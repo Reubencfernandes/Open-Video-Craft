@@ -13,10 +13,12 @@ import {
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { convertWebmAudioToWav, getFfmpegStatus } from "./ffmpeg";
+import { convertWebmAudioToWav, exportVideo, getFfmpegStatus } from "./ffmpeg";
 import { ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
+  ExportVideoRequest,
+  ExportVideoResult,
   FailRecordingRequest,
   ImportedMediaFile,
   ImportedMediaKind,
@@ -420,6 +422,17 @@ function registerIpc(): void {
     return importMediaFiles();
   });
 
+  ipcMain.handle("editor:remove-imported-media", (_event, importId: string): boolean => {
+    return importedMediaCache.delete(importId);
+  });
+
+  ipcMain.handle(
+    "editor:export-video",
+    async (_event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
+      return exportEditorVideo(request);
+    }
+  );
+
   ipcMain.handle("overlays:show-source-border", async (_event, sourceId: string) => {
     return showDisplayOverlay(sourceId);
   });
@@ -587,6 +600,129 @@ async function importMediaFiles(): Promise<ImportedMediaFile[]> {
       extension
     };
   });
+}
+
+async function exportEditorVideo(
+  request: ExportVideoRequest
+): Promise<ExportVideoResult | null> {
+  const source = resolveExportSource(request);
+  const outputPath = await chooseExportPath({
+    format: request.format,
+    name: source.name
+  });
+
+  if (!outputPath) {
+    return null;
+  }
+
+  const bytesWritten = await exportVideo({
+    videoPath: source.videoPath,
+    audioPaths: [
+      ...source.audioPaths,
+      ...request.backgroundAudioImportIds.map(resolveImportedMediaPath)
+    ],
+    outputPath,
+    format: request.format,
+    resolution: request.resolution,
+    trimStart: Math.max(0, request.trimStart),
+    trimEnd:
+      request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
+    volume: request.volume,
+    preserveSourceAudio: source.preserveSourceAudio
+  });
+
+  return {
+    path: outputPath,
+    bytesWritten
+  };
+}
+
+function resolveExportSource(request: ExportVideoRequest): {
+  name: string;
+  videoPath: string;
+  audioPaths: string[];
+  preserveSourceAudio: boolean;
+} {
+  if (request.source.kind === "import") {
+    return {
+      name: path.basename(resolveImportedMediaPath(request.source.importId)),
+      videoPath: resolveImportedMediaPath(request.source.importId),
+      audioPaths: [],
+      preserveSourceAudio: true
+    };
+  }
+
+  const project = projectStore.getProject(request.source.projectId);
+  const screenPath = projectStore.getMediaPath(request.source.projectId, "screen");
+
+  if (!screenPath) {
+    throw new Error("This project does not have a screen recording to export.");
+  }
+
+  const micPath =
+    projectStore.getMediaPath(request.source.projectId, "micWav") ??
+    projectStore.getMediaPath(request.source.projectId, "micWebm");
+
+  return {
+    name: project.name,
+    videoPath: screenPath,
+    audioPaths: micPath ? [micPath] : [],
+    preserveSourceAudio: false
+  };
+}
+
+async function chooseExportPath(input: {
+  format: ExportVideoRequest["format"];
+  name: string;
+}): Promise<string | null> {
+  const extension = input.format;
+  const parentWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
+  const result = parentWindow
+    ? await dialog.showSaveDialog(parentWindow, createExportDialogOptions(input.name, extension))
+    : await dialog.showSaveDialog(createExportDialogOptions(input.name, extension));
+
+  if (result.canceled || !result.filePath) {
+    return null;
+  }
+
+  return path.extname(result.filePath).toLowerCase() === `.${extension}`
+    ? result.filePath
+    : `${result.filePath}.${extension}`;
+}
+
+function createExportDialogOptions(
+  name: string,
+  extension: ExportVideoRequest["format"]
+): Electron.SaveDialogOptions {
+  return {
+    title: "Export video",
+    defaultPath: `${slugForFileName(name)}.${extension}`,
+    filters: [
+      { name: extension.toUpperCase(), extensions: [extension] },
+      { name: "Video", extensions: ["mp4", "webm", "mov"] }
+    ]
+  };
+}
+
+function resolveImportedMediaPath(importId: string): string {
+  const filePath = importedMediaCache.get(importId);
+
+  if (!filePath) {
+    throw new Error("Imported media is no longer available in this editing session.");
+  }
+
+  return filePath;
+}
+
+function slugForFileName(value: string): string {
+  const safeValue = value
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return safeValue || "open-video-craft-export";
 }
 
 function getImportedMediaKind(extension: string): ImportedMediaKind {

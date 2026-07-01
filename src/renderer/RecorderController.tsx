@@ -22,6 +22,12 @@ import type {
   RecordingTrack,
   SourceSummary
 } from "../shared/types";
+import {
+  createDisplayCaptureOptions,
+  createMediaRecorderOptions,
+  recordingRuntime,
+  type RecorderKind
+} from "./recording-runtime";
 
 type FloatingState =
   | "ready"
@@ -76,6 +82,7 @@ export function RecorderController() {
   const stateRef = useRef<FloatingState>("ready");
   const activeRecordedMsRef = useRef(0);
   const activeSegmentStartedAtRef = useRef<number | null>(null);
+  const lastProjectUiSyncAtRef = useRef(0);
   const stoppingRef = useRef(false);
 
   const selectedSource = useMemo(
@@ -205,7 +212,7 @@ export function RecorderController() {
 
     const timer = window.setInterval(() => {
       setElapsedMs(getCurrentRecordedDurationMs());
-    }, 250);
+    }, recordingRuntime.elapsedUpdateMs);
 
     return () => window.clearInterval(timer);
   }, [state]);
@@ -281,12 +288,9 @@ export function RecorderController() {
         await window.openVideoCraft.overlays.showSourceBorder(selectedSource.id);
       }
 
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          frameRate: 30
-        },
-        audio: false
-      });
+      const screenStream = await navigator.mediaDevices.getDisplayMedia(
+        createDisplayCaptureOptions()
+      );
 
       const cameraStream = await getOptionalCameraStream(cameraEnabled, selectedCameraId);
       const micStream = await getOptionalMicStream(micEnabled, selectedMicId);
@@ -370,9 +374,12 @@ export function RecorderController() {
 
       activeRecordedMsRef.current = 0;
       activeSegmentStartedAtRef.current = Date.now();
+      lastProjectUiSyncAtRef.current = Date.now();
       setElapsedMs(0);
       setState("recording");
-      Object.values(recordersRef.current).forEach((recorder) => recorder?.start(1000));
+      Object.values(recordersRef.current).forEach((recorder) =>
+        recorder?.start(recordingRuntime.chunkMs)
+      );
       await refreshDevices();
     } catch (error) {
       stopAllStreams();
@@ -510,8 +517,13 @@ export function RecorderController() {
         track,
         chunk
       });
-      setProject(updatedProject);
       projectRef.current = updatedProject;
+
+      const now = Date.now();
+      if (now - lastProjectUiSyncAtRef.current >= recordingRuntime.projectUiSyncMs) {
+        setProject(updatedProject);
+        lastProjectUiSyncAtRef.current = now;
+      }
     });
   }
 
@@ -864,20 +876,29 @@ function createRecorders(input: {
   onError: (error: unknown) => void;
 }): RecorderMap {
   const recorders: RecorderMap = {
-    screen: createRecorder(input.screenStream, input.screenMimeType, (blob) =>
-      input.onChunk("screen", blob)
+    screen: createRecorder(
+      input.screenStream,
+      input.screenMimeType,
+      (blob) => input.onChunk("screen", blob),
+      "video"
     )
   };
 
   if (input.cameraStream && input.cameraMimeType) {
-    recorders.camera = createRecorder(input.cameraStream, input.cameraMimeType, (blob) =>
-      input.onChunk("camera", blob)
+    recorders.camera = createRecorder(
+      input.cameraStream,
+      input.cameraMimeType,
+      (blob) => input.onChunk("camera", blob),
+      "video"
     );
   }
 
   if (input.micStream && input.micMimeType) {
-    recorders.mic = createRecorder(input.micStream, input.micMimeType, (blob) =>
-      input.onChunk("mic", blob)
+    recorders.mic = createRecorder(
+      input.micStream,
+      input.micMimeType,
+      (blob) => input.onChunk("mic", blob),
+      "audio"
     );
   }
 
@@ -893,9 +914,10 @@ function createRecorders(input: {
 function createRecorder(
   stream: MediaStream,
   mimeType: string,
-  onChunk: (blob: Blob) => void
+  onChunk: (blob: Blob) => void,
+  kind: RecorderKind
 ): MediaRecorder {
-  const recorder = new MediaRecorder(stream, { mimeType });
+  const recorder = new MediaRecorder(stream, createMediaRecorderOptions(kind, mimeType));
   recorder.ondataavailable = (event) => onChunk(event.data);
   return recorder;
 }
