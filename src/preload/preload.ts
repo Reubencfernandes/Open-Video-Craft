@@ -46,7 +46,9 @@ const api = {
     minimizeCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:minimize-current"),
     closeCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:close-current"),
     hideCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:hide-current"),
-    showCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:show-current")
+    showCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:show-current"),
+    setRecorderCompact: (compact: boolean): Promise<boolean> =>
+      ipcRenderer.invoke("windows:set-recorder-compact", compact)
   },
   overlays: {
     showSourceBorder: (sourceId: string): Promise<SourceOverlayResult> =>

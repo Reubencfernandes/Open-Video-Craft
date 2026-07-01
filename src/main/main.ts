@@ -46,6 +46,17 @@ let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
 let displayOverlayWindow: BrowserWindow | null = null;
 
+const recorderWindowSize = {
+  expanded: {
+    width: 460,
+    height: 560
+  },
+  compact: {
+    width: 260,
+    height: 82
+  }
+};
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -104,8 +115,8 @@ async function createRecorderWindow(): Promise<void> {
   }
 
   recorderWindow = new BrowserWindow({
-    width: 460,
-    height: 560,
+    width: recorderWindowSize.expanded.width,
+    height: recorderWindowSize.expanded.height,
     frame: false,
     resizable: false,
     transparent: true,
@@ -337,6 +348,11 @@ function registerIpc(): void {
     return true;
   });
 
+  ipcMain.handle("windows:set-recorder-compact", (_event, compact: boolean): boolean => {
+    setRecorderWindowCompact(compact);
+    return true;
+  });
+
   ipcMain.handle("overlays:show-source-border", async (_event, sourceId: string) => {
     return showDisplayOverlay(sourceId);
   });
@@ -402,6 +418,30 @@ function registerIpc(): void {
     const bytesWritten = await convertWebmAudioToWav(inputPath, outputPath);
     return projectStore.completeAudio(projectId, bytesWritten);
   });
+}
+
+function setRecorderWindowCompact(compact: boolean): void {
+  if (!recorderWindow || recorderWindow.isDestroyed()) {
+    return;
+  }
+
+  const size = compact ? recorderWindowSize.compact : recorderWindowSize.expanded;
+  const bounds = recorderWindow.getBounds();
+  const x = Math.round(bounds.x + bounds.width / 2 - size.width / 2);
+  const y = Math.round(bounds.y + bounds.height / 2 - size.height / 2);
+
+  recorderWindow.setBounds(
+    {
+      x,
+      y,
+      width: size.width,
+      height: size.height
+    },
+    false
+  );
+  recorderWindow.show();
+  recorderWindow.focus();
+  recorderWindow.setAlwaysOnTop(true, "screen-saver");
 }
 
 async function chooseBaseDirectory(): Promise<string | null> {

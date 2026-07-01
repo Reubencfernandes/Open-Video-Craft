@@ -61,6 +61,7 @@ export function RecorderController() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [project, setProject] = useState<ProjectView | null>(null);
+  const [compact, setCompact] = useState(false);
 
   const screenStreamRef = useRef<MediaStream | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -186,6 +187,11 @@ export function RecorderController() {
     if (folder) {
       setBaseDirectory(folder);
     }
+  }
+
+  async function setCompactMode(nextCompact: boolean) {
+    setCompact(nextCompact);
+    await window.openVideoCraft.windows.setRecorderCompact(nextCompact);
   }
 
   async function startRecording() {
@@ -418,6 +424,26 @@ export function RecorderController() {
     micStreamRef.current = null;
   }
 
+  if (compact) {
+    return (
+      <main className="floating-recorder-root floating-recorder-root-compact">
+        <button
+          className="floating-compact-pill app-no-drag"
+          type="button"
+          onClick={() => void setCompactMode(false)}
+          title="Restore recorder"
+        >
+          <span
+            className={`floating-compact-dot ${
+              state === "recording" ? "floating-compact-dot-recording" : ""
+            }`}
+          />
+          <span>{state === "recording" ? formatDuration(elapsedMs) : "Open Video Craft"}</span>
+        </button>
+      </main>
+    );
+  }
+
   return (
     <main className="floating-recorder-root">
       <section className="floating-recorder-card">
@@ -431,8 +457,8 @@ export function RecorderController() {
           <div className="floating-title-actions app-no-drag">
             <button
               type="button"
-              title="Minimize"
-              onClick={() => void window.openVideoCraft.windows.minimizeCurrent()}
+              title="Collapse"
+              onClick={() => void setCompactMode(true)}
             >
               <Minimize2 size={20} />
             </button>
