@@ -164,3 +164,14 @@ export interface SourceOverlayResult {
   shown: boolean;
   reason: string | null;
 }
+
+export type ImportedMediaKind = "video" | "audio" | "image";
+
+export interface ImportedMediaFile {
+  id: string;
+  name: string;
+  path: string;
+  url: string;
+  kind: ImportedMediaKind;
+  extension: string;
+}

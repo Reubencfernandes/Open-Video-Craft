@@ -13,6 +13,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type {
   DeviceSelection,
   ProjectDevices,
@@ -58,7 +59,7 @@ export function RecorderController() {
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [micEnabled, setMicEnabled] = useState(false);
-  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
   const [state, setState] = useState<FloatingState>("ready");
   const [countdown, setCountdown] = useState(3);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -126,14 +127,39 @@ export function RecorderController() {
 
     setMicrophones(nextMicrophones);
     setCameras(nextCameras);
-    setSelectedMicId((current) => current ?? nextMicrophones[0]?.deviceId ?? null);
-    setSelectedCameraId((current) => current ?? nextCameras[0]?.deviceId ?? null);
+    setSelectedMicId((current) =>
+      current && nextMicrophones.some((device) => device.deviceId === current)
+        ? current
+        : nextMicrophones[0]?.deviceId ?? null
+    );
+    setSelectedCameraId((current) =>
+      current && nextCameras.some((device) => device.deviceId === current)
+        ? current
+        : nextCameras[0]?.deviceId ?? null
+    );
+    setMicEnabled((enabled) => (nextMicrophones.length > 0 ? enabled : false));
+    setCameraEnabled((enabled) => (nextCameras.length > 0 ? enabled : false));
   }, []);
 
   useEffect(() => {
     void refreshSources().catch((error) => setErrorMessage(toErrorMessage(error)));
     void refreshDevices().catch(() => undefined);
   }, [refreshDevices, refreshSources]);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.addEventListener) {
+      return undefined;
+    }
+
+    const handleDeviceChange = () => {
+      void refreshDevices().catch(() => undefined);
+    };
+
+    navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+    return () => {
+      navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+    };
+  }, [refreshDevices]);
 
   useEffect(() => {
     projectRef.current = project;
@@ -262,12 +288,16 @@ export function RecorderController() {
         audio: false
       });
 
-      const cameraStream = await getOptionalCameraStream(
-        cameraEnabled,
-        selectedCameraId,
-        selectedCameraLabel
-      );
-      const micStream = await getOptionalMicStream(micEnabled, selectedMicId, setErrorMessage);
+      const cameraStream = await getOptionalCameraStream(cameraEnabled, selectedCameraId);
+      const micStream = await getOptionalMicStream(micEnabled, selectedMicId);
+
+      if (!cameraStream) {
+        setCameraEnabled(false);
+      }
+
+      if (!micStream) {
+        setMicEnabled(false);
+      }
 
       const screenMimeType = getSupportedMimeType(videoMimeCandidates);
       const cameraMimeType = cameraStream ? getSupportedMimeType(videoMimeCandidates) : null;
@@ -681,15 +711,20 @@ export function RecorderController() {
         </div>
 
         <footer className="floating-footer">
-          <button
-            className="floating-footer-control"
-            type="button"
-            onClick={() => setMicEnabled((enabled) => !enabled)}
+          <FloatingDeviceControl
+            enabled={micEnabled}
+            enabledIcon={<Mic size={25} />}
+            disabledIcon={<MicOff size={25} />}
+            enabledLabel="Mic on"
+            disabledLabel="Mic off"
+            options={microphones}
+            value={selectedMicId}
             disabled={!canStart}
-          >
-            {micEnabled ? <Mic size={25} /> : <MicOff size={25} />}
-            <span>{micEnabled ? "Mic on" : "Mic off"}</span>
-          </button>
+            onToggle={() =>
+              setMicEnabled((enabled) => (microphones.length > 0 ? !enabled : false))
+            }
+            onValueChange={setSelectedMicId}
+          />
 
           <button
             className="floating-footer-control"
@@ -702,18 +737,64 @@ export function RecorderController() {
             <span>{baseDirectory ? "Project set" : "Project"}</span>
           </button>
 
-          <button
-            className="floating-footer-control"
-            type="button"
-            onClick={() => setCameraEnabled((enabled) => !enabled)}
+          <FloatingDeviceControl
+            enabled={cameraEnabled}
+            enabledIcon={<Video size={25} />}
+            disabledIcon={<VideoOff size={25} />}
+            enabledLabel={truncateLabel(selectedCameraLabel)}
+            disabledLabel="Camera off"
+            options={cameras}
+            value={selectedCameraId}
             disabled={!canStart}
-          >
-            {cameraEnabled ? <Video size={25} /> : <VideoOff size={25} />}
-            <span>{cameraEnabled ? truncateLabel(selectedCameraLabel) : "Camera off"}</span>
-          </button>
+            onToggle={() =>
+              setCameraEnabled((enabled) => (cameras.length > 0 ? !enabled : false))
+            }
+            onValueChange={setSelectedCameraId}
+          />
         </footer>
       </section>
     </main>
+  );
+}
+
+function FloatingDeviceControl(props: {
+  enabled: boolean;
+  enabledIcon: ReactNode;
+  disabledIcon: ReactNode;
+  enabledLabel: string;
+  disabledLabel: string;
+  options: DeviceOption[];
+  value: string | null;
+  disabled: boolean;
+  onToggle: () => void;
+  onValueChange: (value: string | null) => void;
+}) {
+  return (
+    <div className="floating-footer-control floating-device-control">
+      <button
+        className="floating-device-toggle"
+        type="button"
+        onClick={props.onToggle}
+        disabled={props.disabled}
+      >
+        {props.enabled ? props.enabledIcon : props.disabledIcon}
+        <span>{props.enabled ? props.enabledLabel : props.disabledLabel}</span>
+      </button>
+      {props.enabled && props.options.length > 1 ? (
+        <select
+          className="floating-device-select"
+          value={props.value ?? ""}
+          onChange={(event) => props.onValueChange(event.target.value || null)}
+          disabled={props.disabled}
+        >
+          {props.options.map((option) => (
+            <option key={option.deviceId} value={option.deviceId}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : null}
+    </div>
   );
 }
 
@@ -730,8 +811,7 @@ function delay(ms: number): Promise<void> {
 
 async function getOptionalCameraStream(
   enabled: boolean,
-  deviceId: string | null,
-  label: string
+  deviceId: string | null
 ): Promise<MediaStream | null> {
   if (!enabled || !deviceId) {
     return null;
@@ -747,16 +827,13 @@ async function getOptionalCameraStream(
       audio: false
     });
   } catch {
-    throw new Error(
-      `The camera "${label}" is not sending video. Choose another camera or disable camera recording.`
-    );
+    return null;
   }
 }
 
 async function getOptionalMicStream(
   enabled: boolean,
-  deviceId: string | null,
-  setErrorMessage: (message: string) => void
+  deviceId: string | null
 ): Promise<MediaStream | null> {
   if (!enabled || !deviceId) {
     return null;
@@ -772,7 +849,6 @@ async function getOptionalMicStream(
       }
     });
   } catch {
-    setErrorMessage("The selected microphone is not available. Recording will continue without microphone audio.");
     return null;
   }
 }

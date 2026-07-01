@@ -1,30 +1,36 @@
 import {
   AudioLines,
-  Captions,
   ChevronDown,
   CircleStop,
   Download,
-  Eye,
   Film,
   FolderOpen,
   Image,
-  Lock,
-  MoreHorizontal,
-  MousePointer2,
   Play,
   Plus,
   Scissors,
   Settings2,
-  Sparkles,
-  Type,
+  SkipBack,
+  SkipForward,
   Upload,
-  Volume2
+  Video
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import type { ProjectView } from "../shared/types";
+import type { ImportedMediaFile, ImportedMediaKind, ProjectView } from "../shared/types";
 
-const timeTicks = ["00:00", "00:05", "00:10", "00:15", "00:20", "00:25", "00:30"];
+type MediaPanel = "all" | "video" | "audio" | "image";
+
+type EditorMediaItem = {
+  id: string;
+  name: string;
+  url: string;
+  kind: ImportedMediaKind;
+  origin: "project" | "imported";
+  track: "screen" | "camera" | "audio" | "imported";
+  duration: number | null;
+};
+
+const frameRate = 30;
 
 export function EditorView() {
   const projectId = useMemo(
@@ -32,17 +38,22 @@ export function EditorView() {
     []
   );
   const [project, setProject] = useState<ProjectView | null>(null);
+  const [importedMedia, setImportedMedia] = useState<EditorMediaItem[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [activePanel, setActivePanel] = useState<MediaPanel>("all");
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+
   const screenRef = useRef<HTMLVideoElement | null>(null);
   const cameraRef = useRef<HTMLVideoElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const projectAudioRef = useRef<HTMLAudioElement | null>(null);
+  const importedVideoRef = useRef<HTMLVideoElement | null>(null);
+  const importedAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (!projectId) {
-      setError("No project was provided to the editor.");
       return;
     }
 
@@ -54,10 +65,74 @@ export function EditorView() {
       });
   }, [projectId]);
 
+  const projectMedia = useMemo(() => createProjectMedia(project), [project]);
+  const allMedia = useMemo(
+    () => [...projectMedia, ...importedMedia],
+    [importedMedia, projectMedia]
+  );
+  const selectedItem =
+    allMedia.find((item) => item.id === selectedItemId) ?? allMedia[0] ?? null;
+  const visibleMedia = allMedia.filter((item) =>
+    activePanel === "all" ? true : item.kind === activePanel
+  );
+  const projectName = project?.name ?? "New Edit";
+  const projectScreen = projectMedia.find((item) => item.track === "screen") ?? null;
+  const projectCamera = projectMedia.find((item) => item.track === "camera") ?? null;
+  const projectAudio = projectMedia.find((item) => item.track === "audio") ?? null;
+  const isProjectScreenSelected = selectedItem?.id === projectScreen?.id;
+  const activeDuration =
+    duration > 0 ? duration : selectedItem?.duration ?? (project?.durationMs ?? 0) / 1000;
+  const totalFrames = Math.max(1, Math.floor(activeDuration * frameRate));
+  const currentFrame = Math.min(totalFrames, Math.max(0, Math.round(currentTime * frameRate)));
+  const playheadPercent =
+    activeDuration > 0 ? Math.min(100, Math.max(0, (currentTime / activeDuration) * 100)) : 0;
+
+  useEffect(() => {
+    if (!selectedItemId && allMedia.length > 0) {
+      setSelectedItemId(allMedia[0].id);
+    }
+  }, [allMedia, selectedItemId]);
+
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(selectedItem?.duration ?? 0);
+    setPlaying(false);
+  }, [selectedItem?.id, selectedItem?.duration]);
+
+  async function importMedia() {
+    const files = await window.openVideoCraft.editor.importMedia();
+    if (files.length === 0) {
+      return;
+    }
+
+    const nextItems = files.map(toEditorMediaItem);
+    setImportedMedia((current) => [...current, ...nextItems]);
+    setSelectedItemId(nextItems[0].id);
+    setActivePanel("all");
+  }
+
   function mediaElements(): HTMLMediaElement[] {
-    return [screenRef.current, cameraRef.current, audioRef.current].filter(
-      (element): element is HTMLMediaElement => Boolean(element)
-    );
+    if (!selectedItem) {
+      return [];
+    }
+
+    if (selectedItem.kind === "audio") {
+      return compactMediaElements([importedAudioRef.current]);
+    }
+
+    if (isProjectScreenSelected) {
+      return compactMediaElements([
+        screenRef.current,
+        cameraRef.current,
+        projectAudioRef.current
+      ]);
+    }
+
+    if (selectedItem.kind === "video") {
+      return compactMediaElements([importedVideoRef.current]);
+    }
+
+    return [];
   }
 
   async function togglePlayback() {
@@ -69,6 +144,10 @@ export function EditorView() {
       return;
     }
 
+    if (elements.length === 0) {
+      return;
+    }
+
     elements.forEach((element) => {
       element.currentTime = currentTime;
     });
@@ -77,19 +156,23 @@ export function EditorView() {
   }
 
   function seek(value: number) {
-    setCurrentTime(value);
+    const nextTime = Math.max(0, Math.min(value, activeDuration || value));
+    setCurrentTime(nextTime);
     mediaElements().forEach((element) => {
-      element.currentTime = value;
+      element.currentTime = nextTime;
     });
   }
 
-  const screenUrl = project?.mediaUrls.screen;
-  const cameraUrl = project?.mediaUrls.camera;
-  const audioUrl = project?.mediaUrls.micWav ?? project?.mediaUrls.micWebm;
-  const projectName = project?.name ?? "Untitled Recording";
-  const clipDuration = duration > 0 ? formatSeconds(duration) : "00:30";
-  const playheadPercent =
-    duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 42;
+  function seekFrame(frame: number) {
+    const nextFrame = Math.max(0, Math.min(frame, totalFrames));
+    seek(nextFrame / frameRate);
+  }
+
+  function updateDuration(value: number | null) {
+    if (value && Number.isFinite(value)) {
+      setDuration(value);
+    }
+  }
 
   return (
     <main className="editor-root">
@@ -116,7 +199,7 @@ export function EditorView() {
             <button className="studio-icon-button" type="button" title="Settings">
               <Settings2 size={17} />
             </button>
-            <button className="studio-export-button" type="button">
+            <button className="studio-export-button" type="button" disabled>
               <Download size={16} />
               Export
             </button>
@@ -127,90 +210,98 @@ export function EditorView() {
 
         <div className="studio-workspace">
           <aside className="studio-rail">
-            <button className="studio-rail-active" type="button" title="Media">
+            <button
+              className={activePanel === "all" ? "studio-rail-active" : ""}
+              type="button"
+              title="Media"
+              onClick={() => setActivePanel("all")}
+            >
               <FolderOpen size={18} />
             </button>
-            <button type="button" title="Text">
-              <Type size={18} />
+            <button
+              className={activePanel === "video" ? "studio-rail-active" : ""}
+              type="button"
+              title="Video"
+              onClick={() => setActivePanel("video")}
+            >
+              <Video size={18} />
             </button>
-            <button type="button" title="Audio">
+            <button
+              className={activePanel === "audio" ? "studio-rail-active" : ""}
+              type="button"
+              title="Audio"
+              onClick={() => setActivePanel("audio")}
+            >
               <AudioLines size={18} />
             </button>
-            <button type="button" title="Captions">
-              <Captions size={18} />
-            </button>
-            <button type="button" title="Effects">
-              <Sparkles size={18} />
+            <button
+              className={activePanel === "image" ? "studio-rail-active" : ""}
+              type="button"
+              title="Images"
+              onClick={() => setActivePanel("image")}
+            >
+              <Image size={18} />
             </button>
           </aside>
 
           <aside className="media-panel">
-            <button className="import-button" type="button">
+            <button className="import-button" type="button" onClick={() => void importMedia()}>
               <Upload size={15} />
               Import media
             </button>
             <div className="media-tabs">
-              <button className="media-tab-active" type="button">All Media</button>
-              <button type="button">Video</button>
-              <button type="button">Image</button>
-              <button type="button">Sound</button>
+              {(["all", "video", "audio", "image"] as MediaPanel[]).map((panel) => (
+                <button
+                  className={activePanel === panel ? "media-tab-active" : ""}
+                  type="button"
+                  key={panel}
+                  onClick={() => setActivePanel(panel)}
+                >
+                  {panel === "all" ? "All Media" : panel}
+                </button>
+              ))}
             </div>
 
             <div className="asset-grid">
-              <AssetCard
-                title="Screen.webm"
-                type="Recording"
-                icon={<Film size={15} />}
-                mediaUrl={screenUrl}
-              />
-              <AssetCard
-                title="Camera.webm"
-                type={cameraUrl ? "Camera" : "Optional"}
-                icon={<Image size={15} />}
-                mediaUrl={cameraUrl}
-              />
-              <AssetCard title="Voice.wav" type="Audio" icon={<AudioLines size={15} />} />
-              <AssetCard title="Captions" type="Text layer" icon={<Captions size={15} />} />
+              {visibleMedia.map((item) => (
+                <AssetCard
+                  key={item.id}
+                  item={item}
+                  selected={selectedItem?.id === item.id}
+                  onSelect={() => setSelectedItemId(item.id)}
+                />
+              ))}
             </div>
+
+            {visibleMedia.length === 0 ? (
+              <div className="media-empty">
+                <Plus size={18} />
+                <span>Import media or finish a recording to begin editing.</span>
+              </div>
+            ) : null}
           </aside>
 
           <section className="preview-panel">
             <div className="preview-canvas">
               <div className="preview-composition-frame">
-                {screenUrl ? (
-                  <video
-                    ref={screenRef}
-                    className="studio-screen-video"
-                    src={screenUrl}
-                    playsInline
-                    onLoadedMetadata={(event) => {
-                      const nextDuration = event.currentTarget.duration;
-                      if (Number.isFinite(nextDuration)) {
-                        setDuration(nextDuration);
-                      }
-                    }}
-                    onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+                {selectedItem ? (
+                  <PreviewContent
+                    item={selectedItem}
+                    isProjectScreenSelected={isProjectScreenSelected}
+                    projectCamera={projectCamera}
+                    projectAudio={projectAudio}
+                    screenRef={screenRef}
+                    cameraRef={cameraRef}
+                    projectAudioRef={projectAudioRef}
+                    importedVideoRef={importedVideoRef}
+                    importedAudioRef={importedAudioRef}
+                    onDuration={updateDuration}
+                    onTimeUpdate={setCurrentTime}
                     onEnded={() => setPlaying(false)}
                   />
                 ) : (
-                  <div className="studio-video-empty">Waiting for recorded media.</div>
+                  <div className="studio-video-empty">Import media or record a screen.</div>
                 )}
-
-                <div className="title-overlay-box">
-                  <span>Open Video Craft</span>
-                  <strong>Screen Recording</strong>
-                </div>
-
-                {cameraUrl ? (
-                  <video
-                    ref={cameraRef}
-                    className="studio-camera-bubble"
-                    src={cameraUrl}
-                    playsInline
-                  />
-                ) : null}
-
-                {audioUrl ? <audio ref={audioRef} src={audioUrl} /> : null}
               </div>
 
               <div className="preview-tools">
@@ -221,9 +312,9 @@ export function EditorView() {
                 <input
                   type="range"
                   min={0}
-                  max={Math.max(duration, 0)}
-                  step={0.05}
-                  value={Math.min(currentTime, duration || 0)}
+                  max={Math.max(activeDuration, 0)}
+                  step={1 / frameRate}
+                  value={Math.min(currentTime, activeDuration || 0)}
                   onChange={(event) => seek(Number(event.target.value))}
                 />
                 <span>{formatSeconds(currentTime)}</span>
@@ -233,102 +324,84 @@ export function EditorView() {
 
           <aside className="inspector-panel">
             <div className="inspector-header">
-              <strong>Text Setting</strong>
-              <MoreHorizontal size={18} />
+              <strong>Clip</strong>
+              <Scissors size={18} />
             </div>
 
-            <label>
-              <span>Font</span>
-              <select defaultValue="Inter">
-                <option>Inter</option>
-                <option>Montserrat</option>
-                <option>Manrope</option>
-              </select>
-            </label>
-
-            <div className="setting-grid">
-              <button type="button">20</button>
-              <button type="button">Bold</button>
-              <button type="button">Auto</button>
-              <button type="button">1.2%</button>
+            <div className="clip-inspector">
+              <label>
+                <span>Name</span>
+                <output>{selectedItem?.name ?? "No media selected"}</output>
+              </label>
+              <label>
+                <span>Type</span>
+                <output>{selectedItem?.kind ?? "-"}</output>
+              </label>
+              <label>
+                <span>Duration</span>
+                <output>{formatSeconds(activeDuration)}</output>
+              </label>
+              <label>
+                <span>Frame</span>
+                <output>
+                  {currentFrame} / {totalFrames}
+                </output>
+              </label>
             </div>
-
-            <div className="align-grid">
-              <button type="button">L</button>
-              <button type="button">C</button>
-              <button type="button">R</button>
-              <button type="button">U</button>
-            </div>
-
-            <label>
-              <span>Color</span>
-              <div className="color-setting">
-                <i />
-                <code>#22E68B</code>
-                <span>100%</span>
-              </div>
-            </label>
-
-            <label>
-              <span>Border</span>
-              <div className="color-setting border-setting">
-                <i />
-                <code>#000000</code>
-                <span>0%</span>
-              </div>
-            </label>
           </aside>
         </div>
 
         <section className="timeline-panel">
           <div className="timeline-toolbar">
             <div className="timeline-toolset">
-              <span>Speed</span>
-              <button type="button">1.0X</button>
-              <button type="button"><Scissors size={14} /></button>
-              <button type="button"><MousePointer2 size={14} /></button>
+              <button type="button" onClick={() => seekFrame(currentFrame - 1)}>
+                <SkipBack size={14} />
+              </button>
+              <span>{formatSeconds(currentTime)}</span>
+              <button type="button" onClick={() => seekFrame(currentFrame + 1)}>
+                <SkipForward size={14} />
+              </button>
             </div>
 
-            <div className="timeline-ruler">
-              {timeTicks.map((tick) => (
-                <span key={tick}>{tick}</span>
-              ))}
-            </div>
+            <input
+              className="frame-scrubber"
+              type="range"
+              min={0}
+              max={totalFrames}
+              step={1}
+              value={currentFrame}
+              onChange={(event) => seekFrame(Number(event.target.value))}
+            />
           </div>
 
           <div className="timeline-body">
             <div className="playhead" style={{ left: `${playheadPercent}%` }}>
               <span />
             </div>
-            <TimelineTrack label="Media 1" accent="purple" locked>
-              <div className="clip clip-video clip-main">
-                <span className="clip-thumb" />
-                <strong>{project?.tracks.screen ? "Screen.webm" : "Screen clip"}</strong>
-                <Lock size={13} />
-              </div>
+            <TimelineTrack label="Media" accent="purple">
+              {allMedia
+                .filter((item) => item.kind === "video" || item.kind === "image")
+                .map((item) => (
+                  <TimelineClip
+                    key={item.id}
+                    item={item}
+                    selected={selectedItem?.id === item.id}
+                    onSelect={() => setSelectedItemId(item.id)}
+                  />
+                ))}
             </TimelineTrack>
 
-            <TimelineTrack label="Audio 1" accent="cyan">
-              <div className="clip clip-audio">
-                <span className="waveform" />
-                <strong>{audioUrl ? "Voice.wav" : "Recorded audio"}</strong>
-                <Volume2 size={13} />
-              </div>
-              <div className="clip clip-audio clip-audio-short">
-                <span className="waveform" />
-                <strong>Intro.mp3</strong>
-              </div>
-            </TimelineTrack>
-
-            <TimelineTrack label="Text 1" accent="blue">
-              <div className="clip clip-text">
-                <strong>Open Video Craft Recording</strong>
-                <Type size={13} />
-              </div>
-              <div className="clip clip-text clip-text-end">
-                <strong>Ready to Edit</strong>
-                <Type size={13} />
-              </div>
+            <TimelineTrack label="Audio" accent="cyan">
+              {allMedia
+                .filter((item) => item.kind === "audio")
+                .map((item) => (
+                  <TimelineClip
+                    key={item.id}
+                    item={item}
+                    selected={selectedItem?.id === item.id}
+                    onSelect={() => setSelectedItemId(item.id)}
+                  />
+                ))}
             </TimelineTrack>
           </div>
         </section>
@@ -337,39 +410,212 @@ export function EditorView() {
   );
 }
 
+function PreviewContent(props: {
+  item: EditorMediaItem;
+  isProjectScreenSelected: boolean;
+  projectCamera: EditorMediaItem | null;
+  projectAudio: EditorMediaItem | null;
+  screenRef: React.RefObject<HTMLVideoElement | null>;
+  cameraRef: React.RefObject<HTMLVideoElement | null>;
+  projectAudioRef: React.RefObject<HTMLAudioElement | null>;
+  importedVideoRef: React.RefObject<HTMLVideoElement | null>;
+  importedAudioRef: React.RefObject<HTMLAudioElement | null>;
+  onDuration: (duration: number | null) => void;
+  onTimeUpdate: (time: number) => void;
+  onEnded: () => void;
+}) {
+  if (props.item.kind === "image") {
+    return <img className="studio-screen-video" src={props.item.url} alt="" />;
+  }
+
+  if (props.item.kind === "audio") {
+    return (
+      <div className="audio-preview">
+        <AudioLines size={44} />
+        <strong>{props.item.name}</strong>
+        <audio
+          ref={props.importedAudioRef}
+          src={props.item.url}
+          onLoadedMetadata={(event) => props.onDuration(event.currentTarget.duration)}
+          onTimeUpdate={(event) => props.onTimeUpdate(event.currentTarget.currentTime)}
+          onEnded={props.onEnded}
+        />
+      </div>
+    );
+  }
+
+  if (props.isProjectScreenSelected) {
+    return (
+      <>
+        <video
+          ref={props.screenRef}
+          className="studio-screen-video"
+          src={props.item.url}
+          playsInline
+          onLoadedMetadata={(event) => props.onDuration(event.currentTarget.duration)}
+          onTimeUpdate={(event) => props.onTimeUpdate(event.currentTarget.currentTime)}
+          onEnded={props.onEnded}
+        />
+        {props.projectCamera ? (
+          <video
+            ref={props.cameraRef}
+            className="studio-camera-bubble"
+            src={props.projectCamera.url}
+            playsInline
+          />
+        ) : null}
+        {props.projectAudio ? (
+          <audio ref={props.projectAudioRef} src={props.projectAudio.url} />
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <video
+      ref={props.importedVideoRef}
+      className="studio-screen-video"
+      src={props.item.url}
+      playsInline
+      onLoadedMetadata={(event) => props.onDuration(event.currentTarget.duration)}
+      onTimeUpdate={(event) => props.onTimeUpdate(event.currentTarget.currentTime)}
+      onEnded={props.onEnded}
+    />
+  );
+}
+
 function AssetCard(props: {
-  title: string;
-  type: string;
-  icon: ReactNode;
-  mediaUrl?: string;
+  item: EditorMediaItem;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   return (
-    <button className="asset-card" type="button">
+    <button
+      className={`asset-card ${props.selected ? "asset-card-selected" : ""}`}
+      type="button"
+      onClick={props.onSelect}
+    >
       <div className="asset-preview">
-        {props.mediaUrl ? <video src={props.mediaUrl} muted playsInline /> : props.icon}
+        {props.item.kind === "video" ? (
+          <video src={props.item.url} muted playsInline />
+        ) : props.item.kind === "image" ? (
+          <img src={props.item.url} alt="" />
+        ) : (
+          <AudioLines size={18} />
+        )}
       </div>
-      <strong>{props.title}</strong>
-      <span>{props.type}</span>
+      <strong>{props.item.name}</strong>
+      <span>{props.item.origin === "project" ? "Recording" : props.item.kind}</span>
     </button>
   );
 }
 
 function TimelineTrack(props: {
   label: string;
-  accent: "purple" | "cyan" | "blue";
-  locked?: boolean;
-  children: ReactNode;
+  accent: "purple" | "cyan";
+  children: React.ReactNode;
 }) {
   return (
     <div className="timeline-track">
       <div className={`track-label track-${props.accent}`}>
         <span>{props.label}</span>
-        <button type="button"><Eye size={13} /></button>
-        {props.locked ? <Lock size={13} /> : null}
       </div>
       <div className="track-lane">{props.children}</div>
     </div>
   );
+}
+
+function TimelineClip(props: {
+  item: EditorMediaItem;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const width = props.item.kind === "image" ? "24%" : "62%";
+  const left = props.item.origin === "project" ? "1%" : "34%";
+  const className =
+    props.item.kind === "audio"
+      ? "clip clip-audio"
+      : props.item.kind === "image"
+        ? "clip clip-image"
+        : "clip clip-main";
+
+  return (
+    <button
+      className={`${className} ${props.selected ? "clip-selected" : ""}`}
+      type="button"
+      style={{ left, width }}
+      onClick={props.onSelect}
+    >
+      {props.item.kind === "audio" ? <span className="waveform" /> : <Film size={13} />}
+      <strong>{props.item.name}</strong>
+    </button>
+  );
+}
+
+function createProjectMedia(project: ProjectView | null): EditorMediaItem[] {
+  if (!project) {
+    return [];
+  }
+
+  const items: EditorMediaItem[] = [];
+  const duration = (project.durationMs ?? 0) / 1000 || null;
+
+  if (project.mediaUrls.screen) {
+    items.push({
+      id: `${project.id}:screen`,
+      name: "screen.webm",
+      url: project.mediaUrls.screen,
+      kind: "video",
+      origin: "project",
+      track: "screen",
+      duration
+    });
+  }
+
+  if (project.mediaUrls.camera) {
+    items.push({
+      id: `${project.id}:camera`,
+      name: "camera.webm",
+      url: project.mediaUrls.camera,
+      kind: "video",
+      origin: "project",
+      track: "camera",
+      duration
+    });
+  }
+
+  const audioUrl = project.mediaUrls.micWav ?? project.mediaUrls.micWebm;
+  if (audioUrl) {
+    items.push({
+      id: `${project.id}:audio`,
+      name: project.mediaUrls.micWav ? "mic.wav" : "mic.webm",
+      url: audioUrl,
+      kind: "audio",
+      origin: "project",
+      track: "audio",
+      duration
+    });
+  }
+
+  return items;
+}
+
+function toEditorMediaItem(file: ImportedMediaFile): EditorMediaItem {
+  return {
+    id: file.id,
+    name: file.name,
+    url: file.url,
+    kind: file.kind,
+    origin: "imported",
+    track: "imported",
+    duration: null
+  };
+}
+
+function compactMediaElements(
+  elements: Array<HTMLMediaElement | null>
+): HTMLMediaElement[] {
+  return elements.filter((element): element is HTMLMediaElement => Boolean(element));
 }
 
 function formatSeconds(seconds: number): string {

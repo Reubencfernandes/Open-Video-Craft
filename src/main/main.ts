@@ -10,6 +10,7 @@ import {
   screen as electronScreen,
   session
 } from "electron";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { convertWebmAudioToWav, getFfmpegStatus } from "./ffmpeg";
@@ -17,6 +18,8 @@ import { ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
   FailRecordingRequest,
+  ImportedMediaFile,
+  ImportedMediaKind,
   SourceOverlayResult,
   SourceSummary,
   StartRecordingRequest,
@@ -33,6 +36,15 @@ protocol.registerSchemesAsPrivileged([
       supportFetchAPI: true,
       stream: true
     }
+  },
+  {
+    scheme: "ovc-import",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true
+    }
   }
 ]);
 
@@ -41,6 +53,7 @@ const projectStore = new ProjectStore({
 });
 
 const sourceCache = new Map<string, Electron.DesktopCapturerSource>();
+const importedMediaCache = new Map<string, string>();
 let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
@@ -72,11 +85,12 @@ async function createWindow(): Promise<void> {
     }
   });
 
-  await loadRendererView(mainWindow, "main");
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+    closeDisplayOverlay();
+  });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.webContents.openDevTools({ mode: "detach" });
-  }
+  await loadRendererView(mainWindow, "main");
 }
 
 function registerPermissions(): void {
@@ -161,7 +175,7 @@ async function loadRendererView(
   await window.loadURL(url.toString());
 }
 
-async function openEditorWindow(projectId: string): Promise<void> {
+async function openEditorWindow(projectId?: string | null): Promise<void> {
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = new BrowserWindow({
       width: 1360,
@@ -176,9 +190,13 @@ async function openEditorWindow(projectId: string): Promise<void> {
         nodeIntegration: false
       }
     });
+    mainWindow.on("closed", () => {
+      mainWindow = null;
+      closeDisplayOverlay();
+    });
   }
 
-  await loadRendererView(mainWindow, "editor", { projectId });
+  await loadRendererView(mainWindow, "editor", projectId ? { projectId } : {});
   mainWindow.show();
   mainWindow.focus();
 }
@@ -298,6 +316,24 @@ function registerMediaProtocol(): void {
       });
     }
   });
+
+  protocol.handle("ovc-import", async (request) => {
+    try {
+      const url = new URL(request.url);
+      const id = url.pathname.split("/").filter(Boolean).map(decodeURIComponent)[0];
+      const filePath = id ? importedMediaCache.get(id) : null;
+
+      if (url.hostname !== "file" || !filePath) {
+        return new Response("Not found", { status: 404 });
+      }
+
+      return net.fetch(pathToFileURL(filePath).toString());
+    } catch (error) {
+      return new Response(error instanceof Error ? error.message : "Not found", {
+        status: 404
+      });
+    }
+  });
 }
 
 function registerIpc(): void {
@@ -375,9 +411,13 @@ function registerIpc(): void {
     return true;
   });
 
-  ipcMain.handle("windows:open-editor", async (_event, projectId: string): Promise<boolean> => {
+  ipcMain.handle("windows:open-editor", async (_event, projectId?: string | null): Promise<boolean> => {
     await openEditorWindow(projectId);
     return true;
+  });
+
+  ipcMain.handle("editor:import-media", async (): Promise<ImportedMediaFile[]> => {
+    return importMediaFiles();
   });
 
   ipcMain.handle("overlays:show-source-border", async (_event, sourceId: string) => {
@@ -496,6 +536,71 @@ async function chooseBaseDirectory(): Promise<string | null> {
   return result.filePaths[0];
 }
 
+async function importMediaFiles(): Promise<ImportedMediaFile[]> {
+  const options: Electron.OpenDialogOptions = {
+    title: "Import media into Open Video Craft",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      {
+        name: "Media",
+        extensions: [
+          "mp4",
+          "mov",
+          "mkv",
+          "webm",
+          "avi",
+          "mp3",
+          "wav",
+          "m4a",
+          "aac",
+          "ogg",
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif"
+        ]
+      },
+      { name: "All Files", extensions: ["*"] }
+    ]
+  };
+  const parentWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, options)
+    : await dialog.showOpenDialog(options);
+
+  if (result.canceled) {
+    return [];
+  }
+
+  return result.filePaths.map((filePath) => {
+    const id = randomUUID();
+    importedMediaCache.set(id, filePath);
+    const extension = path.extname(filePath).replace(/^\./, "").toLowerCase();
+
+    return {
+      id,
+      name: path.basename(filePath),
+      path: filePath,
+      url: `ovc-import://file/${encodeURIComponent(id)}`,
+      kind: getImportedMediaKind(extension),
+      extension
+    };
+  });
+}
+
+function getImportedMediaKind(extension: string): ImportedMediaKind {
+  if (["mp3", "wav", "m4a", "aac", "ogg"].includes(extension)) {
+    return "audio";
+  }
+
+  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) {
+    return "image";
+  }
+
+  return "video";
+}
+
 function createFallbackThumbnail(label: string): string {
   const safeLabel = label.replace(/[<>&"]/g, "");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270"><rect width="480" height="270" fill="#18181b"/><rect x="108" y="60" width="264" height="150" rx="10" fill="#27272a" stroke="#3f3f46" stroke-width="2"/><text x="240" y="236" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#d4d4d8">${safeLabel.slice(0, 36)}</text></svg>`;
@@ -509,20 +614,26 @@ app.whenReady().then(async () => {
   globalShortcut.register("CommandOrControl+Shift+S", () => {
     recorderWindow?.webContents.send("recording:global-stop");
   });
-  await createRecorderWindow();
+  await createWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createRecorderWindow();
+      void createWindow();
     }
   });
 });
 
+app.on("before-quit", () => {
+  closeDisplayOverlay();
+});
+
 app.on("will-quit", () => {
+  closeDisplayOverlay();
   globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {
+  closeDisplayOverlay();
   if (process.platform !== "darwin") {
     app.quit();
   }

@@ -3,6 +3,7 @@ import type {
   CreateProjectRequest,
   FailRecordingRequest,
   FfmpegStatus,
+  ImportedMediaFile,
   ProjectView,
   SourceOverlayResult,
   SourceSummary,
@@ -53,8 +54,11 @@ const api = {
     showCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:show-current"),
     setRecorderCompact: (compact: boolean): Promise<boolean> =>
       ipcRenderer.invoke("windows:set-recorder-compact", compact),
-    openEditor: (projectId: string): Promise<boolean> =>
+    openEditor: (projectId?: string | null): Promise<boolean> =>
       ipcRenderer.invoke("windows:open-editor", projectId)
+  },
+  editor: {
+    importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media")
   },
   overlays: {
     showSourceBorder: (sourceId: string): Promise<SourceOverlayResult> =>

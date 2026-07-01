@@ -35,6 +35,141 @@
 }
 
 @layer components {
+  .launcher-root {
+    display: grid;
+    min-height: 100vh;
+    place-items: center;
+    background:
+      linear-gradient(135deg, rgb(13 18 28), rgb(17 18 21) 58%, rgb(28 18 32));
+    color: white;
+    padding: 2rem;
+  }
+
+  .launcher-shell {
+    display: grid;
+    width: min(100%, 760px);
+    gap: 1.25rem;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 14px;
+    background: rgb(12 14 18 / 0.88);
+    box-shadow: 0 34px 90px rgb(0 0 0 / 0.45);
+    padding: 1.5rem;
+  }
+
+  .launcher-brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .launcher-mark {
+    position: relative;
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .launcher-mark span {
+    position: absolute;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+  }
+
+  .launcher-mark span:nth-child(1) {
+    left: 0;
+    top: 0.72rem;
+    background: #22c55e;
+  }
+
+  .launcher-mark span:nth-child(2) {
+    left: 0.72rem;
+    top: 0;
+    background: #f97316;
+  }
+
+  .launcher-mark span:nth-child(3) {
+    left: 1.08rem;
+    top: 0.82rem;
+    background: #06b6d4;
+  }
+
+  .launcher-brand p,
+  .launcher-brand h1 {
+    margin: 0;
+  }
+
+  .launcher-brand p {
+    color: rgb(148 163 184);
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .launcher-brand h1 {
+    margin-top: 0.2rem;
+    font-size: 1.65rem;
+  }
+
+  .launcher-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .launcher-action {
+    display: grid;
+    min-height: 12rem;
+    align-content: end;
+    justify-items: start;
+    gap: 0.55rem;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 10px;
+    background: rgb(255 255 255 / 0.055);
+    color: white;
+    cursor: pointer;
+    padding: 1rem;
+    text-align: left;
+  }
+
+  .launcher-action:hover {
+    background: rgb(255 255 255 / 0.09);
+  }
+
+  .launcher-action-primary {
+    background: rgb(6 182 212 / 0.18);
+    border-color: rgb(6 182 212 / 0.35);
+  }
+
+  .launcher-action span {
+    font-size: 1.05rem;
+    font-weight: 800;
+  }
+
+  .launcher-action small,
+  .launcher-footer {
+    color: rgb(148 163 184);
+  }
+
+  .launcher-action:disabled {
+    cursor: wait;
+    opacity: 0.62;
+  }
+
+  .launcher-error {
+    border: 1px solid rgb(248 113 113 / 0.35);
+    border-radius: 8px;
+    background: rgb(127 29 29 / 0.35);
+    padding: 0.75rem 1rem;
+    color: rgb(254 226 226);
+  }
+
+  .launcher-footer {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+  }
+
   .control-panel {
     display: flex;
     flex-direction: column;
@@ -768,6 +903,28 @@
     font-size: 0.68rem;
   }
 
+  .floating-device-control {
+    gap: 0.12rem;
+    padding: 0 0.2rem;
+  }
+
+  .floating-device-toggle {
+    display: grid;
+    min-width: 0;
+    place-items: center;
+    gap: 0.18rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: inherit;
+  }
+
+  .floating-device-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
   .floating-footer-control:disabled {
     cursor: not-allowed;
     opacity: 0.55;
@@ -1111,57 +1268,6 @@
     color: rgb(148 163 184);
   }
 
-  .title-overlay-box {
-    position: absolute;
-    left: 7%;
-    top: 12%;
-    width: 34%;
-    min-height: 32%;
-    border: 1px solid rgb(34 197 94 / 0.42);
-    border-radius: 5px;
-    background: rgb(5 16 11 / 0.82);
-    color: rgb(134 239 172);
-    padding: 0.8rem;
-    box-shadow: 0 0 0 5px rgb(34 197 94 / 0.08);
-  }
-
-  .title-overlay-box::before,
-  .title-overlay-box::after {
-    content: "";
-    position: absolute;
-    width: 0.45rem;
-    height: 0.45rem;
-    border-radius: 999px;
-    background: #d9f99d;
-  }
-
-  .title-overlay-box::before {
-    left: -0.24rem;
-    top: -0.24rem;
-  }
-
-  .title-overlay-box::after {
-    right: -0.24rem;
-    bottom: -0.24rem;
-  }
-
-  .title-overlay-box span,
-  .title-overlay-box strong {
-    display: block;
-  }
-
-  .title-overlay-box span {
-    font-size: 0.66rem;
-    font-weight: 800;
-    text-transform: uppercase;
-  }
-
-  .title-overlay-box strong {
-    margin-top: 0.35rem;
-    font-size: 1rem;
-    line-height: 1.05;
-  }
-
   .studio-camera-bubble {
     position: absolute;
     right: 5%;
@@ -1490,6 +1596,112 @@
     background: rgb(249 115 22);
     transform: translateX(-50%);
     box-shadow: 0 0 0 4px rgb(249 115 22 / 0.15);
+  }
+
+  .studio-export-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .asset-card-selected .asset-preview {
+    border-color: rgb(168 85 247 / 0.85);
+    box-shadow: 0 0 0 3px rgb(168 85 247 / 0.18);
+  }
+
+  .asset-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .media-empty {
+    display: grid;
+    justify-items: center;
+    gap: 0.55rem;
+    border: 1px dashed rgb(255 255 255 / 0.12);
+    border-radius: 12px;
+    color: rgb(148 163 184);
+    padding: 1.2rem 0.8rem;
+    text-align: center;
+    font-size: 0.72rem;
+  }
+
+  .audio-preview {
+    display: grid;
+    height: 100%;
+    place-items: center;
+    align-content: center;
+    gap: 0.8rem;
+    background:
+      linear-gradient(135deg, rgb(8 13 23), rgb(21 12 32)),
+      #050507;
+    color: rgb(34 211 238);
+    padding: 1.25rem;
+    text-align: center;
+  }
+
+  .audio-preview strong {
+    max-width: 80%;
+    overflow: hidden;
+    color: white;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+  }
+
+  .clip-inspector {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .clip-inspector output {
+    display: block;
+    min-height: 2.1rem;
+    overflow: hidden;
+    border: 1px solid rgb(255 255 255 / 0.07);
+    border-radius: 8px;
+    background: rgb(0 0 0 / 0.18);
+    color: rgb(226 232 240);
+    padding: 0.55rem 0.65rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .frame-scrubber {
+    width: 100%;
+    accent-color: rgb(249 115 22);
+  }
+
+  .timeline-body {
+    min-height: 6.2rem;
+  }
+
+  .clip {
+    border: 0;
+    cursor: pointer;
+    right: auto;
+    text-align: left;
+  }
+
+  .clip:hover {
+    filter: brightness(1.08);
+  }
+
+  .clip-selected {
+    outline: 2px solid rgb(255 255 255 / 0.86);
+    outline-offset: 2px;
+  }
+
+  .clip-image {
+    background: #0f766e;
+  }
+
+  .clip-main {
+    right: auto;
+  }
+
+  .clip-audio {
+    right: auto;
   }
 }
 
