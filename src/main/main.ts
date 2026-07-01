@@ -52,8 +52,8 @@ const recorderWindowSize = {
     height: 560
   },
   compact: {
-    width: 260,
-    height: 82
+    width: 340,
+    height: 86
   }
 };
 
