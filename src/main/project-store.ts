@@ -253,6 +253,11 @@ export class ProjectStore {
     return this.resolveProjectFile(projectId, getMediaTrackRelativePath("micWav"));
   }
 
+  getMediaPath(projectId: string, track: MediaTrackKey): string | null {
+    const projectTrack = this.getRecord(projectId).file.tracks[track];
+    return projectTrack ? this.resolveProjectFile(projectId, projectTrack.path) : null;
+  }
+
   private createRecordingTracks(
     request: StartRecordingRequest,
     now: string

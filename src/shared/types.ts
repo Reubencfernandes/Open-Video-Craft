@@ -175,3 +175,30 @@ export interface ImportedMediaFile {
   kind: ImportedMediaKind;
   extension: string;
 }
+
+export type ExportVideoFormat = "mp4" | "webm" | "mov";
+
+export type ExportResolution = "source" | "720p" | "1080p" | "1440p";
+
+export interface ExportVideoRequest {
+  source:
+    | {
+        kind: "project";
+        projectId: string;
+      }
+    | {
+        kind: "import";
+        importId: string;
+      };
+  format: ExportVideoFormat;
+  resolution: ExportResolution;
+  trimStart: number;
+  trimEnd: number | null;
+  volume: number;
+  backgroundAudioImportIds: string[];
+}
+
+export interface ExportVideoResult {
+  path: string;
+  bytesWritten: number;
+}

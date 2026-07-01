@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   CreateProjectRequest,
+  ExportVideoRequest,
+  ExportVideoResult,
   FailRecordingRequest,
   FfmpegStatus,
   ImportedMediaFile,
@@ -58,7 +60,11 @@ const api = {
       ipcRenderer.invoke("windows:open-editor", projectId)
   },
   editor: {
-    importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media")
+    importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media"),
+    removeImportedMedia: (importId: string): Promise<boolean> =>
+      ipcRenderer.invoke("editor:remove-imported-media", importId),
+    exportVideo: (request: ExportVideoRequest): Promise<ExportVideoResult | null> =>
+      ipcRenderer.invoke("editor:export-video", request)
   },
   overlays: {
     showSourceBorder: (sourceId: string): Promise<SourceOverlayResult> =>
