@@ -1,5 +1,4 @@
 import {
-  Camera,
   CheckCircle2,
   CircleStop,
   FolderOpen,
@@ -7,8 +6,6 @@ import {
   Mic,
   MicOff,
   Minimize2,
-  Monitor,
-  RefreshCcw,
   Video,
   VideoOff,
   X
@@ -79,7 +76,6 @@ export function RecorderController() {
     () => sources.find((source) => source.id === selectedSourceId) ?? null,
     [selectedSourceId, sources]
   );
-  const selectedMicLabel = getDeviceLabel(microphones, selectedMicId, "Mic");
   const selectedCameraLabel = getDeviceLabel(cameras, selectedCameraId, "Camera");
   const canStart = state === "ready" || state === "complete" || state === "failed";
   const shouldShowSelectionOverlay =
@@ -93,11 +89,14 @@ export function RecorderController() {
     const nextSources = await window.openVideoCraft.sources.list();
     setSources(nextSources);
     setSelectedSourceId((current) => {
-      if (current && nextSources.some((source) => source.id === current)) {
+      if (
+        current &&
+        nextSources.some((source) => source.id === current && source.kind === "screen")
+      ) {
         return current;
       }
 
-      return nextSources[0]?.id ?? null;
+      return nextSources.find((source) => source.kind === "screen")?.id ?? nextSources[0]?.id ?? null;
     });
   }, []);
 
@@ -191,7 +190,7 @@ export function RecorderController() {
 
   async function startRecording() {
     if (!selectedSource) {
-      setErrorMessage("Choose a display or window before recording.");
+      setErrorMessage("No screen is available to record.");
       return;
     }
 
@@ -462,28 +461,6 @@ export function RecorderController() {
           </div>
         ) : null}
 
-        <div className="floating-source-row">
-          <select
-            value={selectedSourceId ?? ""}
-            disabled={!canStart}
-            onChange={(event) => setSelectedSourceId(event.target.value)}
-          >
-            {sources.map((source) => (
-              <option key={source.id} value={source.id}>
-                {source.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            title="Refresh sources"
-            onClick={() => void refreshSources()}
-            disabled={!canStart}
-          >
-            <RefreshCcw size={17} />
-          </button>
-        </div>
-
         <div className="floating-record-area">
           {state === "complete" ? (
             <div className="floating-complete">
@@ -525,15 +502,10 @@ export function RecorderController() {
                   ? "Processing audio"
                   : state === "preparing"
                     ? "Preparing"
-                    : selectedSource?.name ?? "Choose a source"}
+                    : selectedSource
+                      ? `Recording screen: ${selectedSource.name}`
+                      : "No screen found"}
           </div>
-        </div>
-
-        <div className="floating-folder-row">
-          <button type="button" onClick={() => void chooseFolder()} disabled={!canStart}>
-            <FolderOpen size={15} />
-      <span>{baseDirectory ? shortPath(baseDirectory) : "Choose save folder"}</span>
-          </button>
         </div>
 
         <footer className="floating-footer">
@@ -550,28 +522,23 @@ export function RecorderController() {
           <button
             className="floating-footer-control"
             type="button"
+            onClick={() => void chooseFolder()}
+            disabled={!canStart}
+            title={baseDirectory ?? "Choose project folder"}
+          >
+            <FolderOpen size={25} />
+            <span>{baseDirectory ? "Project set" : "Project"}</span>
+          </button>
+
+          <button
+            className="floating-footer-control"
+            type="button"
             onClick={() => setCameraEnabled((enabled) => !enabled)}
             disabled={!canStart}
           >
             {cameraEnabled ? <Video size={25} /> : <VideoOff size={25} />}
             <span>{cameraEnabled ? truncateLabel(selectedCameraLabel) : "Camera off"}</span>
           </button>
-
-          <label className="floating-footer-control">
-            <Monitor size={25} />
-            <select
-              value={selectedSourceId ?? ""}
-              disabled={!canStart}
-              onChange={(event) => setSelectedSourceId(event.target.value)}
-              title="Screen source"
-            >
-              {sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                </option>
-              ))}
-            </select>
-          </label>
         </footer>
       </section>
     </main>

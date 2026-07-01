@@ -409,8 +409,9 @@ async function chooseBaseDirectory(): Promise<string | null> {
     title: "Choose where Open Video Craft should save this project",
     properties: ["openDirectory", "createDirectory"]
   };
-  const result = mainWindow
-    ? await dialog.showOpenDialog(mainWindow, options)
+  const parentWindow = BrowserWindow.getFocusedWindow() ?? recorderWindow ?? mainWindow;
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, options)
     : await dialog.showOpenDialog(options);
 
   if (result.canceled || result.filePaths.length === 0) {
@@ -433,11 +434,11 @@ app.whenReady().then(async () => {
   globalShortcut.register("CommandOrControl+Shift+S", () => {
     recorderWindow?.webContents.send("recording:global-stop");
   });
-  await createWindow();
+  await createRecorderWindow();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow();
+      void createRecorderWindow();
     }
   });
 });
