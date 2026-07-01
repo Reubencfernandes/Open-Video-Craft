@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { DisplayBorder } from "./DisplayBorder";
+import { EditorView } from "./EditorView";
 import { RecorderController } from "./RecorderController";
 import "./styles.css";
 
@@ -13,6 +14,8 @@ const component =
     <RecorderController />
   ) : view === "display-border" ? (
     <DisplayBorder />
+  ) : view === "editor" ? (
+    <EditorView />
   ) : (
     <App />
   );

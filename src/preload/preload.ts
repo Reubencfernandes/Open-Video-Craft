@@ -22,6 +22,10 @@ const api = {
   projects: {
     chooseBaseDirectory: (): Promise<string | null> =>
       ipcRenderer.invoke("projects:choose-base-directory"),
+    get: (projectId: string): Promise<ProjectView> =>
+      ipcRenderer.invoke("projects:get", projectId),
+    discard: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("projects:discard", projectId),
     create: (request: CreateProjectRequest): Promise<ProjectView> =>
       ipcRenderer.invoke("projects:create", request)
   },
@@ -48,7 +52,9 @@ const api = {
     hideCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:hide-current"),
     showCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:show-current"),
     setRecorderCompact: (compact: boolean): Promise<boolean> =>
-      ipcRenderer.invoke("windows:set-recorder-compact", compact)
+      ipcRenderer.invoke("windows:set-recorder-compact", compact),
+    openEditor: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("windows:open-editor", projectId)
   },
   overlays: {
     showSourceBorder: (sourceId: string): Promise<SourceOverlayResult> =>

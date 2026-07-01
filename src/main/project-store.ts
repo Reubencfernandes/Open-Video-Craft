@@ -104,6 +104,13 @@ export class ProjectStore {
     return this.toView(this.getRecord(projectId));
   }
 
+  async discardProject(projectId: string): Promise<boolean> {
+    const record = this.getRecord(projectId);
+    this.records.delete(projectId);
+    await fs.rm(record.rootPath, { recursive: true, force: true });
+    return true;
+  }
+
   async startRecording(request: StartRecordingRequest): Promise<ProjectView> {
     const record = this.getRecord(request.projectId);
     const now = this.clock().toISOString();

@@ -144,7 +144,7 @@ async function createRecorderWindow(): Promise<void> {
 
 async function loadRendererView(
   window: BrowserWindow,
-  view: "main" | "controller" | "display-border",
+  view: "main" | "controller" | "display-border" | "editor",
   params: Record<string, string> = {}
 ): Promise<void> {
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -159,6 +159,28 @@ async function loadRendererView(
   }
 
   await window.loadURL(url.toString());
+}
+
+async function openEditorWindow(projectId: string): Promise<void> {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = new BrowserWindow({
+      width: 1360,
+      height: 900,
+      minWidth: 1080,
+      minHeight: 720,
+      title: "Open Video Craft Editor",
+      backgroundColor: "#101114",
+      webPreferences: {
+        preload: path.join(__dirname, "../preload/preload.js"),
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    });
+  }
+
+  await loadRendererView(mainWindow, "editor", { projectId });
+  mainWindow.show();
+  mainWindow.focus();
 }
 
 async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult> {
@@ -353,6 +375,11 @@ function registerIpc(): void {
     return true;
   });
 
+  ipcMain.handle("windows:open-editor", async (_event, projectId: string): Promise<boolean> => {
+    await openEditorWindow(projectId);
+    return true;
+  });
+
   ipcMain.handle("overlays:show-source-border", async (_event, sourceId: string) => {
     return showDisplayOverlay(sourceId);
   });
@@ -364,6 +391,14 @@ function registerIpc(): void {
 
   ipcMain.handle("projects:choose-base-directory", async (): Promise<string | null> => {
     return chooseBaseDirectory();
+  });
+
+  ipcMain.handle("projects:get", async (_event, projectId: string) => {
+    return projectStore.getProject(projectId);
+  });
+
+  ipcMain.handle("projects:discard", async (_event, projectId: string): Promise<boolean> => {
+    return projectStore.discardProject(projectId);
   });
 
   ipcMain.handle(

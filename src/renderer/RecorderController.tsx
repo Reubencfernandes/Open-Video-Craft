@@ -337,7 +337,6 @@ export function RecorderController() {
       setState("countdown");
       await runCountdown(setCountdown);
       await window.openVideoCraft.overlays.hideSourceBorder();
-      await setCompactMode(true);
 
       activeRecordedMsRef.current = 0;
       activeSegmentStartedAtRef.current = Date.now();
@@ -398,6 +397,47 @@ export function RecorderController() {
       projectRef.current = preparedProject;
       setElapsedMs(durationMs);
       setState("complete");
+      await window.openVideoCraft.windows.openEditor(preparedProject.id);
+      await refreshSources();
+    } catch (error) {
+      await failRecording(toErrorMessage(error));
+    }
+  }
+
+  async function cancelRecording() {
+    if (
+      stoppingRef.current ||
+      (stateRef.current !== "recording" && stateRef.current !== "paused")
+    ) {
+      return;
+    }
+
+    stoppingRef.current = true;
+    setState("stopping");
+
+    try {
+      await Promise.all(
+        Object.values(recordersRef.current).map((recorder) =>
+          recorder ? stopRecorder(recorder) : Promise.resolve()
+        )
+      );
+      await Promise.all(Object.values(writeQueuesRef.current));
+      stopAllStreams();
+      await window.openVideoCraft.overlays.hideSourceBorder();
+      await setCompactMode(false);
+
+      const currentProject = projectRef.current;
+      if (currentProject) {
+        await window.openVideoCraft.projects.discard(currentProject.id);
+      }
+
+      projectRef.current = null;
+      setProject(null);
+      activeRecordedMsRef.current = 0;
+      activeSegmentStartedAtRef.current = null;
+      setElapsedMs(0);
+      stoppingRef.current = false;
+      setState("ready");
       await refreshSources();
     } catch (error) {
       await failRecording(toErrorMessage(error));
@@ -595,9 +635,37 @@ export function RecorderController() {
             {state === "countdown" ? countdown : state === "recording" || state === "paused" ? <CircleStop size={34} /> : null}
           </button>
 
+          {state === "recording" || state === "paused" ? (
+            <div className="floating-record-controls">
+              <button
+                type="button"
+                onClick={state === "paused" ? resumeRecording : pauseRecording}
+              >
+                {state === "paused" ? <Play size={17} /> : <Pause size={17} />}
+                <span>{state === "paused" ? "Resume" : "Pause"}</span>
+              </button>
+              <button
+                className="floating-record-cancel"
+                type="button"
+                onClick={() => void cancelRecording()}
+              >
+                <X size={17} />
+                <span>Cancel</span>
+              </button>
+              <button
+                className="floating-record-done"
+                type="button"
+                onClick={() => void stopRecording()}
+              >
+                <CheckCircle2 size={17} />
+                <span>Done</span>
+              </button>
+            </div>
+          ) : null}
+
           <div className="floating-status">
             {state === "recording"
-              ? `${formatDuration(elapsedMs)} - Ctrl+Shift+S to stop`
+              ? `${formatDuration(elapsedMs)} - recording`
               : state === "paused"
                 ? `${formatDuration(elapsedMs)} - paused`
               : state === "countdown"
