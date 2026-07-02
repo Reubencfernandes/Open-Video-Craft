@@ -5,6 +5,7 @@ import {
   dialog,
   globalShortcut,
   ipcMain,
+  Menu,
   net,
   protocol,
   screen as electronScreen,
@@ -79,7 +80,8 @@ async function createWindow(): Promise<void> {
     minWidth: 1080,
     minHeight: 720,
     title: "Open Video Craft",
-    backgroundColor: "#101114",
+    backgroundColor: "#121317",
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
       contextIsolation: true,
@@ -91,6 +93,7 @@ async function createWindow(): Promise<void> {
     mainWindow = null;
     closeDisplayOverlay();
   });
+  attachDevToolsShortcuts(mainWindow);
 
   await loadRendererView(mainWindow, "main");
 }
@@ -154,6 +157,7 @@ async function createRecorderWindow(): Promise<void> {
     recorderWindow = null;
     closeDisplayOverlay();
   });
+  attachDevToolsShortcuts(recorderWindow);
 
   await loadRendererView(recorderWindow, "controller");
 }
@@ -185,7 +189,8 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
       minWidth: 1080,
       minHeight: 720,
       title: "Open Video Craft Editor",
-      backgroundColor: "#101114",
+      backgroundColor: "#121317",
+      autoHideMenuBar: true,
       webPreferences: {
         preload: path.join(__dirname, "../preload/preload.js"),
         contextIsolation: true,
@@ -196,6 +201,7 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
       mainWindow = null;
       closeDisplayOverlay();
     });
+    attachDevToolsShortcuts(mainWindow);
   }
 
   await loadRendererView(mainWindow, "editor", projectId ? { projectId } : {});
@@ -270,6 +276,27 @@ function closeDisplayOverlay(): void {
   displayOverlayWindow = null;
 }
 
+function attachDevToolsShortcuts(window: BrowserWindow): void {
+  window.webContents.on("before-input-event", (event, input) => {
+    const opensDevTools =
+      input.key === "F12" ||
+      (input.key.toLowerCase() === "i" && input.control && input.shift);
+
+    if (!opensDevTools) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (window.webContents.isDevToolsOpened()) {
+      window.webContents.closeDevTools();
+      return;
+    }
+
+    window.webContents.openDevTools({ mode: "detach" });
+  });
+}
+
 function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.Display {
   const displays = electronScreen.getAllDisplays();
 
@@ -340,32 +367,31 @@ function registerMediaProtocol(): void {
 
 function registerIpc(): void {
   ipcMain.handle("sources:list", async (): Promise<SourceSummary[]> => {
+    // Request sources without live thumbnails or window icons. Capturing a
+    // thumbnail per source forces Windows Graphics Capture to start a capturer
+    // for every window, which floods the log with "Failed to start capture"
+    // (E_INVALIDARG / -2147024809) for windows it cannot grab. The recorder UI
+    // never renders these, so we substitute a lightweight fallback thumbnail.
     const sources = await desktopCapturer.getSources({
       types: ["screen", "window"],
       thumbnailSize: {
-        width: 480,
-        height: 270
+        width: 0,
+        height: 0
       },
-      fetchWindowIcons: true
+      fetchWindowIcons: false
     });
 
     sourceCache.clear();
     return sources.map((source) => {
       sourceCache.set(source.id, source);
-      const thumbnail = source.thumbnail?.isEmpty()
-        ? createFallbackThumbnail(source.name)
-        : source.thumbnail?.toDataURL() ?? createFallbackThumbnail(source.name);
-      const appIcon = source.appIcon?.isEmpty()
-        ? null
-        : source.appIcon?.toDataURL() ?? null;
 
       return {
         id: source.id,
         name: source.name,
         kind: source.id.startsWith("screen:") ? "screen" : "window",
         displayId: source.display_id,
-        thumbnail,
-        appIcon
+        thumbnail: createFallbackThumbnail(source.name),
+        appIcon: null
       };
     });
   });
@@ -415,6 +441,20 @@ function registerIpc(): void {
 
   ipcMain.handle("windows:open-editor", async (_event, projectId?: string | null): Promise<boolean> => {
     await openEditorWindow(projectId);
+    return true;
+  });
+
+  ipcMain.handle("windows:open-main", async (event): Promise<boolean> => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+
+    if (!window || window.isDestroyed()) {
+      await createWindow();
+      return true;
+    }
+
+    await loadRendererView(window, "main");
+    window.show();
+    window.focus();
     return true;
   });
 
@@ -744,6 +784,7 @@ function createFallbackThumbnail(label: string): string {
 }
 
 app.whenReady().then(async () => {
+  Menu.setApplicationMenu(null);
   registerPermissions();
   registerMediaProtocol();
   registerIpc();

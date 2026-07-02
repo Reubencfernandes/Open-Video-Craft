@@ -1,8 +1,9 @@
 import {
   CheckCircle2,
   CircleStop,
+  Eye,
+  EyeOff,
   FolderOpen,
-  Menu,
   Mic,
   MicOff,
   Minimize2,
@@ -12,6 +13,7 @@ import {
   VideoOff,
   X
 } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
@@ -72,6 +74,7 @@ export function RecorderController() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [project, setProject] = useState<ProjectView | null>(null);
   const [compact, setCompact] = useState(false);
+  const [borderOverlayEnabled, setBorderOverlayEnabled] = useState(true);
 
   const screenStreamRef = useRef<MediaStream | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -92,11 +95,8 @@ export function RecorderController() {
   const selectedCameraLabel = getDeviceLabel(cameras, selectedCameraId, "Camera");
   const canStart = state === "ready" || state === "complete" || state === "failed";
   const shouldShowSelectionOverlay =
-    state === "ready" ||
-    state === "preparing" ||
-    state === "countdown" ||
-    state === "complete" ||
-    state === "failed";
+    borderOverlayEnabled &&
+    (state === "ready" || state === "preparing" || state === "countdown");
 
   const refreshSources = useCallback(async () => {
     const nextSources = await window.openVideoCraft.sources.list();
@@ -284,7 +284,7 @@ export function RecorderController() {
       setBaseDirectory(folder);
       await window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
 
-      if (selectedSource.kind === "screen") {
+      if (borderOverlayEnabled && selectedSource.kind === "screen") {
         await window.openVideoCraft.overlays.showSourceBorder(selectedSource.id);
       }
 
@@ -402,6 +402,7 @@ export function RecorderController() {
     activeRecordedMsRef.current = durationMs;
     activeSegmentStartedAtRef.current = null;
     setState("stopping");
+    await window.openVideoCraft.overlays.hideSourceBorder();
     await window.openVideoCraft.windows.showCurrent();
     await setCompactMode(false);
 
@@ -607,12 +608,16 @@ export function RecorderController() {
       <section className="floating-recorder-card">
         <div className="floating-titlebar app-drag">
           <div className="floating-title">
-            <button className="floating-title-icon app-no-drag" type="button" title="Menu">
-              <Menu size={24} />
-            </button>
             <span>Open Video Craft</span>
           </div>
           <div className="floating-title-actions app-no-drag">
+            <button
+              type="button"
+              title={borderOverlayEnabled ? "Hide screen border" : "Show screen border"}
+              onClick={() => setBorderOverlayEnabled((value) => !value)}
+            >
+              {borderOverlayEnabled ? <Eye size={19} /> : <EyeOff size={19} />}
+            </button>
             <button
               type="button"
               title="Collapse"
@@ -783,15 +788,40 @@ function FloatingDeviceControl(props: {
 }) {
   return (
     <div className="floating-footer-control floating-device-control">
-      <button
+      <motion.button
         className="floating-device-toggle"
         type="button"
         onClick={props.onToggle}
         disabled={props.disabled}
+        whileTap={props.disabled ? undefined : { scale: 0.88 }}
+        transition={{ type: "spring", stiffness: 520, damping: 28 }}
       >
-        {props.enabled ? props.enabledIcon : props.disabledIcon}
-        <span>{props.enabled ? props.enabledLabel : props.disabledLabel}</span>
-      </button>
+        <span className="floating-device-icon">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span
+              key={props.enabled ? "on" : "off"}
+              initial={{ opacity: 0, scale: 0.5, rotate: -18 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              exit={{ opacity: 0, scale: 0.5, rotate: 18 }}
+              transition={{ type: "spring", stiffness: 520, damping: 26 }}
+              style={{ display: "inline-flex" }}
+            >
+              {props.enabled ? props.enabledIcon : props.disabledIcon}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={props.enabled ? props.enabledLabel : props.disabledLabel}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16 }}
+          >
+            {props.enabled ? props.enabledLabel : props.disabledLabel}
+          </motion.span>
+        </AnimatePresence>
+      </motion.button>
       {props.enabled && props.options.length > 1 ? (
         <select
           className="floating-device-select"

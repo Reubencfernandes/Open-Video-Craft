@@ -6,13 +6,11 @@ import {
   Download,
   Film,
   FolderOpen,
+  Home,
   LayoutTemplate,
-  Maximize2,
-  Monitor,
-  Move,
+  MoreHorizontal,
   Music2,
   Palette,
-  PictureInPicture2,
   Play,
   Plus,
   Scissors,
@@ -29,7 +27,13 @@ import {
   ZoomOut
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode, RefObject } from "react";
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  RefObject
+} from "react";
 import type {
   ExportResolution,
   ExportVideoFormat,
@@ -38,12 +42,27 @@ import type {
   ImportedMediaKind,
   ProjectView
 } from "../shared/types";
+import setupIcon from "./assets/rail-icons/icon1.png";
+import cutIcon from "./assets/rail-icons/icon2.png";
+import layoutIcon from "./assets/rail-icons/icon3.png";
+import zoomIcon from "./assets/rail-icons/icon4.png";
+import styleIcon from "./assets/rail-icons/icon5.png";
+import subtitleIcon from "./assets/rail-icons/icon6.png";
+import audioIcon from "./assets/rail-icons/icon7.png";
 
 type MediaPanel = "all" | "video" | "audio" | "image";
 type EditorTool = "media" | "layout" | "audio" | "zoom" | "subtitles" | "cut" | "style";
 type LayoutMode = "fill" | "fit" | "bubble" | "portrait" | "split";
-type BackgroundStyle = "forest" | "soft-light" | "midnight" | "paper";
+type BackgroundStyle =
+  | "real-world-1"
+  | "real-world-2"
+  | "real-world-3"
+  | "gradient-1"
+  | "gradient-2"
+  | "gradient-3";
 type ZoomDirection = "in" | "out";
+type TimelineTrackKind = "video" | "audio";
+type TimelineTrimEdge = "start" | "end";
 
 type EditorMediaItem = {
   id: string;
@@ -54,6 +73,37 @@ type EditorMediaItem = {
   track: "screen" | "camera" | "audio" | "imported";
   duration: number | null;
   importId?: string;
+};
+
+type TimelineMediaClip = {
+  id: string;
+  item: EditorMediaItem;
+  track: TimelineTrackKind;
+  start: number;
+  duration: number;
+  sourceStart: number;
+};
+
+type TimelineSegment = {
+  id: string;
+  itemId: string;
+  track: TimelineTrackKind;
+  start: number;
+  end: number;
+  sourceStart: number;
+};
+
+type TimelineContextMenu = {
+  x: number;
+  y: number;
+  time: number;
+  segmentId: string | null;
+} | null;
+
+type TimelineTrimDrag = {
+  segmentId: string;
+  edge: TimelineTrimEdge;
+  originalSegments: TimelineSegment[];
 };
 
 type ZoomEffect = {
@@ -73,40 +123,103 @@ type SubtitleSegment = {
 
 const frameRate = 30;
 
+function createRailIcon(background: string, foreground: string, pathData: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="${background}"/><stop offset="1" stop-color="#ffffff" stop-opacity=".18"/></linearGradient></defs><rect x="4" y="4" width="40" height="40" rx="10" fill="url(#g)"/><rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#fff" stroke-opacity=".22"/><path d="${pathData}" fill="none" stroke="${foreground}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 const editorTools: Array<{
   id: EditorTool;
   label: string;
   icon: ReactNode;
+  image: string;
 }> = [
-  { id: "media", label: "Media", icon: <FolderOpen size={18} /> },
-  { id: "layout", label: "Layout", icon: <LayoutTemplate size={18} /> },
-  { id: "audio", label: "Audio", icon: <Volume2 size={18} /> },
-  { id: "zoom", label: "Zoom", icon: <ZoomIn size={18} /> },
-  { id: "subtitles", label: "Subtitles", icon: <Captions size={18} /> },
-  { id: "cut", label: "Cut", icon: <Scissors size={18} /> },
-  { id: "style", label: "Style", icon: <Palette size={18} /> }
+  {
+    id: "media",
+    label: "Setup",
+    icon: <FolderOpen size={18} />,
+    image: setupIcon
+  },
+  {
+    id: "cut",
+    label: "Cut",
+    icon: <Scissors size={18} />,
+    image: cutIcon
+  },
+  {
+    id: "layout",
+    label: "Layout",
+    icon: <LayoutTemplate size={18} />,
+    image: layoutIcon
+  },
+  {
+    id: "zoom",
+    label: "Zoom",
+    icon: <ZoomIn size={18} />,
+    image: zoomIcon
+  },
+  {
+    id: "style",
+    label: "Style",
+    icon: <Palette size={18} />,
+    image: styleIcon
+  },
+  {
+    id: "subtitles",
+    label: "Subs",
+    icon: <Captions size={18} />,
+    image: subtitleIcon
+  },
+  {
+    id: "audio",
+    label: "Audio",
+    icon: <Volume2 size={18} />,
+    image: audioIcon
+  }
 ];
 
-const layoutOptions: Array<{
-  id: LayoutMode;
-  label: string;
-  icon: ReactNode;
+const layoutPresetGroups: Array<{
+  title: string;
+  presets: Array<{
+    id: LayoutMode;
+    label: string;
+    variant: string;
+    featured?: boolean;
+  }>;
 }> = [
-  { id: "fill", label: "Fill", icon: <Maximize2 size={17} /> },
-  { id: "fit", label: "Fit", icon: <Monitor size={17} /> },
-  { id: "bubble", label: "Face Bubble", icon: <PictureInPicture2 size={17} /> },
-  { id: "portrait", label: "Presenter", icon: <Move size={17} /> },
-  { id: "split", label: "Side by Side", icon: <Combine size={17} /> }
+  {
+    title: "Side-by-Side",
+    presets: [
+      { id: "split", label: "Side-by-side compact", variant: "split-a" },
+      { id: "portrait", label: "Side-by-side presenter", variant: "split-b" }
+    ]
+  },
+  {
+    title: "TV Presenter",
+    presets: [
+      { id: "portrait", label: "TV presenter focus", variant: "presenter-a", featured: true },
+      { id: "fit", label: "TV presenter wide", variant: "presenter-b" }
+    ]
+  },
+  {
+    title: "Camera Bubble",
+    presets: [
+      { id: "bubble", label: "Camera bubble overlay", variant: "bubble-a" },
+      { id: "fill", label: "Camera bubble minimal", variant: "bubble-b" }
+    ]
+  }
 ];
 
 const backgroundOptions: Array<{
   id: BackgroundStyle;
   label: string;
 }> = [
-  { id: "forest", label: "Forest" },
-  { id: "soft-light", label: "Soft Light" },
-  { id: "midnight", label: "Midnight" },
-  { id: "paper", label: "Paper" }
+  { id: "real-world-1", label: "Real World 1" },
+  { id: "real-world-2", label: "Real World 2" },
+  { id: "real-world-3", label: "Real World 3" },
+  { id: "gradient-1", label: "Gradient 1" },
+  { id: "gradient-2", label: "Gradient 2" },
+  { id: "gradient-3", label: "Gradient 3" }
 ];
 
 const exportFormats: ExportVideoFormat[] = ["mp4", "webm", "mov"];
@@ -123,7 +236,7 @@ export function EditorView() {
   const [activePanel, setActivePanel] = useState<MediaPanel>("all");
   const [activeTool, setActiveTool] = useState<EditorTool>("layout");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("fit");
-  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("forest");
+  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("real-world-1");
   const [screenPosition, setScreenPosition] = useState({
     x: 0,
     y: 0,
@@ -138,6 +251,13 @@ export function EditorView() {
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
   const [trimRange, setTrimRange] = useState({ start: 0, end: 0 });
+  const [timelineSegments, setTimelineSegments] = useState<TimelineSegment[]>([]);
+  const [selectedTimelineSegmentId, setSelectedTimelineSegmentId] = useState<string | null>(null);
+  const [timelineContextMenu, setTimelineContextMenu] = useState<TimelineContextMenu>(null);
+  const [timelineUndoStack, setTimelineUndoStack] = useState<TimelineSegment[][]>([]);
+  const [timelineRedoStack, setTimelineRedoStack] = useState<TimelineSegment[][]>([]);
+  const [audioWaveforms, setAudioWaveforms] = useState<Record<string, number[]>>({});
+  const [trimmingSegmentId, setTrimmingSegmentId] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<ExportVideoFormat>("mp4");
   const [exportResolution, setExportResolution] = useState<ExportResolution>("1080p");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -145,6 +265,7 @@ export function EditorView() {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [scrubbingTimeline, setScrubbingTimeline] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -153,6 +274,12 @@ export function EditorView() {
   const projectAudioRef = useRef<HTMLAudioElement | null>(null);
   const importedVideoRef = useRef<HTMLVideoElement | null>(null);
   const importedAudioRef = useRef<HTMLAudioElement | null>(null);
+  const timelineBodyRef = useRef<HTMLDivElement | null>(null);
+  const timelineDragRef = useRef(false);
+  const timelineTrimDragRef = useRef<TimelineTrimDrag | null>(null);
+  const previousTimelineDurationRef = useRef(0);
+  const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
+  const loadingAudioWaveformsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!projectId) {
@@ -187,10 +314,54 @@ export function EditorView() {
   const previewItem = isProjectCompositionSelected ? projectScreen : selectedItem;
   const activeDuration =
     duration > 0 ? duration : selectedItem?.duration ?? (project?.durationMs ?? 0) / 1000;
-  const totalFrames = Math.max(1, Math.floor(activeDuration * frameRate));
+  const selectedTimelineItemId = selectedItem?.id ?? null;
+  const timelineEditableItems = useMemo(
+    () =>
+      allMedia.filter(
+        (item) =>
+          item.kind === "audio" ||
+          ((item.kind === "video" || item.kind === "image") && item.track !== "camera")
+      ),
+    [allMedia]
+  );
+  const mediaById = useMemo(
+    () => new Map(allMedia.map((item) => [item.id, item])),
+    [allMedia]
+  );
+  const mediaDurationById = useMemo(
+    () =>
+      new Map(
+        timelineEditableItems.map((item) => [
+          item.id,
+          getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
+        ])
+      ),
+    [activeDuration, selectedTimelineItemId, timelineEditableItems]
+  );
+  const timelineClips = useMemo(
+    () => createTimelineMediaClips(timelineSegments, mediaById),
+    [mediaById, timelineSegments]
+  );
+  const videoTimelineClips = useMemo(
+    () => timelineClips.filter((clip) => clip.track === "video"),
+    [timelineClips]
+  );
+  const audioTimelineClips = useMemo(
+    () => timelineClips.filter((clip) => clip.track === "audio"),
+    [timelineClips]
+  );
+  const timelineDuration = Math.max(
+    activeDuration,
+    ...videoTimelineClips.map((clip) => clip.start + clip.duration),
+    ...audioTimelineClips.map((clip) => clip.start + clip.duration),
+    ...zoomEffects.map((effect) => effect.end),
+    ...subtitles.map((subtitle) => subtitle.end),
+    1
+  );
+  const totalFrames = Math.max(1, Math.floor(timelineDuration * frameRate));
   const currentFrame = Math.min(totalFrames, Math.max(0, Math.round(currentTime * frameRate)));
   const playheadPercent =
-    activeDuration > 0 ? Math.min(100, Math.max(0, (currentTime / activeDuration) * 100)) : 0;
+    timelineDuration > 0 ? Math.min(100, Math.max(0, (currentTime / timelineDuration) * 100)) : 0;
   const activeZoom = getActiveZoom(zoomEffects, currentTime);
   const activeSubtitle =
     subtitles.find((subtitle) => currentTime >= subtitle.start && currentTime <= subtitle.end) ??
@@ -232,24 +403,63 @@ export function EditorView() {
   }, [allMedia, selectedItemId]);
 
   useEffect(() => {
+    const availableItemIds = new Set(timelineEditableItems.map((item) => item.id));
+    const nextKnownItemIds = new Set(
+      [...knownTimelineItemIdsRef.current].filter((itemId) => availableItemIds.has(itemId))
+    );
+    const newItemIds = new Set(
+      timelineEditableItems
+        .map((item) => item.id)
+        .filter((itemId) => !nextKnownItemIds.has(itemId))
+    );
+
+    for (const itemId of newItemIds) {
+      nextKnownItemIds.add(itemId);
+    }
+    knownTimelineItemIdsRef.current = nextKnownItemIds;
+
+    setTimelineSegments((current) =>
+      syncTimelineSegments(
+        current,
+        timelineEditableItems,
+        mediaDurationById,
+        newItemIds
+      )
+    );
+    setSelectedTimelineSegmentId((current) =>
+      current && availableItemIds.has(current.split(":segment-")[0]) ? current : null
+    );
+  }, [mediaDurationById, timelineEditableItems]);
+
+  useEffect(() => {
     setCurrentTime(0);
     setDuration(selectedItem?.duration ?? 0);
     setPlaying(false);
   }, [selectedItem?.id, selectedItem?.duration]);
 
   useEffect(() => {
-    if (activeDuration <= 0) {
+    if (timelineDuration <= 0) {
       return;
     }
 
-    setTrimRange((current) => ({
-      start: Math.min(current.start, activeDuration),
-      end:
-        current.end > 0
-          ? Math.min(Math.max(current.end, current.start), activeDuration)
-          : activeDuration
-    }));
-  }, [activeDuration]);
+    const previousTimelineDuration = previousTimelineDurationRef.current;
+    setTrimRange((current) => {
+      const shouldUseFullDuration =
+        current.end <= 0 ||
+        Math.abs(current.end - previousTimelineDuration) < 0.05 ||
+        (previousTimelineDuration <= 1.05 && current.end <= 1.05 && timelineDuration > 1.05);
+      const start = Math.min(current.start, timelineDuration);
+      const end = shouldUseFullDuration
+        ? timelineDuration
+        : Math.min(Math.max(current.end, start + 0.1), timelineDuration);
+
+      return {
+        start,
+        end
+      };
+    });
+    previousTimelineDurationRef.current = timelineDuration;
+  }, [timelineDuration]);
 
   useEffect(() => {
     const nextVolume = Math.min(1, Math.max(0, audioVolume / 100));
@@ -264,6 +474,99 @@ export function EditorView() {
       element.volume = nextVolume;
     }
   }, [audioVolume, selectedItem?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const audioItems = timelineEditableItems.filter((item) => item.kind === "audio");
+
+    for (const item of audioItems) {
+      if (audioWaveforms[item.id] || loadingAudioWaveformsRef.current.has(item.id)) {
+        continue;
+      }
+
+      loadingAudioWaveformsRef.current.add(item.id);
+      void decodeAudioWaveform(item.url)
+        .catch(() => createFallbackWaveform(item.name))
+        .then((waveform) => {
+          if (cancelled) {
+            return;
+          }
+
+          setAudioWaveforms((current) => ({ ...current, [item.id]: waveform }));
+        })
+        .finally(() => {
+          loadingAudioWaveformsRef.current.delete(item.id);
+        });
+    }
+
+    setAudioWaveforms((current) => {
+      const audioIds = new Set(audioItems.map((item) => item.id));
+      const next = Object.fromEntries(
+        Object.entries(current).filter(([itemId]) => audioIds.has(itemId))
+      );
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [audioWaveforms, timelineEditableItems]);
+
+  useEffect(() => {
+    function handleTimelineKeyDown(event: KeyboardEvent) {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const isTyping =
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.tagName === "SELECT" ||
+        target?.isContentEditable;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          redoTimelineEdit();
+          return;
+        }
+
+        undoTimelineEdit();
+        return;
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        redoTimelineEdit();
+        return;
+      }
+
+      if (isTyping) {
+        return;
+      }
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        void togglePlayback();
+        return;
+      }
+
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        deleteSelectedTimelineSegment();
+      }
+    }
+
+    window.addEventListener("keydown", handleTimelineKeyDown);
+    return () => window.removeEventListener("keydown", handleTimelineKeyDown);
+  }, [
+    currentTime,
+    audioVolume,
+    isProjectCompositionSelected,
+    playing,
+    selectedItem?.id,
+    selectedTimelineSegmentId,
+    timelineRedoStack,
+    timelineSegments,
+    timelineUndoStack
+  ]);
 
   async function importMedia(options: {
     backgroundAudio?: boolean;
@@ -296,7 +599,17 @@ export function EditorView() {
     void window.openVideoCraft.editor.removeImportedMedia(itemId);
     setImportedMedia((current) => current.filter((item) => item.id !== itemId));
     setBackgroundAudioIds((current) => current.filter((id) => id !== itemId));
+    setTimelineSegments((current) => current.filter((segment) => segment.itemId !== itemId));
+    setAudioWaveforms((current) => {
+      const { [itemId]: _removed, ...next } = current;
+      return next;
+    });
+    knownTimelineItemIdsRef.current.delete(itemId);
     setSelectedItemId((current) => (current === itemId ? projectMedia[0]?.id ?? null : current));
+    setSelectedTimelineSegmentId((current) => {
+      const segment = timelineSegments.find((item) => item.id === current);
+      return segment?.itemId === itemId ? null : current;
+    });
   }
 
   function mediaElements(): HTMLMediaElement[] {
@@ -345,7 +658,7 @@ export function EditorView() {
   }
 
   function seek(value: number) {
-    const nextTime = Math.max(0, Math.min(value, activeDuration || value));
+    const nextTime = Math.max(0, Math.min(value, timelineDuration || value));
     setCurrentTime(nextTime);
     mediaElements().forEach((element) => {
       element.currentTime = nextTime;
@@ -357,10 +670,247 @@ export function EditorView() {
     seek(nextFrame / frameRate);
   }
 
+  function getTimelineTimeFromClientX(clientX: number): number | null {
+    const timelineBody = timelineBodyRef.current;
+    if (!timelineBody || timelineDuration <= 0) {
+      return null;
+    }
+
+    const lane = timelineBody.querySelector<HTMLElement>(".track-lane");
+    const bounds = lane?.getBoundingClientRect() ?? timelineBody.getBoundingClientRect();
+    if (bounds.width <= 0) {
+      return null;
+    }
+
+    const progress = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
+    return progress * timelineDuration;
+  }
+
+  function seekTimelinePointer(clientX: number) {
+    const nextTime = getTimelineTimeFromClientX(clientX);
+    if (nextTime === null) {
+      return;
+    }
+
+    seek(nextTime);
+  }
+
+  function commitTimelineSegments(updater: (segments: TimelineSegment[]) => TimelineSegment[]) {
+    setTimelineSegments((current) => {
+      const next = updater(current);
+      if (areTimelineSegmentsEqual(current, next)) {
+        return current;
+      }
+
+      setTimelineUndoStack((stack) => [...stack.slice(-49), current]);
+      setTimelineRedoStack([]);
+      return next;
+    });
+  }
+
+  function undoTimelineEdit() {
+    if (timelineUndoStack.length === 0) {
+      return;
+    }
+
+    const previous = timelineUndoStack[timelineUndoStack.length - 1];
+    setTimelineUndoStack((stack) => stack.slice(0, -1));
+    setTimelineRedoStack((stack) => [timelineSegments, ...stack.slice(0, 49)]);
+    setTimelineSegments(previous);
+    setSelectedTimelineSegmentId(null);
+  }
+
+  function redoTimelineEdit() {
+    if (timelineRedoStack.length === 0) {
+      return;
+    }
+
+    const next = timelineRedoStack[0];
+    setTimelineRedoStack((stack) => stack.slice(1));
+    setTimelineUndoStack((stack) => [...stack.slice(-49), timelineSegments]);
+    setTimelineSegments(next);
+    setSelectedTimelineSegmentId(null);
+  }
+
+  function deleteSelectedTimelineSegment() {
+    if (!selectedTimelineSegmentId) {
+      return;
+    }
+
+    commitTimelineSegments((segments) =>
+      segments.filter((segment) => segment.id !== selectedTimelineSegmentId)
+    );
+    setSelectedTimelineSegmentId(null);
+    setTimelineContextMenu(null);
+  }
+
+  function splitTimelineSegment(segmentId: string | null, time: number) {
+    const targetSegment =
+      (segmentId ? timelineSegments.find((segment) => segment.id === segmentId) : null) ??
+      findTimelineSegmentAtTime(timelineSegments, time);
+
+    if (!targetSegment || !canSplitTimelineSegment(targetSegment, time)) {
+      setTimelineContextMenu(null);
+      return;
+    }
+
+    const splitTime = clampNumber(time, targetSegment.start + 0.1, targetSegment.end - 0.1);
+    const nextSegmentId = `${targetSegment.id}-split-${Date.now()}`;
+
+    commitTimelineSegments((segments) =>
+      segments.flatMap((segment) => {
+        if (segment.id !== targetSegment.id) {
+          return [segment];
+        }
+
+        return [
+          {
+            ...segment,
+            end: splitTime
+          },
+          {
+            ...segment,
+            id: nextSegmentId,
+            start: splitTime,
+            sourceStart: segment.sourceStart + (splitTime - segment.start)
+          }
+        ];
+      })
+    );
+    setSelectedTimelineSegmentId(nextSegmentId);
+    setTimelineContextMenu(null);
+  }
+
+  function openTimelineContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const time = getTimelineTimeFromClientX(event.clientX);
+    if (time === null) {
+      return;
+    }
+
+    const target = event.target instanceof Element ? event.target : null;
+    const targetSegmentId =
+      target?.closest<HTMLElement>("[data-segment-id]")?.dataset.segmentId ??
+      findTimelineSegmentAtTime(timelineSegments, time)?.id ??
+      null;
+
+    if (targetSegmentId) {
+      setSelectedTimelineSegmentId(targetSegmentId);
+      const targetSegment = timelineSegments.find((segment) => segment.id === targetSegmentId);
+      if (targetSegment) {
+        setSelectedItemId(targetSegment.itemId);
+      }
+    }
+
+    setTimelineContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      time,
+      segmentId: targetSegmentId
+    });
+  }
+
+  function beginTimelineClipTrim(
+    event: ReactPointerEvent<HTMLElement>,
+    segmentId: string,
+    edge: TimelineTrimEdge
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+    timelineTrimDragRef.current = {
+      segmentId,
+      edge,
+      originalSegments: timelineSegments
+    };
+    setSelectedTimelineSegmentId(segmentId);
+    setTrimmingSegmentId(segmentId);
+    timelineBodyRef.current?.setPointerCapture(event.pointerId);
+  }
+
+  function updateTimelineClipTrim(clientX: number) {
+    const drag = timelineTrimDragRef.current;
+    const time = getTimelineTimeFromClientX(clientX);
+    if (!drag || time === null) {
+      return;
+    }
+
+    setTimelineSegments((current) =>
+      trimTimelineSegment(current, drag.segmentId, drag.edge, time, mediaDurationById)
+    );
+  }
+
+  function finishTimelineClipTrim() {
+    const drag = timelineTrimDragRef.current;
+    if (!drag) {
+      return;
+    }
+
+    setTimelineSegments((current) => {
+      if (!areTimelineSegmentsEqual(drag.originalSegments, current)) {
+        setTimelineUndoStack((stack) => [...stack.slice(-49), drag.originalSegments]);
+        setTimelineRedoStack([]);
+      }
+
+      return current;
+    });
+    timelineTrimDragRef.current = null;
+    setTrimmingSegmentId(null);
+  }
+
+  function beginTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
+    if (timelineTrimDragRef.current) {
+      return;
+    }
+
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("button, input, select, textarea")) {
+      return;
+    }
+
+    setTimelineContextMenu(null);
+    timelineDragRef.current = true;
+    setScrubbingTimeline(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    seekTimelinePointer(event.clientX);
+  }
+
+  function moveTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
+    if (timelineTrimDragRef.current) {
+      updateTimelineClipTrim(event.clientX);
+      return;
+    }
+
+    if (!timelineDragRef.current) {
+      return;
+    }
+
+    seekTimelinePointer(event.clientX);
+  }
+
+  function endTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    finishTimelineClipTrim();
+    timelineDragRef.current = false;
+    setScrubbingTimeline(false);
+  }
+
   function updateDuration(value: number | null) {
     if (value && Number.isFinite(value)) {
       setDuration(value);
     }
+  }
+
+  function updateMediaDuration(itemId: string, value: number | null) {
+    if (!value || !Number.isFinite(value)) {
+      return;
+    }
+
+    setImportedMedia((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, duration: value } : item))
+    );
   }
 
   function addZoomEffect() {
@@ -407,6 +957,24 @@ export function EditorView() {
     setSubtitles((current) =>
       current.map((subtitle) => (subtitle.id === id ? { ...subtitle, ...updates } : subtitle))
     );
+  }
+
+  function updateTrimStart(value: number) {
+    setTrimRange((current) => {
+      const end = current.end > 0 ? current.end : timelineDuration;
+      const nextStart = clampNumber(value, 0, Math.max(0, end - 0.1));
+      return {
+        start: nextStart,
+        end: Math.max(end, nextStart + 0.1)
+      };
+    });
+  }
+
+  function updateTrimEnd(value: number) {
+    setTrimRange((current) => ({
+      start: current.start,
+      end: clampNumber(value, current.start + 0.1, timelineDuration)
+    }));
   }
 
   function getExportSource(): ExportVideoRequest["source"] | null {
@@ -482,6 +1050,14 @@ export function EditorView() {
           </button>
 
           <div className="studio-top-actions">
+            <button
+              className="studio-icon-button"
+              type="button"
+              title="Back to main menu"
+              onClick={() => void window.openVideoCraft.windows.openMain()}
+            >
+              <Home size={17} />
+            </button>
             <button className="studio-icon-button" type="button" title="Settings">
               <Settings2 size={17} />
             </button>
@@ -526,13 +1102,13 @@ export function EditorView() {
                 key={tool.id}
                 onClick={() => setActiveTool(tool.id)}
               >
-                {tool.icon}
+                <img src={tool.image} alt="" aria-hidden="true" />
                 <span>{tool.label}</span>
               </button>
             ))}
           </aside>
 
-          <aside className="tool-panel">
+          <aside className={`tool-panel ${activeTool === "layout" ? "tool-panel-layout" : ""}`}>
             <ToolPanelHeader
               icon={editorTools.find((tool) => tool.id === activeTool)?.icon}
               title={editorTools.find((tool) => tool.id === activeTool)?.label ?? "Tools"}
@@ -568,6 +1144,7 @@ export function EditorView() {
                       item={item}
                       selected={selectedItem?.id === item.id}
                       onSelect={() => setSelectedItemId(item.id)}
+                      onDuration={(nextDuration) => updateMediaDuration(item.id, nextDuration)}
                       onRemove={
                         item.origin === "imported" ? () => removeImportedMedia(item.id) : undefined
                       }
@@ -585,59 +1162,44 @@ export function EditorView() {
             ) : null}
 
             {activeTool === "layout" ? (
-              <div className="tool-stack">
-                <div className="layout-option-grid">
-                  {layoutOptions.map((option) => (
-                    <button
-                      className={layoutMode === option.id ? "tool-option-active" : ""}
-                      type="button"
-                      key={option.id}
-                      onClick={() => setLayoutMode(option.id)}
-                    >
-                      {option.icon}
-                      <span>{option.label}</span>
-                    </button>
+              <div className="layout-panel">
+                <div className="layout-tabs" role="tablist" aria-label="Layout presets">
+                  <button type="button" role="tab">
+                    Favorites
+                  </button>
+                  <button className="layout-tab-active" type="button" role="tab">
+                    Presets
+                  </button>
+                </div>
+
+                <div className="layout-presets">
+                  <strong>Presets</strong>
+                  {layoutPresetGroups.map((group) => (
+                    <section className="layout-preset-group" key={group.title}>
+                      <h3>{group.title}</h3>
+                      <div className="layout-preset-grid">
+                        {group.presets.map((preset) => (
+                          <button
+                            className={`layout-preset-card layout-preset-${preset.variant} ${
+                              layoutMode === preset.id ? "layout-preset-active" : ""
+                            }`}
+                            type="button"
+                            key={`${group.title}-${preset.variant}`}
+                            aria-label={preset.label}
+                            onClick={() => setLayoutMode(preset.id)}
+                          >
+                            <span className="layout-preset-screen">
+                              <i />
+                              <b />
+                              {preset.featured ? <em /> : null}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
                   ))}
                 </div>
 
-                <RangeControl
-                  label="Horizontal"
-                  min={-36}
-                  max={36}
-                  value={screenPosition.x}
-                  suffix="%"
-                  onChange={(value) =>
-                    setScreenPosition((current) => ({ ...current, x: value }))
-                  }
-                />
-                <RangeControl
-                  label="Vertical"
-                  min={-28}
-                  max={28}
-                  value={screenPosition.y}
-                  suffix="%"
-                  onChange={(value) =>
-                    setScreenPosition((current) => ({ ...current, y: value }))
-                  }
-                />
-                <RangeControl
-                  label="Video scale"
-                  min={60}
-                  max={126}
-                  value={screenPosition.scale}
-                  suffix="%"
-                  onChange={(value) =>
-                    setScreenPosition((current) => ({ ...current, scale: value }))
-                  }
-                />
-                <RangeControl
-                  label="Face size"
-                  min={14}
-                  max={42}
-                  value={cameraSize}
-                  suffix="%"
-                  onChange={setCameraSize}
-                />
               </div>
             ) : null}
 
@@ -828,7 +1390,10 @@ export function EditorView() {
                     projectAudioRef={projectAudioRef}
                     importedVideoRef={importedVideoRef}
                     importedAudioRef={importedAudioRef}
-                    onDuration={updateDuration}
+                    onDuration={(nextDuration) => {
+                      updateDuration(nextDuration);
+                      updateMediaDuration(previewItem.id, nextDuration);
+                    }}
                     onTimeUpdate={setCurrentTime}
                     onEnded={() => setPlaying(false)}
                     onSubtitleClick={(subtitleId) => {
@@ -866,6 +1431,8 @@ export function EditorView() {
               max={totalFrames}
               step={1}
               value={currentFrame}
+              aria-label="Timeline scrubber"
+              style={{ "--scrubber-progress": `${playheadPercent}%` } as CSSProperties}
               onChange={(event) => seekFrame(Number(event.target.value))}
             />
 
@@ -879,47 +1446,100 @@ export function EditorView() {
 
           <TimelineEditStrip
             activeTool={activeTool}
-            activeDuration={activeDuration}
-            trimRange={trimRange}
+            activeDuration={timelineDuration}
             selectedZoomEffect={selectedZoomEffect}
-            onAddMergeClip={() => void importMedia({ selectFirst: false })}
             onRemoveZoom={removeZoomEffect}
-            onTrimEndChange={(value) =>
-              setTrimRange((current) => ({ ...current, end: Math.max(value, current.start) }))
-            }
-            onTrimStartChange={(value) =>
-              setTrimRange((current) => ({
-                ...current,
-                start: Math.min(value, current.end || activeDuration)
-              }))
-            }
             onZoomChange={updateZoomEffect}
           />
 
           <div className="timeline-ruler">
-            {createTimelineTicks(activeDuration).map((tick) => (
+            {createTimelineTicks(timelineDuration).map((tick) => (
               <span key={tick}>{tick}</span>
             ))}
           </div>
 
-          <div className="timeline-body">
+          <div
+            className={`timeline-body ${scrubbingTimeline ? "timeline-body-scrubbing" : ""}`}
+            ref={timelineBodyRef}
+            style={{ "--timeline-progress": `${playheadPercent}` } as CSSProperties}
+            onPointerDown={beginTimelineScrub}
+            onPointerMove={moveTimelineScrub}
+            onPointerUp={endTimelineScrub}
+            onPointerCancel={endTimelineScrub}
+            onContextMenu={openTimelineContextMenu}
+          >
             <div
               className="playhead"
-              style={{ left: `calc(150px + (${playheadPercent} * (100% - 150px) / 100))` }}
+              role="slider"
+              aria-label="Timeline playhead"
+              aria-valuemin={0}
+              aria-valuemax={Number(timelineDuration.toFixed(2))}
+              aria-valuenow={Number(currentTime.toFixed(2))}
+              aria-valuetext={formatSeconds(currentTime)}
+              tabIndex={0}
+              style={{
+                left: `calc(var(--timeline-label-width) + var(--timeline-track-gap) + (${playheadPercent} * (100% - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowLeft") {
+                  event.preventDefault();
+                  seekFrame(currentFrame - 1);
+                }
+                if (event.key === "ArrowRight") {
+                  event.preventDefault();
+                  seekFrame(currentFrame + 1);
+                }
+                if (event.key === "Home") {
+                  event.preventDefault();
+                  seek(0);
+                }
+                if (event.key === "End") {
+                  event.preventDefault();
+                  seek(timelineDuration);
+                }
+              }}
             >
               <span />
             </div>
-            <TimelineTrack label="Video 1" accent="purple" icon={<Film size={14} />}>
-              {allMedia
-                .filter((item) => item.kind === "video" || item.kind === "image")
-                .map((item) => (
-                  <TimelineClip
-                    key={item.id}
-                    item={item}
-                    selected={selectedItem?.id === item.id}
-                    onSelect={() => setSelectedItemId(item.id)}
+            <TimelineTrack
+              label="Video 1"
+              accent="purple"
+              icon={<Film size={14} />}
+              controls={
+                activeTool === "cut" ? (
+                  <TimelineVideoCutControls
+                    duration={timelineDuration}
+                    range={trimRange}
+                    onAddMergeClip={() => void importMedia({ selectFirst: false })}
+                    onTrimEndChange={updateTrimEnd}
+                    onTrimStartChange={updateTrimStart}
                   />
-                ))}
+                ) : null
+              }
+            >
+              {videoTimelineClips.map((clip) => (
+                <TimelineClip
+                  key={clip.id}
+                  clip={clip}
+                  timelineDuration={timelineDuration}
+                  selected={selectedItem?.id === clip.item.id}
+                  selectedSegment={selectedTimelineSegmentId === clip.id}
+                  waveform={clip.item.kind === "audio" ? audioWaveforms[clip.item.id] : undefined}
+                  onSelect={() => {
+                    setSelectedItemId(clip.item.id);
+                    setSelectedTimelineSegmentId(clip.id);
+                  }}
+                  onTrimPointerDown={beginTimelineClipTrim}
+                />
+              ))}
+              {activeTool === "cut" ? (
+                <TimelineTrimClip
+                  duration={timelineDuration}
+                  range={trimRange}
+                  selected
+                  onSelect={() => setActiveTool("cut")}
+                />
+              ) : null}
             </TimelineTrack>
 
             <TimelineTrack label="Zoom" accent="amber" icon={<WandSparkles size={14} />}>
@@ -927,7 +1547,7 @@ export function EditorView() {
                 <TimelineZoomClip
                   key={effect.id}
                   effect={effect}
-                  duration={activeDuration}
+                  duration={timelineDuration}
                   selected={selectedZoomEffect?.id === effect.id}
                   onSelect={() => {
                     setSelectedZoomId(effect.id);
@@ -937,26 +1557,22 @@ export function EditorView() {
               ))}
             </TimelineTrack>
 
-            <TimelineTrack label="Cut" accent="rose" icon={<Scissors size={14} />}>
-              <TimelineTrimClip
-                duration={activeDuration}
-                range={trimRange}
-                selected={activeTool === "cut"}
-                onSelect={() => setActiveTool("cut")}
-              />
-            </TimelineTrack>
-
             <TimelineTrack label="Audio 1" accent="green" icon={<AudioLines size={14} />}>
-              {allMedia
-                .filter((item) => item.kind === "audio")
-                .map((item) => (
-                  <TimelineClip
-                    key={item.id}
-                    item={item}
-                    selected={selectedItem?.id === item.id}
-                    onSelect={() => setSelectedItemId(item.id)}
-                  />
-                ))}
+              {audioTimelineClips.map((clip) => (
+                <TimelineClip
+                  key={clip.id}
+                  clip={clip}
+                  timelineDuration={timelineDuration}
+                  selected={selectedItem?.id === clip.item.id}
+                  selectedSegment={selectedTimelineSegmentId === clip.id}
+                  waveform={clip.item.kind === "audio" ? audioWaveforms[clip.item.id] : undefined}
+                  onSelect={() => {
+                    setSelectedItemId(clip.item.id);
+                    setSelectedTimelineSegmentId(clip.id);
+                  }}
+                  onTrimPointerDown={beginTimelineClipTrim}
+                />
+              ))}
             </TimelineTrack>
 
             <TimelineTrack label="Subtitles" accent="cyan" icon={<Captions size={14} />}>
@@ -964,7 +1580,7 @@ export function EditorView() {
                 <TimelineSubtitleClip
                   key={subtitle.id}
                   subtitle={subtitle}
-                  duration={activeDuration}
+                  duration={timelineDuration}
                   selected={selectedSubtitle?.id === subtitle.id}
                   onSelect={() => {
                     setSelectedSubtitleId(subtitle.id);
@@ -974,6 +1590,24 @@ export function EditorView() {
               ))}
             </TimelineTrack>
           </div>
+          {timelineContextMenu ? (
+            <div
+              className="timeline-context-menu"
+              style={{ left: timelineContextMenu.x, top: timelineContextMenu.y }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                disabled={!canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)}
+                onClick={() =>
+                  splitTimelineSegment(timelineContextMenu.segmentId, timelineContextMenu.time)
+                }
+              >
+                <Scissors size={14} />
+                Split
+              </button>
+            </div>
+          ) : null}
         </section>
       </section>
     </main>
@@ -985,6 +1619,9 @@ function ToolPanelHeader(props: { icon: ReactNode; title: string }) {
     <div className="tool-panel-header">
       <span>{props.icon}</span>
       <strong>{props.title}</strong>
+      <button type="button" title="Panel options">
+        <MoreHorizontal size={16} />
+      </button>
     </div>
   );
 }
@@ -1198,6 +1835,7 @@ function AssetCard(props: {
   item: EditorMediaItem;
   selected: boolean;
   onSelect: () => void;
+  onDuration?: (duration: number | null) => void;
   onRemove?: () => void;
 }) {
   return (
@@ -1207,7 +1845,12 @@ function AssetCard(props: {
       <button className="asset-card-main" type="button" onClick={props.onSelect}>
         <div className="asset-preview">
           {props.item.kind === "video" ? (
-            <video src={props.item.url} muted playsInline />
+            <video
+              src={props.item.url}
+              muted
+              playsInline
+              onLoadedMetadata={(event) => props.onDuration?.(event.currentTarget.duration)}
+            />
           ) : props.item.kind === "image" ? (
             <img src={props.item.url} alt="" />
           ) : (
@@ -1234,12 +1877,8 @@ function AssetCard(props: {
 function TimelineEditStrip(props: {
   activeTool: EditorTool;
   activeDuration: number;
-  trimRange: { start: number; end: number };
   selectedZoomEffect: ZoomEffect | null;
-  onAddMergeClip: () => void;
   onRemoveZoom: (id: string) => void;
-  onTrimEndChange: (value: number) => void;
-  onTrimStartChange: (value: number) => void;
   onZoomChange: (id: string, updates: Partial<ZoomEffect>) => void;
 }) {
   if (props.activeTool === "zoom" && props.selectedZoomEffect) {
@@ -1304,55 +1943,61 @@ function TimelineEditStrip(props: {
     );
   }
 
-  if (props.activeTool === "cut") {
-    return (
-      <div className="timeline-edit-strip">
-        <div className="timeline-edit-title">
-          <Scissors size={15} />
-          <strong>Cut</strong>
-        </div>
-        <label>
-          <span>Start</span>
-          <input
-            type="number"
-            min={0}
-            max={props.activeDuration}
-            step={0.1}
-            value={Number(props.trimRange.start.toFixed(1))}
-            onChange={(event) => props.onTrimStartChange(Number(event.target.value))}
-          />
-        </label>
-        <label>
-          <span>End</span>
-          <input
-            type="number"
-            min={props.trimRange.start}
-            max={props.activeDuration}
-            step={0.1}
-            value={Number(props.trimRange.end.toFixed(1))}
-            onChange={(event) => props.onTrimEndChange(Number(event.target.value))}
-          />
-        </label>
-        <label className="timeline-edit-range">
-          <span>Range</span>
-          <input
-            type="range"
-            min={0}
-            max={Math.max(props.activeDuration, 1)}
-            step={0.1}
-            value={props.trimRange.start}
-            onChange={(event) => props.onTrimStartChange(Number(event.target.value))}
-          />
-        </label>
-        <button className="timeline-merge-button" type="button" onClick={props.onAddMergeClip}>
-          <Combine size={14} />
-          Merge
-        </button>
-      </div>
-    );
-  }
-
   return null;
+}
+
+function TimelineVideoCutControls(props: {
+  duration: number;
+  range: { start: number; end: number };
+  onAddMergeClip: () => void;
+  onTrimEndChange: (value: number) => void;
+  onTrimStartChange: (value: number) => void;
+}) {
+  return (
+    <div className="timeline-video-cut-controls" onPointerDown={(event) => event.stopPropagation()}>
+      <div className="timeline-edit-title">
+        <Scissors size={15} />
+        <strong>Cut</strong>
+      </div>
+      <label>
+        <span>Start</span>
+        <input
+          type="number"
+          min={0}
+          max={props.duration}
+          step={0.1}
+          value={Number(props.range.start.toFixed(1))}
+          onChange={(event) => props.onTrimStartChange(Number(event.target.value))}
+        />
+      </label>
+      <label>
+        <span>End</span>
+        <input
+          type="number"
+          min={props.range.start + 0.1}
+          max={props.duration}
+          step={0.1}
+          value={Number(props.range.end.toFixed(1))}
+          onChange={(event) => props.onTrimEndChange(Number(event.target.value))}
+        />
+      </label>
+      <label className="timeline-edit-range">
+        <span>Trim</span>
+        <input
+          type="range"
+          min={0}
+          max={Math.max(props.duration, 1)}
+          step={0.1}
+          value={props.range.start}
+          onChange={(event) => props.onTrimStartChange(Number(event.target.value))}
+        />
+      </label>
+      <button className="timeline-merge-button" type="button" onClick={props.onAddMergeClip}>
+        <Combine size={14} />
+        Merge
+      </button>
+    </div>
+  );
 }
 
 function TimelineTrack(props: {
@@ -1360,49 +2005,84 @@ function TimelineTrack(props: {
   accent: "purple" | "cyan" | "green" | "amber" | "rose";
   icon: ReactNode;
   children: ReactNode;
+  controls?: ReactNode;
 }) {
   return (
-    <div className="timeline-track">
+    <div className={`timeline-track ${props.controls ? "timeline-track-with-controls" : ""}`}>
       <div className={`track-label track-${props.accent}`}>
         {props.icon}
         <span>{props.label}</span>
       </div>
       <div className="track-lane">{props.children}</div>
+      {props.controls ? <div className="timeline-track-controls">{props.controls}</div> : null}
     </div>
   );
 }
 
 function TimelineClip(props: {
-  item: EditorMediaItem;
+  clip: TimelineMediaClip;
+  timelineDuration: number;
   selected: boolean;
+  selectedSegment: boolean;
+  waveform?: number[];
   onSelect: () => void;
+  onTrimPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    segmentId: string,
+    edge: TimelineTrimEdge
+  ) => void;
 }) {
-  const width = props.item.kind === "image" ? "22%" : props.item.kind === "audio" ? "58%" : "64%";
-  const left = props.item.origin === "project" ? "2%" : props.item.kind === "audio" ? "25%" : "34%";
+  const item = props.clip.item;
   const className =
-    props.item.kind === "audio"
+    item.kind === "audio"
       ? "clip clip-audio"
-      : props.item.kind === "image"
+      : item.kind === "image"
         ? "clip clip-image"
         : "clip clip-main";
 
   return (
     <button
-      className={`${className} ${props.selected ? "clip-selected" : ""}`}
+      className={`${className} ${props.selected ? "clip-selected" : ""} ${
+        props.selectedSegment ? "clip-segment-selected" : ""
+      }`}
       type="button"
-      style={{ left, width }}
+      data-segment-id={props.clip.id}
+      style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
       onClick={props.onSelect}
     >
-      {props.item.kind === "audio" ? (
-        <span className="waveform" />
+      <span
+        className="clip-edge clip-edge-start"
+        onPointerDown={(event) => props.onTrimPointerDown(event, props.clip.id, "start")}
+      />
+      {item.kind === "audio" ? (
+        <AudioWaveform values={props.waveform} />
       ) : (
         <>
           <span className="clip-thumb" />
           <Film size={13} />
         </>
       )}
-      <strong>{props.item.name}</strong>
+      <strong>{item.name}</strong>
+      <span
+        className="clip-edge clip-edge-end"
+        onPointerDown={(event) => props.onTrimPointerDown(event, props.clip.id, "end")}
+      />
     </button>
+  );
+}
+
+function AudioWaveform(props: { values?: number[] }) {
+  const values = props.values?.length ? props.values : createFallbackWaveform("audio");
+
+  return (
+    <span className="waveform" aria-hidden="true">
+      {values.map((value, index) => (
+        <i
+          key={index}
+          style={{ height: `${Math.max(12, Math.min(100, value * 100))}%` }}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -1412,18 +2092,15 @@ function TimelineZoomClip(props: {
   selected: boolean;
   onSelect: () => void;
 }) {
-  const safeDuration = Math.max(props.duration, props.effect.end, 1);
-  const left = `${Math.max(0, (props.effect.start / safeDuration) * 100)}%`;
-  const width = `${Math.max(
-    6,
-    ((props.effect.end - props.effect.start) / safeDuration) * 100
-  )}%`;
-
   return (
     <button
       className={`clip clip-zoom ${props.selected ? "clip-selected" : ""}`}
       type="button"
-      style={{ left, width }}
+      style={createTimelineClipStyle(
+        props.effect.start,
+        props.effect.end - props.effect.start,
+        props.duration
+      )}
       onClick={props.onSelect}
     >
       {props.effect.direction === "in" ? <ZoomIn size={13} /> : <ZoomOut size={13} />}
@@ -1438,18 +2115,15 @@ function TimelineTrimClip(props: {
   selected: boolean;
   onSelect: () => void;
 }) {
-  const safeDuration = Math.max(props.duration, props.range.end, 1);
-  const left = `${Math.max(0, (props.range.start / safeDuration) * 100)}%`;
-  const width = `${Math.max(
-    6,
-    ((props.range.end - props.range.start) / safeDuration) * 100
-  )}%`;
-
   return (
     <button
       className={`clip clip-trim ${props.selected ? "clip-selected" : ""}`}
       type="button"
-      style={{ left, width }}
+      style={createTimelineClipStyle(
+        props.range.start,
+        props.range.end - props.range.start,
+        props.duration
+      )}
       onClick={props.onSelect}
     >
       <Scissors size={13} />
@@ -1466,24 +2140,250 @@ function TimelineSubtitleClip(props: {
   selected: boolean;
   onSelect: () => void;
 }) {
-  const safeDuration = Math.max(props.duration, props.subtitle.end, 1);
-  const left = `${Math.max(0, (props.subtitle.start / safeDuration) * 100)}%`;
-  const width = `${Math.max(
-    6,
-    ((props.subtitle.end - props.subtitle.start) / safeDuration) * 100
-  )}%`;
-
   return (
     <button
       className={`clip clip-text ${props.selected ? "clip-selected" : ""}`}
       type="button"
-      style={{ left, width }}
+      style={createTimelineClipStyle(
+        props.subtitle.start,
+        props.subtitle.end - props.subtitle.start,
+        props.duration
+      )}
       onClick={props.onSelect}
     >
       <Captions size={13} />
       <strong>{props.subtitle.text}</strong>
     </button>
   );
+}
+
+function getTimelineMediaDuration(
+  item: EditorMediaItem,
+  activeDuration: number,
+  selectedItemId: string | null
+): number {
+  if (item.duration && item.duration > 0) {
+    return item.duration;
+  }
+
+  if (item.id === selectedItemId && activeDuration > 0) {
+    return activeDuration;
+  }
+
+  if (item.kind === "image") {
+    return Math.min(Math.max(activeDuration, 5), 5);
+  }
+
+  return Math.max(activeDuration, 1);
+}
+
+function getTimelineTrackKind(item: EditorMediaItem): TimelineTrackKind {
+  return item.kind === "audio" ? "audio" : "video";
+}
+
+function syncTimelineSegments(
+  currentSegments: TimelineSegment[],
+  items: EditorMediaItem[],
+  mediaDurationById: Map<string, number>,
+  newItemIds: ReadonlySet<string>
+): TimelineSegment[] {
+  const itemIds = new Set(items.map((item) => item.id));
+  const nextSegments = currentSegments
+    .filter((segment) => itemIds.has(segment.itemId))
+    .map((segment) => {
+      const itemDuration = mediaDurationById.get(segment.itemId) ?? 1;
+      const wasPlaceholderFullClip =
+        segment.start === 0 &&
+        segment.sourceStart === 0 &&
+        segment.end <= 1.05 &&
+        itemDuration > 1.05;
+      const end = wasPlaceholderFullClip
+        ? itemDuration
+        : clampNumber(segment.end, segment.start + 0.1, itemDuration);
+
+      return {
+        ...segment,
+        end,
+        sourceStart: clampNumber(segment.sourceStart, 0, Math.max(0, itemDuration - 0.1))
+      };
+    });
+
+  for (const item of items) {
+    if (!newItemIds.has(item.id) || nextSegments.some((segment) => segment.itemId === item.id)) {
+      continue;
+    }
+
+    nextSegments.push({
+      id: `${item.id}:segment-0`,
+      itemId: item.id,
+      track: getTimelineTrackKind(item),
+      start: 0,
+      end: mediaDurationById.get(item.id) ?? 1,
+      sourceStart: 0
+    });
+  }
+
+  return areTimelineSegmentsEqual(currentSegments, nextSegments) ? currentSegments : nextSegments;
+}
+
+function createTimelineMediaClips(
+  segments: TimelineSegment[],
+  mediaById: Map<string, EditorMediaItem>
+): TimelineMediaClip[] {
+  return segments
+    .map((segment) => {
+      const item = mediaById.get(segment.itemId);
+      if (!item) {
+        return null;
+      }
+
+      return {
+        id: segment.id,
+        item,
+        track: segment.track,
+        start: segment.start,
+        duration: Math.max(0.1, segment.end - segment.start),
+        sourceStart: segment.sourceStart
+      } satisfies TimelineMediaClip;
+    })
+    .filter((clip): clip is TimelineMediaClip => Boolean(clip))
+    .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id));
+}
+
+function findTimelineSegmentAtTime(
+  segments: TimelineSegment[],
+  time: number
+): TimelineSegment | null {
+  return (
+    segments.find((segment) => time > segment.start && time < segment.end) ??
+    segments.find((segment) => time >= segment.start && time <= segment.end) ??
+    null
+  );
+}
+
+function canSplitTimelineSegment(segment: TimelineSegment, time: number): boolean {
+  return time > segment.start + 0.1 && time < segment.end - 0.1;
+}
+
+function canSplitTimelineSegmentAt(
+  segments: TimelineSegment[],
+  contextMenu: Exclude<TimelineContextMenu, null>
+): boolean {
+  const segment =
+    (contextMenu.segmentId
+      ? segments.find((item) => item.id === contextMenu.segmentId)
+      : null) ?? findTimelineSegmentAtTime(segments, contextMenu.time);
+  return segment ? canSplitTimelineSegment(segment, contextMenu.time) : false;
+}
+
+function trimTimelineSegment(
+  segments: TimelineSegment[],
+  segmentId: string,
+  edge: TimelineTrimEdge,
+  time: number,
+  mediaDurationById: Map<string, number>
+): TimelineSegment[] {
+  return segments.map((segment) => {
+    if (segment.id !== segmentId) {
+      return segment;
+    }
+
+    const mediaDuration = mediaDurationById.get(segment.itemId) ?? segment.end;
+    const minDuration = 0.15;
+
+    if (edge === "start") {
+      const nextStart = clampNumber(time, 0, segment.end - minDuration);
+      const sourceStart = clampNumber(
+        segment.sourceStart + (nextStart - segment.start),
+        0,
+        Math.max(0, mediaDuration - minDuration)
+      );
+      return {
+        ...segment,
+        start: nextStart,
+        sourceStart
+      };
+    }
+
+    const maxEnd = segment.start + Math.max(minDuration, mediaDuration - segment.sourceStart);
+    return {
+      ...segment,
+      end: clampNumber(time, segment.start + minDuration, maxEnd)
+    };
+  });
+}
+
+function areTimelineSegmentsEqual(first: TimelineSegment[], second: TimelineSegment[]): boolean {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
+function createTimelineClipStyle(
+  start: number,
+  duration: number,
+  timelineDuration: number
+): CSSProperties {
+  const safeDuration = Math.max(timelineDuration, start + duration, 1);
+  const left = Math.min(100, Math.max(0, (start / safeDuration) * 100));
+  const width = Math.min(100 - left, Math.max(1.5, (duration / safeDuration) * 100));
+
+  return {
+    left: `${left}%`,
+    right: "auto",
+    width: `${width}%`
+  };
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+
+  return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
+async function decodeAudioWaveform(url: string, barCount = 96): Promise<number[]> {
+  const response = await fetch(url);
+  const buffer = await response.arrayBuffer();
+  const AudioContextConstructor =
+    window.AudioContext ||
+    (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextConstructor) {
+    throw new Error("AudioContext is not available.");
+  }
+  const audioContext = new AudioContextConstructor();
+
+  try {
+    const audioBuffer = await audioContext.decodeAudioData(buffer.slice(0));
+    const channelData = audioBuffer.getChannelData(0);
+    const samplesPerBar = Math.max(1, Math.floor(channelData.length / barCount));
+
+    return Array.from({ length: barCount }, (_value, index) => {
+      const start = index * samplesPerBar;
+      const end = Math.min(channelData.length, start + samplesPerBar);
+      let peak = 0;
+
+      for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+        peak = Math.max(peak, Math.abs(channelData[sampleIndex]));
+      }
+
+      return Math.min(1, Math.max(0.08, peak));
+    });
+  } finally {
+    await audioContext.close().catch(() => undefined);
+  }
+}
+
+function createFallbackWaveform(seed: string, barCount = 64): number[] {
+  let hash = 0;
+  for (const character of seed) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+
+  return Array.from({ length: barCount }, (_value, index) => {
+    const wave = Math.sin((index + 1) * 0.72 + hash * 0.0001);
+    const pulse = Math.sin((index + 1) * 1.73 + hash * 0.0007);
+    return clampNumber(0.18 + Math.abs(wave) * 0.52 + Math.abs(pulse) * 0.22, 0.12, 1);
+  });
 }
 
 function createProjectMedia(project: ProjectView | null): EditorMediaItem[] {

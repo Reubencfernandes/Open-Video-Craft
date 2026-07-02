@@ -57,7 +57,8 @@ const api = {
     setRecorderCompact: (compact: boolean): Promise<boolean> =>
       ipcRenderer.invoke("windows:set-recorder-compact", compact),
     openEditor: (projectId?: string | null): Promise<boolean> =>
-      ipcRenderer.invoke("windows:open-editor", projectId)
+      ipcRenderer.invoke("windows:open-editor", projectId),
+    openMain: (): Promise<boolean> => ipcRenderer.invoke("windows:open-main")
   },
   editor: {
     importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media"),

@@ -7,7 +7,7 @@ export function DisplayBorder() {
   return (
     <div className="display-border-overlay">
       <div className="display-border-label">
-        <Monitor size={24} />
+        <Monitor size={16} />
         <span>{label}</span>
       </div>
     </div>

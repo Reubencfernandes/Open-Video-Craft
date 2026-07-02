@@ -1,4 +1,4 @@
-import { Film, ScreenShare, Sparkles } from "lucide-react";
+import { Film, ScreenShare } from "lucide-react";
 import { useState } from "react";
 
 type LaunchAction = "record" | "edit";
@@ -72,11 +72,6 @@ export function App() {
             <span>Edit</span>
             <small>Open the editor and import media.</small>
           </button>
-        </div>
-
-        <div className="launcher-footer">
-          <Sparkles size={16} />
-          <span>{busyAction ? "Opening..." : "Choose a workspace to continue."}</span>
         </div>
       </section>
     </main>
