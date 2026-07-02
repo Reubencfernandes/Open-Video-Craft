@@ -57,6 +57,7 @@ const projectStore = new ProjectStore({
 
 const sourceCache = new Map<string, Electron.DesktopCapturerSource>();
 const importedMediaCache = new Map<string, string>();
+const appId = "com.openvideocraft.app";
 let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
@@ -73,6 +74,12 @@ const recorderWindowSize = {
   }
 };
 
+function getAppIconPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, "app.png")
+    : path.join(__dirname, "../../src/renderer/assets/app.png");
+}
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -80,6 +87,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1080,
     minHeight: 720,
     title: "Open Video Craft",
+    icon: getAppIconPath(),
     backgroundColor: "#121317",
     autoHideMenuBar: true,
     webPreferences: {
@@ -142,6 +150,7 @@ async function createRecorderWindow(): Promise<void> {
     alwaysOnTop: true,
     skipTaskbar: true,
     title: "Open Video Craft Recorder",
+    icon: getAppIconPath(),
     backgroundColor: "#00000000",
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
@@ -189,6 +198,7 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
       minWidth: 1080,
       minHeight: 720,
       title: "Open Video Craft Editor",
+      icon: getAppIconPath(),
       backgroundColor: "#121317",
       autoHideMenuBar: true,
       webPreferences: {
@@ -784,6 +794,7 @@ function createFallbackThumbnail(label: string): string {
 }
 
 app.whenReady().then(async () => {
+  app.setAppUserModelId(appId);
   Menu.setApplicationMenu(null);
   registerPermissions();
   registerMediaProtocol();

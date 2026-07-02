@@ -1,0 +1,95 @@
+name: Release desktop apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            npm_script: dist:win
+            builder_args: "--publish never"
+            artifact_name: open-video-craft-win
+          - name: macOS Intel
+            os: macos-15-intel
+            npm_script: dist:mac
+            builder_args: "--x64 --publish never"
+            artifact_name: open-video-craft-mac-x64
+          - name: macOS Apple Silicon
+            os: macos-latest
+            npm_script: dist:mac
+            builder_args: "--arm64 --publish never"
+            artifact_name: open-video-craft-mac-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build installers
+        run: npm run ${{ matrix.npm_script }} -- ${{ matrix.builder_args }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            release/**/*.exe
+            release/**/*.dmg
+            release/**/*.zip
+            release/**/*.blockmap
+            release/**/*.yml
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          gh release view "$TAG_NAME" >/dev/null 2>&1 || \
+            gh release create "$TAG_NAME" \
+              --title "$TAG_NAME" \
+              --notes "Windows and macOS desktop builds for Open Video Craft."
+
+          mapfile -d '' files < <(find artifacts -type f -print0)
+          gh release upload "$TAG_NAME" "${files[@]}" --clobber

@@ -5,16 +5,93 @@
   "private": true,
   "license": "ISC",
   "author": "Reuben Chagas Fernandes",
+  "productName": "Open Video Craft",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Reubencfernandes/Open-Video-Craft.git"
+  },
   "type": "commonjs",
   "main": "dist-electron/main/main.js",
   "scripts": {
     "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist-electron/main/main.js\"",
+    "build:icons": "node scripts/create-app-icons.mjs",
     "build:main": "tsc -p tsconfig.electron.json",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
+    "dist": "npm run build:icons && npm run build && electron-builder",
+    "dist:win": "npm run build:icons && npm run build && electron-builder --win",
+    "dist:mac": "npm run build:icons && npm run build && electron-builder --mac",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "start": "electron dist-electron/main/main.js"
+  },
+  "build": {
+    "appId": "com.openvideocraft.app",
+    "productName": "Open Video Craft",
+    "copyright": "Copyright (c) 2026 Reuben Chagas Fernandes",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/ffprobe-static/**/*"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release/${version}"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist-renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "src/renderer/assets/app.png",
+        "to": "app.png"
+      }
+    ],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "icon": "build/icon.icns",
+      "identity": null,
+      "category": "public.app-category.video",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}-${os}-${arch}.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}-${os}-${arch}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Reubencfernandes",
+      "repo": "Open-Video-Craft"
+    }
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.2",
@@ -25,6 +102,7 @@
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^43.0.0",
+    "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.16",
     "tailwindcss": "^4.3.2",
