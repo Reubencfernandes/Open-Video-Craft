@@ -30,6 +30,8 @@ import {
   recordingRuntime,
   type RecorderKind
 } from "./recording-runtime";
+import appLogo from "./assets/app.png";
+import { cx } from "./classNames";
 
 type FloatingState =
   | "ready"
@@ -561,27 +563,28 @@ export function RecorderController() {
 
   if (compact) {
     return (
-      <main className="floating-recorder-root floating-recorder-root-compact">
-        <div className="floating-compact-pill app-drag">
+      <main className="floating-recorder-root floating-recorder-root-compact grid size-full place-items-center bg-transparent">
+        <div className="floating-compact-pill app-drag inline-flex h-full w-full items-center justify-between gap-3 rounded-full border border-white/15 bg-slate-950/95 py-0 pl-4 pr-2 font-bold text-white shadow-2xl">
           <button
-            className="floating-compact-restore app-no-drag"
+            className="floating-compact-restore app-no-drag inline-flex min-w-0 flex-1 items-center gap-3 border-0 bg-transparent font-bold text-white"
             type="button"
             onClick={() => void setCompactMode(false)}
             title="Restore recorder"
           >
             <span
-              className={`floating-compact-dot ${
-                state === "recording" || state === "paused"
-                  ? "floating-compact-dot-recording"
-                  : ""
-              }`}
+              className={cx(
+                "floating-compact-dot size-3.5 flex-none rounded-full bg-cyan-500 shadow-[0_0_0_4px_rgb(6_182_212_/_0.14)]",
+                (state === "recording" || state === "paused") &&
+                  "floating-compact-dot-recording bg-red-500 shadow-[0_0_0_4px_rgb(248_60_72_/_0.18)]"
+              )}
             />
-            <span>{state === "paused" ? "Paused" : formatDuration(elapsedMs)}</span>
+            <span className="truncate">{state === "paused" ? "Paused" : formatDuration(elapsedMs)}</span>
           </button>
 
           {state === "recording" || state === "paused" ? (
-            <div className="floating-compact-actions app-no-drag">
+            <div className="floating-compact-actions app-no-drag inline-flex flex-none items-center gap-1.5">
               <button
+                className="grid size-9 place-items-center rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/15"
                 type="button"
                 onClick={state === "paused" ? resumeRecording : pauseRecording}
                 title={state === "paused" ? "Resume recording" : "Pause recording"}
@@ -589,7 +592,7 @@ export function RecorderController() {
                 {state === "paused" ? <Play size={17} /> : <Pause size={17} />}
               </button>
               <button
-                className="floating-compact-stop"
+                className="floating-compact-stop grid size-9 place-items-center rounded-full border border-red-300/30 bg-red-600 text-white hover:bg-red-700"
                 type="button"
                 onClick={() => void stopRecording()}
                 title="Stop recording"
@@ -604,14 +607,16 @@ export function RecorderController() {
   }
 
   return (
-    <main className="floating-recorder-root">
-      <section className="floating-recorder-card">
-        <div className="floating-titlebar app-drag">
-          <div className="floating-title">
+    <main className="floating-recorder-root grid size-full place-items-center bg-transparent">
+      <section className="floating-recorder-card flex h-[460px] w-[430px] flex-col overflow-hidden rounded-[9px] border border-white/15 bg-[#121317] text-white shadow-[0_24px_62px_rgb(0_0_0_/_0.42)]">
+        <div className="floating-titlebar app-drag flex h-12 flex-none items-center justify-between border-b border-white/[0.07] px-4">
+          <div className="floating-title inline-flex min-w-0 items-center gap-2.5 text-[0.82rem] font-extrabold">
+            <img src={appLogo} alt="" />
             <span>Open Video Craft</span>
           </div>
-          <div className="floating-title-actions app-no-drag">
+          <div className="floating-title-actions app-no-drag inline-flex items-center gap-1">
             <button
+              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
               title={borderOverlayEnabled ? "Hide screen border" : "Show screen border"}
               onClick={() => setBorderOverlayEnabled((value) => !value)}
@@ -619,6 +624,7 @@ export function RecorderController() {
               {borderOverlayEnabled ? <Eye size={19} /> : <EyeOff size={19} />}
             </button>
             <button
+              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
               title="Collapse"
               onClick={() => void setCompactMode(true)}
@@ -626,6 +632,7 @@ export function RecorderController() {
               <Minimize2 size={20} />
             </button>
             <button
+              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
               title="Close"
               onClick={() => void window.openVideoCraft.windows.closeCurrent()}
@@ -636,33 +643,37 @@ export function RecorderController() {
         </div>
 
         {errorMessage ? (
-          <div className="floating-error">
+          <div className="floating-error relative m-4 rounded-lg border border-red-400/35 bg-red-950/70 p-4 pr-12 text-red-50">
             <button
-              className="floating-error-close"
+              className="floating-error-close absolute right-3 top-3 grid size-8 place-items-center rounded-md border-0 bg-transparent text-white hover:bg-white/10"
               type="button"
               onClick={() => setErrorMessage(null)}
               title="Dismiss"
             >
               <X size={24} />
             </button>
-            <div className="floating-error-title">Error</div>
-            <p>{errorMessage}</p>
+            <div className="floating-error-title mb-2 text-base font-bold">Error</div>
+            <p className="m-0 text-sm font-semibold leading-5">{errorMessage}</p>
           </div>
         ) : null}
 
-        <div className="floating-record-area">
+        <div className="floating-record-area relative grid min-h-0 flex-1 place-items-center px-4 pb-6 pt-4">
           {state === "complete" ? (
-            <div className="floating-complete">
+            <div className="floating-complete absolute top-4 grid justify-items-center gap-1 text-emerald-300">
               <CheckCircle2 size={28} />
-              <span>Saved</span>
-              <small>{project ? shortPath(project.rootPath) : ""}</small>
+              <span className="text-sm font-extrabold">Saved</span>
+              <small className="max-w-72 truncate text-xs text-slate-400">
+                {project ? shortPath(project.rootPath) : ""}
+              </small>
             </div>
           ) : null}
 
           <button
-            className={`floating-record-button ${
-              state === "recording" || state === "paused" ? "floating-recording" : ""
-            }`}
+            className={cx(
+              "floating-record-button grid size-[76px] place-items-center rounded-full border-0 bg-rose-600 text-3xl font-extrabold text-white transition hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70",
+              (state === "recording" || state === "paused") &&
+                "floating-recording bg-red-700 hover:bg-red-800"
+            )}
             type="button"
             disabled={
               state === "preparing" ||
@@ -683,8 +694,9 @@ export function RecorderController() {
           </button>
 
           {state === "recording" || state === "paused" ? (
-            <div className="floating-record-controls">
+            <div className="floating-record-controls absolute bottom-14 inline-flex items-center gap-2">
               <button
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 text-sm font-bold text-white hover:bg-white/15"
                 type="button"
                 onClick={state === "paused" ? resumeRecording : pauseRecording}
               >
@@ -692,7 +704,7 @@ export function RecorderController() {
                 <span>{state === "paused" ? "Resume" : "Pause"}</span>
               </button>
               <button
-                className="floating-record-cancel"
+                className="floating-record-cancel inline-flex h-9 items-center gap-2 rounded-full border border-red-300/30 bg-red-500/15 px-4 text-sm font-bold text-red-100 hover:bg-red-500/25"
                 type="button"
                 onClick={() => void cancelRecording()}
               >
@@ -700,7 +712,7 @@ export function RecorderController() {
                 <span>Cancel</span>
               </button>
               <button
-                className="floating-record-done"
+                className="floating-record-done inline-flex h-9 items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-500/15 px-4 text-sm font-bold text-emerald-100 hover:bg-emerald-500/25"
                 type="button"
                 onClick={() => void stopRecording()}
               >
@@ -710,7 +722,7 @@ export function RecorderController() {
             </div>
           ) : null}
 
-          <div className="floating-status">
+          <div className="floating-status absolute bottom-5 max-w-[86%] truncate text-center text-xs font-bold text-slate-400">
             {state === "recording"
               ? `${formatDuration(elapsedMs)} - recording`
               : state === "paused"
@@ -727,7 +739,7 @@ export function RecorderController() {
           </div>
         </div>
 
-        <footer className="floating-footer">
+        <footer className="floating-footer grid grid-cols-3 gap-2 border-t border-white/[0.07] p-3">
           <FloatingDeviceControl
             enabled={micEnabled}
             enabledIcon={<Mic size={25} />}
@@ -744,7 +756,7 @@ export function RecorderController() {
           />
 
           <button
-            className="floating-footer-control"
+            className="floating-footer-control grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45"
             type="button"
             onClick={() => void chooseFolder()}
             disabled={!canStart}
@@ -787,16 +799,16 @@ function FloatingDeviceControl(props: {
   onValueChange: (value: string | null) => void;
 }) {
   return (
-    <div className="floating-footer-control floating-device-control">
+    <div className="floating-footer-control floating-device-control grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200">
       <motion.button
-        className="floating-device-toggle"
+        className="floating-device-toggle grid w-full min-w-0 place-items-center gap-1 border-0 bg-transparent text-inherit disabled:cursor-not-allowed disabled:opacity-45"
         type="button"
         onClick={props.onToggle}
         disabled={props.disabled}
         whileTap={props.disabled ? undefined : { scale: 0.88 }}
         transition={{ type: "spring", stiffness: 520, damping: 28 }}
       >
-        <span className="floating-device-icon">
+        <span className="floating-device-icon inline-flex min-h-7 items-center justify-center text-cyan-300">
           <AnimatePresence mode="wait" initial={false}>
             <motion.span
               key={props.enabled ? "on" : "off"}
@@ -824,7 +836,7 @@ function FloatingDeviceControl(props: {
       </motion.button>
       {props.enabled && props.options.length > 1 ? (
         <select
-          className="floating-device-select"
+          className="floating-device-select h-7 w-full min-w-0 rounded-md border border-white/10 bg-slate-950/80 px-1.5 text-[0.65rem] text-slate-100"
           value={props.value ?? ""}
           onChange={(event) => props.onValueChange(event.target.value || null)}
           disabled={props.disabled}
