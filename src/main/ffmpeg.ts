@@ -39,6 +39,33 @@ export function getFfmpegStatus(): FfmpegStatus {
   };
 }
 
+// MediaRecorder writes a headerless chunk stream: no duration, no seek cues.
+// A stream-copy remux rewrites the container so <video> elements can report a
+// finite duration and seek reliably. The original file is replaced in place.
+export async function remuxWebm(filePath: string): Promise<void> {
+  const inputStats = await fs.stat(filePath).catch(() => null);
+
+  if (!inputStats || inputStats.size === 0) {
+    return;
+  }
+
+  const tempPath = `${filePath}.remux.webm`;
+
+  try {
+    await runProcess(resolveFfmpegPath(), ["-y", "-i", filePath, "-c", "copy", tempPath]);
+
+    const outputStats = await fs.stat(tempPath).catch(() => null);
+    if (!outputStats || outputStats.size === 0) {
+      throw new Error("Remuxing produced an empty file.");
+    }
+
+    await fs.rename(tempPath, filePath);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function convertWebmAudioToWav(inputPath: string, outputPath: string): Promise<number> {
   const inputStats = await fs.stat(inputPath).catch(() => null);
 

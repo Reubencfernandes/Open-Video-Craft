@@ -1,0 +1,408 @@
+import type { CSSProperties } from "react";
+import type {
+  EditorMediaItem,
+  SubtitleSegment,
+  TimelineContextMenu,
+  TimelineMediaClip,
+  TimelineSegment,
+  TimelineTrackKind,
+  TimelineTrimEdge,
+  ZoomEffect
+} from "./types";
+import { clampNumber } from "./utils";
+
+export function getTimelineMediaDuration(
+  item: EditorMediaItem,
+  activeDuration: number,
+  selectedItemId: string | null
+): number {
+  if (item.duration && item.duration > 0) {
+    return item.duration;
+  }
+
+  if (item.origin === "project" && item.id === selectedItemId && activeDuration > 0) {
+    return activeDuration;
+  }
+
+  if (item.kind === "image") {
+    return 5;
+  }
+
+  return 1;
+}
+
+export function getTimelineTrackKind(item: EditorMediaItem): TimelineTrackKind {
+  return item.kind === "audio" ? "audio" : "video";
+}
+
+export function syncTimelineSegments(
+  currentSegments: TimelineSegment[],
+  items: EditorMediaItem[],
+  mediaDurationById: Map<string, number>,
+  newItemIds: ReadonlySet<string>
+): TimelineSegment[] {
+  const itemIds = new Set(items.map((item) => item.id));
+  const nextSegments = currentSegments
+    .filter((segment) => itemIds.has(segment.itemId))
+    .map((segment) => {
+      const itemDuration = mediaDurationById.get(segment.itemId) ?? 1;
+      const track = segment.track;
+      const lane = track === "audio" ? normalizeTimelineLane(segment.lane) : 0;
+      const sourceStart = clampNumber(segment.sourceStart, 0, Math.max(0, itemDuration - 0.1));
+      // A clip's timeline length can never exceed the media left after sourceStart,
+      // but its end lives in timeline space and may sit well past itemDuration once
+      // the clip has been moved, so clamp against start + remaining source, not
+      // against the raw media duration.
+      const maxEnd = segment.start + Math.max(0.1, itemDuration - sourceStart);
+      const wasPlaceholderFullClip =
+        segment.sourceStart === 0 &&
+        segment.end - segment.start <= 1.05 &&
+        itemDuration > 1.05;
+      const end = wasPlaceholderFullClip
+        ? maxEnd
+        : clampNumber(segment.end, segment.start + 0.1, maxEnd);
+
+      return {
+        ...segment,
+        track,
+        lane,
+        end,
+        sourceStart
+      };
+    });
+
+  for (const item of items) {
+    if (!newItemIds.has(item.id) || nextSegments.some((segment) => segment.itemId === item.id)) {
+      continue;
+    }
+
+    const track = getTimelineTrackKind(item);
+    // Video clips stay sequenced on the video track. Audio clips start at the
+    // beginning and are assigned to the first channel that keeps them visible
+    // without overlapping another clip on that channel.
+    const trackEnd = nextSegments
+      .filter((segment) => segment.track === track)
+      .reduce((max, segment) => Math.max(max, segment.end), 0);
+    const itemDuration = mediaDurationById.get(item.id) ?? 1;
+    const segmentId = `${item.id}:segment-0`;
+    const start = track === "audio" ? 0 : trackEnd;
+    const end = start + itemDuration;
+    const lane =
+      track === "audio" ? resolveAudioLane(nextSegments, segmentId, start, end, 0) : 0;
+
+    nextSegments.push({
+      id: segmentId,
+      itemId: item.id,
+      track,
+      lane,
+      start,
+      end,
+      sourceStart: 0
+    });
+  }
+
+  const normalizedSegments = normalizeAudioLanes(nextSegments);
+  return areTimelineSegmentsEqual(currentSegments, normalizedSegments)
+    ? currentSegments
+    : normalizedSegments;
+}
+
+export function createTimelineMediaClips(
+  segments: TimelineSegment[],
+  mediaById: Map<string, EditorMediaItem>
+): TimelineMediaClip[] {
+  return segments
+    .map((segment) => {
+      const item = mediaById.get(segment.itemId);
+      if (!item) {
+        return null;
+      }
+
+      return {
+        id: segment.id,
+        item,
+        track: segment.track,
+        lane: segment.track === "audio" ? normalizeTimelineLane(segment.lane) : 0,
+        start: segment.start,
+        duration: Math.max(0.1, segment.end - segment.start),
+        sourceStart: segment.sourceStart
+      } satisfies TimelineMediaClip;
+    })
+    .filter((clip): clip is TimelineMediaClip => Boolean(clip))
+    .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id));
+}
+
+export function findTimelineSegmentAtTime(
+  segments: TimelineSegment[],
+  time: number
+): TimelineSegment | null {
+  return (
+    segments.find((segment) => time > segment.start && time < segment.end) ??
+    segments.find((segment) => time >= segment.start && time <= segment.end) ??
+    null
+  );
+}
+
+export function canSplitTimelineSegment(segment: TimelineSegment, time: number): boolean {
+  return time > segment.start + 0.1 && time < segment.end - 0.1;
+}
+
+export function canSplitTimelineSegmentAt(
+  segments: TimelineSegment[],
+  contextMenu: Exclude<TimelineContextMenu, null>
+): boolean {
+  const segment =
+    (contextMenu.segmentId
+      ? segments.find((item) => item.id === contextMenu.segmentId)
+      : null) ?? findTimelineSegmentAtTime(segments, contextMenu.time);
+  return segment ? canSplitTimelineSegment(segment, contextMenu.time) : false;
+}
+
+export function trimTimelineSegment(
+  segments: TimelineSegment[],
+  segmentId: string,
+  edge: TimelineTrimEdge,
+  time: number,
+  mediaDurationById: Map<string, number>
+): TimelineSegment[] {
+  const nextSegments = segments.map((segment) => {
+    if (segment.id !== segmentId) {
+      return segment;
+    }
+
+    const mediaDuration = mediaDurationById.get(segment.itemId) ?? segment.end;
+    const minDuration = 0.15;
+
+    if (edge === "start") {
+      const nextStart = clampNumber(time, 0, segment.end - minDuration);
+      const sourceStart = clampNumber(
+        segment.sourceStart + (nextStart - segment.start),
+        0,
+        Math.max(0, mediaDuration - minDuration)
+      );
+      return {
+        ...segment,
+        start: nextStart,
+        sourceStart
+      };
+    }
+
+    const maxEnd = segment.start + Math.max(minDuration, mediaDuration - segment.sourceStart);
+    return {
+      ...segment,
+      end: clampNumber(time, segment.start + minDuration, maxEnd)
+    };
+  });
+
+  return resolveSegmentAudioLane(nextSegments, segmentId);
+}
+
+export function moveTimelineSegment(
+  segments: TimelineSegment[],
+  segmentId: string,
+  rawStart: number,
+  timelineDuration: number
+): TimelineSegment[] {
+  const segment = segments.find((item) => item.id === segmentId);
+  if (!segment) {
+    return segments;
+  }
+
+  const length = segment.end - segment.start;
+  const snapThreshold = Math.max(0.08, timelineDuration * 0.01);
+  const snapTargets = [0];
+  for (const other of segments) {
+    if (other.id === segmentId || other.track !== segment.track) {
+      continue;
+    }
+    snapTargets.push(other.start, other.end);
+  }
+
+  let start = Math.max(0, rawStart);
+  for (const target of snapTargets) {
+    if (Math.abs(start - target) <= snapThreshold) {
+      start = target;
+      break;
+    }
+  }
+  const end = start + length;
+  for (const target of snapTargets) {
+    if (Math.abs(end - target) <= snapThreshold) {
+      start = Math.max(0, target - length);
+      break;
+    }
+  }
+
+  const nextStart = Math.max(0, start);
+  const nextEnd = nextStart + length;
+  const nextLane =
+    segment.track === "audio"
+      ? resolveAudioLane(segments, segmentId, nextStart, nextEnd, segment.lane)
+      : segment.lane;
+
+  return segments.map((item) =>
+    item.id === segmentId
+      ? { ...item, lane: item.track === "audio" ? nextLane : 0, start: nextStart, end: nextEnd }
+      : item
+  );
+}
+
+export function createAudioTimelineTracks(
+  clips: TimelineMediaClip[]
+): Array<{ lane: number; clips: TimelineMediaClip[] }> {
+  const lanes = new Map<number, TimelineMediaClip[]>();
+
+  for (const clip of clips) {
+    const lane = normalizeTimelineLane(clip.lane);
+    lanes.set(lane, [...(lanes.get(lane) ?? []), clip]);
+  }
+
+  return [...lanes.entries()]
+    .sort(([firstLane], [secondLane]) => firstLane - secondLane)
+    .map(([lane, laneClips]) => ({
+      lane,
+      clips: laneClips.sort(
+        (first, second) => first.start - second.start || first.id.localeCompare(second.id)
+      )
+    }));
+}
+
+export function normalizeAudioLanes(segments: TimelineSegment[]): TimelineSegment[] {
+  const normalized = segments.map((segment) => ({
+    ...segment,
+    lane: segment.track === "audio" ? normalizeTimelineLane(segment.lane) : 0
+  }));
+  const processedAudioSegments: TimelineSegment[] = [];
+  const laneById = new Map<string, number>();
+
+  for (const segment of normalized
+    .filter((item) => item.track === "audio")
+    .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id))) {
+    let lane = normalizeTimelineLane(segment.lane);
+    while (audioLaneHasOverlap(processedAudioSegments, segment.id, lane, segment.start, segment.end)) {
+      lane += 1;
+    }
+
+    laneById.set(segment.id, lane);
+    processedAudioSegments.push({ ...segment, lane });
+  }
+
+  return normalized.map((segment) =>
+    segment.track === "audio" ? { ...segment, lane: laneById.get(segment.id) ?? 0 } : segment
+  );
+}
+
+function resolveSegmentAudioLane(
+  segments: TimelineSegment[],
+  segmentId: string
+): TimelineSegment[] {
+  const segment = segments.find((item) => item.id === segmentId);
+  if (!segment || segment.track !== "audio") {
+    return segments;
+  }
+
+  const lane = resolveAudioLane(segments, segmentId, segment.start, segment.end, segment.lane);
+  return segments.map((item) => (item.id === segmentId ? { ...item, lane } : item));
+}
+
+export function resolveAudioLane(
+  segments: TimelineSegment[],
+  segmentId: string,
+  start: number,
+  end: number,
+  preferredLane: number
+): number {
+  const maxLane = segments.reduce(
+    (max, segment) =>
+      segment.track === "audio" ? Math.max(max, normalizeTimelineLane(segment.lane)) : max,
+    0
+  );
+  const candidates = [
+    normalizeTimelineLane(preferredLane),
+    ...Array.from({ length: maxLane + 2 }, (_value, index) => index)
+  ];
+
+  for (const lane of [...new Set(candidates)]) {
+    if (!audioLaneHasOverlap(segments, segmentId, lane, start, end)) {
+      return lane;
+    }
+  }
+
+  return maxLane + 1;
+}
+
+function audioLaneHasOverlap(
+  segments: TimelineSegment[],
+  segmentId: string,
+  lane: number,
+  start: number,
+  end: number
+): boolean {
+  return segments.some(
+    (segment) =>
+      segment.id !== segmentId &&
+      segment.track === "audio" &&
+      normalizeTimelineLane(segment.lane) === lane &&
+      rangesOverlap(start, end, segment.start, segment.end)
+  );
+}
+
+function rangesOverlap(firstStart: number, firstEnd: number, secondStart: number, secondEnd: number) {
+  const tolerance = 0.01;
+  return firstStart < secondEnd - tolerance && firstEnd > secondStart + tolerance;
+}
+
+function normalizeTimelineLane(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+export function areTimelineSegmentsEqual(
+  first: TimelineSegment[],
+  second: TimelineSegment[]
+): boolean {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
+export function createTimelineClipStyle(
+  start: number,
+  duration: number,
+  timelineDuration: number
+): CSSProperties {
+  const safeDuration = Math.max(timelineDuration, start + duration, 1);
+  const left = Math.min(100, Math.max(0, (start / safeDuration) * 100));
+  const width = Math.min(100 - left, Math.max(1.5, (duration / safeDuration) * 100));
+
+  return {
+    left: `${left}%`,
+    right: "auto",
+    width: `${width}%`
+  };
+}
+
+export function calculateTimelineDuration(
+  videoClips: TimelineMediaClip[],
+  audioClips: TimelineMediaClip[],
+  zoomEffects: ZoomEffect[],
+  subtitles: SubtitleSegment[],
+  activeDuration: number
+): number {
+  const timelineContentEnd = Math.max(
+    0,
+    ...videoClips.map((clip) => clip.start + clip.duration),
+    ...audioClips.map((clip) => clip.start + clip.duration),
+    ...zoomEffects.map((effect) => effect.end),
+    ...subtitles.map((subtitle) => subtitle.end)
+  );
+
+  return Math.max(timelineContentEnd, timelineContentEnd > 0 ? 0 : activeDuration, 1);
+}
+
+export function createClipPlaybackKey(clip: TimelineMediaClip): string {
+  return [
+    clip.id,
+    clip.item.url,
+    clip.start.toFixed(4),
+    clip.duration.toFixed(4),
+    clip.sourceStart.toFixed(4)
+  ].join("|");
+}

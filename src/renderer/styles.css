@@ -1097,12 +1097,9 @@
     aspect-ratio: 1.32;
     place-items: center;
     overflow: hidden;
-    border: 1px solid rgb(255 255 255 / 0.06);
-    border-radius: 12px;
-    background:
-      radial-gradient(circle at 30% 20%, rgb(34 197 94 / 0.4), transparent 30%),
-      radial-gradient(circle at 80% 70%, rgb(6 182 212 / 0.4), transparent 34%),
-      #14171d;
+    border: 1px solid rgb(255 255 255 / 0.08);
+    border-radius: 8px;
+    background: #17181c;
     color: rgb(148 163 184);
   }
 
@@ -1417,18 +1414,7 @@
   .clip-main {
     left: 1%;
     right: 1%;
-    background: linear-gradient(90deg, #891bd8, #b02ee8);
-  }
-
-  .clip-thumb {
-    flex: 0 0 auto;
-    width: 4.6rem;
-    height: 1.85rem;
-    border-radius: 7px;
-    background:
-      radial-gradient(circle at 25% 40%, rgb(34 197 94 / 0.75), transparent 30%),
-      radial-gradient(circle at 74% 50%, rgb(6 182 212 / 0.75), transparent 30%),
-      #111827;
+    background: #3f6db4;
   }
 
   .clip-audio {
@@ -1586,8 +1572,8 @@
   }
 
   .clip-selected {
-    outline: 2px solid rgb(255 255 255 / 0.86);
-    outline-offset: 2px;
+    outline: 1px solid rgb(255 255 255 / 0.9);
+    outline-offset: -1px;
   }
 
   .clip-image {

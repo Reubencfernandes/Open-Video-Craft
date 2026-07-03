@@ -29,6 +29,7 @@ import WaveSurfer from "wavesurfer.js";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
+  DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
   ReactNode,
@@ -187,6 +188,7 @@ const subtitleStyleOptions: Array<{ id: SubtitleStyle; label: string }> = [
 ];
 
 const frameRate = 30;
+const mediaDragType = "application/x-ovc-media-id";
 const cameraSizeOptions = [
   { label: "S", value: 18 },
   { label: "M", value: 24 },
@@ -389,6 +391,7 @@ export function EditorView() {
   const [scrubbingTimeline, setScrubbingTimeline] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [timelineViewDuration, setTimelineViewDuration] = useState(0);
 
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraRef = useRef<HTMLVideoElement | null>(null);
@@ -638,10 +641,15 @@ export function EditorView() {
     subtitles,
     activeDuration
   );
-  const totalFrames = Math.max(1, Math.floor(timelineDuration * frameRate));
+  // The rendered timeline scale never shrinks: trimming or deleting a clip
+  // leaves an empty gap (for future clips) instead of rescaling everything.
+  const timelineRenderDuration = Math.max(timelineViewDuration, timelineDuration);
+  const totalFrames = Math.max(1, Math.floor(timelineRenderDuration * frameRate));
   const currentFrame = Math.min(totalFrames, Math.max(0, Math.round(currentTime * frameRate)));
   const playheadPercent =
-    timelineDuration > 0 ? Math.min(100, Math.max(0, (currentTime / timelineDuration) * 100)) : 0;
+    timelineRenderDuration > 0
+      ? Math.min(100, Math.max(0, (currentTime / timelineRenderDuration) * 100))
+      : 0;
   const activeZoom = getActiveZoom(zoomEffects, currentTime);
   const activeSubtitle =
     subtitles.find((subtitle) => currentTime >= subtitle.start && currentTime <= subtitle.end) ??
@@ -704,8 +712,11 @@ export function EditorView() {
     const nextKnownItemIds = new Set(
       [...knownTimelineItemIdsRef.current].filter((itemId) => availableItemIds.has(itemId))
     );
+    // Only project recordings load onto the timeline automatically; imported
+    // media stays in the asset grid until it is dragged onto the timeline.
     const newItemIds = new Set(
       timelineEditableItems
+        .filter((item) => item.origin === "project")
         .map((item) => item.id)
         .filter((itemId) => !nextKnownItemIds.has(itemId))
     );
@@ -779,6 +790,10 @@ export function EditorView() {
 
   useEffect(() => {
     timelineDurationRef.current = timelineDuration;
+  }, [timelineDuration]);
+
+  useEffect(() => {
+    setTimelineViewDuration((current) => Math.max(current, timelineDuration));
   }, [timelineDuration]);
 
   useEffect(() => {
@@ -1037,7 +1052,12 @@ export function EditorView() {
       const clipPlaybackKey = createClipPlaybackKey(videoClip);
       const clipChanged = syncedVideoClipKeyRef.current !== clipPlaybackKey;
       syncedVideoClipKeyRef.current = clipPlaybackKey;
-      if (forceSeek || clipChanged || Math.abs(videoEl.currentTime - desired) > 0.3) {
+      // Drift correction must wait for in-flight seeks: re-seeking every frame
+      // while the element is still seeking freezes playback on a single frame.
+      if (
+        Number.isFinite(desired) &&
+        (forceSeek || clipChanged || (canDriftSeek(videoEl) && Math.abs(videoEl.currentTime - desired) > 0.3))
+      ) {
         try {
           videoEl.currentTime = desired;
         } catch {
@@ -1066,7 +1086,10 @@ export function EditorView() {
       const clipPlaybackKey = createClipPlaybackKey(videoClip);
       const clipChanged = syncedCameraClipKeyRef.current !== clipPlaybackKey;
       syncedCameraClipKeyRef.current = clipPlaybackKey;
-      if (forceSeek || clipChanged || Math.abs(cameraEl.currentTime - desired) > 0.3) {
+      if (
+        Number.isFinite(desired) &&
+        (forceSeek || clipChanged || (canDriftSeek(cameraEl) && Math.abs(cameraEl.currentTime - desired) > 0.3))
+      ) {
         try {
           cameraEl.currentTime = desired;
         } catch {
@@ -1091,7 +1114,10 @@ export function EditorView() {
       const active = t >= clip.start && t < clip.start + clip.duration;
       if (active) {
         const desired = clip.sourceStart + (t - clip.start);
-        if (Math.abs(el.currentTime - desired) > 0.3) {
+        if (
+          Number.isFinite(desired) &&
+          (forceSeek || (canDriftSeek(el) && Math.abs(el.currentTime - desired) > 0.3))
+        ) {
           try {
             el.currentTime = desired;
           } catch {
@@ -1153,7 +1179,7 @@ export function EditorView() {
 
   function getTimelineTimeFromClientX(clientX: number): number | null {
     const timelineBody = timelineBodyRef.current;
-    if (!timelineBody || timelineDuration <= 0) {
+    if (!timelineBody || timelineRenderDuration <= 0) {
       return null;
     }
 
@@ -1164,7 +1190,7 @@ export function EditorView() {
     }
 
     const progress = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
-    return progress * timelineDuration;
+    return progress * timelineRenderDuration;
   }
 
   function seekTimelinePointer(clientX: number) {
@@ -1174,6 +1200,60 @@ export function EditorView() {
     }
 
     seek(nextTime);
+  }
+
+  function handleTimelineDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    if (event.dataTransfer.types.includes(mediaDragType)) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  }
+
+  function handleTimelineDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const itemId = event.dataTransfer.getData(mediaDragType);
+    const item = itemId ? mediaById.get(itemId) : null;
+    const dropTime = getTimelineTimeFromClientX(event.clientX);
+    if (!item || dropTime === null) {
+      return;
+    }
+
+    event.preventDefault();
+    addTimelineClipAt(item, dropTime);
+  }
+
+  // Adds a new clip for the media item at the drop position. The same asset
+  // can be dropped multiple times to build a multi-clip sequence.
+  function addTimelineClipAt(item: EditorMediaItem, dropTime: number) {
+    if (item.track === "camera") {
+      return;
+    }
+
+    const track = getTimelineTrackKind(item);
+    const itemDuration = Math.max(
+      0.1,
+      mediaDurationById.get(item.id) ??
+        getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
+    );
+    const start = Math.max(0, dropTime);
+    const end = start + itemDuration;
+    const segmentId = `${item.id}:segment-${createId("drop")}`;
+
+    knownTimelineItemIdsRef.current.add(item.id);
+    commitTimelineSegments((segments) => {
+      const draft: TimelineSegment = {
+        id: segmentId,
+        itemId: item.id,
+        track,
+        lane: track === "audio" ? resolveAudioLane(segments, segmentId, start, end, 0) : 0,
+        start,
+        end,
+        sourceStart: 0
+      };
+      // Route through the move logic so drops snap to clip edges like drags do.
+      return moveTimelineSegment([...segments, draft], segmentId, start, timelineRenderDuration);
+    });
+    setSelectedItemId(item.id);
+    setSelectedTimelineSegmentId(segmentId);
   }
 
   function beginScreenLayoutDrag(
@@ -1479,7 +1559,7 @@ export function EditorView() {
     drag.moved = true;
     const rawStart = Math.max(0, drag.segmentStart + delta);
     setTimelineSegments((current) => {
-      const next = moveTimelineSegment(current, drag.segmentId, rawStart, timelineDuration);
+      const next = moveTimelineSegment(current, drag.segmentId, rawStart, timelineRenderDuration);
       if (!areTimelineSegmentsEqual(current, next)) {
         scheduleTimelinePlaybackSync(next);
       }
@@ -1990,7 +2070,12 @@ export function EditorView() {
                       key={item.id}
                       item={item}
                       selected={selectedItem?.id === item.id}
+                      draggable={item.track !== "camera"}
                       onSelect={() => selectTimelineItem(item.id)}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData(mediaDragType, item.id);
+                        event.dataTransfer.effectAllowed = "copy";
+                      }}
                       onDuration={(nextDuration) => updateMediaDuration(item.id, nextDuration)}
                       onRemove={
                         item.origin === "imported" ? () => removeImportedMedia(item.id) : undefined
@@ -2500,7 +2585,7 @@ export function EditorView() {
         </div>
 
         {timelineVisible ? (
-        <section className="timeline-panel grid min-w-0 gap-[0.45rem] bg-transparent px-[1.1rem] pb-4 pt-3 [--timeline-body-pad:0.7rem] [--timeline-label-width:132px] [--timeline-track-gap:0.85rem]">
+        <section className="timeline-panel grid min-w-0 gap-[0.45rem] px-[1.1rem] pb-4 pt-3 [--timeline-body-pad:0.7rem] [--timeline-label-width:132px] [--timeline-track-gap:0.85rem]">
           <div className="timeline-toolbar grid grid-cols-[238px_minmax(0,1fr)_142px] items-center gap-3">
             <div className="timeline-toolset timeline-playback inline-flex h-9 min-w-0 items-center gap-1.5 bg-transparent px-1.5 text-[0.68rem] text-slate-400">
               <button type="button" onClick={() => seekFrame(currentFrame - 1)} title="Previous frame">
@@ -2538,14 +2623,14 @@ export function EditorView() {
           </div>
 
           <div className="timeline-ruler grid grid-cols-6 pl-[calc(var(--timeline-label-width)+var(--timeline-track-gap))] text-[0.68rem] tabular-nums text-slate-500">
-            {createTimelineTicks(timelineDuration).map((tick) => (
+            {createTimelineTicks(timelineRenderDuration).map((tick) => (
               <span key={tick}>{tick}</span>
             ))}
           </div>
 
           <div
             className={cx(
-              "timeline-body relative grid min-h-[12.3rem] cursor-pointer select-none gap-1.5 overflow-visible bg-transparent px-[var(--timeline-body-pad)] pb-3 pt-2.5 touch-none",
+              "timeline-body relative grid min-h-[12.3rem] cursor-pointer select-none gap-1.5 overflow-visible px-[var(--timeline-body-pad)] pb-3 pt-2.5 touch-none",
               scrubbingTimeline && "timeline-body-scrubbing cursor-ew-resize"
             )}
             ref={timelineBodyRef}
@@ -2555,6 +2640,8 @@ export function EditorView() {
             onPointerUp={endTimelineScrub}
             onPointerCancel={endTimelineScrub}
             onContextMenu={openTimelineContextMenu}
+            onDragOver={handleTimelineDragOver}
+            onDrop={handleTimelineDrop}
           >
             <div
               className="playhead absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent"
@@ -2574,7 +2661,7 @@ export function EditorView() {
                 <TimelineClip
                   key={clip.id}
                   clip={clip}
-                  timelineDuration={timelineDuration}
+                  timelineDuration={timelineRenderDuration}
                   selected={selectedTimelineSegmentId === clip.id}
                   selectedSegment={selectedTimelineSegmentId === clip.id}
                   onSelect={() => {
@@ -2593,7 +2680,7 @@ export function EditorView() {
                   <TimelineZoomClip
                     key={effect.id}
                     effect={effect}
-                    duration={timelineDuration}
+                    duration={timelineRenderDuration}
                     selected={selectedZoomEffect?.id === effect.id}
                     onSelect={() => {
                       setSelectedZoomId(effect.id);
@@ -2618,7 +2705,7 @@ export function EditorView() {
                     <TimelineClip
                       key={clip.id}
                       clip={clip}
-                      timelineDuration={timelineDuration}
+                      timelineDuration={timelineRenderDuration}
                       selected={selectedTimelineSegmentId === clip.id}
                       selectedSegment={selectedTimelineSegmentId === clip.id}
                       onSelect={() => {
@@ -2639,7 +2726,7 @@ export function EditorView() {
                   <TimelineSubtitleClip
                     key={subtitle.id}
                     subtitle={subtitle}
-                    duration={timelineDuration}
+                    duration={timelineRenderDuration}
                     selected={selectedSubtitle?.id === subtitle.id}
                     onSelect={() => {
                       setSelectedSubtitleId(subtitle.id);
@@ -2982,7 +3069,9 @@ function SubtitleOverlay(props: {
 function AssetCard(props: {
   item: EditorMediaItem;
   selected: boolean;
+  draggable?: boolean;
   onSelect: () => void;
+  onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
   onDuration?: (duration: number | null) => void;
   onRemove?: () => void;
 }) {
@@ -2990,28 +3079,16 @@ function AssetCard(props: {
     <div
       className={`asset-card ${props.selected ? "asset-card-selected" : ""}`}
     >
-      <button className="asset-card-main" type="button" onClick={props.onSelect}>
+      <button
+        className="asset-card-main"
+        type="button"
+        draggable={props.draggable}
+        onClick={props.onSelect}
+        onDragStart={props.onDragStart}
+      >
         <div className="asset-preview">
           {props.item.kind === "video" ? (
-            <video
-              src={props.item.url}
-              muted
-              playsInline
-              preload="metadata"
-              onLoadedMetadata={(event) => {
-                props.onDuration?.(event.currentTarget.duration);
-                // A bare <video> paints a black frame until it has decoded one;
-                // nudging currentTime forces a real first-frame thumbnail.
-                try {
-                  event.currentTarget.currentTime = Math.min(
-                    0.1,
-                    (event.currentTarget.duration || 1) / 2
-                  );
-                } catch {
-                  // seeking may not be ready yet; ignore
-                }
-              }}
-            />
+            <VideoThumbnail url={props.item.url} onDuration={props.onDuration} />
           ) : props.item.kind === "image" ? (
             <img src={props.item.url} alt="" />
           ) : (
@@ -3033,6 +3110,137 @@ function AssetCard(props: {
       ) : null}
     </div>
   );
+}
+
+// Captures a real decoded frame into a small JPEG so the asset grid shows an
+// actual thumbnail. Handles chunked recordings that report Infinity duration
+// and reports the resolved duration back to the media library.
+function VideoThumbnail(props: {
+  url: string;
+  onDuration?: (duration: number | null) => void;
+}) {
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const onDurationRef = useRef(props.onDuration);
+
+  useEffect(() => {
+    onDurationRef.current = props.onDuration;
+  }, [props.onDuration]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setThumbnailUrl(null);
+
+    void captureVideoThumbnail(props.url, (duration) => {
+      if (!cancelled) {
+        onDurationRef.current?.(duration);
+      }
+    })
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setThumbnailUrl(dataUrl);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [props.url]);
+
+  return thumbnailUrl ? <img src={thumbnailUrl} alt="" /> : <Film size={18} />;
+}
+
+async function captureVideoThumbnail(
+  url: string,
+  onDuration: (duration: number) => void
+): Promise<string> {
+  const video = document.createElement("video");
+  video.muted = true;
+  video.preload = "auto";
+  video.src = url;
+  video.load();
+
+  try {
+    const duration = await resolveVideoDuration(video);
+    if (Number.isFinite(duration) && duration > 0) {
+      onDuration(duration);
+    }
+
+    const seekTo =
+      Number.isFinite(duration) && duration > 0
+        ? clampNumber(duration * 0.1, 0.1, Math.max(0, duration - 0.05))
+        : 0.1;
+    await seekVideoTo(video, seekTo);
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) {
+      throw new Error("Video has no decodable frames.");
+    }
+
+    const scale = Math.min(1, 320 / width);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Canvas 2D context is unavailable.");
+    }
+
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
+function resolveVideoDuration(video: HTMLVideoElement): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const fail = () => reject(new Error("Video failed to load."));
+    video.addEventListener("error", fail, { once: true });
+    video.addEventListener(
+      "loadedmetadata",
+      () => {
+        if (Number.isFinite(video.duration)) {
+          resolve(video.duration);
+          return;
+        }
+
+        // Chunked WebM reports Infinity until forced to scan to the end.
+        const onDurationChange = () => {
+          if (Number.isFinite(video.duration)) {
+            video.removeEventListener("durationchange", onDurationChange);
+            resolve(video.duration);
+          }
+        };
+        video.addEventListener("durationchange", onDurationChange);
+        try {
+          video.currentTime = 1e9;
+        } catch {
+          resolve(Number.NaN);
+        }
+      },
+      { once: true }
+    );
+  });
+}
+
+function seekVideoTo(video: HTMLVideoElement, time: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    video.addEventListener("seeked", () => resolve(), { once: true });
+    video.addEventListener(
+      "error",
+      () => reject(new Error("Video failed while seeking.")),
+      { once: true }
+    );
+
+    try {
+      video.currentTime = time;
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
 function ZoomTargetPanel(props: {
@@ -3158,7 +3366,7 @@ function TimelineTrack(props: {
         {props.icon}
         <span>{props.label}</span>
       </div>
-      <div className="track-lane relative min-h-[2.35rem] overflow-hidden rounded-lg bg-white/[0.035]">
+      <div className="track-lane relative min-h-[2.35rem] overflow-hidden">
         {props.children}
       </div>
       {props.controls ? (
@@ -3184,19 +3392,18 @@ function TimelineClip(props: {
   const item = props.clip.item;
   const className =
     item.kind === "audio"
-      ? "clip clip-audio bg-[#0c8b70]"
+      ? "clip clip-audio"
       : item.kind === "image"
-        ? "clip clip-image bg-gradient-to-r from-teal-700 to-sky-400"
-        : "clip clip-main bg-gradient-to-r from-sky-500 to-violet-500";
+        ? "clip clip-image"
+        : "clip clip-main";
 
   return (
     <button
       className={cx(
         className,
-        "group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-2 overflow-hidden rounded-[7px] border border-white/[0.08] px-2.5 text-[0.7rem] font-extrabold text-white shadow-inner",
+        "group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-1.5 overflow-hidden rounded-[3px] px-2 text-[0.68rem] font-semibold text-white",
         props.selected && "clip-selected",
-        props.selectedSegment &&
-          "clip-segment-selected outline outline-2 outline-offset-2 outline-white"
+        props.selectedSegment && "clip-segment-selected"
       )}
       type="button"
       data-segment-id={props.clip.id}
@@ -3211,14 +3418,9 @@ function TimelineClip(props: {
       {item.kind === "audio" ? (
         <AudioWaveform id={props.clip.id} name={item.name} url={item.url} />
       ) : (
-        <>
-          <span className="clip-thumb h-6 w-13 flex-none rounded-md bg-slate-950/80" />
-          <Film size={13} />
-        </>
+        <Film className="relative z-[2] flex-none" size={13} />
       )}
-      <strong className="relative z-[2] ml-auto min-w-0 truncate pl-2 drop-shadow">
-        {item.name}
-      </strong>
+      <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
       <span
         className="clip-edge clip-edge-end absolute inset-y-0 right-0 z-[4] w-2 cursor-ew-resize after:absolute after:bottom-1.5 after:right-1 after:top-1.5 after:w-0.5 after:rounded-full after:bg-white/70 after:opacity-0 after:transition group-hover:after:opacity-100"
         onPointerDown={(event) => props.onTrimPointerDown(event, props.clip.id, "end")}
@@ -3351,8 +3553,8 @@ function TimelineZoomClip(props: {
   return (
     <button
       className={cx(
-        "clip clip-zoom group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-2 overflow-hidden rounded-[7px] border border-white/[0.08] bg-gradient-to-r from-amber-500 to-fuchsia-500 px-2.5 text-[0.7rem] font-extrabold text-white shadow-inner",
-        props.selected && "clip-selected clip-segment-selected outline outline-2 outline-offset-2 outline-white"
+        "clip clip-zoom group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-1.5 overflow-hidden rounded-[3px] px-2 text-[0.68rem] font-semibold text-white",
+        props.selected && "clip-selected clip-segment-selected"
       )}
       type="button"
       title={`Zoom (${props.effect.speed})`}
@@ -3415,8 +3617,8 @@ function TimelineSubtitleClip(props: {
   return (
     <button
       className={cx(
-        "clip clip-text absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-2 overflow-hidden rounded-[7px] border border-white/[0.08] bg-cyan-600 px-2.5 text-[0.7rem] font-extrabold text-white shadow-inner",
-        props.selected && "clip-selected"
+        "clip clip-text absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-1.5 overflow-hidden rounded-[3px] px-2 text-[0.68rem] font-semibold text-white",
+        props.selected && "clip-selected clip-segment-selected"
       )}
       type="button"
       style={createTimelineClipStyle(
@@ -3844,6 +4046,10 @@ async function decodeAudioTo16kMono(url: string): Promise<Float32Array> {
   } finally {
     void audioContext.close();
   }
+}
+
+function canDriftSeek(element: HTMLMediaElement): boolean {
+  return !element.seeking && element.readyState >= HTMLMediaElement.HAVE_METADATA;
 }
 
 function clampNumber(value: number, min: number, max: number): number {

@@ -14,7 +14,7 @@ import {
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { convertWebmAudioToWav, exportVideo, getFfmpegStatus } from "./ffmpeg";
+import { convertWebmAudioToWav, exportVideo, getFfmpegStatus, remuxWebm } from "./ffmpeg";
 import { ProjectLibrary } from "./project-library";
 import { ProjectStore } from "./project-store";
 import type {
@@ -227,10 +227,23 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
   mainWindow.focus();
 }
 
+// Overlay show/hide requests arrive concurrently from the renderer (toggle,
+// state changes, recording lifecycle). Handlers await window loads, so without
+// serialization two interleaved shows can orphan a border window that nothing
+// can close anymore. Every overlay IPC operation runs through this queue.
+let overlayOpQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueOverlayOp<T>(op: () => Promise<T> | T): Promise<T> {
+  const run = overlayOpQueue.then(op, op);
+  overlayOpQueue = run.catch(() => undefined);
+  return run;
+}
+
 async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult> {
   const source = sourceCache.get(sourceId);
 
   if (!source) {
+    closeDisplayOverlay();
     return {
       shown: false,
       reason: "Selected source is no longer available."
@@ -248,7 +261,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   const display = getDisplayForSource(source);
   closeDisplayOverlay();
 
-  displayOverlayWindow = new BrowserWindow({
+  const overlayWindow = new BrowserWindow({
     x: display.bounds.x,
     y: display.bounds.y,
     width: display.bounds.width,
@@ -268,17 +281,34 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
       nodeIntegration: false
     }
   });
+  displayOverlayWindow = overlayWindow;
 
-  displayOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
-  displayOverlayWindow.setAlwaysOnTop(true, "screen-saver");
-  displayOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  displayOverlayWindow.on("closed", () => {
-    displayOverlayWindow = null;
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  overlayWindow.setAlwaysOnTop(true, "screen-saver");
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Visible on screen while recording, but never captured into the video.
+  overlayWindow.setContentProtection(true);
+  overlayWindow.on("closed", () => {
+    if (displayOverlayWindow === overlayWindow) {
+      displayOverlayWindow = null;
+    }
   });
 
-  await loadRendererView(displayOverlayWindow, "display-border", {
-    label: source.name || "Primary Display"
-  });
+  try {
+    await loadRendererView(overlayWindow, "display-border", {
+      label: source.name || "Primary Display"
+    });
+  } catch (error) {
+    if (overlayWindow.isDestroyed()) {
+      // A hide closed the window while it was still loading.
+      return {
+        shown: false,
+        reason: null
+      };
+    }
+
+    throw error;
+  }
 
   return {
     shown: true,
@@ -356,7 +386,8 @@ function registerMediaProtocol(): void {
         relativePathSegments.join(path.sep)
       );
 
-      return net.fetch(pathToFileURL(filePath).toString());
+      // Forward headers so Range requests work; media seeking depends on it.
+      return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers });
     } catch (error) {
       return new Response(error instanceof Error ? error.message : "Not found", {
         status: 404
@@ -374,7 +405,7 @@ function registerMediaProtocol(): void {
         return new Response("Not found", { status: 404 });
       }
 
-      return net.fetch(pathToFileURL(filePath).toString());
+      return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers });
     } catch (error) {
       return new Response(error instanceof Error ? error.message : "Not found", {
         status: 404
@@ -491,13 +522,15 @@ function registerIpc(): void {
     }
   );
 
-  ipcMain.handle("overlays:show-source-border", async (_event, sourceId: string) => {
-    return showDisplayOverlay(sourceId);
+  ipcMain.handle("overlays:show-source-border", (_event, sourceId: string) => {
+    return enqueueOverlayOp(() => showDisplayOverlay(sourceId));
   });
 
-  ipcMain.handle("overlays:hide-source-border", (): boolean => {
-    closeDisplayOverlay();
-    return true;
+  ipcMain.handle("overlays:hide-source-border", (): Promise<boolean> => {
+    return enqueueOverlayOp(() => {
+      closeDisplayOverlay();
+      return true;
+    });
   });
 
   ipcMain.handle("projects:choose-base-directory", async (): Promise<string | null> => {
@@ -589,6 +622,15 @@ function registerIpc(): void {
   ipcMain.handle("ffmpeg:status", async () => getFfmpegStatus());
 
   ipcMain.handle("ffmpeg:prepare-audio", async (_event, projectId: string) => {
+    // Rewrite the recorded video containers with duration + seek cues so the
+    // editor can seek them. A failed remux keeps the raw recording playable.
+    for (const track of ["screen", "camera"] as const) {
+      const mediaPath = projectStore.getMediaPath(projectId, track);
+      if (mediaPath) {
+        await remuxWebm(mediaPath).catch(() => undefined);
+      }
+    }
+
     const inputPath = projectStore.getMicWebmPath(projectId);
 
     if (!inputPath) {

@@ -96,9 +96,19 @@ export function RecorderController() {
   );
   const selectedCameraLabel = getDeviceLabel(cameras, selectedCameraId, "Camera");
   const canStart = state === "ready" || state === "complete" || state === "failed";
+  // The border stays visible while recording as an on-screen indicator; the
+  // overlay window is content-protected, so it never appears in the capture.
   const shouldShowSelectionOverlay =
     borderOverlayEnabled &&
-    (state === "ready" || state === "preparing" || state === "countdown");
+    (state === "ready" ||
+      state === "preparing" ||
+      state === "countdown" ||
+      state === "recording" ||
+      state === "paused");
+  const overlaySourceId =
+    shouldShowSelectionOverlay && selectedSource?.kind === "screen"
+      ? selectedSource.id
+      : null;
 
   const refreshSources = useCallback(async () => {
     const nextSources = await window.openVideoCraft.sources.list();
@@ -189,23 +199,30 @@ export function RecorderController() {
   }, []);
 
   useEffect(() => {
-    if (!selectedSource || !shouldShowSelectionOverlay) {
+    if (!selectedSourceId) {
+      return;
+    }
+
+    void window.openVideoCraft.capture
+      .selectDisplaySource(selectedSourceId)
+      .catch(() => undefined);
+  }, [selectedSourceId]);
+
+  // Single source of truth for the screen border overlay: visible whenever a
+  // screen source is selected, the eye toggle is on, and the recorder is in a
+  // selection or recording state.
+  useEffect(() => {
+    if (!overlaySourceId) {
       void window.openVideoCraft.overlays.hideSourceBorder();
       return;
     }
 
-    void window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
-
-    if (selectedSource.kind === "screen") {
-      void window.openVideoCraft.overlays.showSourceBorder(selectedSource.id);
-    } else {
-      void window.openVideoCraft.overlays.hideSourceBorder();
-    }
+    void window.openVideoCraft.overlays.showSourceBorder(overlaySourceId);
 
     return () => {
       void window.openVideoCraft.overlays.hideSourceBorder();
     };
-  }, [selectedSource, shouldShowSelectionOverlay]);
+  }, [overlaySourceId]);
 
   useEffect(() => {
     if (state !== "recording") {
@@ -285,10 +302,6 @@ export function RecorderController() {
 
       setBaseDirectory(folder);
       await window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
-
-      if (borderOverlayEnabled && selectedSource.kind === "screen") {
-        await window.openVideoCraft.overlays.showSourceBorder(selectedSource.id);
-      }
 
       const screenStream = await navigator.mediaDevices.getDisplayMedia(
         createDisplayCaptureOptions()
@@ -372,7 +385,6 @@ export function RecorderController() {
 
       setState("countdown");
       await runCountdown(setCountdown);
-      await window.openVideoCraft.overlays.hideSourceBorder();
 
       activeRecordedMsRef.current = 0;
       activeSegmentStartedAtRef.current = Date.now();
