@@ -44,7 +44,8 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --no-audit --no-fund
+        timeout-minutes: 20
 
       - name: Typecheck
         run: npm run typecheck
