@@ -6,6 +6,7 @@ import type {
   FailRecordingRequest,
   FfmpegStatus,
   ImportedMediaFile,
+  ProjectLibraryEntry,
   ProjectView,
   SourceOverlayResult,
   SourceSummary,
@@ -25,8 +26,14 @@ const api = {
   projects: {
     chooseBaseDirectory: (): Promise<string | null> =>
       ipcRenderer.invoke("projects:choose-base-directory"),
+    listRecent: (): Promise<ProjectLibraryEntry[]> =>
+      ipcRenderer.invoke("projects:list-recent"),
     get: (projectId: string): Promise<ProjectView> =>
       ipcRenderer.invoke("projects:get", projectId),
+    openExistingProjectFolder: (): Promise<ProjectView | null> =>
+      ipcRenderer.invoke("projects:open-existing-project-folder"),
+    removeFromRecent: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("projects:remove-from-recent", projectId),
     discard: (projectId: string): Promise<boolean> =>
       ipcRenderer.invoke("projects:discard", projectId),
     create: (request: CreateProjectRequest): Promise<ProjectView> =>

@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { convertWebmAudioToWav, exportVideo, getFfmpegStatus } from "./ffmpeg";
+import { ProjectLibrary } from "./project-library";
 import { ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
@@ -23,6 +24,7 @@ import type {
   FailRecordingRequest,
   ImportedMediaFile,
   ImportedMediaKind,
+  ProjectView,
   SourceOverlayResult,
   SourceSummary,
   StartRecordingRequest,
@@ -62,6 +64,7 @@ let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
 let displayOverlayWindow: BrowserWindow | null = null;
+let projectLibrary: ProjectLibrary | null = null;
 
 const recorderWindowSize = {
   expanded: {
@@ -78,6 +81,11 @@ function getAppIconPath(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, "app.png")
     : path.join(__dirname, "../../src/renderer/assets/app.png");
+}
+
+function getProjectLibrary(): ProjectLibrary {
+  projectLibrary ??= new ProjectLibrary(path.join(app.getPath("userData"), "projects.json"));
+  return projectLibrary;
 }
 
 async function createWindow(): Promise<void> {
@@ -496,12 +504,33 @@ function registerIpc(): void {
     return chooseBaseDirectory();
   });
 
+  ipcMain.handle("projects:list-recent", async () => {
+    return getProjectLibrary().listRecent();
+  });
+
   ipcMain.handle("projects:get", async (_event, projectId: string) => {
-    return projectStore.getProject(projectId);
+    return getProjectForEditor(projectId);
+  });
+
+  ipcMain.handle("projects:open-existing-project-folder", async (): Promise<ProjectView | null> => {
+    const projectRootPath = await chooseExistingProjectFolder();
+    if (!projectRootPath) {
+      return null;
+    }
+
+    const project = await projectStore.loadProject(projectRootPath);
+    await getProjectLibrary().upsert(project);
+    return project;
+  });
+
+  ipcMain.handle("projects:remove-from-recent", async (_event, projectId: string): Promise<boolean> => {
+    return getProjectLibrary().remove(projectId);
   });
 
   ipcMain.handle("projects:discard", async (_event, projectId: string): Promise<boolean> => {
-    return projectStore.discardProject(projectId);
+    const discarded = await projectStore.discardProject(projectId);
+    await getProjectLibrary().remove(projectId);
+    return discarded;
   });
 
   ipcMain.handle(
@@ -517,16 +546,22 @@ function registerIpc(): void {
         }
       }
 
-      return projectStore.createProject({
+      const project = await projectStore.createProject({
         name: request.name,
         baseDirectory
       });
+      await getProjectLibrary().upsert(project);
+      return project;
     }
   );
 
   ipcMain.handle(
     "recording:start",
-    async (_event, request: StartRecordingRequest) => projectStore.startRecording(request)
+    async (_event, request: StartRecordingRequest) => {
+      const project = await projectStore.startRecording(request);
+      await getProjectLibrary().upsert(project);
+      return project;
+    }
   );
 
   ipcMain.handle("recording:write-chunk", async (_event, request: WriteChunkRequest) => {
@@ -535,12 +570,20 @@ function registerIpc(): void {
 
   ipcMain.handle(
     "recording:stop",
-    async (_event, request: StopRecordingRequest) => projectStore.stopRecording(request)
+    async (_event, request: StopRecordingRequest) => {
+      const project = await projectStore.stopRecording(request);
+      await getProjectLibrary().upsert(project);
+      return project;
+    }
   );
 
   ipcMain.handle(
     "recording:fail",
-    async (_event, request: FailRecordingRequest) => projectStore.markFailed(request)
+    async (_event, request: FailRecordingRequest) => {
+      const project = await projectStore.markFailed(request);
+      await getProjectLibrary().upsert(project);
+      return project;
+    }
   );
 
   ipcMain.handle("ffmpeg:status", async () => getFfmpegStatus());
@@ -549,13 +592,34 @@ function registerIpc(): void {
     const inputPath = projectStore.getMicWebmPath(projectId);
 
     if (!inputPath) {
-      return projectStore.completeAudio(projectId, 0);
+      const project = await projectStore.completeAudio(projectId, 0);
+      await getProjectLibrary().upsert(project);
+      return project;
     }
 
     const outputPath = projectStore.getMicWavPath(projectId);
     const bytesWritten = await convertWebmAudioToWav(inputPath, outputPath);
-    return projectStore.completeAudio(projectId, bytesWritten);
+    const project = await projectStore.completeAudio(projectId, bytesWritten);
+    await getProjectLibrary().upsert(project);
+    return project;
   });
+}
+
+async function getProjectForEditor(projectId: string): Promise<ProjectView> {
+  if (projectStore.hasProject(projectId)) {
+    const project = projectStore.getProject(projectId);
+    await getProjectLibrary().upsert(project);
+    return project;
+  }
+
+  const entry = await getProjectLibrary().get(projectId);
+  if (!entry || !entry.available) {
+    throw new Error(`Project "${projectId}" is no longer available.`);
+  }
+
+  const project = await projectStore.loadProject(entry.rootPath);
+  await getProjectLibrary().upsert(project);
+  return project;
 }
 
 function setRecorderWindowCompact(compact: boolean): void {
@@ -588,6 +652,23 @@ async function chooseBaseDirectory(): Promise<string | null> {
     properties: ["openDirectory", "createDirectory"]
   };
   const parentWindow = BrowserWindow.getFocusedWindow() ?? recorderWindow ?? mainWindow;
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, options)
+    : await dialog.showOpenDialog(options);
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return result.filePaths[0];
+}
+
+async function chooseExistingProjectFolder(): Promise<string | null> {
+  const options: Electron.OpenDialogOptions = {
+    title: "Open an Open Video Craft project folder",
+    properties: ["openDirectory"]
+  };
+  const parentWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
   const result = parentWindow
     ? await dialog.showOpenDialog(parentWindow, options)
     : await dialog.showOpenDialog(options);

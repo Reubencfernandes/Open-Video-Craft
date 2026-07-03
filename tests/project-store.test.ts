@@ -61,6 +61,12 @@ describe("ProjectStore", () => {
       segments: []
     });
     await expect(fs.stat(path.join(project.rootPath, "media"))).resolves.toBeTruthy();
+
+    const loadedProject = await new ProjectStore({
+      appVersion: "1.0.0"
+    }).loadProject(project.rootPath);
+    expect(loadedProject.id).toBe(project.id);
+    expect(loadedProject.rootPath).toBe(project.rootPath);
   });
 
   it("tracks recording metadata and bytes written per media track", async () => {

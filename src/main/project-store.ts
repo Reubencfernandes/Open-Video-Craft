@@ -104,6 +104,22 @@ export class ProjectStore {
     return this.toView(this.getRecord(projectId));
   }
 
+  hasProject(projectId: string): boolean {
+    return this.records.has(projectId);
+  }
+
+  async loadProject(rootPath: string): Promise<ProjectView> {
+    const resolvedRootPath = path.resolve(rootPath);
+    const file = await readProjectFile(resolvedRootPath);
+    const record: ProjectRecord = {
+      rootPath: resolvedRootPath,
+      file
+    };
+
+    this.records.set(file.id, record);
+    return this.toView(record);
+  }
+
   async discardProject(projectId: string): Promise<boolean> {
     const record = this.getRecord(projectId);
     this.records.delete(projectId);
@@ -363,6 +379,25 @@ export function createMediaUrl(projectId: string, relativePath: string): string 
     .join("/");
 
   return `ovc-media://project/${encodeURIComponent(projectId)}/${encodedPath}`;
+}
+
+export async function readProjectFile(rootPath: string): Promise<ProjectFile> {
+  const filePath = path.join(path.resolve(rootPath), "project.json");
+  const raw = await fs.readFile(filePath, "utf8");
+  const parsed = JSON.parse(raw) as Partial<ProjectFile>;
+
+  if (
+    parsed.schemaVersion !== 1 ||
+    typeof parsed.id !== "string" ||
+    typeof parsed.name !== "string" ||
+    typeof parsed.updatedAt !== "string" ||
+    !parsed.tracks ||
+    typeof parsed.tracks !== "object"
+  ) {
+    throw new Error(`"${filePath}" is not a valid Open Video Craft project.`);
+  }
+
+  return parsed as ProjectFile;
 }
 
 async function exists(filePath: string): Promise<boolean> {

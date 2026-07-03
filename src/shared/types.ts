@@ -66,6 +66,23 @@ export interface ProjectView extends ProjectFile {
   mediaUrls: Partial<Record<MediaTrackKey, string>>;
 }
 
+export interface ProjectMediaAvailability {
+  screen: boolean;
+  camera: boolean;
+  audio: boolean;
+}
+
+export interface ProjectLibraryEntry {
+  id: string;
+  name: string;
+  rootPath: string;
+  status: RecordingStatus;
+  durationMs: number | null;
+  updatedAt: string;
+  mediaAvailability: ProjectMediaAvailability;
+  available: boolean;
+}
+
 export interface CreateProjectRequest {
   name: string;
   baseDirectory?: string | null;

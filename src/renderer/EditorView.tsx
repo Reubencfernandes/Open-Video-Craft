@@ -51,6 +51,14 @@ import subtitleIcon from "./assets/rail-icons/icon6.png";
 import audioIcon from "./assets/rail-icons/icon7.png";
 import appLogo from "./assets/app.png";
 import { cx } from "./classNames";
+import {
+  constrainZoomEnd,
+  constrainZoomMove,
+  constrainZoomStart,
+  getOrderedZoomTimingItems,
+  placeZoomInFirstGap,
+  zoomMinDurationSeconds
+} from "./zoom-timing";
 
 type MediaPanel = "all" | "video" | "audio" | "image";
 type EditorTool = "media" | "layout" | "audio" | "zoom" | "subtitles" | "cut" | "style";
@@ -127,6 +135,22 @@ type TimelineContextMenu = {
   time: number;
   segmentId: string | null;
 } | null;
+type ScreenLayoutDragMode = "move" | "resize-nw" | "resize-ne" | "resize-sw" | "resize-se";
+
+type ScreenLayoutDrag = {
+  mode: ScreenLayoutDragMode;
+  startClientX: number;
+  startClientY: number;
+  startPosition: {
+    x: number;
+    y: number;
+    scale: number;
+  };
+  boundsWidth: number;
+  boundsHeight: number;
+};
+
+const screenResizeModes = ["resize-nw", "resize-ne", "resize-sw", "resize-se"] as const;
 
 type TimelineTrimDrag = {
   segmentId: string;
@@ -328,7 +352,7 @@ export function EditorView() {
   const [screenPosition, setScreenPosition] = useState({
     x: 0,
     y: 0,
-    scale: 88
+    scale: 100
   });
   const [cameraSize, setCameraSize] = useState(24);
   const [cameraPosition, setCameraPosition] = useState<CameraPosition>("bottom-right");
@@ -374,6 +398,9 @@ export function EditorView() {
   const rafRef = useRef<number | null>(null);
   const videoClipsRef = useRef<TimelineMediaClip[]>([]);
   const audioClipsRef = useRef<TimelineMediaClip[]>([]);
+  const zoomEffectsRef = useRef<ZoomEffect[]>([]);
+  const syncedVideoClipKeyRef = useRef<string | null>(null);
+  const syncedCameraClipKeyRef = useRef<string | null>(null);
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<Record<string, { volume: number; muted: boolean }>>({});
   const timelineDurationRef = useRef(0);
@@ -395,6 +422,7 @@ export function EditorView() {
     origEnd: number;
     moved: boolean;
   } | null>(null);
+  const screenLayoutDragRef = useRef<ScreenLayoutDrag | null>(null);
   const previousTimelineDurationRef = useRef(0);
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
   const saveStateRef = useRef<() => void>(() => undefined);
@@ -509,6 +537,34 @@ export function EditorView() {
     return () => window.removeEventListener("keydown", handleSaveShortcut);
   }, []);
 
+  useEffect(() => {
+    if (exportMessage !== "Project saved") {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => setExportMessage(null), 2200);
+    return () => window.clearTimeout(timeout);
+  }, [exportMessage]);
+
+  useEffect(() => {
+    function handlePointerMove(event: PointerEvent) {
+      updateScreenLayoutDrag(event.clientX, event.clientY);
+    }
+
+    function handlePointerUp() {
+      finishScreenLayoutDrag();
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+    };
+  }, []);
+
   const projectMedia = useMemo(() => createProjectMedia(project), [project]);
   const allMedia = useMemo(
     () => [...projectMedia, ...importedMedia],
@@ -575,17 +631,12 @@ export function EditorView() {
   const isProjectCompositionSelected = Boolean(
     previewItem && previewItem.origin === "project" && previewItem.track === "screen"
   );
-  const timelineContentEnd = Math.max(
-    0,
-    ...videoTimelineClips.map((clip) => clip.start + clip.duration),
-    ...audioTimelineClips.map((clip) => clip.start + clip.duration),
-    ...zoomEffects.map((effect) => effect.end),
-    ...subtitles.map((subtitle) => subtitle.end)
-  );
-  const timelineDuration = Math.max(
-    timelineContentEnd,
-    timelineContentEnd > 0 ? 0 : activeDuration,
-    1
+  const timelineDuration = calculateTimelineDuration(
+    videoTimelineClips,
+    audioTimelineClips,
+    zoomEffects,
+    subtitles,
+    activeDuration
   );
   const totalFrames = Math.max(1, Math.floor(timelineDuration * frameRate));
   const currentFrame = Math.min(totalFrames, Math.max(0, Math.round(currentTime * frameRate)));
@@ -605,27 +656,14 @@ export function EditorView() {
   const backgroundAudioItems = importedMedia.filter((item) =>
     backgroundAudioIds.includes(item.id)
   );
-  const screenScale =
-    layoutMode === "bubble-fill" ||
-    layoutMode === "side-by-side" ||
-    layoutMode === "side-overlap" ||
-    layoutMode === "camera-only"
-      ? activeZoom.scale
-      : (screenPosition.scale / 100) * activeZoom.scale;
-  const screenStyle: CSSProperties =
-    layoutMode === "bubble-fill" ||
-    layoutMode === "side-by-side" ||
-    layoutMode === "side-overlap"
-      ? {
-          transform: `scale(${screenScale.toFixed(3)})`,
-          transformOrigin: `${activeZoom.originX}% ${activeZoom.originY}%`
-        }
-      : {
-          transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
-            3
-          )})`,
-          transformOrigin: `${activeZoom.originX}% ${activeZoom.originY}%`
-        };
+  const screenScale = (screenPosition.scale / 100) * activeZoom.scale;
+  const screenStyle: CSSProperties = {
+    transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
+      3
+    )})`,
+    transformOrigin: `${activeZoom.originX}% ${activeZoom.originY}%`
+  };
+  const screenEditEnabled = activeTool === "layout" && layoutMode !== "camera-only";
   const previewFrameStyle = {
     "--camera-size": `${cameraSize}%`,
     ...(backgroundStyle === "custom" && customBackgroundUrl
@@ -648,6 +686,12 @@ export function EditorView() {
     activeTool === "zoom" ||
     activeTool === "audio" ||
     activeTool === "subtitles";
+
+  useEffect(() => {
+    if (!screenEditEnabled) {
+      finishScreenLayoutDrag();
+    }
+  }, [screenEditEnabled]);
 
   useEffect(() => {
     if (!selectedItemId && allMedia.length > 0) {
@@ -717,12 +761,13 @@ export function EditorView() {
   }, [timelineEditableItems]);
 
   useEffect(() => {
-    videoClipsRef.current = videoTimelineClips;
-  }, [videoTimelineClips]);
+    syncTimelinePlaybackRefs(timelineSegments);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDuration, mediaById, subtitles, timelineSegments, zoomEffects]);
 
   useEffect(() => {
-    audioClipsRef.current = audioTimelineClips;
-  }, [audioTimelineClips]);
+    zoomEffectsRef.current = zoomEffects;
+  }, [zoomEffects]);
 
   useEffect(() => {
     masterVolumeRef.current = masterVolume;
@@ -744,6 +789,21 @@ export function EditorView() {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
 
+  useEffect(() => {
+    syncMediaToTime(currentTimeRef.current, playingRef.current, true);
+    // The media element is swapped by React when the active clip/source changes;
+    // sync after commit so the new element starts at the timeline time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeVideoClip?.id,
+    activeVideoClip?.start,
+    activeVideoClip?.duration,
+    activeVideoClip?.sourceStart,
+    previewItem?.url,
+    projectCamera?.url,
+    layoutMode
+  ]);
+
   // Master playback clock: advances the global timeline time while playing and
   // keeps every media element slaved to it (see syncMediaToTime).
   useEffect(() => {
@@ -761,7 +821,7 @@ export function EditorView() {
       if (next >= timelineDurationRef.current) {
         currentTimeRef.current = timelineDurationRef.current;
         setCurrentTime(timelineDurationRef.current);
-        syncMediaToTime(timelineDurationRef.current, false);
+        syncMediaToTime(timelineDurationRef.current, false, true);
         setPlaying(false);
         return;
       }
@@ -770,7 +830,8 @@ export function EditorView() {
       // Sync media every frame for tight A/V alignment, but throttle the (heavy)
       // React re-render that moves the playhead/UI to ~30fps.
       syncMediaToTime(next, true);
-      if (now - lastUiUpdate >= 33) {
+      const frameInterval = isZoomActiveAtTime(zoomEffectsRef.current, next) ? 16 : 33;
+      if (now - lastUiUpdate >= frameInterval) {
         lastUiUpdate = now;
         setCurrentTime(next);
       }
@@ -865,6 +926,11 @@ export function EditorView() {
 
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
+        if (activeTool === "zoom" && selectedZoomId) {
+          removeZoomEffect(selectedZoomId);
+          return;
+        }
+
         deleteSelectedTimelineSegment();
       }
     }
@@ -873,11 +939,13 @@ export function EditorView() {
     return () => window.removeEventListener("keydown", handleTimelineKeyDown);
   }, [
     currentTime,
+    activeTool,
     masterVolume,
     isProjectCompositionSelected,
     playing,
     selectedItem?.id,
     selectedTimelineSegmentId,
+    selectedZoomId,
     timelineRedoStack,
     timelineSegments,
     timelineUndoStack
@@ -928,7 +996,13 @@ export function EditorView() {
     void window.openVideoCraft.editor.removeImportedMedia(itemId);
     setImportedMedia((current) => current.filter((item) => item.id !== itemId));
     setBackgroundAudioIds((current) => current.filter((id) => id !== itemId));
-    setTimelineSegments((current) => current.filter((segment) => segment.itemId !== itemId));
+    setTimelineSegments((current) => {
+      const next = current.filter((segment) => segment.itemId !== itemId);
+      if (!areTimelineSegmentsEqual(current, next)) {
+        scheduleTimelinePlaybackSync(next);
+      }
+      return next;
+    });
     knownTimelineItemIdsRef.current.delete(itemId);
     setSelectedItemId((current) => (current === itemId ? projectMedia[0]?.id ?? null : current));
     setSelectedTimelineSegmentId((current) => {
@@ -950,7 +1024,7 @@ export function EditorView() {
     return Math.min(1, master * (level.volume / 100));
   }
 
-  function syncMediaToTime(t: number, isPlaying: boolean) {
+  function syncMediaToTime(t: number, isPlaying: boolean, forceSeek = false) {
     const master = Math.min(1, Math.max(0, masterVolumeRef.current / 100));
     const videoClip =
       videoClipsRef.current.find(
@@ -960,7 +1034,10 @@ export function EditorView() {
     const videoEl = mainVideoRef.current;
     if (videoEl && videoClip && videoClip.item.kind === "video") {
       const desired = videoClip.sourceStart + (t - videoClip.start);
-      if (Math.abs(videoEl.currentTime - desired) > 0.3) {
+      const clipPlaybackKey = createClipPlaybackKey(videoClip);
+      const clipChanged = syncedVideoClipKeyRef.current !== clipPlaybackKey;
+      syncedVideoClipKeyRef.current = clipPlaybackKey;
+      if (forceSeek || clipChanged || Math.abs(videoEl.currentTime - desired) > 0.3) {
         try {
           videoEl.currentTime = desired;
         } catch {
@@ -978,12 +1055,18 @@ export function EditorView() {
       }
     } else if (videoEl && !videoEl.paused) {
       videoEl.pause();
+      syncedVideoClipKeyRef.current = null;
+    } else if (!videoClip) {
+      syncedVideoClipKeyRef.current = null;
     }
 
     const cameraEl = cameraRef.current;
     if (cameraEl && videoClip) {
       const desired = videoClip.sourceStart + (t - videoClip.start);
-      if (Math.abs(cameraEl.currentTime - desired) > 0.3) {
+      const clipPlaybackKey = createClipPlaybackKey(videoClip);
+      const clipChanged = syncedCameraClipKeyRef.current !== clipPlaybackKey;
+      syncedCameraClipKeyRef.current = clipPlaybackKey;
+      if (forceSeek || clipChanged || Math.abs(cameraEl.currentTime - desired) > 0.3) {
         try {
           cameraEl.currentTime = desired;
         } catch {
@@ -995,6 +1078,8 @@ export function EditorView() {
       } else if (!isPlaying && !cameraEl.paused) {
         cameraEl.pause();
       }
+    } else {
+      syncedCameraClipKeyRef.current = null;
     }
 
     for (const clip of audioClipsRef.current) {
@@ -1028,7 +1113,7 @@ export function EditorView() {
   function togglePlayback() {
     if (playing) {
       setPlaying(false);
-      syncMediaToTime(currentTimeRef.current, false);
+      syncMediaToTime(currentTimeRef.current, false, true);
       return;
     }
 
@@ -1039,7 +1124,7 @@ export function EditorView() {
       setCurrentTime(0);
     }
 
-    syncMediaToTime(startAt, true);
+    syncMediaToTime(startAt, true, true);
     setPlaying(true);
   }
 
@@ -1047,7 +1132,7 @@ export function EditorView() {
     const nextTime = Math.max(0, Math.min(value, timelineDuration || value));
     currentTimeRef.current = nextTime;
     setCurrentTime(nextTime);
-    syncMediaToTime(nextTime, playingRef.current);
+    syncMediaToTime(nextTime, playingRef.current, true);
   }
 
   function selectTimelineItem(itemId: string) {
@@ -1091,6 +1176,99 @@ export function EditorView() {
     seek(nextTime);
   }
 
+  function beginScreenLayoutDrag(
+    event: ReactPointerEvent<HTMLElement>,
+    mode: ScreenLayoutDragMode
+  ) {
+    if (event.button !== 0 || activeTool !== "layout" || layoutMode === "camera-only") {
+      return;
+    }
+
+    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const overlay = target?.classList.contains("studio-screen-edit-overlay")
+      ? target
+      : target?.closest<HTMLElement>(".studio-screen-edit-overlay");
+    const bounds = overlay?.getBoundingClientRect();
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    screenLayoutDragRef.current = {
+      mode,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPosition: screenPosition,
+      boundsWidth: bounds.width,
+      boundsHeight: bounds.height
+    };
+  }
+
+  function updateScreenLayoutDrag(clientX: number, clientY: number) {
+    const drag = screenLayoutDragRef.current;
+    if (!drag) {
+      return;
+    }
+
+    const deltaX = clientX - drag.startClientX;
+    const deltaY = clientY - drag.startClientY;
+    if (drag.mode === "move") {
+      setScreenPosition({
+        ...drag.startPosition,
+        x: clampNumber(drag.startPosition.x + (deltaX / drag.boundsWidth) * 100, -120, 120),
+        y: clampNumber(drag.startPosition.y + (deltaY / drag.boundsHeight) * 100, -120, 120)
+      });
+      return;
+    }
+
+    const direction = getScreenResizeDirection(drag.mode);
+    const scaleDelta =
+      (((deltaX * direction.x) / drag.boundsWidth +
+        (deltaY * direction.y) / drag.boundsHeight) /
+        2) *
+      100;
+    setScreenPosition({
+      ...drag.startPosition,
+      scale: clampNumber(drag.startPosition.scale + scaleDelta, 35, 220)
+    });
+  }
+
+  function finishScreenLayoutDrag() {
+    screenLayoutDragRef.current = null;
+  }
+
+  function syncTimelinePlaybackRefs(segments: TimelineSegment[]): number {
+    const nextTimelineClips = createTimelineMediaClips(segments, mediaById);
+    const nextVideoClips = nextTimelineClips.filter((clip) => clip.track === "video");
+    const nextAudioClips = nextTimelineClips.filter((clip) => clip.track === "audio");
+    const nextTimelineDuration = calculateTimelineDuration(
+      nextVideoClips,
+      nextAudioClips,
+      zoomEffects,
+      subtitles,
+      activeDuration
+    );
+
+    videoClipsRef.current = nextVideoClips;
+    audioClipsRef.current = nextAudioClips;
+    timelineDurationRef.current = nextTimelineDuration;
+    return nextTimelineDuration;
+  }
+
+  function forceSyncCurrentTimelineMedia() {
+    const safeDuration = Math.max(timelineDurationRef.current, 1);
+    const nextTime = clampNumber(currentTimeRef.current, 0, safeDuration);
+    currentTimeRef.current = nextTime;
+    setCurrentTime(nextTime);
+    syncMediaToTime(nextTime, playingRef.current, true);
+  }
+
+  function scheduleTimelinePlaybackSync(segments: TimelineSegment[]) {
+    syncTimelinePlaybackRefs(segments);
+    window.queueMicrotask(forceSyncCurrentTimelineMedia);
+  }
+
   function commitTimelineSegments(updater: (segments: TimelineSegment[]) => TimelineSegment[]) {
     setTimelineSegments((current) => {
       const next = updater(current);
@@ -1098,6 +1276,7 @@ export function EditorView() {
         return current;
       }
 
+      scheduleTimelinePlaybackSync(next);
       setTimelineUndoStack((stack) => [...stack.slice(-49), current]);
       setTimelineRedoStack([]);
       return next;
@@ -1112,6 +1291,7 @@ export function EditorView() {
     const previous = timelineUndoStack[timelineUndoStack.length - 1];
     setTimelineUndoStack((stack) => stack.slice(0, -1));
     setTimelineRedoStack((stack) => [timelineSegments, ...stack.slice(0, 49)]);
+    scheduleTimelinePlaybackSync(previous);
     setTimelineSegments(previous);
     setSelectedTimelineSegmentId(null);
   }
@@ -1124,6 +1304,7 @@ export function EditorView() {
     const next = timelineRedoStack[0];
     setTimelineRedoStack((stack) => stack.slice(1));
     setTimelineUndoStack((stack) => [...stack.slice(-49), timelineSegments]);
+    scheduleTimelinePlaybackSync(next);
     setTimelineSegments(next);
     setSelectedTimelineSegmentId(null);
   }
@@ -1234,9 +1415,13 @@ export function EditorView() {
       return;
     }
 
-    setTimelineSegments((current) =>
-      trimTimelineSegment(current, drag.segmentId, drag.edge, time, mediaDurationById)
-    );
+    setTimelineSegments((current) => {
+      const next = trimTimelineSegment(current, drag.segmentId, drag.edge, time, mediaDurationById);
+      if (!areTimelineSegmentsEqual(current, next)) {
+        scheduleTimelinePlaybackSync(next);
+      }
+      return next;
+    });
   }
 
   function finishTimelineClipTrim() {
@@ -1293,9 +1478,13 @@ export function EditorView() {
 
     drag.moved = true;
     const rawStart = Math.max(0, drag.segmentStart + delta);
-    setTimelineSegments((current) =>
-      moveTimelineSegment(current, drag.segmentId, rawStart, timelineDuration)
-    );
+    setTimelineSegments((current) => {
+      const next = moveTimelineSegment(current, drag.segmentId, rawStart, timelineDuration);
+      if (!areTimelineSegmentsEqual(current, next)) {
+        scheduleTimelinePlaybackSync(next);
+      }
+      return next;
+    });
   }
 
   function finishTimelineClipMove() {
@@ -1360,22 +1549,30 @@ export function EditorView() {
         return;
       }
       drag.moved = true;
-      const length = drag.origEnd - drag.origStart;
-      const start = clampNumber(
+      const constrained = constrainZoomMove(
+        zoomEffects,
+        drag.id,
         drag.origStart + delta,
-        0,
-        Math.max(0, timelineDuration - length)
+        timelineDuration
       );
-      updateZoomEffect(drag.id, { start, end: start + length });
+      if (constrained) {
+        updateZoomEffect(drag.id, constrained);
+      }
       return;
     }
 
     if (drag.mode === "start") {
-      updateZoomEffect(drag.id, { start: clampNumber(time, 0, drag.origEnd - 0.2) });
+      const constrained = constrainZoomStart(zoomEffects, drag.id, time);
+      if (constrained) {
+        updateZoomEffect(drag.id, constrained);
+      }
       return;
     }
 
-    updateZoomEffect(drag.id, { end: clampNumber(time, drag.origStart + 0.2, timelineDuration) });
+    const constrained = constrainZoomEnd(zoomEffects, drag.id, time, timelineDuration);
+    if (constrained) {
+      updateZoomEffect(drag.id, constrained);
+    }
   }
 
   function finishZoomClipDrag() {
@@ -1452,29 +1649,52 @@ export function EditorView() {
 
   function addZoomEffect() {
     const start = currentTime;
-    const end = activeDuration > 0 ? Math.min(activeDuration, start + 2.5) : start + 2.5;
+    const desiredDuration = Math.min(
+      2.5,
+      Math.max(zoomMinDurationSeconds, timelineDuration - start)
+    );
+    const placement =
+      placeZoomInFirstGap(zoomEffects, start, desiredDuration, timelineDuration) ??
+      placeZoomInFirstGap(zoomEffects, start, zoomMinDurationSeconds, timelineDuration);
+
+    if (!placement) {
+      setError("There is no room for another zoom after the playhead.");
+      return;
+    }
+
     const nextEffect: ZoomEffect = {
       id: createId("zoom"),
-      start,
-      end: Math.max(start + 0.5, end),
+      start: placement.start,
+      end: placement.end,
       speed: "medium",
       scale: 1.5,
       targetX: 50,
       targetY: 50
     };
-    setZoomEffects((current) => [...current, nextEffect]);
+    setError(null);
+    setZoomEffects((current) => {
+      const next = [...current, nextEffect];
+      zoomEffectsRef.current = next;
+      return next;
+    });
     setSelectedZoomId(nextEffect.id);
     setActiveTool("zoom");
   }
 
   function updateZoomEffect(id: string, updates: Partial<ZoomEffect>) {
-    setZoomEffects((current) =>
-      current.map((effect) => (effect.id === id ? { ...effect, ...updates } : effect))
-    );
+    setZoomEffects((current) => {
+      const next = current.map((effect) => (effect.id === id ? { ...effect, ...updates } : effect));
+      zoomEffectsRef.current = next;
+      return next;
+    });
   }
 
   function removeZoomEffect(id: string) {
-    setZoomEffects((current) => current.filter((effect) => effect.id !== id));
+    setZoomEffects((current) => {
+      const next = current.filter((effect) => effect.id !== id);
+      zoomEffectsRef.current = next;
+      return next;
+    });
     setSelectedZoomId((current) => (current === id ? null : current));
   }
 
@@ -1708,8 +1928,16 @@ export function EditorView() {
           />
         ) : null}
 
-        {error ? <div className="studio-error">{error}</div> : null}
-        {exportMessage ? <div className="studio-success">{exportMessage}</div> : null}
+        {error ? (
+          <div className="studio-error" role="alert">
+            {error}
+          </div>
+        ) : null}
+        {exportMessage ? (
+          <div className="studio-success" role="status" aria-live="polite">
+            {exportMessage}
+          </div>
+        ) : null}
 
         <div className="studio-workspace">
           <aside className="studio-rail" aria-label="Editor tools">
@@ -1812,6 +2040,22 @@ export function EditorView() {
                 </div>
 
                 <div className="layout-customization">
+                  {layoutMode !== "camera-only" ? (
+                    <RangeControl
+                      label="Screen size"
+                      min={70}
+                      max={150}
+                      value={screenPosition.scale}
+                      suffix="%"
+                      onChange={(scale) =>
+                        setScreenPosition((current) => ({
+                          ...current,
+                          scale
+                        }))
+                      }
+                    />
+                  ) : null}
+
                   <div className="layout-control-group">
                     <span>Camera style</span>
                     <div className="icon-segmented-control">
@@ -1966,21 +2210,31 @@ export function EditorView() {
                   }}
                 />
                 {selectedZoomEffect ? (
-                  <div className="layout-control-group">
-                    <span>Zoom speed</span>
-                    <div className="segmented-control segmented-control-3">
-                      {(["slow", "medium", "fast"] as ZoomSpeed[]).map((speed) => (
-                        <button
-                          className={selectedZoomEffect.speed === speed ? "segmented-active" : ""}
-                          type="button"
-                          key={speed}
-                          onClick={() => updateZoomEffect(selectedZoomEffect.id, { speed })}
-                        >
-                          {speed}
-                        </button>
-                      ))}
+                  <>
+                    <div className="layout-control-group">
+                      <span>Zoom speed</span>
+                      <div className="segmented-control segmented-control-3">
+                        {(["slow", "medium", "fast"] as ZoomSpeed[]).map((speed) => (
+                          <button
+                            className={selectedZoomEffect.speed === speed ? "segmented-active" : ""}
+                            type="button"
+                            key={speed}
+                            onClick={() => updateZoomEffect(selectedZoomEffect.id, { speed })}
+                          >
+                            {speed}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                    <button
+                      className="secondary-tool-button secondary-tool-danger"
+                      type="button"
+                      onClick={() => removeZoomEffect(selectedZoomEffect.id)}
+                    >
+                      <Trash2 size={16} />
+                      Delete selected zoom
+                    </button>
+                  </>
                 ) : (
                   <div className="tool-empty">Add a zoom, then drag its box on the timeline.</div>
                 )}
@@ -2199,11 +2453,16 @@ export function EditorView() {
                     projectCamera={projectCamera}
                     layoutMode={layoutMode}
                     screenStyle={screenStyle}
+                    screenEditEnabled={screenEditEnabled}
                     activeSubtitle={activeSubtitle}
                     subtitleStyle={subtitleStyle}
                     currentTime={currentTime}
                     mainVideoRef={mainVideoRef}
                     cameraRef={cameraRef}
+                    onScreenEditPointerDown={beginScreenLayoutDrag}
+                    onMediaReady={() =>
+                      syncMediaToTime(currentTimeRef.current, playingRef.current, true)
+                    }
                     onDuration={(nextDuration) => {
                       updateDuration(nextDuration);
                       updateMediaDuration(previewItem.id, nextDuration);
@@ -2299,33 +2558,9 @@ export function EditorView() {
           >
             <div
               className="playhead absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent"
-              role="slider"
-              aria-label="Timeline playhead"
-              aria-valuemin={0}
-              aria-valuemax={Number(timelineDuration.toFixed(2))}
-              aria-valuenow={Number(currentTime.toFixed(2))}
-              aria-valuetext={formatSeconds(currentTime)}
-              tabIndex={0}
+              aria-hidden="true"
               style={{
                 left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "ArrowLeft") {
-                  event.preventDefault();
-                  seekFrame(currentFrame - 1);
-                }
-                if (event.key === "ArrowRight") {
-                  event.preventDefault();
-                  seekFrame(currentFrame + 1);
-                }
-                if (event.key === "Home") {
-                  event.preventDefault();
-                  seek(0);
-                }
-                if (event.key === "End") {
-                  event.preventDefault();
-                  seek(timelineDuration);
-                }
               }}
             >
               <span />
@@ -2354,7 +2589,7 @@ export function EditorView() {
 
             {activeTool === "zoom" ? (
               <TimelineTrack label="Zoom" accent="amber" icon={<WandSparkles size={14} />}>
-                {zoomEffects.map((effect) => (
+                {getOrderedZoomTimingItems(zoomEffects).map((effect) => (
                   <TimelineZoomClip
                     key={effect.id}
                     effect={effect}
@@ -2559,11 +2794,17 @@ function PreviewContent(props: {
   projectCamera: EditorMediaItem | null;
   layoutMode: LayoutMode;
   screenStyle: CSSProperties;
+  screenEditEnabled: boolean;
   activeSubtitle: SubtitleSegment | null;
   subtitleStyle: SubtitleStyle;
   currentTime: number;
   mainVideoRef: RefObject<HTMLVideoElement | null>;
   cameraRef: RefObject<HTMLVideoElement | null>;
+  onScreenEditPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    mode: ScreenLayoutDragMode
+  ) => void;
+  onMediaReady: () => void;
   onDuration: (duration: number | null) => void;
   onSubtitleClick: (subtitleId: string) => void;
 }) {
@@ -2571,6 +2812,11 @@ function PreviewContent(props: {
     return (
       <>
         <img className="studio-screen-video" style={props.screenStyle} src={props.item.url} alt="" />
+        <ScreenEditOverlay
+          enabled={props.screenEditEnabled}
+          style={props.screenStyle}
+          onPointerDown={props.onScreenEditPointerDown}
+        />
         <SubtitleOverlay
           subtitle={props.activeSubtitle}
           currentTime={props.currentTime}
@@ -2582,21 +2828,32 @@ function PreviewContent(props: {
   }
 
   if (props.isProjectCompositionSelected) {
-    const showScreen = props.layoutMode !== "camera-only" || !props.projectCamera;
+    const showScreen = props.layoutMode !== "camera-only";
     const showCamera = Boolean(props.projectCamera && props.layoutMode !== "screen-only");
 
     return (
       <>
         {showScreen ? (
-          <video
-            ref={props.mainVideoRef}
-            className="studio-screen-video"
-            style={props.screenStyle}
-            src={props.item.url}
-            playsInline
-            muted
-            onLoadedMetadata={(event) => props.onDuration(event.currentTarget.duration)}
-          />
+          <>
+            <video
+              ref={props.mainVideoRef}
+              className="studio-screen-video"
+              style={props.screenStyle}
+              src={props.item.url}
+              playsInline
+              muted
+              onCanPlay={props.onMediaReady}
+              onLoadedMetadata={(event) => {
+                props.onDuration(event.currentTarget.duration);
+                props.onMediaReady();
+              }}
+            />
+            <ScreenEditOverlay
+              enabled={props.screenEditEnabled}
+              style={props.screenStyle}
+              onPointerDown={props.onScreenEditPointerDown}
+            />
+          </>
         ) : null}
         {showCamera && props.projectCamera ? (
           <video
@@ -2605,7 +2862,11 @@ function PreviewContent(props: {
             src={props.projectCamera.url}
             playsInline
             muted
+            onCanPlay={props.onMediaReady}
           />
+        ) : null}
+        {props.layoutMode === "camera-only" && !props.projectCamera ? (
+          <div className="studio-video-empty">No camera recording for this project.</div>
         ) : null}
         <SubtitleOverlay
           subtitle={props.activeSubtitle}
@@ -2625,7 +2886,16 @@ function PreviewContent(props: {
         style={props.screenStyle}
         src={props.item.url}
         playsInline
-        onLoadedMetadata={(event) => props.onDuration(event.currentTarget.duration)}
+        onCanPlay={props.onMediaReady}
+        onLoadedMetadata={(event) => {
+          props.onDuration(event.currentTarget.duration);
+          props.onMediaReady();
+        }}
+      />
+      <ScreenEditOverlay
+        enabled={props.screenEditEnabled}
+        style={props.screenStyle}
+        onPointerDown={props.onScreenEditPointerDown}
       />
       <SubtitleOverlay
         subtitle={props.activeSubtitle}
@@ -2634,6 +2904,39 @@ function PreviewContent(props: {
         onClick={props.onSubtitleClick}
       />
     </>
+  );
+}
+
+function ScreenEditOverlay(props: {
+  enabled: boolean;
+  style: CSSProperties;
+  onPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    mode: ScreenLayoutDragMode
+  ) => void;
+}) {
+  if (!props.enabled) {
+    return null;
+  }
+
+  return (
+    <div
+      className="studio-screen-video studio-screen-edit-overlay"
+      style={props.style}
+      aria-hidden="true"
+      onPointerDown={(event) => props.onPointerDown(event, "move")}
+    >
+      {screenResizeModes.map((mode) => (
+        <span
+          className={`studio-screen-edit-handle studio-screen-edit-handle-${mode.replace(
+            "resize-",
+            ""
+          )}`}
+          key={mode}
+          onPointerDown={(event) => props.onPointerDown(event, mode)}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -3551,6 +3854,21 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
+function getScreenResizeDirection(mode: ScreenLayoutDragMode): { x: number; y: number } {
+  switch (mode) {
+    case "resize-nw":
+      return { x: -1, y: -1 };
+    case "resize-ne":
+      return { x: 1, y: -1 };
+    case "resize-sw":
+      return { x: -1, y: 1 };
+    case "resize-se":
+      return { x: 1, y: 1 };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
 function createProjectMedia(project: ProjectView | null): EditorMediaItem[] {
   if (!project) {
     return [];
@@ -3617,32 +3935,168 @@ function getActiveZoom(effects: ZoomEffect[], time: number): {
   originX: number;
   originY: number;
 } {
-  const effect = effects.find((item) => time >= item.start && time <= item.end);
+  const orderedEffects = getOrderedZoomEffects(effects);
+  let activeIndex = -1;
+  for (let index = 0; index < orderedEffects.length; index += 1) {
+    const effect = orderedEffects[index];
+    if (time >= effect.start && time <= effect.end) {
+      activeIndex = index;
+    }
+  }
 
-  if (!effect) {
+  if (activeIndex === -1) {
+    const bridgeIndex = orderedEffects.findIndex((effect, index) => {
+      const nextEffect = orderedEffects[index + 1];
+      return (
+        Boolean(nextEffect) &&
+        time > effect.end &&
+        time < nextEffect.start &&
+        areZoomEffectsChained(effect, nextEffect)
+      );
+    });
+
+    if (bridgeIndex >= 0) {
+      const effect = orderedEffects[bridgeIndex];
+      const nextEffect = orderedEffects[bridgeIndex + 1];
+      const gapDuration = Math.max(0.001, nextEffect.start - effect.end);
+      const progress = smootherStep((time - effect.end) / gapDuration);
+      return interpolateZoomTransform(
+        getZoomFullTransform(effect),
+        getZoomFullTransform(nextEffect),
+        progress
+      );
+    }
+
     return { scale: 1, originX: 50, originY: 50 };
   }
 
+  const effect = orderedEffects[activeIndex];
+  const previousEffect = orderedEffects[activeIndex - 1] ?? null;
+  const nextEffect = orderedEffects[activeIndex + 1] ?? null;
+  const previousGap = previousEffect ? effect.start - previousEffect.end : Number.POSITIVE_INFINITY;
+  const previousIsChained = Boolean(
+    previousEffect && previousGap <= zoomChainGapSeconds
+  );
+  const nextIsChained = Boolean(nextEffect && areZoomEffectsChained(effect, nextEffect));
+  const fullZoom = getZoomFullTransform(effect);
   const duration = Math.max(0.1, effect.end - effect.start);
   const elapsed = clampNumber(time - effect.start, 0, duration);
-  // Ease in, hold at full zoom, then ease out. The ramp length is set by the
-  // per-zoom speed (slow ramps in gently, fast snaps in), capped at half the
-  // clip so short zooms still reach full scale.
-  const rampBySpeed: Record<ZoomSpeed, number> = { slow: 1, medium: 0.55, fast: 0.25 };
-  const ramp = Math.min(rampBySpeed[effect.speed] ?? 0.55, duration / 2);
-  const rampProgress =
-    elapsed < ramp
-      ? elapsed / ramp
-      : elapsed > duration - ramp
-        ? (duration - elapsed) / ramp
-        : 1;
-  const easedProgress = rampProgress * rampProgress * (3 - 2 * rampProgress);
+  const ramp = getZoomRampDuration(effect, duration);
 
+  if (elapsed < ramp) {
+    const entryTransform =
+      previousIsChained && previousGap <= zoomDirectChainGapSeconds && previousEffect
+        ? getZoomFullTransform(previousEffect)
+        : previousIsChained
+          ? fullZoom
+          : { scale: 1, originX: 50, originY: 50 };
+    return interpolateZoomTransform(entryTransform, fullZoom, smootherStep(elapsed / ramp));
+  }
+
+  if (!nextIsChained && elapsed > duration - ramp) {
+    return interpolateZoomTransform(
+      fullZoom,
+      { scale: 1, originX: 50, originY: 50 },
+      smootherStep((elapsed - (duration - ramp)) / ramp)
+    );
+  }
+
+  return fullZoom;
+}
+
+function isZoomActiveAtTime(effects: ZoomEffect[], time: number): boolean {
+  const orderedEffects = getOrderedZoomEffects(effects);
+  return orderedEffects.some((effect, index) => {
+    if (time >= effect.start && time <= effect.end) {
+      return true;
+    }
+
+    const nextEffect = orderedEffects[index + 1];
+    return (
+      Boolean(nextEffect) &&
+      time > effect.end &&
+      time < nextEffect.start &&
+      areZoomEffectsChained(effect, nextEffect)
+    );
+  });
+}
+
+function calculateTimelineDuration(
+  videoClips: TimelineMediaClip[],
+  audioClips: TimelineMediaClip[],
+  zoomEffects: ZoomEffect[],
+  subtitles: SubtitleSegment[],
+  activeDuration: number
+): number {
+  const timelineContentEnd = Math.max(
+    0,
+    ...videoClips.map((clip) => clip.start + clip.duration),
+    ...audioClips.map((clip) => clip.start + clip.duration),
+    ...zoomEffects.map((effect) => effect.end),
+    ...subtitles.map((subtitle) => subtitle.end)
+  );
+
+  return Math.max(timelineContentEnd, timelineContentEnd > 0 ? 0 : activeDuration, 1);
+}
+
+function createClipPlaybackKey(clip: TimelineMediaClip): string {
+  return [
+    clip.id,
+    clip.item.url,
+    clip.start.toFixed(4),
+    clip.duration.toFixed(4),
+    clip.sourceStart.toFixed(4)
+  ].join("|");
+}
+
+const zoomChainGapSeconds = 0.45;
+const zoomDirectChainGapSeconds = 0.05;
+const zoomRampBySpeed: Record<ZoomSpeed, number> = { slow: 1.6, medium: 1.1, fast: 0.45 };
+
+function getOrderedZoomEffects(effects: ZoomEffect[]): ZoomEffect[] {
+  return [...effects].sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+function areZoomEffectsChained(effect: ZoomEffect, nextEffect: ZoomEffect): boolean {
+  return nextEffect.start - effect.end <= zoomChainGapSeconds;
+}
+
+function getZoomRampDuration(effect: ZoomEffect, duration: number): number {
+  return Math.min(zoomRampBySpeed[effect.speed] ?? zoomRampBySpeed.medium, duration / 2);
+}
+
+function getZoomFullTransform(effect: ZoomEffect): {
+  scale: number;
+  originX: number;
+  originY: number;
+} {
   return {
-    scale: 1 + (effect.scale - 1) * easedProgress,
+    scale: effect.scale,
     originX: effect.targetX,
     originY: effect.targetY
   };
+}
+
+function interpolateZoomTransform(
+  from: { scale: number; originX: number; originY: number },
+  to: { scale: number; originX: number; originY: number },
+  progress: number
+): {
+  scale: number;
+  originX: number;
+  originY: number;
+} {
+  const t = clampNumber(progress, 0, 1);
+  return {
+    scale: from.scale + (to.scale - from.scale) * t,
+    originX: from.originX + (to.originX - from.originX) * t,
+    originY: from.originY + (to.originY - from.originY) * t
+  };
+}
+
+function smootherStep(value: number): number {
+  const t = clampNumber(value, 0, 1);
+  return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
 function createTimelineTicks(duration: number): string[] {

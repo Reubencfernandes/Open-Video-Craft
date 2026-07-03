@@ -1768,16 +1768,42 @@
   }
 
   .studio-success {
-    margin: 0.55rem 1.1rem 0;
+    position: fixed;
+    top: 4.4rem;
+    right: 1.1rem;
+    z-index: 40;
+    display: flex;
+    width: min(28rem, calc(100vw - 2rem));
+    min-height: 2.35rem;
+    align-items: center;
+    margin: 0;
     overflow: hidden;
     border: 1px solid rgb(34 197 94 / 0.28);
     border-radius: 8px;
     background: rgb(22 101 52 / 0.34);
+    box-shadow: 0 18px 42px rgb(0 0 0 / 0.35);
     color: rgb(220 252 231);
     padding: 0.6rem 0.8rem;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 0.78rem;
+    font-weight: 800;
+  }
+
+  .studio-error {
+    position: fixed;
+    top: 4.4rem;
+    right: 1.1rem;
+    z-index: 40;
+    width: min(34rem, calc(100vw - 2rem));
+    min-height: 2.35rem;
+    margin: 0;
+    overflow: hidden;
+    box-shadow: 0 18px 42px rgb(0 0 0 / 0.35);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    font-weight: 800;
   }
 
   .studio-workspace {
@@ -2959,10 +2985,65 @@
     border-radius: var(--video-radius, 8px);
     object-fit: cover;
     transform-origin: center;
-    /* Short, linear transition so the zoom keeps up with the ~30fps playback
-       clock instead of rubber-banding behind a long ease. */
-    transition: transform 90ms linear;
+    /* Keep transform interpolation short so smooth timeline zooms do not lag
+       behind the playback clock. */
+    transition: transform 45ms cubic-bezier(0.2, 0, 0.2, 1);
     will-change: transform;
+  }
+
+  .studio-screen-edit-overlay {
+    z-index: 3;
+    box-sizing: border-box;
+    border: 1px solid rgb(34 211 238 / 0.88);
+    background: rgb(14 165 233 / 0.06);
+    box-shadow:
+      0 0 0 1px rgb(2 6 23 / 0.35),
+      0 14px 34px rgb(8 47 73 / 0.2);
+    cursor: grab;
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  .studio-screen-edit-overlay:active {
+    cursor: grabbing;
+  }
+
+  .studio-screen-edit-handle {
+    position: absolute;
+    z-index: 1;
+    width: 0.78rem;
+    height: 0.78rem;
+    border: 2px solid #ffffff;
+    border-radius: 999px;
+    background: #22d3ee;
+    box-shadow:
+      0 0 0 1px rgb(8 47 73 / 0.65),
+      0 8px 18px rgb(2 6 23 / 0.35);
+    pointer-events: auto;
+  }
+
+  .studio-screen-edit-handle-nw {
+    left: -0.42rem;
+    top: -0.42rem;
+    cursor: nwse-resize;
+  }
+
+  .studio-screen-edit-handle-ne {
+    right: -0.42rem;
+    top: -0.42rem;
+    cursor: nesw-resize;
+  }
+
+  .studio-screen-edit-handle-sw {
+    left: -0.42rem;
+    bottom: -0.42rem;
+    cursor: nesw-resize;
+  }
+
+  .studio-screen-edit-handle-se {
+    right: -0.42rem;
+    bottom: -0.42rem;
+    cursor: nwse-resize;
   }
 
   .preview-corner-flat {

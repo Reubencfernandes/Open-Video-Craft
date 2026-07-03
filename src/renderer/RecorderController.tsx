@@ -662,8 +662,11 @@ export function RecorderController() {
             <div className="floating-complete absolute top-4 grid justify-items-center gap-1 text-emerald-300">
               <CheckCircle2 size={28} />
               <span className="text-sm font-extrabold">Saved</span>
-              <small className="max-w-72 truncate text-xs text-slate-400">
-                {project ? shortPath(project.rootPath) : ""}
+              <small
+                className="max-w-[360px] break-all text-center text-xs leading-4 text-slate-400"
+                title={project?.rootPath ?? ""}
+              >
+                {project?.rootPath ?? ""}
               </small>
             </div>
           ) : null}
@@ -1031,12 +1034,6 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-}
-
-function shortPath(filePath: string): string {
-  const normalized = filePath.replace(/\\/g, "/");
-  const parts = normalized.split("/");
-  return parts.length > 2 ? `.../${parts.slice(-2).join("/")}` : filePath;
 }
 
 function truncateLabel(value: string): string {
