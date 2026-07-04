@@ -101,7 +101,7 @@ export function TimelineRuler(props: { duration: number }) {
 export function TimelinePlayhead(props: { playheadPercent: number }) {
   return (
     <div
-      className="playhead absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-[#e8493a] before:content-['']"
+      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-[#e8493a] before:content-['']"
       aria-hidden="true"
       style={{
         left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${props.playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`

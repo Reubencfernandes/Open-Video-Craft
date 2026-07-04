@@ -1,340 +1,99 @@
-import {
-  AudioLines,
-  Captions,
-  CircleStop,
-  Download,
-  Film,
-  FolderOpen,
-  Home,
-  LayoutTemplate,
-  MoreHorizontal,
-  Music2,
-  Palette,
-  Play,
-  Plus,
-  Save,
-  Scissors,
-  SkipBack,
-  SkipForward,
-  SlidersHorizontal,
-  Trash2,
-  Upload,
-  Volume2,
-  VolumeX,
-  WandSparkles,
-  X,
-  ZoomIn
-} from "lucide-react";
-import WaveSurfer from "wavesurfer.js";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+/**
+ * EditorView: the video editor window.
+ *
+ * This component is the orchestrator — it owns every piece of editor state
+ * (media library, timeline segments, playback clock, zoom/subtitle effects,
+ * layout/style settings) and all the handlers that mutate it. Rendering is
+ * delegated to the small presentational components under ./editor/:
+ *
+ *   - panels/*        one component per left-rail tool
+ *   - Timeline        the bottom timeline panel (tracks, clips, playhead)
+ *   - PreviewContent  the media shown inside the preview frame
+ *   - ExportDialog    the export modal
+ *
+ * Pure timeline/zoom/media math lives in ./editor/{timeline,zoom,media}-utils.
+ */
+import { Download, Home, Save } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-  ReactNode,
-  RefObject
+  PointerEvent as ReactPointerEvent
 } from "react";
 import type {
   ExportResolution,
   ExportVideoFormat,
   ExportVideoRequest,
-  ImportedMediaFile,
-  ImportedMediaKind,
   ProjectView
 } from "../shared/types";
-import setupIcon from "./assets/rail-icons/icon1.png";
-import cutIcon from "./assets/rail-icons/icon2.png";
-import layoutIcon from "./assets/rail-icons/icon3.png";
-import zoomIcon from "./assets/rail-icons/icon4.png";
-import styleIcon from "./assets/rail-icons/icon5.png";
-import subtitleIcon from "./assets/rail-icons/icon6.png";
-import audioIcon from "./assets/rail-icons/icon7.png";
 import appLogo from "./assets/app.png";
-import { cx } from "./classNames";
 import {
   constrainZoomEnd,
   constrainZoomMove,
   constrainZoomStart,
-  getOrderedZoomTimingItems,
   placeZoomInFirstGap,
   zoomMinDurationSeconds
 } from "./zoom-timing";
-
-type MediaPanel = "all" | "video" | "audio" | "image";
-type EditorTool = "media" | "layout" | "audio" | "zoom" | "subtitles" | "cut" | "style";
-type LayoutMode =
-  | "screen-only"
-  | "camera-only"
-  | "bubble"
-  | "bubble-fill"
-  | "presenter"
-  | "side-by-side"
-  | "side-overlap";
-type BackgroundStyle =
-  | "real-world-1"
-  | "real-world-2"
-  | "real-world-3"
-  | "gradient-1"
-  | "gradient-2"
-  | "gradient-3"
-  | "animated-1"
-  | "animated-2"
-  | "animated-3"
-  | "custom";
-type BackgroundCategory = "animated" | "image" | "gradient";
-type CameraPosition =
-  | "top-left"
-  | "top-center"
-  | "top-right"
-  | "middle-left"
-  | "middle-center"
-  | "middle-right"
-  | "bottom-left"
-  | "bottom-center"
-  | "bottom-right";
-type CameraShape = "circle" | "rounded" | "square";
-type CameraBorderStyle = "none" | "light" | "accent";
-type VideoCornerStyle = "flat" | "soft" | "round";
-type TimelineTrackKind = "video" | "audio";
-type TimelineTrimEdge = "start" | "end";
-
-type EditorMediaItem = {
-  id: string;
-  name: string;
-  url: string;
-  kind: ImportedMediaKind;
-  origin: "project" | "imported";
-  track: "screen" | "camera" | "audio" | "imported";
-  duration: number | null;
-  importId?: string;
-};
-
-type TimelineMediaClip = {
-  id: string;
-  item: EditorMediaItem;
-  track: TimelineTrackKind;
-  lane: number;
-  start: number;
-  duration: number;
-  sourceStart: number;
-};
-
-type TimelineSegment = {
-  id: string;
-  itemId: string;
-  track: TimelineTrackKind;
-  lane: number;
-  start: number;
-  end: number;
-  sourceStart: number;
-};
-
-type TimelineContextMenu = {
-  x: number;
-  y: number;
-  time: number;
-  segmentId: string | null;
-} | null;
-type ScreenLayoutDragMode = "move" | "resize-nw" | "resize-ne" | "resize-sw" | "resize-se";
-
-type ScreenLayoutDrag = {
-  mode: ScreenLayoutDragMode;
-  startClientX: number;
-  startClientY: number;
-  startPosition: {
-    x: number;
-    y: number;
-    scale: number;
-  };
-  boundsWidth: number;
-  boundsHeight: number;
-};
-
-const screenResizeModes = ["resize-nw", "resize-ne", "resize-sw", "resize-se"] as const;
-
-type TimelineTrimDrag = {
-  segmentId: string;
-  edge: TimelineTrimEdge;
-  originalSegments: TimelineSegment[];
-};
-
-type ZoomSpeed = "slow" | "medium" | "fast";
-
-type ZoomEffect = {
-  id: string;
-  start: number;
-  end: number;
-  speed: ZoomSpeed;
-  scale: number;
-  targetX: number;
-  targetY: number;
-};
-
-type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";
-
-type SubtitleSegment = {
-  id: string;
-  start: number;
-  end: number;
-  text: string;
-};
-
-const subtitleStyleOptions: Array<{ id: SubtitleStyle; label: string }> = [
-  { id: "clean", label: "Clean" },
-  { id: "karaoke", label: "Karaoke" },
-  { id: "boxed", label: "Boxed" },
-  { id: "pop", label: "Pop" }
-];
-
-const frameRate = 30;
-const mediaDragType = "application/x-ovc-media-id";
-const cameraSizeOptions = [
-  { label: "S", value: 18 },
-  { label: "M", value: 24 },
-  { label: "L", value: 32 }
-];
-const cameraPositionOptions: CameraPosition[] = [
-  "top-left",
-  "top-center",
-  "top-right",
-  "middle-left",
-  "middle-center",
-  "middle-right",
-  "bottom-left",
-  "bottom-center",
-  "bottom-right"
-];
-
-function createRailIcon(background: string, foreground: string, pathData: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="${background}"/><stop offset="1" stop-color="#ffffff" stop-opacity=".18"/></linearGradient></defs><rect x="4" y="4" width="40" height="40" rx="10" fill="url(#g)"/><rect x="6" y="6" width="36" height="36" rx="8" fill="none" stroke="#fff" stroke-opacity=".22"/><path d="${pathData}" fill="none" stroke="${foreground}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
-
-const editorTools: Array<{
-  id: EditorTool;
-  label: string;
-  icon: ReactNode;
-  image: string;
-}> = [
-  {
-    id: "media",
-    label: "Setup",
-    icon: <FolderOpen size={18} />,
-    image: setupIcon
-  },
-  {
-    id: "cut",
-    label: "Cut",
-    icon: <Scissors size={18} />,
-    image: cutIcon
-  },
-  {
-    id: "layout",
-    label: "Layout",
-    icon: <LayoutTemplate size={18} />,
-    image: layoutIcon
-  },
-  {
-    id: "zoom",
-    label: "Zoom",
-    icon: <ZoomIn size={18} />,
-    image: zoomIcon
-  },
-  {
-    id: "style",
-    label: "Style",
-    icon: <Palette size={18} />,
-    image: styleIcon
-  },
-  {
-    id: "subtitles",
-    label: "Subs",
-    icon: <Captions size={18} />,
-    image: subtitleIcon
-  },
-  {
-    id: "audio",
-    label: "Audio",
-    icon: <Volume2 size={18} />,
-    image: audioIcon
-  }
-];
-
-const layoutPresetGroups: Array<{
-  title: string;
-  presets: Array<{
-    id: LayoutMode;
-    label: string;
-    variant: string;
-    featured?: boolean;
-  }>;
-}> = [
-  {
-    title: "Screen",
-    presets: [
-      { id: "screen-only", label: "Screen only", variant: "screen-only" },
-      { id: "camera-only", label: "Camera only", variant: "camera-only" }
-    ]
-  },
-  {
-    title: "Camera Bubble",
-    presets: [
-      { id: "bubble", label: "Bubble on fit screen", variant: "bubble-a" },
-      { id: "bubble-fill", label: "Bubble on filled screen", variant: "bubble-b", featured: true }
-    ]
-  },
-  {
-    title: "Side-by-Side",
-    presets: [
-      { id: "side-by-side", label: "Split left", variant: "split-a" },
-      { id: "side-overlap", label: "Split left overlap", variant: "split-b" }
-    ]
-  },
-  {
-    title: "TV Presenter",
-    presets: [
-      { id: "presenter", label: "TV presenter", variant: "presenter-a", featured: true }
-    ]
-  }
-];
-
-const backgroundCategories: Array<{
-  id: BackgroundCategory;
-  label: string;
-  options: Array<{ id: BackgroundStyle; label: string }>;
-}> = [
-  {
-    id: "animated",
-    label: "Animated",
-    options: [
-      { id: "animated-1", label: "Aurora" },
-      { id: "animated-2", label: "Sunset" },
-      { id: "animated-3", label: "Ocean" }
-    ]
-  },
-  {
-    id: "image",
-    label: "Image",
-    options: [
-      { id: "real-world-1", label: "Desk" },
-      { id: "real-world-2", label: "Studio" },
-      { id: "real-world-3", label: "Nature" }
-    ]
-  },
-  {
-    id: "gradient",
-    label: "Gradient",
-    options: [
-      { id: "gradient-1", label: "Violet" },
-      { id: "gradient-2", label: "Teal" },
-      { id: "gradient-3", label: "Ember" }
-    ]
-  }
-];
-
-const exportFormats: ExportVideoFormat[] = ["mp4", "webm", "mov"];
-const exportResolutions: ExportResolution[] = ["source", "720p", "1080p", "1440p"];
+import { ToolPanelHeader } from "./editor/controls";
+import { ExportDialog } from "./editor/ExportDialog";
+import { PreviewContent } from "./editor/PreviewContent";
+import { Timeline } from "./editor/Timeline";
+import { editorTools } from "./editor/tools";
+import { AudioPanel } from "./editor/panels/AudioPanel";
+import { CutPanel } from "./editor/panels/CutPanel";
+import { LayoutPanel } from "./editor/panels/LayoutPanel";
+import { MediaPanel } from "./editor/panels/MediaPanel";
+import { StylePanel } from "./editor/panels/StylePanel";
+import { SubtitlesPanel } from "./editor/panels/SubtitlesPanel";
+import { ZoomPanel } from "./editor/panels/ZoomPanel";
+import {
+  canDriftSeek,
+  createProjectMedia,
+  decodeAudioTo16kMono,
+  toEditorMediaItem
+} from "./editor/media-utils";
+import {
+  areTimelineSegmentsEqual,
+  calculateTimelineDuration,
+  canSplitTimelineSegment,
+  canSplitTimelineSegmentAt,
+  createAudioTimelineTracks,
+  createClipPlaybackKey,
+  createTimelineMediaClips,
+  findTimelineSegmentAtTime,
+  getTimelineMediaDuration,
+  getTimelineTrackKind,
+  moveTimelineSegment,
+  resolveAudioLane,
+  syncTimelineSegments,
+  trimTimelineSegment
+} from "./editor/timeline-utils";
+import { clampNumber, createId, formatBytes } from "./editor/utils";
+import { getActiveZoom, isZoomActiveAtTime } from "./editor/zoom-utils";
+import { frameRate, mediaDragType } from "./editor/types";
+import type {
+  BackgroundCategory,
+  BackgroundStyle,
+  CameraBorderStyle,
+  CameraPosition,
+  CameraShape,
+  EditorMediaItem,
+  EditorTool,
+  LayoutMode,
+  MediaPanel as MediaPanelTab,
+  ScreenLayoutDrag,
+  ScreenLayoutDragMode,
+  SubtitleSegment,
+  SubtitleStyle,
+  TimelineContextMenu,
+  TimelineMediaClip,
+  TimelineSegment,
+  TimelineTrimDrag,
+  TimelineTrimEdge,
+  VideoCornerStyle,
+  ZoomEffect
+} from "./editor/types";
 
 export function EditorView() {
   const projectId = useMemo(
@@ -344,7 +103,7 @@ export function EditorView() {
   const [project, setProject] = useState<ProjectView | null>(null);
   const [importedMedia, setImportedMedia] = useState<EditorMediaItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [activePanel, setActivePanel] = useState<MediaPanel>("all");
+  const [activePanel, setActivePanel] = useState<MediaPanelTab>("all");
   const [activeTool, setActiveTool] = useState<EditorTool>("layout");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("bubble");
   const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("real-world-1");
@@ -380,7 +139,6 @@ export function EditorView() {
   const [timelineContextMenu, setTimelineContextMenu] = useState<TimelineContextMenu>(null);
   const [timelineUndoStack, setTimelineUndoStack] = useState<TimelineSegment[][]>([]);
   const [timelineRedoStack, setTimelineRedoStack] = useState<TimelineSegment[][]>([]);
-  const [trimmingSegmentId, setTrimmingSegmentId] = useState<string | null>(null);
   const [exportFormat, setExportFormat] = useState<ExportVideoFormat>("mp4");
   const [exportResolution, setExportResolution] = useState<ExportResolution>("1080p");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -494,6 +252,7 @@ export function EditorView() {
     }
   }, [stateStorageKey]);
 
+  // Persist the editable session (timeline, effects, look) to localStorage.
   const saveState = () => {
     if (!stateStorageKey) {
       return;
@@ -540,6 +299,7 @@ export function EditorView() {
     return () => window.removeEventListener("keydown", handleSaveShortcut);
   }, []);
 
+  // Auto-dismiss the "Project saved" toast.
   useEffect(() => {
     if (exportMessage !== "Project saved") {
       return undefined;
@@ -549,6 +309,8 @@ export function EditorView() {
     return () => window.clearTimeout(timeout);
   }, [exportMessage]);
 
+  // Screen layout drags (move/resize in the preview) track the pointer globally
+  // so they keep working when the pointer leaves the preview frame.
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
       updateScreenLayoutDrag(event.clientX, event.clientY);
@@ -568,6 +330,10 @@ export function EditorView() {
     };
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Derived data: media library, timeline clips, playback geometry.
+  // ---------------------------------------------------------------------------
+
   const projectMedia = useMemo(() => createProjectMedia(project), [project]);
   const allMedia = useMemo(
     () => [...projectMedia, ...importedMedia],
@@ -584,6 +350,8 @@ export function EditorView() {
   const activeDuration =
     duration > 0 ? duration : selectedItem?.duration ?? (project?.durationMs ?? 0) / 1000;
   const selectedTimelineItemId = selectedItem?.id ?? null;
+  // Items that may appear on the timeline (the camera feed rides along with the
+  // screen recording and is never an independent clip).
   const timelineEditableItems = useMemo(
     () =>
       allMedia.filter(
@@ -623,6 +391,7 @@ export function EditorView() {
     () => createAudioTimelineTracks(audioTimelineClips),
     [audioTimelineClips]
   );
+  // The video clip under the playhead — this is what the preview shows.
   const activeVideoClip = useMemo(
     () =>
       videoTimelineClips.find(
@@ -661,9 +430,8 @@ export function EditorView() {
   const audioSources = allMedia.filter((item) => item.kind === "audio");
   const selectedTimelineClip =
     timelineClips.find((clip) => clip.id === selectedTimelineSegmentId) ?? null;
-  const backgroundAudioItems = importedMedia.filter((item) =>
-    backgroundAudioIds.includes(item.id)
-  );
+  // The preview's screen transform combines the user layout scale/offset with
+  // the currently animating zoom effect.
   const screenScale = (screenPosition.scale / 100) * activeZoom.scale;
   const screenStyle: CSSProperties = {
     transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
@@ -689,7 +457,11 @@ export function EditorView() {
     `preview-camera-border-${cameraBorderStyle}`,
     `preview-corner-${videoCornerStyle}`
   ].join(" ");
+  // The timeline is the drop target for assets, so it must be visible on the
+  // "media" (Setup) tool as well — otherwise the asset grid and the timeline
+  // are never on screen together and there is nothing to drag onto.
   const timelineVisible =
+    activeTool === "media" ||
     activeTool === "cut" ||
     activeTool === "zoom" ||
     activeTool === "audio" ||
@@ -707,6 +479,7 @@ export function EditorView() {
     }
   }, [allMedia, selectedItemId]);
 
+  // Keep timeline segments consistent with the media library.
   useEffect(() => {
     const availableItemIds = new Set(timelineEditableItems.map((item) => item.id));
     const nextKnownItemIds = new Set(
@@ -739,6 +512,8 @@ export function EditorView() {
     );
   }, [mediaDurationById, timelineEditableItems]);
 
+  // Probe durations for media whose length is still unknown (throwaway
+  // elements; the real duration lands in the library via updateMediaDuration).
   useEffect(() => {
     const unresolvedMedia = timelineEditableItems.filter(
       (item) => item.kind !== "image" && (!item.duration || item.duration <= 0)
@@ -792,6 +567,7 @@ export function EditorView() {
     timelineDurationRef.current = timelineDuration;
   }, [timelineDuration]);
 
+  // Grow (never shrink) the rendered timeline scale as content grows.
   useEffect(() => {
     setTimelineViewDuration((current) => Math.max(current, timelineDuration));
   }, [timelineDuration]);
@@ -863,6 +639,7 @@ export function EditorView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
+  // Apply volume changes immediately to the live media elements.
   useEffect(() => {
     const master = Math.min(1, Math.max(0, masterVolume / 100));
     if (mainVideoRef.current) {
@@ -878,6 +655,7 @@ export function EditorView() {
     }
   }, [masterVolume, audioLevels, audioTimelineClips]);
 
+  // Keep the export trim range sensible as the timeline duration changes.
   useEffect(() => {
     if (timelineDuration <= 0) {
       return;
@@ -902,7 +680,7 @@ export function EditorView() {
     previousTimelineDurationRef.current = timelineDuration;
   }, [timelineDuration]);
 
-
+  // Global keyboard shortcuts: play/pause, delete, undo/redo.
   useEffect(() => {
     function handleTimelineKeyDown(event: KeyboardEvent) {
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -966,6 +744,10 @@ export function EditorView() {
     timelineUndoStack
   ]);
 
+  // ---------------------------------------------------------------------------
+  // Media library actions.
+  // ---------------------------------------------------------------------------
+
   async function importMedia(options: {
     backgroundAudio?: boolean;
     selectFirst?: boolean;
@@ -1026,10 +808,10 @@ export function EditorView() {
     });
   }
 
-  // Slave every media element to the global timeline time `t`. The main video
-  // element shows whichever video clip is under the playhead; each audio clip
-  // plays when the playhead is inside it. Elements only hard-seek when they drift
-  // more than ~0.3s so normal playback stays smooth.
+  // ---------------------------------------------------------------------------
+  // Playback: a rAF clock drives the timeline time; media elements are slaves.
+  // ---------------------------------------------------------------------------
+
   function effectiveClipVolume(itemId: string): number {
     const master = Math.max(0, masterVolumeRef.current / 100);
     const level = audioLevelsRef.current[itemId] ?? { volume: 100, muted: false };
@@ -1039,6 +821,10 @@ export function EditorView() {
     return Math.min(1, master * (level.volume / 100));
   }
 
+  // Slave every media element to the global timeline time `t`. The main video
+  // element shows whichever video clip is under the playhead; each audio clip
+  // plays when the playhead is inside it. Elements only hard-seek when they
+  // drift more than ~0.3s so normal playback stays smooth.
   function syncMediaToTime(t: number, isPlaying: boolean, forceSeek = false) {
     const master = Math.min(1, Math.max(0, masterVolumeRef.current / 100));
     const videoClip =
@@ -1161,6 +947,7 @@ export function EditorView() {
     syncMediaToTime(nextTime, playingRef.current, true);
   }
 
+  // Selecting an asset also jumps the playhead to its first clip (if any).
   function selectTimelineItem(itemId: string) {
     setSelectedItemId(itemId);
     const segment = [...timelineSegments]
@@ -1177,6 +964,8 @@ export function EditorView() {
     seek(nextFrame / frameRate);
   }
 
+  // Convert a pointer X coordinate into timeline seconds using the clip lane's
+  // bounds (the lane, not the body, so the label column is excluded).
   function getTimelineTimeFromClientX(clientX: number): number | null {
     const timelineBody = timelineBodyRef.current;
     if (!timelineBody || timelineRenderDuration <= 0) {
@@ -1201,6 +990,10 @@ export function EditorView() {
 
     seek(nextTime);
   }
+
+  // ---------------------------------------------------------------------------
+  // Drag & drop from the asset grid onto the timeline.
+  // ---------------------------------------------------------------------------
 
   function handleTimelineDragOver(event: ReactDragEvent<HTMLDivElement>) {
     if (event.dataTransfer.types.includes(mediaDragType)) {
@@ -1236,6 +1029,8 @@ export function EditorView() {
     );
     const start = Math.max(0, dropTime);
     const end = start + itemDuration;
+    // The "itemId:segment-" id format is load-bearing: selection code maps a
+    // segment back to its media item by splitting on ":segment-".
     const segmentId = `${item.id}:segment-${createId("drop")}`;
 
     knownTimelineItemIdsRef.current.add(item.id);
@@ -1255,6 +1050,10 @@ export function EditorView() {
     setSelectedItemId(item.id);
     setSelectedTimelineSegmentId(segmentId);
   }
+
+  // ---------------------------------------------------------------------------
+  // Screen layout drag (move/resize the screen video inside the preview).
+  // ---------------------------------------------------------------------------
 
   function beginScreenLayoutDrag(
     event: ReactPointerEvent<HTMLElement>,
@@ -1302,6 +1101,7 @@ export function EditorView() {
       return;
     }
 
+    // Corner resize: average the two axes' movement into a scale delta.
     const direction = getScreenResizeDirection(drag.mode);
     const scaleDelta =
       (((deltaX * direction.x) / drag.boundsWidth +
@@ -1318,6 +1118,12 @@ export function EditorView() {
     screenLayoutDragRef.current = null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Timeline editing: commit (with undo), trim, move, split, delete, scrub.
+  // ---------------------------------------------------------------------------
+
+  // Recompute the playback refs (clip lists + duration) for a segment list so
+  // the rAF clock sees edits immediately, without waiting for a re-render.
   function syncTimelinePlaybackRefs(segments: TimelineSegment[]): number {
     const nextTimelineClips = createTimelineMediaClips(segments, mediaById);
     const nextVideoClips = nextTimelineClips.filter((clip) => clip.track === "video");
@@ -1349,6 +1155,7 @@ export function EditorView() {
     window.queueMicrotask(forceSyncCurrentTimelineMedia);
   }
 
+  // All segment edits flow through here so each change lands on the undo stack.
   function commitTimelineSegments(updater: (segments: TimelineSegment[]) => TimelineSegment[]) {
     setTimelineSegments((current) => {
       const next = updater(current);
@@ -1484,7 +1291,6 @@ export function EditorView() {
       originalSegments: timelineSegments
     };
     setSelectedTimelineSegmentId(segmentId);
-    setTrimmingSegmentId(segmentId);
     timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
@@ -1504,6 +1310,7 @@ export function EditorView() {
     });
   }
 
+  // Trims mutate live during the drag; push a single undo entry at the end.
   function finishTimelineClipTrim() {
     const drag = timelineTrimDragRef.current;
     if (!drag) {
@@ -1519,7 +1326,6 @@ export function EditorView() {
       return current;
     });
     timelineTrimDragRef.current = null;
-    setTrimmingSegmentId(null);
   }
 
   function beginTimelineClipMove(event: ReactPointerEvent<HTMLElement>, segmentId: string) {
@@ -1551,6 +1357,7 @@ export function EditorView() {
       return;
     }
 
+    // Ignore sub-frame jitters so a plain click doesn't count as a move.
     const delta = time - drag.pointerStartTime;
     if (!drag.moved && Math.abs(delta) < 0.02) {
       return;
@@ -1659,6 +1466,8 @@ export function EditorView() {
     zoomDragRef.current = null;
   }
 
+  // Pointer handlers on the timeline body dispatch to whichever drag is active
+  // (trim / zoom / move) and otherwise treat the pointer as a playhead scrub.
   function beginTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
     if (timelineTrimDragRef.current || timelineMoveDragRef.current || zoomDragRef.current) {
       return;
@@ -1710,6 +1519,10 @@ export function EditorView() {
     timelineDragRef.current = false;
     setScrubbingTimeline(false);
   }
+
+  // ---------------------------------------------------------------------------
+  // Duration bookkeeping, zoom effects, subtitles, audio levels.
+  // ---------------------------------------------------------------------------
 
   function updateDuration(value: number | null) {
     if (value && Number.isFinite(value)) {
@@ -1871,23 +1684,9 @@ export function EditorView() {
     });
   }
 
-  function updateTrimStart(value: number) {
-    setTrimRange((current) => {
-      const end = current.end > 0 ? current.end : timelineDuration;
-      const nextStart = clampNumber(value, 0, Math.max(0, end - 0.1));
-      return {
-        start: nextStart,
-        end: Math.max(end, nextStart + 0.1)
-      };
-    });
-  }
-
-  function updateTrimEnd(value: number) {
-    setTrimRange((current) => ({
-      start: current.start,
-      end: clampNumber(value, current.start + 0.1, timelineDuration)
-    }));
-  }
+  // ---------------------------------------------------------------------------
+  // Export.
+  // ---------------------------------------------------------------------------
 
   function getExportSource(): ExportVideoRequest["source"] | null {
     if (selectedItem?.origin === "imported" && selectedItem.kind === "video") {
@@ -1940,6 +1739,12 @@ export function EditorView() {
       setExporting(false);
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Render.
+  // ---------------------------------------------------------------------------
+
+  const activeToolMeta = editorTools.find((tool) => tool.id === activeTool);
 
   return (
     <main className="editor-root">
@@ -2020,6 +1825,7 @@ export function EditorView() {
         ) : null}
 
         <div className="studio-workspace">
+          {/* Left rail: tool switcher. */}
           <aside className="studio-rail" aria-label="Editor tools">
             {editorTools.map((tool) => (
               <button
@@ -2035,499 +1841,107 @@ export function EditorView() {
             ))}
           </aside>
 
+          {/* Tool panel: one small component per tool. */}
           <aside className={`tool-panel ${activeTool === "layout" ? "tool-panel-layout" : ""}`}>
             <ToolPanelHeader
-              icon={editorTools.find((tool) => tool.id === activeTool)?.icon}
-              title={editorTools.find((tool) => tool.id === activeTool)?.label ?? "Tools"}
+              icon={activeToolMeta?.icon}
+              title={activeToolMeta?.label ?? "Tools"}
             />
 
             {activeTool === "media" ? (
-              <>
-                <button
-                  className="import-button"
-                  type="button"
-                  onClick={() => void importMedia()}
-                >
-                  <Upload size={15} />
-                  Import media
-                </button>
-                <div className="media-tabs">
-                  {(["all", "video", "audio", "image"] as MediaPanel[]).map((panel) => (
-                    <button
-                      className={activePanel === panel ? "media-tab-active" : ""}
-                      type="button"
-                      key={panel}
-                      onClick={() => setActivePanel(panel)}
-                    >
-                      {panel === "all" ? "All" : panel}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="asset-grid">
-                  {visibleMedia.map((item) => (
-                    <AssetCard
-                      key={item.id}
-                      item={item}
-                      selected={selectedItem?.id === item.id}
-                      draggable={item.track !== "camera"}
-                      onSelect={() => selectTimelineItem(item.id)}
-                      onDragStart={(event) => {
-                        event.dataTransfer.setData(mediaDragType, item.id);
-                        event.dataTransfer.effectAllowed = "copy";
-                      }}
-                      onDuration={(nextDuration) => updateMediaDuration(item.id, nextDuration)}
-                      onRemove={
-                        item.origin === "imported" ? () => removeImportedMedia(item.id) : undefined
-                      }
-                    />
-                  ))}
-                </div>
-
-                {visibleMedia.length === 0 ? (
-                  <div className="media-empty">
-                    <Plus size={18} />
-                    <span>Import media or finish a recording to begin editing.</span>
-                  </div>
-                ) : null}
-              </>
+              <MediaPanel
+                activeTab={activePanel}
+                visibleMedia={visibleMedia}
+                selectedItemId={selectedItem?.id ?? null}
+                onImport={() => void importMedia()}
+                onTabChange={setActivePanel}
+                onSelectItem={selectTimelineItem}
+                onItemDuration={updateMediaDuration}
+                onRemoveItem={removeImportedMedia}
+              />
             ) : null}
 
             {activeTool === "layout" ? (
-              <div className="layout-panel">
-                <div className="layout-panel-title">Presets</div>
-
-                <div className="layout-presets">
-                  {layoutPresetGroups.map((group) => (
-                    <section className="layout-preset-group" key={group.title}>
-                      <h3>{group.title}</h3>
-                      <div className="layout-preset-grid">
-                        {group.presets.map((preset) => (
-                          <button
-                            className={`layout-preset-card layout-preset-${preset.variant} ${
-                              layoutMode === preset.id ? "layout-preset-active" : ""
-                            }`}
-                            type="button"
-                            key={`${group.title}-${preset.variant}`}
-                            aria-label={preset.label}
-                            onClick={() => setLayoutMode(preset.id)}
-                          >
-                            <span className="layout-preset-screen">
-                              <i />
-                              <b />
-                            </span>
-                            <strong>{preset.label}</strong>
-                          </button>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-
-                <div className="layout-customization">
-                  {layoutMode !== "camera-only" ? (
-                    <RangeControl
-                      label="Screen size"
-                      min={70}
-                      max={150}
-                      value={screenPosition.scale}
-                      suffix="%"
-                      onChange={(scale) =>
-                        setScreenPosition((current) => ({
-                          ...current,
-                          scale
-                        }))
-                      }
-                    />
-                  ) : null}
-
-                  <div className="layout-control-group">
-                    <span>Camera style</span>
-                    <div className="icon-segmented-control">
-                      {(["circle", "rounded", "square"] as CameraShape[]).map((shape) => (
-                        <button
-                          className={cameraShape === shape ? "segmented-active" : ""}
-                          type="button"
-                          key={shape}
-                          onClick={() => setCameraShape(shape)}
-                          title={shape}
-                        >
-                          <i className={`camera-shape-icon camera-shape-${shape}`} />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="layout-control-group">
-                    <span>Camera border</span>
-                    <div className="segmented-control">
-                      {(["none", "light", "accent"] as CameraBorderStyle[]).map((border) => (
-                        <button
-                          className={cameraBorderStyle === border ? "segmented-active" : ""}
-                          type="button"
-                          key={border}
-                          onClick={() => setCameraBorderStyle(border)}
-                        >
-                          {border}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="layout-control-grid">
-                    <div className="layout-control-group">
-                      <span>Position</span>
-                      <div className="position-grid">
-                        {cameraPositionOptions.map((position) => (
-                          <button
-                            className={cameraPosition === position ? "position-active" : ""}
-                            type="button"
-                            key={position}
-                            onClick={() => setCameraPosition(position)}
-                            title={position.replace("-", " ")}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="layout-control-group">
-                      <span>Camera size</span>
-                      <div className="segmented-control">
-                        {cameraSizeOptions.map((option) => (
-                          <button
-                            className={cameraSize === option.value ? "segmented-active" : ""}
-                            type="button"
-                            key={option.label}
-                            onClick={() => setCameraSize(option.value)}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <LayoutPanel
+                layoutMode={layoutMode}
+                screenScale={screenPosition.scale}
+                cameraShape={cameraShape}
+                cameraBorderStyle={cameraBorderStyle}
+                cameraPosition={cameraPosition}
+                cameraSize={cameraSize}
+                onLayoutModeChange={setLayoutMode}
+                onScreenScaleChange={(scale) =>
+                  setScreenPosition((current) => ({ ...current, scale }))
+                }
+                onCameraShapeChange={setCameraShape}
+                onCameraBorderStyleChange={setCameraBorderStyle}
+                onCameraPositionChange={setCameraPosition}
+                onCameraSizeChange={setCameraSize}
+              />
             ) : null}
 
             {activeTool === "audio" ? (
-              <div className="tool-stack">
-                <RangeControl
-                  label="Master volume"
-                  min={0}
-                  max={200}
-                  value={masterVolume}
-                  suffix="%"
-                  onChange={setMasterVolume}
-                />
-                <button
-                  className="secondary-tool-button"
-                  type="button"
-                  onClick={() => void importMedia({ backgroundAudio: true, selectFirst: false })}
-                >
-                  <Music2 size={16} />
-                  Add background music
-                </button>
-                <div className="audio-source-list">
-                  {audioSources.map((item) => {
-                    const level = audioLevels[item.id] ?? { volume: 100, muted: false };
-                    return (
-                      <div
-                        className={`audio-source ${level.muted ? "audio-source-muted" : ""}`}
-                        key={item.id}
-                      >
-                        <div className="audio-source-head">
-                          <button
-                            className="audio-source-name"
-                            type="button"
-                            onClick={() => selectTimelineItem(item.id)}
-                          >
-                            <AudioLines size={14} />
-                            <span>{item.name}</span>
-                          </button>
-                          <output>{level.volume}%</output>
-                          <button
-                            className="audio-source-mute"
-                            type="button"
-                            title={level.muted ? "Unmute" : "Mute"}
-                            onClick={() => setAudioLevel(item.id, { muted: !level.muted })}
-                          >
-                            {level.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-                          </button>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={200}
-                          value={level.volume}
-                          onChange={(event) =>
-                            setAudioLevel(item.id, { volume: Number(event.target.value) })
-                          }
-                        />
-                      </div>
-                    );
-                  })}
-                  {audioSources.length === 0 ? (
-                    <div className="tool-empty">Record with a mic or add music to control audio</div>
-                  ) : null}
-                </div>
-              </div>
+              <AudioPanel
+                masterVolume={masterVolume}
+                audioSources={audioSources}
+                audioLevels={audioLevels}
+                onMasterVolumeChange={setMasterVolume}
+                onAddBackgroundMusic={() =>
+                  void importMedia({ backgroundAudio: true, selectFirst: false })
+                }
+                onSelectItem={selectTimelineItem}
+                onSetAudioLevel={setAudioLevel}
+              />
             ) : null}
 
             {activeTool === "zoom" ? (
-              <div className="tool-stack">
-                <button className="secondary-tool-button" type="button" onClick={addZoomEffect}>
-                  <WandSparkles size={16} />
-                  Add smooth zoom
-                </button>
-                <ZoomTargetPanel
-                  item={previewItem}
-                  selectedZoomEffect={selectedZoomEffect}
-                  onScaleChange={(scale) => {
-                    if (selectedZoomEffect) {
-                      updateZoomEffect(selectedZoomEffect.id, { scale });
-                    }
-                  }}
-                  onRegionChange={(region) => {
-                    if (selectedZoomEffect) {
-                      updateZoomEffect(selectedZoomEffect.id, region);
-                    }
-                  }}
-                />
-                {selectedZoomEffect ? (
-                  <>
-                    <div className="layout-control-group">
-                      <span>Zoom speed</span>
-                      <div className="segmented-control segmented-control-3">
-                        {(["slow", "medium", "fast"] as ZoomSpeed[]).map((speed) => (
-                          <button
-                            className={selectedZoomEffect.speed === speed ? "segmented-active" : ""}
-                            type="button"
-                            key={speed}
-                            onClick={() => updateZoomEffect(selectedZoomEffect.id, { speed })}
-                          >
-                            {speed}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <button
-                      className="secondary-tool-button secondary-tool-danger"
-                      type="button"
-                      onClick={() => removeZoomEffect(selectedZoomEffect.id)}
-                    >
-                      <Trash2 size={16} />
-                      Delete selected zoom
-                    </button>
-                  </>
-                ) : (
-                  <div className="tool-empty">Add a zoom, then drag its box on the timeline.</div>
-                )}
-              </div>
+              <ZoomPanel
+                previewItem={previewItem}
+                selectedZoomEffect={selectedZoomEffect}
+                onAddZoom={addZoomEffect}
+                onUpdateZoom={updateZoomEffect}
+                onRemoveZoom={removeZoomEffect}
+              />
             ) : null}
 
             {activeTool === "subtitles" ? (
-              <div className="tool-stack">
-                <button className="secondary-tool-button" type="button" onClick={addSubtitle}>
-                  <Captions size={16} />
-                  Add subtitle
-                </button>
-                <button
-                  className="secondary-tool-button"
-                  type="button"
-                  disabled={sttStatus === "loading" || sttStatus === "transcribing"}
-                  onClick={() => void generateSubtitles()}
-                >
-                  <WandSparkles size={16} />
-                  {sttStatus === "loading"
-                    ? "Loading model…"
-                    : sttStatus === "transcribing"
-                      ? "Transcribing…"
-                      : "Auto-generate (speech-to-text)"}
-                </button>
-                <div className="cut-hint">
-                  <WandSparkles size={14} />
-                  <span>
-                    Runs an open-source Whisper model on your device. The first run downloads
-                    the model (~40MB), then transcribes the recording's audio into subtitles.
-                  </span>
-                </div>
-                <div className="layout-control-group">
-                  <span>Subtitle style</span>
-                  <div className="segmented-control">
-                    {subtitleStyleOptions.map((option) => (
-                      <button
-                        className={subtitleStyle === option.id ? "segmented-active" : ""}
-                        type="button"
-                        key={option.id}
-                        onClick={() => setSubtitleStyle(option.id)}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {selectedSubtitle ? (
-                  <div className="subtitle-editor">
-                    <textarea
-                      value={selectedSubtitle.text}
-                      onChange={(event) =>
-                        updateSubtitle(selectedSubtitle.id, { text: event.target.value })
-                      }
-                    />
-                    <div className="time-input-grid">
-                      <label>
-                        <span>Start</span>
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.1}
-                          value={selectedSubtitle.start}
-                          onChange={(event) =>
-                            updateSubtitle(selectedSubtitle.id, {
-                              start: Number(event.target.value)
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        <span>End</span>
-                        <input
-                          type="number"
-                          min={selectedSubtitle.start + 0.1}
-                          step={0.1}
-                          value={selectedSubtitle.end}
-                          onChange={(event) =>
-                            updateSubtitle(selectedSubtitle.id, {
-                              end: Number(event.target.value)
-                            })
-                          }
-                        />
-                      </label>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="tool-empty">No subtitles</div>
-                )}
-                <div className="tool-list">
-                  {subtitles.map((subtitle) => (
-                    <button
-                      className={`tool-list-item ${
-                        selectedSubtitle?.id === subtitle.id ? "tool-list-item-active" : ""
-                      }`}
-                      type="button"
-                      key={subtitle.id}
-                      onClick={() => setSelectedSubtitleId(subtitle.id)}
-                    >
-                      <Captions size={15} />
-                      <span>{subtitle.text}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <SubtitlesPanel
+                sttStatus={sttStatus}
+                subtitleStyle={subtitleStyle}
+                subtitles={subtitles}
+                selectedSubtitle={selectedSubtitle}
+                onAddSubtitle={addSubtitle}
+                onGenerateSubtitles={() => void generateSubtitles()}
+                onStyleChange={setSubtitleStyle}
+                onUpdateSubtitle={updateSubtitle}
+                onSelectSubtitle={setSelectedSubtitleId}
+              />
             ) : null}
 
             {activeTool === "cut" ? (
-              <div className="tool-stack">
-                <div className="cut-hint">
-                  <Scissors size={14} />
-                  <span>
-                    Click the timeline to move the playhead, then split. Drag a clip to move it,
-                    drag its edges to trim, or delete the selected clip.
-                  </span>
-                </div>
-                <button
-                  className="secondary-tool-button"
-                  type="button"
-                  onClick={() => splitTimelineSegment(selectedTimelineSegmentId, currentTime)}
-                >
-                  <Scissors size={16} />
-                  Split at playhead
-                </button>
-                {selectedTimelineClip ? (
-                  <>
-                    <div className="cut-selected">
-                      <strong>{selectedTimelineClip.item.name}</strong>
-                      <span>
-                        {formatSeconds(selectedTimelineClip.start)} –{" "}
-                        {formatSeconds(selectedTimelineClip.start + selectedTimelineClip.duration)}
-                      </span>
-                    </div>
-                    <button
-                      className="secondary-tool-button secondary-tool-danger"
-                      type="button"
-                      onClick={deleteSelectedTimelineSegment}
-                    >
-                      <Trash2 size={16} />
-                      Delete selected clip
-                    </button>
-                  </>
-                ) : (
-                  <div className="tool-empty">Select a clip on the timeline to trim or delete it.</div>
-                )}
-              </div>
+              <CutPanel
+                selectedClip={selectedTimelineClip}
+                onSplitAtPlayhead={() =>
+                  splitTimelineSegment(selectedTimelineSegmentId, currentTime)
+                }
+                onDeleteSelected={deleteSelectedTimelineSegment}
+              />
             ) : null}
 
             {activeTool === "style" ? (
-              <div className="tool-stack">
-                <div className="media-tabs">
-                  {backgroundCategories.map((category) => (
-                    <button
-                      className={activeBackgroundCategory === category.id ? "media-tab-active" : ""}
-                      type="button"
-                      key={category.id}
-                      onClick={() => setActiveBackgroundCategory(category.id)}
-                    >
-                      {category.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="style-grid">
-                  {backgroundCategories
-                    .find((category) => category.id === activeBackgroundCategory)
-                    ?.options.map((option) => (
-                      <button
-                        className={`style-swatch style-swatch-${option.id} ${
-                          backgroundStyle === option.id ? "style-swatch-active" : ""
-                        }`}
-                        type="button"
-                        key={option.id}
-                        onClick={() => setBackgroundStyle(option.id)}
-                      >
-                        <span />
-                        <strong>{option.label}</strong>
-                      </button>
-                    ))}
-                </div>
-                <button
-                  className={`secondary-tool-button ${
-                    backgroundStyle === "custom" ? "tool-option-active" : ""
-                  }`}
-                  type="button"
-                  onClick={() => void importCustomBackground()}
-                >
-                  <Upload size={16} />
-                  Upload custom background
-                </button>
-                <div className="layout-control-group">
-                  <span>Video corners</span>
-                  <div className="segmented-control">
-                    {(["flat", "soft", "round"] as VideoCornerStyle[]).map((shape) => (
-                      <button
-                        className={videoCornerStyle === shape ? "segmented-active" : ""}
-                        type="button"
-                        key={shape}
-                        onClick={() => setVideoCornerStyle(shape)}
-                      >
-                        {shape === "flat" ? "Flat" : shape === "soft" ? "Slight" : "Full"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <StylePanel
+                activeCategory={activeBackgroundCategory}
+                backgroundStyle={backgroundStyle}
+                videoCornerStyle={videoCornerStyle}
+                onCategoryChange={setActiveBackgroundCategory}
+                onBackgroundStyleChange={setBackgroundStyle}
+                onUploadCustomBackground={() => void importCustomBackground()}
+                onCornerStyleChange={setVideoCornerStyle}
+              />
             ) : null}
           </aside>
 
+          {/* Preview: shows whatever video/image clip is under the playhead. */}
           <section className="preview-panel">
             <div className="preview-canvas">
               <div className={previewClassName} style={previewFrameStyle}>
@@ -2562,6 +1976,7 @@ export function EditorView() {
                 )}
               </div>
             </div>
+            {/* Hidden audio elements — one per audio clip, driven by the clock. */}
             <div className="timeline-audio-players" aria-hidden="true">
               {audioTimelineClips.map((clip) => (
                 <audio
@@ -2585,1481 +2000,71 @@ export function EditorView() {
         </div>
 
         {timelineVisible ? (
-        <section className="timeline-panel grid min-w-0 gap-[0.45rem] px-[1.1rem] pb-4 pt-3 [--timeline-body-pad:0.7rem] [--timeline-label-width:132px] [--timeline-track-gap:0.85rem]">
-          <div className="timeline-toolbar grid grid-cols-[238px_minmax(0,1fr)_142px] items-center gap-3">
-            <div className="timeline-toolset timeline-playback inline-flex h-9 min-w-0 items-center gap-1.5 bg-transparent px-1.5 text-[0.68rem] text-slate-400">
-              <button type="button" onClick={() => seekFrame(currentFrame - 1)} title="Previous frame">
-                <SkipBack size={14} />
-              </button>
-              <button type="button" onClick={() => void togglePlayback()} title="Play">
-                {playing ? <CircleStop size={15} /> : <Play size={15} />}
-              </button>
-              <button type="button" onClick={() => seekFrame(currentFrame + 1)} title="Next frame">
-                <SkipForward size={14} />
-              </button>
-              <span className="text-xs font-extrabold tabular-nums text-cyan-400">
-                {formatTimecode(currentTime, currentFrame)}
-              </span>
-            </div>
-
-            <input
-              className="frame-scrubber"
-              type="range"
-              min={0}
-              max={totalFrames}
-              step={1}
-              value={currentFrame}
-              aria-label="Timeline scrubber"
-              style={{ "--scrubber-progress": `${playheadPercent}%` } as CSSProperties}
-              onChange={(event) => seekFrame(Number(event.target.value))}
-            />
-
-            <div className="timeline-status inline-flex h-9 min-w-0 items-center justify-end gap-1.5 text-[0.72rem] tabular-nums text-slate-400">
-              <SlidersHorizontal size={14} />
-              <span>
-                {currentFrame} / {totalFrames}
-              </span>
-            </div>
-          </div>
-
-          <div className="timeline-ruler grid grid-cols-6 pl-[calc(var(--timeline-label-width)+var(--timeline-track-gap))] text-[0.68rem] tabular-nums text-slate-500">
-            {createTimelineTicks(timelineRenderDuration).map((tick) => (
-              <span key={tick}>{tick}</span>
-            ))}
-          </div>
-
-          <div
-            className={cx(
-              "timeline-body relative grid min-h-[12.3rem] cursor-pointer select-none gap-1.5 overflow-visible px-[var(--timeline-body-pad)] pb-3 pt-2.5 touch-none",
-              scrubbingTimeline && "timeline-body-scrubbing cursor-ew-resize"
-            )}
-            ref={timelineBodyRef}
-            style={{ "--timeline-progress": `${playheadPercent}` } as CSSProperties}
-            onPointerDown={beginTimelineScrub}
-            onPointerMove={moveTimelineScrub}
-            onPointerUp={endTimelineScrub}
-            onPointerCancel={endTimelineScrub}
-            onContextMenu={openTimelineContextMenu}
-            onDragOver={handleTimelineDragOver}
-            onDrop={handleTimelineDrop}
-          >
-            <div
-              className="playhead absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent"
-              aria-hidden="true"
-              style={{
-                left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
-              }}
-            >
-              <span />
-            </div>
-            <TimelineTrack
-              label="Video 1"
-              accent="purple"
-              icon={<Film size={14} />}
-            >
-              {videoTimelineClips.map((clip) => (
-                <TimelineClip
-                  key={clip.id}
-                  clip={clip}
-                  timelineDuration={timelineRenderDuration}
-                  selected={selectedTimelineSegmentId === clip.id}
-                  selectedSegment={selectedTimelineSegmentId === clip.id}
-                  onSelect={() => {
-                    setSelectedItemId(clip.item.id);
-                    setSelectedTimelineSegmentId(clip.id);
-                  }}
-                  onTrimPointerDown={beginTimelineClipTrim}
-                  onMovePointerDown={beginTimelineClipMove}
-                />
-              ))}
-            </TimelineTrack>
-
-            {activeTool === "zoom" ? (
-              <TimelineTrack label="Zoom" accent="amber" icon={<WandSparkles size={14} />}>
-                {getOrderedZoomTimingItems(zoomEffects).map((effect) => (
-                  <TimelineZoomClip
-                    key={effect.id}
-                    effect={effect}
-                    duration={timelineRenderDuration}
-                    selected={selectedZoomEffect?.id === effect.id}
-                    onSelect={() => {
-                      setSelectedZoomId(effect.id);
-                      setActiveTool("zoom");
-                      seek((effect.start + effect.end) / 2);
-                    }}
-                    onDragPointerDown={beginZoomClipDrag}
-                  />
-                ))}
-              </TimelineTrack>
-            ) : null}
-
-            {activeTool === "audio" ? (
-              audioTimelineTracks.map((track) => (
-                <TimelineTrack
-                  key={track.lane}
-                  label={`Audio ${track.lane + 1}`}
-                  accent="green"
-                  icon={<AudioLines size={14} />}
-                >
-                  {track.clips.map((clip) => (
-                    <TimelineClip
-                      key={clip.id}
-                      clip={clip}
-                      timelineDuration={timelineRenderDuration}
-                      selected={selectedTimelineSegmentId === clip.id}
-                      selectedSegment={selectedTimelineSegmentId === clip.id}
-                      onSelect={() => {
-                        setSelectedItemId(clip.item.id);
-                        setSelectedTimelineSegmentId(clip.id);
-                      }}
-                      onTrimPointerDown={beginTimelineClipTrim}
-                      onMovePointerDown={beginTimelineClipMove}
-                    />
-                  ))}
-                </TimelineTrack>
-              ))
-            ) : null}
-
-            {activeTool === "subtitles" ? (
-              <TimelineTrack label="Subtitles" accent="cyan" icon={<Captions size={14} />}>
-                {subtitles.map((subtitle) => (
-                  <TimelineSubtitleClip
-                    key={subtitle.id}
-                    subtitle={subtitle}
-                    duration={timelineRenderDuration}
-                    selected={selectedSubtitle?.id === subtitle.id}
-                    onSelect={() => {
-                      setSelectedSubtitleId(subtitle.id);
-                      setActiveTool("subtitles");
-                    }}
-                  />
-                ))}
-              </TimelineTrack>
-            ) : null}
-          </div>
-          {timelineContextMenu ? (
-            <div
-              className="timeline-context-menu"
-              style={{ left: timelineContextMenu.x, top: timelineContextMenu.y }}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <button
-                type="button"
-                disabled={!canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)}
-                onClick={() =>
-                  splitTimelineSegment(timelineContextMenu.segmentId, timelineContextMenu.time)
-                }
-              >
-                <Scissors size={14} />
-                Split
-              </button>
-              <button
-                type="button"
-                className="timeline-context-menu-danger"
-                disabled={!timelineContextMenu.segmentId}
-                onClick={() => deleteTimelineSegment(timelineContextMenu.segmentId)}
-              >
-                <Trash2 size={14} />
-                Delete
-              </button>
-            </div>
-          ) : null}
-        </section>
+          <Timeline
+            bodyRef={timelineBodyRef}
+            activeTool={activeTool}
+            playing={playing}
+            scrubbing={scrubbingTimeline}
+            currentTime={currentTime}
+            currentFrame={currentFrame}
+            totalFrames={totalFrames}
+            playheadPercent={playheadPercent}
+            renderDuration={timelineRenderDuration}
+            videoClips={videoTimelineClips}
+            audioTracks={audioTimelineTracks}
+            zoomEffects={zoomEffects}
+            subtitles={subtitles}
+            selectedSegmentId={selectedTimelineSegmentId}
+            selectedZoomId={selectedZoomEffect?.id ?? null}
+            selectedSubtitleId={selectedSubtitle?.id ?? null}
+            contextMenu={timelineContextMenu}
+            canSplitAtContextMenu={
+              timelineContextMenu
+                ? canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)
+                : false
+            }
+            onTogglePlayback={() => void togglePlayback()}
+            onSeekFrame={seekFrame}
+            onSelectClip={(clip) => {
+              setSelectedItemId(clip.item.id);
+              setSelectedTimelineSegmentId(clip.id);
+            }}
+            onSelectZoom={(effect) => {
+              setSelectedZoomId(effect.id);
+              setActiveTool("zoom");
+              seek((effect.start + effect.end) / 2);
+            }}
+            onSelectSubtitle={(subtitleId) => {
+              setSelectedSubtitleId(subtitleId);
+              setActiveTool("subtitles");
+            }}
+            onTrimPointerDown={beginTimelineClipTrim}
+            onMovePointerDown={beginTimelineClipMove}
+            onZoomDragPointerDown={beginZoomClipDrag}
+            onBodyPointerDown={beginTimelineScrub}
+            onBodyPointerMove={moveTimelineScrub}
+            onBodyPointerUp={endTimelineScrub}
+            onBodyContextMenu={openTimelineContextMenu}
+            onBodyDragOver={handleTimelineDragOver}
+            onBodyDrop={handleTimelineDrop}
+            onContextMenuSplit={() => {
+              if (timelineContextMenu) {
+                splitTimelineSegment(timelineContextMenu.segmentId, timelineContextMenu.time);
+              }
+            }}
+            onContextMenuDelete={() => {
+              if (timelineContextMenu) {
+                deleteTimelineSegment(timelineContextMenu.segmentId);
+              }
+            }}
+          />
         ) : null}
       </section>
     </main>
   );
 }
 
-function ToolPanelHeader(props: { icon: ReactNode; title: string }) {
-  return (
-    <div className="tool-panel-header">
-      <span>{props.icon}</span>
-      <strong>{props.title}</strong>
-      <button type="button" title="Panel options">
-        <MoreHorizontal size={16} />
-      </button>
-    </div>
-  );
-}
-
-function ExportDialog(props: {
-  exportFormat: ExportVideoFormat;
-  exportResolution: ExportResolution;
-  exporting: boolean;
-  onClose: () => void;
-  onExport: () => void;
-  onFormatChange: (format: ExportVideoFormat) => void;
-  onResolutionChange: (resolution: ExportResolution) => void;
-}) {
-  return (
-    <div className="export-dialog-backdrop" role="presentation">
-      <section className="export-dialog" role="dialog" aria-modal="true" aria-label="Export video">
-        <div className="export-dialog-header">
-          <strong>Export video</strong>
-          <button type="button" onClick={props.onClose} disabled={props.exporting}>
-            <X size={16} />
-          </button>
-        </div>
-        <label>
-          <span>Resolution</span>
-          <select
-            value={props.exportResolution}
-            onChange={(event) =>
-              props.onResolutionChange(event.target.value as ExportResolution)
-            }
-            disabled={props.exporting}
-          >
-            {exportResolutions.map((resolution) => (
-              <option key={resolution} value={resolution}>
-                {resolution === "source" ? "Source" : resolution}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Format</span>
-          <select
-            value={props.exportFormat}
-            onChange={(event) => props.onFormatChange(event.target.value as ExportVideoFormat)}
-            disabled={props.exporting}
-          >
-            {exportFormats.map((format) => (
-              <option key={format} value={format}>
-                {format.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="export-dialog-actions">
-          <button type="button" onClick={props.onClose} disabled={props.exporting}>
-            Cancel
-          </button>
-          <button type="button" onClick={props.onExport} disabled={props.exporting}>
-            <Download size={15} />
-            {props.exporting ? "Exporting" : "Export"}
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function RangeControl(props: {
-  label: string;
-  min: number;
-  max: number;
-  value: number;
-  suffix?: string;
-  step?: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="range-control">
-      <span>
-        {props.label}
-        <output>
-          {props.value}
-          {props.suffix}
-        </output>
-      </span>
-      <input
-        type="range"
-        min={props.min}
-        max={props.max}
-        step={props.step ?? 1}
-        value={props.value}
-        onChange={(event) => props.onChange(Number(event.target.value))}
-      />
-    </label>
-  );
-}
-
-function PreviewContent(props: {
-  item: EditorMediaItem;
-  isProjectCompositionSelected: boolean;
-  projectCamera: EditorMediaItem | null;
-  layoutMode: LayoutMode;
-  screenStyle: CSSProperties;
-  screenEditEnabled: boolean;
-  activeSubtitle: SubtitleSegment | null;
-  subtitleStyle: SubtitleStyle;
-  currentTime: number;
-  mainVideoRef: RefObject<HTMLVideoElement | null>;
-  cameraRef: RefObject<HTMLVideoElement | null>;
-  onScreenEditPointerDown: (
-    event: ReactPointerEvent<HTMLElement>,
-    mode: ScreenLayoutDragMode
-  ) => void;
-  onMediaReady: () => void;
-  onDuration: (duration: number | null) => void;
-  onSubtitleClick: (subtitleId: string) => void;
-}) {
-  if (props.item.kind === "image") {
-    return (
-      <>
-        <img className="studio-screen-video" style={props.screenStyle} src={props.item.url} alt="" />
-        <ScreenEditOverlay
-          enabled={props.screenEditEnabled}
-          style={props.screenStyle}
-          onPointerDown={props.onScreenEditPointerDown}
-        />
-        <SubtitleOverlay
-          subtitle={props.activeSubtitle}
-          currentTime={props.currentTime}
-          style={props.subtitleStyle}
-          onClick={props.onSubtitleClick}
-        />
-      </>
-    );
-  }
-
-  if (props.isProjectCompositionSelected) {
-    const showScreen = props.layoutMode !== "camera-only";
-    const showCamera = Boolean(props.projectCamera && props.layoutMode !== "screen-only");
-
-    return (
-      <>
-        {showScreen ? (
-          <>
-            <video
-              ref={props.mainVideoRef}
-              className="studio-screen-video"
-              style={props.screenStyle}
-              src={props.item.url}
-              playsInline
-              muted
-              onCanPlay={props.onMediaReady}
-              onLoadedMetadata={(event) => {
-                props.onDuration(event.currentTarget.duration);
-                props.onMediaReady();
-              }}
-            />
-            <ScreenEditOverlay
-              enabled={props.screenEditEnabled}
-              style={props.screenStyle}
-              onPointerDown={props.onScreenEditPointerDown}
-            />
-          </>
-        ) : null}
-        {showCamera && props.projectCamera ? (
-          <video
-            ref={props.cameraRef}
-            className="studio-camera-video"
-            src={props.projectCamera.url}
-            playsInline
-            muted
-            onCanPlay={props.onMediaReady}
-          />
-        ) : null}
-        {props.layoutMode === "camera-only" && !props.projectCamera ? (
-          <div className="studio-video-empty">No camera recording for this project.</div>
-        ) : null}
-        <SubtitleOverlay
-          subtitle={props.activeSubtitle}
-          currentTime={props.currentTime}
-          style={props.subtitleStyle}
-          onClick={props.onSubtitleClick}
-        />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <video
-        ref={props.mainVideoRef}
-        className="studio-screen-video"
-        style={props.screenStyle}
-        src={props.item.url}
-        playsInline
-        onCanPlay={props.onMediaReady}
-        onLoadedMetadata={(event) => {
-          props.onDuration(event.currentTarget.duration);
-          props.onMediaReady();
-        }}
-      />
-      <ScreenEditOverlay
-        enabled={props.screenEditEnabled}
-        style={props.screenStyle}
-        onPointerDown={props.onScreenEditPointerDown}
-      />
-      <SubtitleOverlay
-        subtitle={props.activeSubtitle}
-        currentTime={props.currentTime}
-        style={props.subtitleStyle}
-        onClick={props.onSubtitleClick}
-      />
-    </>
-  );
-}
-
-function ScreenEditOverlay(props: {
-  enabled: boolean;
-  style: CSSProperties;
-  onPointerDown: (
-    event: ReactPointerEvent<HTMLElement>,
-    mode: ScreenLayoutDragMode
-  ) => void;
-}) {
-  if (!props.enabled) {
-    return null;
-  }
-
-  return (
-    <div
-      className="studio-screen-video studio-screen-edit-overlay"
-      style={props.style}
-      aria-hidden="true"
-      onPointerDown={(event) => props.onPointerDown(event, "move")}
-    >
-      {screenResizeModes.map((mode) => (
-        <span
-          className={`studio-screen-edit-handle studio-screen-edit-handle-${mode.replace(
-            "resize-",
-            ""
-          )}`}
-          key={mode}
-          onPointerDown={(event) => props.onPointerDown(event, mode)}
-        />
-      ))}
-    </div>
-  );
-}
-
-function SubtitleOverlay(props: {
-  subtitle: SubtitleSegment | null;
-  currentTime: number;
-  style: SubtitleStyle;
-  onClick: (subtitleId: string) => void;
-}) {
-  if (!props.subtitle) {
-    return null;
-  }
-
-  const words = props.subtitle.text.trim().split(/\s+/).filter(Boolean);
-  // No word timings are available, so spread the words evenly across the
-  // subtitle's [start, end] window and highlight the one under the playhead.
-  const duration = Math.max(0.1, props.subtitle.end - props.subtitle.start);
-  const perWord = duration / Math.max(1, words.length);
-  const elapsed = props.currentTime - props.subtitle.start;
-  const highlights = props.style === "karaoke" || props.style === "pop";
-  const activeIndex = highlights
-    ? clampNumber(Math.floor(elapsed / perWord), 0, words.length - 1)
-    : -1;
-
-  return (
-    <button
-      className={`subtitle-overlay subtitle-style-${props.style}`}
-      type="button"
-      onClick={() => props.onClick(props.subtitle?.id ?? "")}
-    >
-      {words.map((word, index) => (
-        <span
-          key={`${word}-${index}`}
-          className={`subtitle-word ${index === activeIndex ? "subtitle-word-active" : ""}`}
-        >
-          {word}
-        </span>
-      ))}
-    </button>
-  );
-}
-
-function AssetCard(props: {
-  item: EditorMediaItem;
-  selected: boolean;
-  draggable?: boolean;
-  onSelect: () => void;
-  onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
-  onDuration?: (duration: number | null) => void;
-  onRemove?: () => void;
-}) {
-  return (
-    <div
-      className={`asset-card ${props.selected ? "asset-card-selected" : ""}`}
-    >
-      <button
-        className="asset-card-main"
-        type="button"
-        draggable={props.draggable}
-        onClick={props.onSelect}
-        onDragStart={props.onDragStart}
-      >
-        <div className="asset-preview">
-          {props.item.kind === "video" ? (
-            <VideoThumbnail url={props.item.url} onDuration={props.onDuration} />
-          ) : props.item.kind === "image" ? (
-            <img src={props.item.url} alt="" />
-          ) : (
-            <AudioLines size={18} />
-          )}
-        </div>
-        <strong>{props.item.name}</strong>
-        <span>{props.item.origin === "project" ? "Recording" : props.item.kind}</span>
-      </button>
-      {props.onRemove ? (
-        <button
-          className="asset-remove-button"
-          type="button"
-          onClick={props.onRemove}
-          title="Remove imported media"
-        >
-          <Trash2 size={13} />
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-// Captures a real decoded frame into a small JPEG so the asset grid shows an
-// actual thumbnail. Handles chunked recordings that report Infinity duration
-// and reports the resolved duration back to the media library.
-function VideoThumbnail(props: {
-  url: string;
-  onDuration?: (duration: number | null) => void;
-}) {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const onDurationRef = useRef(props.onDuration);
-
-  useEffect(() => {
-    onDurationRef.current = props.onDuration;
-  }, [props.onDuration]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setThumbnailUrl(null);
-
-    void captureVideoThumbnail(props.url, (duration) => {
-      if (!cancelled) {
-        onDurationRef.current?.(duration);
-      }
-    })
-      .then((dataUrl) => {
-        if (!cancelled) {
-          setThumbnailUrl(dataUrl);
-        }
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [props.url]);
-
-  return thumbnailUrl ? <img src={thumbnailUrl} alt="" /> : <Film size={18} />;
-}
-
-async function captureVideoThumbnail(
-  url: string,
-  onDuration: (duration: number) => void
-): Promise<string> {
-  const video = document.createElement("video");
-  video.muted = true;
-  video.preload = "auto";
-  video.src = url;
-  video.load();
-
-  try {
-    const duration = await resolveVideoDuration(video);
-    if (Number.isFinite(duration) && duration > 0) {
-      onDuration(duration);
-    }
-
-    const seekTo =
-      Number.isFinite(duration) && duration > 0
-        ? clampNumber(duration * 0.1, 0.1, Math.max(0, duration - 0.05))
-        : 0.1;
-    await seekVideoTo(video, seekTo);
-
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-    if (!width || !height) {
-      throw new Error("Video has no decodable frames.");
-    }
-
-    const scale = Math.min(1, 320 / width);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(width * scale));
-    canvas.height = Math.max(1, Math.round(height * scale));
-    const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error("Canvas 2D context is unavailable.");
-    }
-
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.82);
-  } finally {
-    video.removeAttribute("src");
-    video.load();
-  }
-}
-
-function resolveVideoDuration(video: HTMLVideoElement): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const fail = () => reject(new Error("Video failed to load."));
-    video.addEventListener("error", fail, { once: true });
-    video.addEventListener(
-      "loadedmetadata",
-      () => {
-        if (Number.isFinite(video.duration)) {
-          resolve(video.duration);
-          return;
-        }
-
-        // Chunked WebM reports Infinity until forced to scan to the end.
-        const onDurationChange = () => {
-          if (Number.isFinite(video.duration)) {
-            video.removeEventListener("durationchange", onDurationChange);
-            resolve(video.duration);
-          }
-        };
-        video.addEventListener("durationchange", onDurationChange);
-        try {
-          video.currentTime = 1e9;
-        } catch {
-          resolve(Number.NaN);
-        }
-      },
-      { once: true }
-    );
-  });
-}
-
-function seekVideoTo(video: HTMLVideoElement, time: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    video.addEventListener("seeked", () => resolve(), { once: true });
-    video.addEventListener(
-      "error",
-      () => reject(new Error("Video failed while seeking.")),
-      { once: true }
-    );
-
-    try {
-      video.currentTime = time;
-    } catch (error) {
-      reject(error instanceof Error ? error : new Error(String(error)));
-    }
-  });
-}
-
-function ZoomTargetPanel(props: {
-  item: EditorMediaItem | null;
-  selectedZoomEffect: ZoomEffect | null;
-  onScaleChange: (scale: number) => void;
-  onRegionChange: (region: { targetX: number; targetY: number; scale: number }) => void;
-}) {
-  const effect = props.selectedZoomEffect;
-  const draggingRef = useRef(false);
-
-  function moveTargetTo(event: ReactPointerEvent<HTMLElement>) {
-    if (!effect) {
-      return;
-    }
-
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const targetX = clampNumber(((event.clientX - bounds.left) / bounds.width) * 100, 0, 100);
-    const targetY = clampNumber(((event.clientY - bounds.top) / bounds.height) * 100, 0, 100);
-    props.onRegionChange({ targetX, targetY, scale: effect.scale });
-  }
-
-  function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
-    if (!effect) {
-      return;
-    }
-
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    draggingRef.current = true;
-    moveTargetTo(event);
-  }
-
-  function handlePointerMove(event: ReactPointerEvent<HTMLElement>) {
-    if (draggingRef.current) {
-      moveTargetTo(event);
-    }
-  }
-
-  function handlePointerUp() {
-    draggingRef.current = false;
-  }
-
-  return (
-    <div className="zoom-target-panel">
-      <span>Drag the dot to set what the zoom focuses on</span>
-      <button
-        className="zoom-target-preview"
-        type="button"
-        disabled={!effect}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-      >
-        {props.item?.kind === "image" ? (
-          <img src={props.item.url} alt="" />
-        ) : props.item?.kind === "video" ? (
-          <video src={props.item.url} muted playsInline />
-        ) : (
-          <div className="zoom-target-empty">
-            <AudioLines size={24} />
-          </div>
-        )}
-        {effect ? (
-          <i
-            className="zoom-target-dot"
-            style={{
-              left: `${effect.targetX}%`,
-              top: `${effect.targetY}%`
-            }}
-          />
-        ) : null}
-      </button>
-      <label className="zoom-scale-control">
-        <span>Scale</span>
-        <div>
-          <ZoomIn size={15} />
-          <input
-            type="range"
-            min={125}
-            max={300}
-            value={Math.round((effect?.scale ?? 1.5) * 100)}
-            disabled={!effect}
-            onChange={(event) => props.onScaleChange(Number(event.target.value) / 100)}
-          />
-          <output>{Math.round((effect?.scale ?? 1.5) * 100)} %</output>
-        </div>
-      </label>
-    </div>
-  );
-}
-
-function TimelineTrack(props: {
-  label: string;
-  accent: "purple" | "cyan" | "green" | "amber" | "rose";
-  icon: ReactNode;
-  children: ReactNode;
-  controls?: ReactNode;
-}) {
-  const accentClassName = {
-    purple: "text-purple-300",
-    cyan: "text-cyan-400",
-    green: "text-emerald-400",
-    amber: "text-amber-500",
-    rose: "text-rose-400"
-  }[props.accent];
-
-  return (
-    <div
-      className={cx(
-        "timeline-track grid grid-cols-[var(--timeline-label-width)_minmax(0,1fr)] items-stretch gap-[var(--timeline-track-gap)]",
-        Boolean(props.controls) && "timeline-track-with-controls gap-y-2"
-      )}
-    >
-      <div
-        className={cx(
-          `track-label track-${props.accent}`,
-          "inline-flex min-h-[2.35rem] min-w-0 items-center gap-2 border-r border-white/[0.07] text-[0.68rem] font-extrabold text-slate-300",
-          accentClassName
-        )}
-      >
-        {props.icon}
-        <span>{props.label}</span>
-      </div>
-      <div className="track-lane relative min-h-[2.35rem] overflow-hidden">
-        {props.children}
-      </div>
-      {props.controls ? (
-        <div className="timeline-track-controls col-start-2 min-w-0">{props.controls}</div>
-      ) : null}
-    </div>
-  );
-}
-
-function TimelineClip(props: {
-  clip: TimelineMediaClip;
-  timelineDuration: number;
-  selected: boolean;
-  selectedSegment: boolean;
-  onSelect: () => void;
-  onTrimPointerDown: (
-    event: ReactPointerEvent<HTMLElement>,
-    segmentId: string,
-    edge: TimelineTrimEdge
-  ) => void;
-  onMovePointerDown: (event: ReactPointerEvent<HTMLElement>, segmentId: string) => void;
-}) {
-  const item = props.clip.item;
-  const className =
-    item.kind === "audio"
-      ? "clip clip-audio"
-      : item.kind === "image"
-        ? "clip clip-image"
-        : "clip clip-main";
-
-  return (
-    <button
-      className={cx(
-        className,
-        "group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-1.5 overflow-hidden rounded-[3px] px-2 text-[0.68rem] font-semibold text-white",
-        props.selected && "clip-selected",
-        props.selectedSegment && "clip-segment-selected"
-      )}
-      type="button"
-      data-segment-id={props.clip.id}
-      style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
-      onClick={props.onSelect}
-      onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
-    >
-      <span
-        className="clip-edge clip-edge-start absolute inset-y-0 left-0 z-[4] w-2 cursor-ew-resize after:absolute after:bottom-1.5 after:left-1 after:top-1.5 after:w-0.5 after:rounded-full after:bg-white/70 after:opacity-0 after:transition group-hover:after:opacity-100"
-        onPointerDown={(event) => props.onTrimPointerDown(event, props.clip.id, "start")}
-      />
-      {item.kind === "audio" ? (
-        <AudioWaveform id={props.clip.id} name={item.name} url={item.url} />
-      ) : (
-        <Film className="relative z-[2] flex-none" size={13} />
-      )}
-      <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
-      <span
-        className="clip-edge clip-edge-end absolute inset-y-0 right-0 z-[4] w-2 cursor-ew-resize after:absolute after:bottom-1.5 after:right-1 after:top-1.5 after:w-0.5 after:rounded-full after:bg-white/70 after:opacity-0 after:transition group-hover:after:opacity-100"
-        onPointerDown={(event) => props.onTrimPointerDown(event, props.clip.id, "end")}
-      />
-    </button>
-  );
-}
-
-const AudioWaveform = memo(function AudioWaveform(props: { id: string; name: string; url: string }) {
-  const containerRef = useRef<HTMLSpanElement | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) {
-      return undefined;
-    }
-
-    let wavesurfer: ReturnType<typeof WaveSurfer.create> | null = null;
-    let cancelled = false;
-    const rafId = window.requestAnimationFrame(() => {
-      if (!container.isConnected) {
-        return;
-      }
-
-      container.replaceChildren();
-      setFailed(false);
-      wavesurfer = WaveSurfer.create({
-        container,
-        height: 24,
-        waveColor: "rgba(209, 250, 229, 0.85)",
-        progressColor: "rgba(34, 211, 238, 0.95)",
-        cursorWidth: 0,
-        interact: false,
-        normalize: true,
-        barWidth: 2,
-        barGap: 1,
-        barRadius: 2,
-        hideScrollbar: true,
-        autoScroll: false,
-        autoCenter: false
-      });
-
-      wavesurfer.on("ready", () => setFailed(false));
-      wavesurfer.on("decode", () => setFailed(false));
-
-      void loadWaveSurferBlob(wavesurfer, props.url, props.name).catch(() => {
-        if (!cancelled) {
-          setFailed(true);
-        }
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      window.cancelAnimationFrame(rafId);
-      try {
-        wavesurfer?.destroy();
-      } catch {
-        // ignore teardown races when the clip unmounts mid-load
-      }
-      container.replaceChildren();
-    };
-  }, [props.name, props.url]);
-
-  return (
-    <span
-      className={cx(
-        "waveform pointer-events-none absolute inset-x-2 inset-y-1 z-[1] flex items-center overflow-hidden bg-transparent opacity-95 [mask-image:linear-gradient(90deg,transparent_0,#000_0.55rem,#000_calc(100%_-_0.55rem),transparent_100%)]",
-        failed && "waveform-fallback"
-      )}
-      aria-hidden="true"
-      ref={containerRef}
-    />
-  );
-});
-
-async function loadWaveSurferBlob(
-  wavesurfer: ReturnType<typeof WaveSurfer.create>,
-  url: string,
-  name: string
-): Promise<void> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Waveform audio fetch failed: ${response.status}`);
-  }
-
-  const sourceBlob = await response.blob();
-  const mimeType = sourceBlob.type || inferAudioMimeType(name);
-  const audioBlob = mimeType
-    ? new Blob([await sourceBlob.arrayBuffer()], { type: mimeType })
-    : sourceBlob;
-
-  await wavesurfer.loadBlob(audioBlob);
-}
-
-function inferAudioMimeType(name: string): string {
-  const extension = name.split(".").pop()?.toLowerCase();
-  switch (extension) {
-    case "aac":
-      return "audio/aac";
-    case "m4a":
-    case "mp4":
-      return "audio/mp4";
-    case "mp3":
-      return "audio/mpeg";
-    case "oga":
-    case "ogg":
-      return "audio/ogg";
-    case "wav":
-      return "audio/wav";
-    case "webm":
-      return "audio/webm";
-    default:
-      return "";
-  }
-}
-
-function TimelineZoomClip(props: {
-  effect: ZoomEffect;
-  duration: number;
-  selected: boolean;
-  onSelect: () => void;
-  onDragPointerDown: (
-    event: ReactPointerEvent<HTMLElement>,
-    id: string,
-    mode: "move" | "start" | "end"
-  ) => void;
-}) {
-  return (
-    <button
-      className={cx(
-        "clip clip-zoom group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-1.5 overflow-hidden rounded-[3px] px-2 text-[0.68rem] font-semibold text-white",
-        props.selected && "clip-selected clip-segment-selected"
-      )}
-      type="button"
-      title={`Zoom (${props.effect.speed})`}
-      style={createTimelineClipStyle(
-        props.effect.start,
-        props.effect.end - props.effect.start,
-        props.duration
-      )}
-      onClick={props.onSelect}
-      onPointerDown={(event) => props.onDragPointerDown(event, props.effect.id, "move")}
-    >
-      <span
-        className="clip-edge clip-edge-start absolute inset-y-0 left-0 z-[4] w-2 cursor-ew-resize after:absolute after:bottom-1.5 after:left-1 after:top-1.5 after:w-0.5 after:rounded-full after:bg-white/70 after:opacity-0 after:transition group-hover:after:opacity-100"
-        onPointerDown={(event) => props.onDragPointerDown(event, props.effect.id, "start")}
-      />
-      <ZoomIn size={13} />
-      <strong className="min-w-0 truncate">Zoom</strong>
-      <span
-        className="clip-edge clip-edge-end absolute inset-y-0 right-0 z-[4] w-2 cursor-ew-resize after:absolute after:bottom-1.5 after:right-1 after:top-1.5 after:w-0.5 after:rounded-full after:bg-white/70 after:opacity-0 after:transition group-hover:after:opacity-100"
-        onPointerDown={(event) => props.onDragPointerDown(event, props.effect.id, "end")}
-      />
-    </button>
-  );
-}
-
-function TimelineTrimClip(props: {
-  duration: number;
-  range: { start: number; end: number };
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      className={cx(
-        "clip clip-trim absolute top-[0.22rem] z-[3] inline-flex h-[1.95rem] min-w-0 items-center gap-2 overflow-hidden rounded-[7px] border-2 border-rose-400 bg-rose-400/20 px-2.5 text-[0.7rem] font-extrabold text-white shadow-inner",
-        props.selected && "clip-selected"
-      )}
-      type="button"
-      style={createTimelineClipStyle(
-        props.range.start,
-        props.range.end - props.range.start,
-        props.duration
-      )}
-      onClick={props.onSelect}
-    >
-      <Scissors size={13} />
-      <strong className="min-w-0 truncate">
-        {formatSeconds(props.range.start)} - {formatSeconds(props.range.end)}
-      </strong>
-    </button>
-  );
-}
-
-function TimelineSubtitleClip(props: {
-  subtitle: SubtitleSegment;
-  duration: number;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      className={cx(
-        "clip clip-text absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 items-center gap-1.5 overflow-hidden rounded-[3px] px-2 text-[0.68rem] font-semibold text-white",
-        props.selected && "clip-selected clip-segment-selected"
-      )}
-      type="button"
-      style={createTimelineClipStyle(
-        props.subtitle.start,
-        props.subtitle.end - props.subtitle.start,
-        props.duration
-      )}
-      onClick={props.onSelect}
-    >
-      <Captions size={13} />
-      <strong className="min-w-0 truncate">{props.subtitle.text}</strong>
-    </button>
-  );
-}
-
-function getTimelineMediaDuration(
-  item: EditorMediaItem,
-  activeDuration: number,
-  selectedItemId: string | null
-): number {
-  if (item.duration && item.duration > 0) {
-    return item.duration;
-  }
-
-  if (item.origin === "project" && item.id === selectedItemId && activeDuration > 0) {
-    return activeDuration;
-  }
-
-  if (item.kind === "image") {
-    return 5;
-  }
-
-  return 1;
-}
-
-function getTimelineTrackKind(item: EditorMediaItem): TimelineTrackKind {
-  return item.kind === "audio" ? "audio" : "video";
-}
-
-function syncTimelineSegments(
-  currentSegments: TimelineSegment[],
-  items: EditorMediaItem[],
-  mediaDurationById: Map<string, number>,
-  newItemIds: ReadonlySet<string>
-): TimelineSegment[] {
-  const itemIds = new Set(items.map((item) => item.id));
-  const nextSegments = currentSegments
-    .filter((segment) => itemIds.has(segment.itemId))
-    .map((segment) => {
-      const itemDuration = mediaDurationById.get(segment.itemId) ?? 1;
-      const track = segment.track;
-      const lane = track === "audio" ? normalizeTimelineLane(segment.lane) : 0;
-      const sourceStart = clampNumber(segment.sourceStart, 0, Math.max(0, itemDuration - 0.1));
-      // A clip's timeline length can never exceed the media left after sourceStart,
-      // but its end lives in timeline space and may sit well past itemDuration once
-      // the clip has been moved, so clamp against start + remaining source, not
-      // against the raw media duration.
-      const maxEnd = segment.start + Math.max(0.1, itemDuration - sourceStart);
-      const wasPlaceholderFullClip =
-        segment.sourceStart === 0 &&
-        segment.end - segment.start <= 1.05 &&
-        itemDuration > 1.05;
-      const end = wasPlaceholderFullClip
-        ? maxEnd
-        : clampNumber(segment.end, segment.start + 0.1, maxEnd);
-
-      return {
-        ...segment,
-        track,
-        lane,
-        end,
-        sourceStart
-      };
-    });
-
-  for (const item of items) {
-    if (!newItemIds.has(item.id) || nextSegments.some((segment) => segment.itemId === item.id)) {
-      continue;
-    }
-
-    const track = getTimelineTrackKind(item);
-    // Video clips stay sequenced on the video track. Audio clips start at the
-    // beginning and are assigned to the first channel that keeps them visible
-    // without overlapping another clip on that channel.
-    const trackEnd = nextSegments
-      .filter((segment) => segment.track === track)
-      .reduce((max, segment) => Math.max(max, segment.end), 0);
-    const itemDuration = mediaDurationById.get(item.id) ?? 1;
-    const segmentId = `${item.id}:segment-0`;
-    const start = track === "audio" ? 0 : trackEnd;
-    const end = start + itemDuration;
-    const lane =
-      track === "audio" ? resolveAudioLane(nextSegments, segmentId, start, end, 0) : 0;
-
-    nextSegments.push({
-      id: segmentId,
-      itemId: item.id,
-      track,
-      lane,
-      start,
-      end,
-      sourceStart: 0
-    });
-  }
-
-  const normalizedSegments = normalizeAudioLanes(nextSegments);
-  return areTimelineSegmentsEqual(currentSegments, normalizedSegments)
-    ? currentSegments
-    : normalizedSegments;
-}
-
-function createTimelineMediaClips(
-  segments: TimelineSegment[],
-  mediaById: Map<string, EditorMediaItem>
-): TimelineMediaClip[] {
-  return segments
-    .map((segment) => {
-      const item = mediaById.get(segment.itemId);
-      if (!item) {
-        return null;
-      }
-
-      return {
-        id: segment.id,
-        item,
-        track: segment.track,
-        lane: segment.track === "audio" ? normalizeTimelineLane(segment.lane) : 0,
-        start: segment.start,
-        duration: Math.max(0.1, segment.end - segment.start),
-        sourceStart: segment.sourceStart
-      } satisfies TimelineMediaClip;
-    })
-    .filter((clip): clip is TimelineMediaClip => Boolean(clip))
-    .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id));
-}
-
-function findTimelineSegmentAtTime(
-  segments: TimelineSegment[],
-  time: number
-): TimelineSegment | null {
-  return (
-    segments.find((segment) => time > segment.start && time < segment.end) ??
-    segments.find((segment) => time >= segment.start && time <= segment.end) ??
-    null
-  );
-}
-
-function canSplitTimelineSegment(segment: TimelineSegment, time: number): boolean {
-  return time > segment.start + 0.1 && time < segment.end - 0.1;
-}
-
-function canSplitTimelineSegmentAt(
-  segments: TimelineSegment[],
-  contextMenu: Exclude<TimelineContextMenu, null>
-): boolean {
-  const segment =
-    (contextMenu.segmentId
-      ? segments.find((item) => item.id === contextMenu.segmentId)
-      : null) ?? findTimelineSegmentAtTime(segments, contextMenu.time);
-  return segment ? canSplitTimelineSegment(segment, contextMenu.time) : false;
-}
-
-function trimTimelineSegment(
-  segments: TimelineSegment[],
-  segmentId: string,
-  edge: TimelineTrimEdge,
-  time: number,
-  mediaDurationById: Map<string, number>
-): TimelineSegment[] {
-  const nextSegments = segments.map((segment) => {
-    if (segment.id !== segmentId) {
-      return segment;
-    }
-
-    const mediaDuration = mediaDurationById.get(segment.itemId) ?? segment.end;
-    const minDuration = 0.15;
-
-    if (edge === "start") {
-      const nextStart = clampNumber(time, 0, segment.end - minDuration);
-      const sourceStart = clampNumber(
-        segment.sourceStart + (nextStart - segment.start),
-        0,
-        Math.max(0, mediaDuration - minDuration)
-      );
-      return {
-        ...segment,
-        start: nextStart,
-        sourceStart
-      };
-    }
-
-    const maxEnd = segment.start + Math.max(minDuration, mediaDuration - segment.sourceStart);
-    return {
-      ...segment,
-      end: clampNumber(time, segment.start + minDuration, maxEnd)
-    };
-  });
-
-  return resolveSegmentAudioLane(nextSegments, segmentId);
-}
-
-function moveTimelineSegment(
-  segments: TimelineSegment[],
-  segmentId: string,
-  rawStart: number,
-  timelineDuration: number
-): TimelineSegment[] {
-  const segment = segments.find((item) => item.id === segmentId);
-  if (!segment) {
-    return segments;
-  }
-
-  const length = segment.end - segment.start;
-  const snapThreshold = Math.max(0.08, timelineDuration * 0.01);
-  const snapTargets = [0];
-  for (const other of segments) {
-    if (other.id === segmentId || other.track !== segment.track) {
-      continue;
-    }
-    snapTargets.push(other.start, other.end);
-  }
-
-  let start = Math.max(0, rawStart);
-  for (const target of snapTargets) {
-    if (Math.abs(start - target) <= snapThreshold) {
-      start = target;
-      break;
-    }
-  }
-  const end = start + length;
-  for (const target of snapTargets) {
-    if (Math.abs(end - target) <= snapThreshold) {
-      start = Math.max(0, target - length);
-      break;
-    }
-  }
-
-  const nextStart = Math.max(0, start);
-  const nextEnd = nextStart + length;
-  const nextLane =
-    segment.track === "audio"
-      ? resolveAudioLane(segments, segmentId, nextStart, nextEnd, segment.lane)
-      : segment.lane;
-
-  return segments.map((item) =>
-    item.id === segmentId
-      ? { ...item, lane: item.track === "audio" ? nextLane : 0, start: nextStart, end: nextEnd }
-      : item
-  );
-}
-
-function createAudioTimelineTracks(
-  clips: TimelineMediaClip[]
-): Array<{ lane: number; clips: TimelineMediaClip[] }> {
-  const lanes = new Map<number, TimelineMediaClip[]>();
-
-  for (const clip of clips) {
-    const lane = normalizeTimelineLane(clip.lane);
-    lanes.set(lane, [...(lanes.get(lane) ?? []), clip]);
-  }
-
-  return [...lanes.entries()]
-    .sort(([firstLane], [secondLane]) => firstLane - secondLane)
-    .map(([lane, laneClips]) => ({
-      lane,
-      clips: laneClips.sort(
-        (first, second) => first.start - second.start || first.id.localeCompare(second.id)
-      )
-    }));
-}
-
-function normalizeAudioLanes(segments: TimelineSegment[]): TimelineSegment[] {
-  const normalized = segments.map((segment) => ({
-    ...segment,
-    lane: segment.track === "audio" ? normalizeTimelineLane(segment.lane) : 0
-  }));
-  const processedAudioSegments: TimelineSegment[] = [];
-  const laneById = new Map<string, number>();
-
-  for (const segment of normalized
-    .filter((item) => item.track === "audio")
-    .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id))) {
-    let lane = normalizeTimelineLane(segment.lane);
-    while (audioLaneHasOverlap(processedAudioSegments, segment.id, lane, segment.start, segment.end)) {
-      lane += 1;
-    }
-
-    laneById.set(segment.id, lane);
-    processedAudioSegments.push({ ...segment, lane });
-  }
-
-  return normalized.map((segment) =>
-    segment.track === "audio" ? { ...segment, lane: laneById.get(segment.id) ?? 0 } : segment
-  );
-}
-
-function resolveSegmentAudioLane(
-  segments: TimelineSegment[],
-  segmentId: string
-): TimelineSegment[] {
-  const segment = segments.find((item) => item.id === segmentId);
-  if (!segment || segment.track !== "audio") {
-    return segments;
-  }
-
-  const lane = resolveAudioLane(segments, segmentId, segment.start, segment.end, segment.lane);
-  return segments.map((item) => (item.id === segmentId ? { ...item, lane } : item));
-}
-
-function resolveAudioLane(
-  segments: TimelineSegment[],
-  segmentId: string,
-  start: number,
-  end: number,
-  preferredLane: number
-): number {
-  const maxLane = segments.reduce(
-    (max, segment) =>
-      segment.track === "audio" ? Math.max(max, normalizeTimelineLane(segment.lane)) : max,
-    0
-  );
-  const candidates = [
-    normalizeTimelineLane(preferredLane),
-    ...Array.from({ length: maxLane + 2 }, (_value, index) => index)
-  ];
-
-  for (const lane of [...new Set(candidates)]) {
-    if (!audioLaneHasOverlap(segments, segmentId, lane, start, end)) {
-      return lane;
-    }
-  }
-
-  return maxLane + 1;
-}
-
-function audioLaneHasOverlap(
-  segments: TimelineSegment[],
-  segmentId: string,
-  lane: number,
-  start: number,
-  end: number
-): boolean {
-  return segments.some(
-    (segment) =>
-      segment.id !== segmentId &&
-      segment.track === "audio" &&
-      normalizeTimelineLane(segment.lane) === lane &&
-      rangesOverlap(start, end, segment.start, segment.end)
-  );
-}
-
-function rangesOverlap(firstStart: number, firstEnd: number, secondStart: number, secondEnd: number) {
-  const tolerance = 0.01;
-  return firstStart < secondEnd - tolerance && firstEnd > secondStart + tolerance;
-}
-
-function normalizeTimelineLane(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
-}
-
-function areTimelineSegmentsEqual(first: TimelineSegment[], second: TimelineSegment[]): boolean {
-  return JSON.stringify(first) === JSON.stringify(second);
-}
-
-function createTimelineClipStyle(
-  start: number,
-  duration: number,
-  timelineDuration: number
-): CSSProperties {
-  const safeDuration = Math.max(timelineDuration, start + duration, 1);
-  const left = Math.min(100, Math.max(0, (start / safeDuration) * 100));
-  const width = Math.min(100 - left, Math.max(1.5, (duration / safeDuration) * 100));
-
-  return {
-    left: `${left}%`,
-    right: "auto",
-    width: `${width}%`
-  };
-}
-
-let idCounter = 0;
-
-function createId(prefix: string): string {
-  idCounter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${idCounter}`;
-}
-
-// Decode any audio/video URL to a mono 16kHz Float32Array, which is what the
-// Whisper speech-to-text model expects.
-async function decodeAudioTo16kMono(url: string): Promise<Float32Array> {
-  const response = await fetch(url);
-  const arrayBuffer = await response.arrayBuffer();
-  const audioContext = new AudioContext();
-
-  try {
-    const decoded = await audioContext.decodeAudioData(arrayBuffer);
-    const length = decoded.length;
-    const channels = decoded.numberOfChannels;
-    const mono = new Float32Array(length);
-    for (let channel = 0; channel < channels; channel += 1) {
-      const data = decoded.getChannelData(channel);
-      for (let i = 0; i < length; i += 1) {
-        mono[i] += data[i] / channels;
-      }
-    }
-
-    const targetRate = 16000;
-    if (decoded.sampleRate === targetRate) {
-      return mono;
-    }
-
-    const offline = new OfflineAudioContext(
-      1,
-      Math.ceil((length * targetRate) / decoded.sampleRate),
-      targetRate
-    );
-    const buffer = offline.createBuffer(1, length, decoded.sampleRate);
-    buffer.copyToChannel(mono, 0);
-    const bufferSource = offline.createBufferSource();
-    bufferSource.buffer = buffer;
-    bufferSource.connect(offline.destination);
-    bufferSource.start();
-    const rendered = await offline.startRendering();
-    return rendered.getChannelData(0);
-  } finally {
-    void audioContext.close();
-  }
-}
-
-function canDriftSeek(element: HTMLMediaElement): boolean {
-  return !element.seeking && element.readyState >= HTMLMediaElement.HAVE_METADATA;
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-
-  return Math.min(Math.max(value, min), Math.max(min, max));
-}
-
+/** Maps a corner-resize handle to the drag direction that grows the screen. */
 function getScreenResizeDirection(mode: ScreenLayoutDragMode): { x: number; y: number } {
   switch (mode) {
     case "resize-nw":
@@ -4073,285 +2078,4 @@ function getScreenResizeDirection(mode: ScreenLayoutDragMode): { x: number; y: n
     default:
       return { x: 0, y: 0 };
   }
-}
-
-function createProjectMedia(project: ProjectView | null): EditorMediaItem[] {
-  if (!project) {
-    return [];
-  }
-
-  const items: EditorMediaItem[] = [];
-  const duration = (project.durationMs ?? 0) / 1000 || null;
-
-  if (project.mediaUrls.screen) {
-    items.push({
-      id: `${project.id}:screen`,
-      name: "screen.webm",
-      url: project.mediaUrls.screen,
-      kind: "video",
-      origin: "project",
-      track: "screen",
-      duration
-    });
-  }
-
-  if (project.mediaUrls.camera) {
-    items.push({
-      id: `${project.id}:camera`,
-      name: "camera.webm",
-      url: project.mediaUrls.camera,
-      kind: "video",
-      origin: "project",
-      track: "camera",
-      duration
-    });
-  }
-
-  const audioUrl = project.mediaUrls.micWav ?? project.mediaUrls.micWebm;
-  if (audioUrl) {
-    items.push({
-      id: `${project.id}:audio`,
-      name: project.mediaUrls.micWav ? "mic.wav" : "mic.webm",
-      url: audioUrl,
-      kind: "audio",
-      origin: "project",
-      track: "audio",
-      duration
-    });
-  }
-
-  return items;
-}
-
-function toEditorMediaItem(file: ImportedMediaFile): EditorMediaItem {
-  return {
-    id: file.id,
-    name: file.name,
-    url: file.url,
-    kind: file.kind,
-    origin: "imported",
-    track: "imported",
-    duration: null,
-    importId: file.id
-  };
-}
-
-function getActiveZoom(effects: ZoomEffect[], time: number): {
-  scale: number;
-  originX: number;
-  originY: number;
-} {
-  const orderedEffects = getOrderedZoomEffects(effects);
-  let activeIndex = -1;
-  for (let index = 0; index < orderedEffects.length; index += 1) {
-    const effect = orderedEffects[index];
-    if (time >= effect.start && time <= effect.end) {
-      activeIndex = index;
-    }
-  }
-
-  if (activeIndex === -1) {
-    const bridgeIndex = orderedEffects.findIndex((effect, index) => {
-      const nextEffect = orderedEffects[index + 1];
-      return (
-        Boolean(nextEffect) &&
-        time > effect.end &&
-        time < nextEffect.start &&
-        areZoomEffectsChained(effect, nextEffect)
-      );
-    });
-
-    if (bridgeIndex >= 0) {
-      const effect = orderedEffects[bridgeIndex];
-      const nextEffect = orderedEffects[bridgeIndex + 1];
-      const gapDuration = Math.max(0.001, nextEffect.start - effect.end);
-      const progress = smootherStep((time - effect.end) / gapDuration);
-      return interpolateZoomTransform(
-        getZoomFullTransform(effect),
-        getZoomFullTransform(nextEffect),
-        progress
-      );
-    }
-
-    return { scale: 1, originX: 50, originY: 50 };
-  }
-
-  const effect = orderedEffects[activeIndex];
-  const previousEffect = orderedEffects[activeIndex - 1] ?? null;
-  const nextEffect = orderedEffects[activeIndex + 1] ?? null;
-  const previousGap = previousEffect ? effect.start - previousEffect.end : Number.POSITIVE_INFINITY;
-  const previousIsChained = Boolean(
-    previousEffect && previousGap <= zoomChainGapSeconds
-  );
-  const nextIsChained = Boolean(nextEffect && areZoomEffectsChained(effect, nextEffect));
-  const fullZoom = getZoomFullTransform(effect);
-  const duration = Math.max(0.1, effect.end - effect.start);
-  const elapsed = clampNumber(time - effect.start, 0, duration);
-  const ramp = getZoomRampDuration(effect, duration);
-
-  if (elapsed < ramp) {
-    const entryTransform =
-      previousIsChained && previousGap <= zoomDirectChainGapSeconds && previousEffect
-        ? getZoomFullTransform(previousEffect)
-        : previousIsChained
-          ? fullZoom
-          : { scale: 1, originX: 50, originY: 50 };
-    return interpolateZoomTransform(entryTransform, fullZoom, smootherStep(elapsed / ramp));
-  }
-
-  if (!nextIsChained && elapsed > duration - ramp) {
-    return interpolateZoomTransform(
-      fullZoom,
-      { scale: 1, originX: 50, originY: 50 },
-      smootherStep((elapsed - (duration - ramp)) / ramp)
-    );
-  }
-
-  return fullZoom;
-}
-
-function isZoomActiveAtTime(effects: ZoomEffect[], time: number): boolean {
-  const orderedEffects = getOrderedZoomEffects(effects);
-  return orderedEffects.some((effect, index) => {
-    if (time >= effect.start && time <= effect.end) {
-      return true;
-    }
-
-    const nextEffect = orderedEffects[index + 1];
-    return (
-      Boolean(nextEffect) &&
-      time > effect.end &&
-      time < nextEffect.start &&
-      areZoomEffectsChained(effect, nextEffect)
-    );
-  });
-}
-
-function calculateTimelineDuration(
-  videoClips: TimelineMediaClip[],
-  audioClips: TimelineMediaClip[],
-  zoomEffects: ZoomEffect[],
-  subtitles: SubtitleSegment[],
-  activeDuration: number
-): number {
-  const timelineContentEnd = Math.max(
-    0,
-    ...videoClips.map((clip) => clip.start + clip.duration),
-    ...audioClips.map((clip) => clip.start + clip.duration),
-    ...zoomEffects.map((effect) => effect.end),
-    ...subtitles.map((subtitle) => subtitle.end)
-  );
-
-  return Math.max(timelineContentEnd, timelineContentEnd > 0 ? 0 : activeDuration, 1);
-}
-
-function createClipPlaybackKey(clip: TimelineMediaClip): string {
-  return [
-    clip.id,
-    clip.item.url,
-    clip.start.toFixed(4),
-    clip.duration.toFixed(4),
-    clip.sourceStart.toFixed(4)
-  ].join("|");
-}
-
-const zoomChainGapSeconds = 0.45;
-const zoomDirectChainGapSeconds = 0.05;
-const zoomRampBySpeed: Record<ZoomSpeed, number> = { slow: 1.6, medium: 1.1, fast: 0.45 };
-
-function getOrderedZoomEffects(effects: ZoomEffect[]): ZoomEffect[] {
-  return [...effects].sort((a, b) => a.start - b.start || a.end - b.end);
-}
-
-function areZoomEffectsChained(effect: ZoomEffect, nextEffect: ZoomEffect): boolean {
-  return nextEffect.start - effect.end <= zoomChainGapSeconds;
-}
-
-function getZoomRampDuration(effect: ZoomEffect, duration: number): number {
-  return Math.min(zoomRampBySpeed[effect.speed] ?? zoomRampBySpeed.medium, duration / 2);
-}
-
-function getZoomFullTransform(effect: ZoomEffect): {
-  scale: number;
-  originX: number;
-  originY: number;
-} {
-  return {
-    scale: effect.scale,
-    originX: effect.targetX,
-    originY: effect.targetY
-  };
-}
-
-function interpolateZoomTransform(
-  from: { scale: number; originX: number; originY: number },
-  to: { scale: number; originX: number; originY: number },
-  progress: number
-): {
-  scale: number;
-  originX: number;
-  originY: number;
-} {
-  const t = clampNumber(progress, 0, 1);
-  return {
-    scale: from.scale + (to.scale - from.scale) * t,
-    originX: from.originX + (to.originX - from.originX) * t,
-    originY: from.originY + (to.originY - from.originY) * t
-  };
-}
-
-function smootherStep(value: number): number {
-  const t = clampNumber(value, 0, 1);
-  return t * t * t * (t * (t * 6 - 15) + 10);
-}
-
-function createTimelineTicks(duration: number): string[] {
-  const safeDuration = Math.max(duration, 1);
-  const tickCount = 6;
-
-  return Array.from({ length: tickCount }, (_value, index) =>
-    formatTimelineTick((safeDuration / (tickCount - 1)) * index, safeDuration)
-  );
-}
-
-function formatTimelineTick(seconds: number, duration: number): string {
-  if (duration < 10) {
-    return `${seconds.toFixed(1)}s`;
-  }
-
-  return formatSeconds(seconds);
-}
-
-function formatTimecode(seconds: number, frame: number): string {
-  if (!Number.isFinite(seconds)) {
-    return "00:00:00:00";
-  }
-
-  const rounded = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(rounded / 3600);
-  const minutes = Math.floor((rounded % 3600) / 60);
-  const remainingSeconds = rounded % 60;
-  const remainingFrames = Math.max(0, frame % frameRate);
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(
-    remainingSeconds
-  ).padStart(2, "0")}:${String(remainingFrames).padStart(2, "0")}`;
-}
-
-function formatSeconds(seconds: number): string {
-  if (!Number.isFinite(seconds)) {
-    return "00:00";
-  }
-
-  const rounded = Math.max(0, Math.floor(seconds));
-  const minutes = Math.floor(rounded / 60);
-  const remainingSeconds = rounded % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 * 1024) {
-    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  }
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
