@@ -35,6 +35,7 @@ export type CameraPosition =
 export type CameraShape = "circle" | "rounded" | "square";
 export type CameraBorderStyle = "none" | "light" | "accent";
 export type VideoCornerStyle = "flat" | "soft" | "round";
+export type ScreenAspectRatio = "16:9" | "16:10" | "4:3";
 export type TimelineTrackKind = "video" | "audio";
 export type TimelineTrimEdge = "start" | "end";
 
@@ -89,6 +90,28 @@ export type ScreenLayoutDrag = {
   };
   boundsWidth: number;
   boundsHeight: number;
+};
+
+export type CameraFrame = {
+  x: number;
+  y: number;
+  size: number;
+};
+
+export type CameraContentTransform = {
+  x: number;
+  y: number;
+  scale: number;
+  mirrored: boolean;
+};
+
+export type CameraLayoutDrag = {
+  mode: ScreenLayoutDragMode;
+  startClientX: number;
+  startClientY: number;
+  startFrame: CameraFrame;
+  canvasWidth: number;
+  canvasHeight: number;
 };
 
 export type TimelineTrimDrag = {

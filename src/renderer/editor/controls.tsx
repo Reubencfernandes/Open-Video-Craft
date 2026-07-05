@@ -4,10 +4,14 @@ import type { ReactNode } from "react";
 /** Header strip at the top of the left tool panel (icon + tool name). */
 export function ToolPanelHeader(props: { icon: ReactNode; title: string }) {
   return (
-    <div className="tool-panel-header">
-      <span>{props.icon}</span>
-      <strong>{props.title}</strong>
-      <button type="button" title="Panel options">
+    <div className="flex min-h-[2.7rem] items-center gap-3 text-slate-100">
+      <span className="inline-flex text-cyan-300">{props.icon}</span>
+      <strong className="min-w-0 flex-1 truncate text-xl font-extrabold">{props.title}</strong>
+      <button
+        className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-400 hover:bg-white/10 hover:text-white"
+        type="button"
+        title="Panel options"
+      >
         <MoreHorizontal size={16} />
       </button>
     </div>
@@ -25,15 +29,16 @@ export function RangeControl(props: {
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="range-control">
-      <span>
+    <label className="grid gap-2 text-xs font-extrabold text-slate-400">
+      <span className="flex items-center justify-between gap-3">
         {props.label}
-        <output>
+        <output className="rounded-md bg-white/[0.06] px-2 py-1 text-white tabular-nums">
           {props.value}
           {props.suffix}
         </output>
       </span>
       <input
+        className="w-full accent-amber-500"
         type="range"
         min={props.min}
         max={props.max}

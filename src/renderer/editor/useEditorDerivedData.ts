@@ -1,0 +1,369 @@
+import { useMemo } from "react";
+import type { CSSProperties } from "react";
+import type { ProjectView } from "../../shared/types";
+import { createProjectMedia } from "./media-utils";
+import { getScreenFrameForAspectRatio } from "./layout-geometry";
+import {
+  calculateTimelineDuration,
+  createAudioTimelineTracks,
+  createTimelineMediaClips,
+  getTimelineMediaDuration
+} from "./timeline-utils";
+import { frameRate } from "./types";
+import { clampNumber } from "./utils";
+import type {
+  BackgroundStyle,
+  CameraBorderStyle,
+  CameraContentTransform,
+  CameraFrame,
+  CameraPosition,
+  CameraShape,
+  EditorMediaItem,
+  EditorTool,
+  LayoutMode,
+  MediaPanel,
+  ScreenAspectRatio,
+  SubtitleSegment,
+  TimelineSegment,
+  VideoCornerStyle,
+  ZoomEffect
+} from "./types";
+import { getActiveZoom } from "./zoom-utils";
+
+type ScreenPosition = {
+  x: number;
+  y: number;
+  scale: number;
+};
+
+type UseEditorDerivedDataParams = {
+  project: ProjectView | null;
+  importedMedia: EditorMediaItem[];
+  selectedItemId: string | null;
+  activePanel: MediaPanel;
+  duration: number;
+  timelineSegments: TimelineSegment[];
+  selectedTimelineSegmentId: string | null;
+  timelineViewDuration: number;
+  currentTime: number;
+  zoomEffects: ZoomEffect[];
+  selectedZoomId: string | null;
+  subtitles: SubtitleSegment[];
+  selectedSubtitleId: string | null;
+  layoutMode: LayoutMode;
+  screenAspectRatio: ScreenAspectRatio;
+  screenPosition: ScreenPosition;
+  backgroundStyle: BackgroundStyle;
+  customBackgroundUrl: string | null;
+  cameraSize: number;
+  cameraPosition: CameraPosition;
+  cameraFrame: CameraFrame;
+  cameraContentTransform: CameraContentTransform;
+  cameraShape: CameraShape;
+  cameraBorderStyle: CameraBorderStyle;
+  videoCornerStyle: VideoCornerStyle;
+  activeTool: EditorTool;
+};
+
+const previewBackgrounds: Record<BackgroundStyle, string> = {
+  "real-world-1":
+    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1542051841857-5f90071e7989?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
+  "real-world-2":
+    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1759681770982-313332e7f42c?q=80&w=1075&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
+  "real-world-3":
+    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1567597714138-3bdc30f4f493?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1pYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
+  "gradient-1":
+    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1635776062360-af423602aff3?q=80&w=1332&auto=format&fit=crop")',
+  "gradient-2":
+    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?q=80&w=1332&auto=format&fit=crop")',
+  "gradient-3":
+    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1554034483-04fda0d3507b?q=80&w=1170&auto=format&fit=crop")',
+  "animated-1": "linear-gradient(120deg, #22d3ee, #6d28d9, #db2777)",
+  "animated-2": "linear-gradient(120deg, #f59e0b, #ef4444, #7c3aed)",
+  "animated-3": "linear-gradient(120deg, #0ea5e9, #14b8a6, #1e3a8a)",
+  custom: ""
+};
+
+export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
+  const {
+    project,
+    importedMedia,
+    selectedItemId,
+    activePanel,
+    duration,
+    timelineSegments,
+    selectedTimelineSegmentId,
+    timelineViewDuration,
+    currentTime,
+    zoomEffects,
+    selectedZoomId,
+    subtitles,
+    selectedSubtitleId,
+    layoutMode,
+    screenAspectRatio,
+    screenPosition,
+    backgroundStyle,
+    customBackgroundUrl,
+    cameraSize,
+    cameraPosition,
+    cameraFrame,
+    cameraContentTransform,
+    cameraShape,
+    cameraBorderStyle,
+    videoCornerStyle,
+    activeTool
+  } = params;
+
+  const projectMedia = useMemo(() => createProjectMedia(project), [project]);
+  const allMedia = useMemo(
+    () => [...projectMedia, ...importedMedia],
+    [importedMedia, projectMedia]
+  );
+  const selectedItem =
+    allMedia.find((item) => item.id === selectedItemId) ?? allMedia[0] ?? null;
+  const visibleMedia = allMedia.filter((item) =>
+    activePanel === "all" ? true : item.kind === activePanel
+  );
+  const projectName = project?.name ?? "New Edit";
+  const projectScreen = projectMedia.find((item) => item.track === "screen") ?? null;
+  const projectCamera = projectMedia.find((item) => item.track === "camera") ?? null;
+  const activeDuration =
+    duration > 0 ? duration : selectedItem?.duration ?? (project?.durationMs ?? 0) / 1000;
+  const selectedTimelineItemId = selectedItem?.id ?? null;
+
+  // The camera feed rides along with the screen recording and is never an
+  // independent timeline clip.
+  const timelineEditableItems = useMemo(
+    () =>
+      allMedia.filter(
+        (item) =>
+          item.kind === "audio" ||
+          ((item.kind === "video" || item.kind === "image") && item.track !== "camera")
+      ),
+    [allMedia]
+  );
+  const mediaById = useMemo(
+    () => new Map(allMedia.map((item) => [item.id, item])),
+    [allMedia]
+  );
+  const mediaDurationById = useMemo(
+    () =>
+      new Map(
+        timelineEditableItems.map((item) => [
+          item.id,
+          getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
+        ])
+      ),
+    [activeDuration, selectedTimelineItemId, timelineEditableItems]
+  );
+  const timelineClips = useMemo(
+    () => createTimelineMediaClips(timelineSegments, mediaById),
+    [mediaById, timelineSegments]
+  );
+  const videoTimelineClips = useMemo(
+    () => timelineClips.filter((clip) => clip.track === "video"),
+    [timelineClips]
+  );
+  const audioTimelineClips = useMemo(
+    () => timelineClips.filter((clip) => clip.track === "audio"),
+    [timelineClips]
+  );
+  const audioTimelineTracks = useMemo(
+    () => createAudioTimelineTracks(audioTimelineClips),
+    [audioTimelineClips]
+  );
+  const activeVideoClip = useMemo(
+    () =>
+      videoTimelineClips.find(
+        (clip) => currentTime >= clip.start && currentTime < clip.start + clip.duration
+      ) ?? null,
+    [currentTime, videoTimelineClips]
+  );
+  const previewItem = activeVideoClip?.item ?? null;
+  const isProjectCompositionSelected = Boolean(
+    previewItem && previewItem.origin === "project" && previewItem.track === "screen"
+  );
+  const timelineDuration = useMemo(
+    () =>
+      calculateTimelineDuration(
+        videoTimelineClips,
+        audioTimelineClips,
+        zoomEffects,
+        subtitles,
+        activeDuration
+      ),
+    [activeDuration, audioTimelineClips, subtitles, videoTimelineClips, zoomEffects]
+  );
+  const timelineRenderDuration = Math.max(timelineViewDuration, timelineDuration);
+  const totalFrames = Math.max(1, Math.floor(timelineRenderDuration * frameRate));
+  const currentFrame = Math.min(totalFrames, Math.max(0, Math.round(currentTime * frameRate)));
+  const playheadPercent =
+    timelineRenderDuration > 0
+      ? Math.min(100, Math.max(0, (currentTime / timelineRenderDuration) * 100))
+      : 0;
+  const activeZoom = getActiveZoom(zoomEffects, currentTime);
+  const activeSubtitle =
+    subtitles.find((subtitle) => currentTime >= subtitle.start && currentTime <= subtitle.end) ??
+    null;
+  const selectedSubtitle =
+    subtitles.find((subtitle) => subtitle.id === selectedSubtitleId) ?? subtitles[0] ?? null;
+  const selectedZoomEffect =
+    zoomEffects.find((effect) => effect.id === selectedZoomId) ?? null;
+  const audioSources = allMedia.filter((item) => item.kind === "audio");
+  const selectedTimelineClip =
+    timelineClips.find((clip) => clip.id === selectedTimelineSegmentId) ?? null;
+
+  const screenAspectEnabled =
+    layoutMode === "screen-only" ||
+    layoutMode === "bubble" ||
+    layoutMode === "bubble-fill" ||
+    layoutMode === "presenter" ||
+    layoutMode === "side-overlap";
+  const screenFrame = screenAspectEnabled
+    ? getScreenFrameForAspectRatio(layoutMode, screenAspectRatio)
+    : null;
+  const sideBySideScreenFrame =
+    layoutMode === "side-by-side" ? { x: 40, y: 0, width: 60, height: 100 } : null;
+  const activeScreenFrame = screenFrame ?? sideBySideScreenFrame;
+  const screenScale = (screenPosition.scale / 100) * activeZoom.scale;
+  const screenStyle: CSSProperties = {
+    ...(activeScreenFrame
+      ? {
+          left: `${activeScreenFrame.x}%`,
+          top: `${activeScreenFrame.y}%`,
+          right: "auto",
+          bottom: "auto",
+          width: `${activeScreenFrame.width}%`,
+          height: `${activeScreenFrame.height}%`
+        }
+      : {}),
+    borderRadius:
+      videoCornerStyle === "flat" ? 0 : videoCornerStyle === "round" ? 22 : 8,
+    objectFit: layoutMode === "bubble-fill" || layoutMode === "side-by-side" ? "cover" : "contain",
+    transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
+      3
+    )})`,
+    transformOrigin: `${activeZoom.originX}% ${activeZoom.originY}%`
+  };
+  const cameraFreeformEnabled =
+    layoutMode === "bubble" ||
+    layoutMode === "bubble-fill" ||
+    layoutMode === "presenter" ||
+    layoutMode === "side-overlap";
+  const baseCameraStyle: CSSProperties = {
+    border:
+      cameraBorderStyle === "none"
+        ? 0
+        : cameraBorderStyle === "accent"
+          ? "3px solid rgb(249 169 22)"
+          : "4px solid white",
+    borderRadius:
+      cameraShape === "circle" ? "999px" : cameraShape === "rounded" ? 12 : 0,
+    boxSizing: "border-box",
+    overflow: "hidden"
+  };
+  const cameraCropScale = Math.max(1, cameraContentTransform.scale / 100);
+  const cameraPanLimit = ((cameraCropScale - 1) / (2 * cameraCropScale)) * 100;
+  const cameraPanX = clampNumber(cameraContentTransform.x, -cameraPanLimit, cameraPanLimit);
+  const cameraPanY = clampNumber(cameraContentTransform.y, -cameraPanLimit, cameraPanLimit);
+  const cameraVideoStyle: CSSProperties = {
+    objectFit: "cover",
+    transform: `translate(${cameraPanX}%, ${cameraPanY}%) scale(${
+      cameraContentTransform.mirrored ? -cameraCropScale : cameraCropScale
+    }, ${cameraCropScale})`,
+    transformOrigin: "center"
+  };
+  const cameraStyle: CSSProperties | null =
+    layoutMode === "camera-only"
+      ? {
+          ...baseCameraStyle,
+          left: 0,
+          top: 0,
+          width: "100%",
+          height: "100%"
+        }
+      : layoutMode === "side-by-side"
+        ? {
+            ...baseCameraStyle,
+            left: 0,
+            top: 0,
+            width: "40%",
+            height: "100%",
+            borderRadius: 0,
+            border: 0
+          }
+        : cameraFreeformEnabled
+          ? {
+              ...baseCameraStyle,
+              left: `${cameraFrame.x}%`,
+              top: `${cameraFrame.y}%`,
+              right: "auto",
+              bottom: "auto",
+              width: `${cameraFrame.size}%`,
+              height: "auto",
+              aspectRatio: "1 / 1",
+              transform: "none"
+            }
+          : null;
+  const screenEditEnabled = activeTool === "layout" && layoutMode !== "camera-only";
+  const cameraEditEnabled =
+    activeTool === "layout" && cameraFreeformEnabled && Boolean(projectCamera);
+  const previewFrameStyle = {
+    "--camera-size": `${cameraSize}%`,
+    backgroundColor: "#050608",
+    backgroundImage:
+      backgroundStyle === "custom" && customBackgroundUrl
+        ? `linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("${customBackgroundUrl}")`
+        : previewBackgrounds[backgroundStyle],
+    backgroundPosition: "center",
+    backgroundSize: "cover"
+  } as CSSProperties;
+  const previewClassName =
+    "relative w-[min(100%,calc(940px*var(--preview-zoom,1)))] flex-none aspect-video overflow-hidden rounded-[10px] bg-[#050608] shadow-[0_26px_70px_rgb(0_0_0_/_0.42)]";
+  const timelineVisible =
+    activeTool === "media" ||
+    activeTool === "cut" ||
+    activeTool === "zoom" ||
+    activeTool === "audio" ||
+    activeTool === "subtitles";
+
+  return {
+    activeDuration,
+    activeSubtitle,
+    activeVideoClip,
+    allMedia,
+    audioSources,
+    audioTimelineClips,
+    audioTimelineTracks,
+    cameraEditEnabled,
+    cameraStyle,
+    cameraVideoStyle,
+    currentFrame,
+    isProjectCompositionSelected,
+    mediaById,
+    mediaDurationById,
+    playheadPercent,
+    previewClassName,
+    previewFrameStyle,
+    previewItem,
+    projectCamera,
+    projectMedia,
+    projectName,
+    projectScreen,
+    screenAspectEnabled,
+    screenEditEnabled,
+    screenStyle,
+    selectedItem,
+    selectedSubtitle,
+    selectedTimelineClip,
+    selectedTimelineItemId,
+    selectedZoomEffect,
+    timelineDuration,
+    timelineEditableItems,
+    timelineRenderDuration,
+    timelineVisible,
+    totalFrames,
+    videoTimelineClips,
+    visibleMedia
+  };
+}

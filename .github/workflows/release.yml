@@ -22,16 +22,11 @@ jobs:
             npm_script: dist:win
             builder_args: "--publish never"
             artifact_name: open-video-craft-win
-          - name: macOS Intel
-            os: macos-15-intel
+          - name: macOS
             npm_script: dist:mac
-            builder_args: "--x64 --publish never"
-            artifact_name: open-video-craft-mac-x64
-          - name: macOS Apple Silicon
             os: macos-latest
-            npm_script: dist:mac
-            builder_args: "--arm64 --publish never"
-            artifact_name: open-video-craft-mac-arm64
+            builder_args: "--x64 --arm64 --publish never"
+            artifact_name: open-video-craft-mac
 
     steps:
       - name: Checkout
@@ -54,6 +49,15 @@ jobs:
         run: npm test
 
       - name: Build installers
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: npm run ${{ matrix.npm_script }} -- ${{ matrix.builder_args }}
 
       - name: Upload installers

@@ -18,6 +18,24 @@ export interface SourceSummary {
   appIcon: string | null;
 }
 
+export type DesktopPermissionKind = "screen" | "camera" | "microphone";
+
+export type DesktopPermissionState =
+  | "not-determined"
+  | "granted"
+  | "denied"
+  | "restricted"
+  | "unknown"
+  | "unavailable";
+
+export interface DesktopPermissionStatus {
+  platform: "darwin" | "win32" | "linux" | "other";
+  canDragAppBundle: boolean;
+  screen: DesktopPermissionState;
+  camera: DesktopPermissionState;
+  microphone: DesktopPermissionState;
+}
+
 export interface DeviceSelection {
   enabled: boolean;
   deviceId: string | null;

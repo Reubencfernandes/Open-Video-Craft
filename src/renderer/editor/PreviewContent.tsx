@@ -10,15 +10,31 @@ import type {
 
 const screenResizeModes = ["resize-nw", "resize-ne", "resize-sw", "resize-se"] as const;
 
+const mediaFrameClassName =
+  "absolute inset-0 size-full border-0 bg-transparent transition-[transform] duration-[45ms] ease-[cubic-bezier(0.2,0,0.2,1)] will-change-transform";
+
+const editOverlayClassName =
+  "absolute z-[3] box-border cursor-grab touch-none border border-cyan-300/90 bg-sky-500/10 shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
+
+const handleBaseClassName =
+  "absolute z-[1] size-3 rounded-full border-2 border-white bg-cyan-300 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)]";
+
+const handleClassByMode: Record<ScreenLayoutDragMode, string> = {
+  move: "",
+  "resize-nw": "-left-1.5 -top-1.5 cursor-nwse-resize",
+  "resize-ne": "-right-1.5 -top-1.5 cursor-nesw-resize",
+  "resize-sw": "-bottom-1.5 -left-1.5 cursor-nesw-resize",
+  "resize-se": "-bottom-1.5 -right-1.5 cursor-nwse-resize"
+};
+
 /**
  * Renders whatever the playhead is currently over inside the preview frame:
  * - an image asset,
  * - the project composition (screen video + optional camera bubble), or
  * - a plain imported video.
  *
- * The `studio-*` / `preview-*` class names hook into the layout-preset CSS
- * (bubble, side-by-side, presenter, ...) which positions these elements per
- * the selected LayoutMode.
+ * Layout positioning is passed in via React styles so the component can stay
+ * Tailwind-only while still supporting freeform screen/camera dragging.
  */
 export function PreviewContent(props: {
   item: EditorMediaItem;
@@ -26,13 +42,20 @@ export function PreviewContent(props: {
   projectCamera: EditorMediaItem | null;
   layoutMode: LayoutMode;
   screenStyle: CSSProperties;
+  cameraStyle: CSSProperties | null;
+  cameraVideoStyle: CSSProperties;
   screenEditEnabled: boolean;
+  cameraEditEnabled: boolean;
   activeSubtitle: SubtitleSegment | null;
   subtitleStyle: SubtitleStyle;
   currentTime: number;
   mainVideoRef: RefObject<HTMLVideoElement | null>;
   cameraRef: RefObject<HTMLVideoElement | null>;
   onScreenEditPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    mode: ScreenLayoutDragMode
+  ) => void;
+  onCameraEditPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     mode: ScreenLayoutDragMode
   ) => void;
@@ -43,7 +66,7 @@ export function PreviewContent(props: {
   if (props.item.kind === "image") {
     return (
       <>
-        <img className="studio-screen-video" style={props.screenStyle} src={props.item.url} alt="" />
+        <img className={mediaFrameClassName} style={props.screenStyle} src={props.item.url} alt="" />
         <ScreenEditOverlay
           enabled={props.screenEditEnabled}
           style={props.screenStyle}
@@ -69,7 +92,7 @@ export function PreviewContent(props: {
           <>
             <video
               ref={props.mainVideoRef}
-              className="studio-screen-video"
+              className={mediaFrameClassName}
               style={props.screenStyle}
               src={props.item.url}
               playsInline
@@ -88,17 +111,29 @@ export function PreviewContent(props: {
           </>
         ) : null}
         {showCamera && props.projectCamera ? (
-          <video
-            ref={props.cameraRef}
-            className="studio-camera-video"
-            src={props.projectCamera.url}
-            playsInline
-            muted
-            onCanPlay={props.onMediaReady}
-          />
+          <>
+            <div className={mediaFrameClassName} style={props.cameraStyle ?? undefined}>
+              <video
+                ref={props.cameraRef}
+                className="absolute inset-0 size-full border-0 bg-transparent"
+                style={props.cameraVideoStyle}
+                src={props.projectCamera.url}
+                playsInline
+                muted
+                onCanPlay={props.onMediaReady}
+              />
+            </div>
+            <CameraEditOverlay
+              enabled={props.cameraEditEnabled}
+              style={props.cameraStyle}
+              onPointerDown={props.onCameraEditPointerDown}
+            />
+          </>
         ) : null}
         {props.layoutMode === "camera-only" && !props.projectCamera ? (
-          <div className="studio-video-empty">No camera recording for this project.</div>
+          <div className="grid size-full place-items-center text-sm font-bold text-slate-400">
+            No camera recording for this project.
+          </div>
         ) : null}
         <SubtitleOverlay
           subtitle={props.activeSubtitle}
@@ -114,7 +149,7 @@ export function PreviewContent(props: {
     <>
       <video
         ref={props.mainVideoRef}
-        className="studio-screen-video"
+        className={mediaFrameClassName}
         style={props.screenStyle}
         src={props.item.url}
         playsInline
@@ -157,17 +192,54 @@ function ScreenEditOverlay(props: {
 
   return (
     <div
-      className="studio-screen-video studio-screen-edit-overlay"
+      className={`${mediaFrameClassName} ${editOverlayClassName}`}
       style={props.style}
       aria-hidden="true"
+      data-screen-edit-overlay
       onPointerDown={(event) => props.onPointerDown(event, "move")}
     >
       {screenResizeModes.map((mode) => (
         <span
-          className={`studio-screen-edit-handle studio-screen-edit-handle-${mode.replace(
-            "resize-",
-            ""
-          )}`}
+          className={`${handleBaseClassName} ${handleClassByMode[mode]}`}
+          key={mode}
+          onPointerDown={(event) => props.onPointerDown(event, mode)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CameraEditOverlay(props: {
+  enabled: boolean;
+  style: CSSProperties | null;
+  onPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    mode: ScreenLayoutDragMode
+  ) => void;
+}) {
+  if (!props.enabled || !props.style) {
+    return null;
+  }
+
+  const overlayStyle = {
+    ...props.style,
+    border: undefined,
+    overflow: "visible"
+  } satisfies CSSProperties;
+
+  return (
+    <div
+      className={`${editOverlayClassName} z-[5] ${
+        props.style.borderRadius === "999px" ? "rounded-full" : ""
+      }`}
+      style={overlayStyle}
+      aria-hidden="true"
+      data-camera-edit-overlay
+      onPointerDown={(event) => props.onPointerDown(event, "move")}
+    >
+      {screenResizeModes.map((mode) => (
+        <span
+          className={`${handleBaseClassName} ${handleClassByMode[mode]}`}
           key={mode}
           onPointerDown={(event) => props.onPointerDown(event, mode)}
         />
@@ -202,14 +274,22 @@ function SubtitleOverlay(props: {
 
   return (
     <button
-      className={`subtitle-overlay subtitle-style-${props.style}`}
+      className={`absolute bottom-[6%] left-1/2 z-[4] max-w-[86%] -translate-x-1/2 cursor-text rounded-lg border-0 px-2 py-1 text-center font-extrabold leading-tight text-white shadow-none [text-shadow:0_2px_8px_rgb(0_0_0_/_0.85)] ${
+        props.style === "boxed" ? "bg-black/70 [text-shadow:none]" : "bg-transparent"
+      }`}
       type="button"
       onClick={() => props.onClick(props.subtitle?.id ?? "")}
     >
       {words.map((word, index) => (
         <span
           key={`${word}-${index}`}
-          className={`subtitle-word ${index === activeIndex ? "subtitle-word-active" : ""}`}
+          className={`mx-[0.16em] inline-block rounded transition ${
+            index === activeIndex && props.style === "karaoke"
+              ? "bg-violet-500 px-[0.16em] text-white"
+              : index === activeIndex && props.style === "pop"
+                ? "scale-110 text-sky-400"
+                : ""
+          }`}
         >
           {word}
         </span>

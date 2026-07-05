@@ -30,13 +30,17 @@ export function SubtitlesPanel(props: {
   const selected = props.selectedSubtitle;
 
   return (
-    <div className="tool-stack">
-      <button className="secondary-tool-button" type="button" onClick={props.onAddSubtitle}>
+    <div className="grid min-h-0 content-start gap-4 overflow-auto">
+      <button
+        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-sm font-extrabold text-white hover:bg-white/10"
+        type="button"
+        onClick={props.onAddSubtitle}
+      >
         <Captions size={16} />
         Add subtitle
       </button>
       <button
-        className="secondary-tool-button"
+        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-sm font-extrabold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
         type="button"
         disabled={props.sttStatus === "loading" || props.sttStatus === "transcribing"}
         onClick={props.onGenerateSubtitles}
@@ -46,21 +50,25 @@ export function SubtitlesPanel(props: {
           ? "Loading model…"
           : props.sttStatus === "transcribing"
             ? "Transcribing…"
-            : "Auto-generate (speech-to-text)"}
+          : "Auto-generate (speech-to-text)"}
       </button>
-      <div className="cut-hint">
+      <div className="flex gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm font-semibold leading-5 text-slate-300">
         <WandSparkles size={14} />
         <span>
           Runs an open-source Whisper model on your device. The first run downloads the model
           (~40MB), then transcribes the recording's audio into subtitles.
         </span>
       </div>
-      <div className="layout-control-group">
-        <span>Subtitle style</span>
-        <div className="segmented-control">
+      <div className="grid gap-2">
+        <span className="text-xs font-extrabold text-slate-400">Subtitle style</span>
+        <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/[0.05] p-1">
           {subtitleStyleOptions.map((option) => (
             <button
-              className={props.subtitleStyle === option.id ? "segmented-active" : ""}
+              className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+                props.subtitleStyle === option.id
+                  ? "bg-white text-[#111827]"
+                  : "text-slate-300 hover:bg-white/10 hover:text-white"
+              }`}
               type="button"
               key={option.id}
               onClick={() => props.onStyleChange(option.id)}
@@ -71,15 +79,17 @@ export function SubtitlesPanel(props: {
         </div>
       </div>
       {selected ? (
-        <div className="subtitle-editor">
+        <div className="grid gap-3">
           <textarea
+            className="min-h-24 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-cyan-300"
             value={selected.text}
             onChange={(event) => props.onUpdateSubtitle(selected.id, { text: event.target.value })}
           />
-          <div className="time-input-grid">
-            <label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1 text-xs font-extrabold text-slate-400">
               <span>Start</span>
               <input
+                className="h-9 rounded-md border border-white/10 bg-black/20 px-2 text-white"
                 type="number"
                 min={0}
                 step={0.1}
@@ -89,9 +99,10 @@ export function SubtitlesPanel(props: {
                 }
               />
             </label>
-            <label>
+            <label className="grid gap-1 text-xs font-extrabold text-slate-400">
               <span>End</span>
               <input
+                className="h-9 rounded-md border border-white/10 bg-black/20 px-2 text-white"
                 type="number"
                 min={selected.start + 0.1}
                 step={0.1}
@@ -104,20 +115,24 @@ export function SubtitlesPanel(props: {
           </div>
         </div>
       ) : (
-        <div className="tool-empty">No subtitles</div>
+        <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-sm font-bold text-slate-400">
+          No subtitles
+        </div>
       )}
-      <div className="tool-list">
+      <div className="grid gap-2">
         {props.subtitles.map((subtitle) => (
           <button
-            className={`tool-list-item ${
-              selected?.id === subtitle.id ? "tool-list-item-active" : ""
+            className={`inline-flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold ${
+              selected?.id === subtitle.id
+                ? "border-cyan-300 bg-cyan-400/10 text-white"
+                : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
             }`}
             type="button"
             key={subtitle.id}
             onClick={() => props.onSelectSubtitle(subtitle.id)}
           >
             <Captions size={15} />
-            <span>{subtitle.text}</span>
+            <span className="truncate">{subtitle.text}</span>
           </button>
         ))}
       </div>

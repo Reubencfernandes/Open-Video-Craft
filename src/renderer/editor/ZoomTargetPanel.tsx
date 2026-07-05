@@ -50,10 +50,12 @@ export function ZoomTargetPanel(props: {
   }
 
   return (
-    <div className="zoom-target-panel">
-      <span>Drag the dot to set what the zoom focuses on</span>
+    <div className="grid gap-2">
+      <span className="text-xs font-extrabold text-slate-400">
+        Drag the dot to set what the zoom focuses on
+      </span>
       <button
-        className="zoom-target-preview"
+        className="relative grid aspect-video w-full cursor-crosshair place-items-center overflow-hidden rounded-lg border border-white/10 bg-[#24262b] p-0 disabled:cursor-not-allowed disabled:opacity-55 [&>img]:size-full [&>img]:object-cover [&>video]:size-full [&>video]:object-cover"
         type="button"
         disabled={!effect}
         onPointerDown={handlePointerDown}
@@ -66,13 +68,13 @@ export function ZoomTargetPanel(props: {
         ) : props.item?.kind === "video" ? (
           <video src={props.item.url} muted playsInline />
         ) : (
-          <div className="zoom-target-empty">
+          <div className="grid size-full place-items-center text-slate-400">
             <AudioLines size={24} />
           </div>
         )}
         {effect ? (
           <i
-            className="zoom-target-dot"
+            className="pointer-events-none absolute size-6 rounded-full border-[3px] border-red-400 shadow-[0_0_0_2px_rgb(255_255_255_/_0.82),0_0_18px_rgb(255_93_93_/_0.55)] -translate-x-1/2 -translate-y-1/2"
             style={{
               left: `${effect.targetX}%`,
               top: `${effect.targetY}%`
@@ -80,11 +82,12 @@ export function ZoomTargetPanel(props: {
           />
         ) : null}
       </button>
-      <label className="zoom-scale-control">
+      <label className="grid gap-2 text-xs font-extrabold text-slate-400">
         <span>Scale</span>
-        <div>
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_4rem] items-center gap-2">
           <ZoomIn size={15} />
           <input
+            className="w-full accent-amber-500"
             type="range"
             min={125}
             max={300}
@@ -92,7 +95,9 @@ export function ZoomTargetPanel(props: {
             disabled={!effect}
             onChange={(event) => props.onScaleChange(Number(event.target.value) / 100)}
           />
-          <output>{Math.round((effect?.scale ?? 1.5) * 100)} %</output>
+          <output className="rounded-md bg-white/[0.06] px-2 py-1 text-center text-white tabular-nums">
+            {Math.round((effect?.scale ?? 1.5) * 100)} %
+          </output>
         </div>
       </label>
     </div>

@@ -7,18 +7,25 @@ import {
   ipcMain,
   Menu,
   net,
+  nativeImage,
   protocol,
   screen as electronScreen,
-  session
+  session,
+  shell,
+  systemPreferences
 } from "electron";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { startAutoUpdates } from "./auto-updates";
 import { convertWebmAudioToWav, exportVideo, getFfmpegStatus, remuxWebm } from "./ffmpeg";
 import { ProjectLibrary } from "./project-library";
 import { ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
+  DesktopPermissionKind,
+  DesktopPermissionState,
+  DesktopPermissionStatus,
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
@@ -60,6 +67,11 @@ const projectStore = new ProjectStore({
 const sourceCache = new Map<string, Electron.DesktopCapturerSource>();
 const importedMediaCache = new Map<string, string>();
 const appId = "com.openvideocraft.app";
+const macPermissionSettingsUrls: Record<DesktopPermissionKind, string> = {
+  screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+  camera: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
+  microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+};
 let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
@@ -81,6 +93,24 @@ function getAppIconPath(): string {
   return app.isPackaged
     ? path.join(process.resourcesPath, "app.png")
     : path.join(__dirname, "../../src/renderer/assets/app.png");
+}
+
+function configureAppIdentity(): void {
+  app.setName("Open Video Craft");
+  app.setAppUserModelId(appId);
+
+  if (process.platform === "darwin" && app.dock) {
+    const icon = nativeImage.createFromPath(getAppIconPath());
+
+    if (!icon.isEmpty()) {
+      app.dock.setIcon(icon);
+      app.setAboutPanelOptions({
+        applicationName: "Open Video Craft",
+        applicationVersion: app.getVersion(),
+        iconPath: getAppIconPath()
+      });
+    }
+  }
 }
 
 function getProjectLibrary(): ProjectLibrary {
@@ -370,6 +400,153 @@ function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.D
   return electronScreen.getPrimaryDisplay();
 }
 
+type CapturerSourceType = "screen" | "window";
+
+async function listDesktopCapturerSources(): Promise<Electron.DesktopCapturerSource[]> {
+  const attempts: Array<{
+    label: string;
+    types: CapturerSourceType[];
+    thumbnailSize: Electron.Size;
+  }> = [
+    {
+      label: "screens and windows without thumbnails",
+      types: ["screen", "window"],
+      thumbnailSize: { width: 0, height: 0 }
+    },
+    {
+      label: "screens only without thumbnails",
+      types: ["screen"],
+      thumbnailSize: { width: 0, height: 0 }
+    },
+    {
+      label: "screens only with minimal thumbnails",
+      types: ["screen"],
+      thumbnailSize: { width: 1, height: 1 }
+    }
+  ];
+
+  let lastError: unknown = null;
+  for (const attempt of attempts) {
+    try {
+      return await desktopCapturer.getSources({
+        types: attempt.types,
+        thumbnailSize: attempt.thumbnailSize,
+        fetchWindowIcons: false
+      });
+    } catch (error) {
+      lastError = error;
+      console.warn(`Failed to list ${attempt.label}.`, error);
+    }
+  }
+
+  const detail = lastError instanceof Error ? lastError.message : String(lastError);
+  if (process.platform === "darwin") {
+    throw new Error(
+      `Failed to get screen sources. Allow screen recording for ${app.getName()} in macOS System Settings > Privacy & Security > Screen & System Audio Recording, then restart the app. ${detail}`
+    );
+  }
+
+  throw new Error(`Failed to get screen sources. ${detail}`);
+}
+
+function getPermissionPlatform(): DesktopPermissionStatus["platform"] {
+  if (process.platform === "darwin" || process.platform === "win32" || process.platform === "linux") {
+    return process.platform;
+  }
+
+  return "other";
+}
+
+function getDesktopPermissionStatus(): DesktopPermissionStatus {
+  if (process.platform !== "darwin") {
+    return {
+      platform: getPermissionPlatform(),
+      canDragAppBundle: false,
+      screen: "unavailable",
+      camera: "unavailable",
+      microphone: "unavailable"
+    };
+  }
+
+  return {
+    platform: "darwin",
+    canDragAppBundle: getAppBundlePath() !== null,
+    screen: getMacPermissionState("screen"),
+    camera: getMacPermissionState("camera"),
+    microphone: getMacPermissionState("microphone")
+  };
+}
+
+function getMacPermissionState(kind: DesktopPermissionKind): DesktopPermissionState {
+  try {
+    return systemPreferences.getMediaAccessStatus(kind);
+  } catch (error) {
+    console.warn(`Failed to read ${kind} permission status.`, error);
+    return "unknown";
+  }
+}
+
+function assertDesktopPermissionKind(value: unknown): DesktopPermissionKind {
+  if (value === "screen" || value === "camera" || value === "microphone") {
+    return value;
+  }
+
+  throw new Error("Unknown permission type.");
+}
+
+function assertMediaPermissionKind(
+  value: unknown
+): Extract<DesktopPermissionKind, "camera" | "microphone"> {
+  if (value === "camera" || value === "microphone") {
+    return value;
+  }
+
+  throw new Error("Only camera and microphone permissions can be requested directly.");
+}
+
+async function openPermissionSettings(kind: DesktopPermissionKind): Promise<boolean> {
+  if (process.platform !== "darwin") {
+    return false;
+  }
+
+  await shell.openExternal(macPermissionSettingsUrls[kind]);
+  return true;
+}
+
+async function requestMediaPermission(
+  kind: Extract<DesktopPermissionKind, "camera" | "microphone">
+): Promise<boolean> {
+  if (process.platform !== "darwin") {
+    return false;
+  }
+
+  return systemPreferences.askForMediaAccess(kind);
+}
+
+function getAppBundlePath(): string | null {
+  if (process.platform !== "darwin" || !app.isPackaged) {
+    return null;
+  }
+
+  const contentsMarker = `${path.sep}Contents${path.sep}MacOS${path.sep}`;
+  const markerIndex = process.execPath.indexOf(contentsMarker);
+  return markerIndex > 0 ? process.execPath.slice(0, markerIndex) : null;
+}
+
+function startAppBundleDrag(event: Electron.IpcMainEvent): void {
+  const appBundlePath = getAppBundlePath();
+
+  if (!appBundlePath) {
+    return;
+  }
+
+  const icon = nativeImage.createFromPath(getAppIconPath());
+  event.sender.startDrag({
+    file: appBundlePath,
+    icon: icon.isEmpty() ? getAppIconPath() : icon
+  });
+}
+
 function registerMediaProtocol(): void {
   protocol.handle("ovc-media", async (request) => {
     try {
@@ -421,14 +598,7 @@ function registerIpc(): void {
     // for every window, which floods the log with "Failed to start capture"
     // (E_INVALIDARG / -2147024809) for windows it cannot grab. The recorder UI
     // never renders these, so we substitute a lightweight fallback thumbnail.
-    const sources = await desktopCapturer.getSources({
-      types: ["screen", "window"],
-      thumbnailSize: {
-        width: 0,
-        height: 0
-      },
-      fetchWindowIcons: false
-    });
+    const sources = await listDesktopCapturerSources();
 
     sourceCache.clear();
     return sources.map((source) => {
@@ -443,6 +613,22 @@ function registerIpc(): void {
         appIcon: null
       };
     });
+  });
+
+  ipcMain.handle("permissions:get-status", (): DesktopPermissionStatus => {
+    return getDesktopPermissionStatus();
+  });
+
+  ipcMain.handle("permissions:open-settings", async (_event, kind: unknown): Promise<boolean> => {
+    return openPermissionSettings(assertDesktopPermissionKind(kind));
+  });
+
+  ipcMain.handle("permissions:request-media", async (_event, kind: unknown): Promise<boolean> => {
+    return requestMediaPermission(assertMediaPermissionKind(kind));
+  });
+
+  ipcMain.on("permissions:start-app-drag", (event): void => {
+    startAppBundleDrag(event);
   });
 
   ipcMain.handle("capture:select-display-source", (_event, sourceId: string): boolean => {
@@ -917,7 +1103,7 @@ function createFallbackThumbnail(label: string): string {
 }
 
 app.whenReady().then(async () => {
-  app.setAppUserModelId(appId);
+  configureAppIdentity();
   Menu.setApplicationMenu(null);
   registerPermissions();
   registerMediaProtocol();
@@ -926,6 +1112,7 @@ app.whenReady().then(async () => {
     recorderWindow?.webContents.send("recording:global-stop");
   });
   await createWindow();
+  startAutoUpdates();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

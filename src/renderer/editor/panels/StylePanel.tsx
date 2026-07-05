@@ -35,6 +35,19 @@ const backgroundCategories: Array<{
   }
 ];
 
+const swatchClasses: Record<BackgroundStyle, string> = {
+  "animated-1": "bg-[linear-gradient(120deg,#22d3ee,#6d28d9,#db2777)]",
+  "animated-2": "bg-[linear-gradient(120deg,#f59e0b,#ef4444,#7c3aed)]",
+  "animated-3": "bg-[linear-gradient(120deg,#0ea5e9,#14b8a6,#1e3a8a)]",
+  "real-world-1": "bg-[linear-gradient(135deg,#3b82f6,#0f172a)]",
+  "real-world-2": "bg-[linear-gradient(135deg,#64748b,#111827)]",
+  "real-world-3": "bg-[linear-gradient(135deg,#14b8a6,#052e16)]",
+  "gradient-1": "bg-[linear-gradient(135deg,#8b5cf6,#ec4899)]",
+  "gradient-2": "bg-[linear-gradient(135deg,#06b6d4,#14b8a6)]",
+  "gradient-3": "bg-[linear-gradient(135deg,#f59e0b,#7c2d12)]",
+  custom: "bg-[linear-gradient(135deg,#111827,#334155)]"
+};
+
 /**
  * "Style" tool: pick the composition background (built-in swatches or a custom
  * uploaded image) and the corner rounding applied to the video frame.
@@ -49,11 +62,15 @@ export function StylePanel(props: {
   onCornerStyleChange: (style: VideoCornerStyle) => void;
 }) {
   return (
-    <div className="tool-stack">
-      <div className="media-tabs">
+    <div className="grid min-h-0 content-start gap-4 overflow-auto">
+      <div className="flex gap-2">
         {backgroundCategories.map((category) => (
           <button
-            className={props.activeCategory === category.id ? "media-tab-active" : ""}
+            className={`min-w-0 flex-1 rounded-full px-3 py-2 text-sm font-bold ${
+              props.activeCategory === category.id
+                ? "bg-white/[0.08] text-white"
+                : "text-slate-400 hover:bg-white/[0.05] hover:text-white"
+            }`}
             type="button"
             key={category.id}
             onClick={() => props.onCategoryChange(category.id)}
@@ -62,26 +79,30 @@ export function StylePanel(props: {
           </button>
         ))}
       </div>
-      <div className="style-grid">
+      <div className="grid grid-cols-2 gap-3">
         {backgroundCategories
           .find((category) => category.id === props.activeCategory)
           ?.options.map((option) => (
             <button
-              className={`style-swatch style-swatch-${option.id} ${
-                props.backgroundStyle === option.id ? "style-swatch-active" : ""
+              className={`grid gap-2 rounded-lg border p-2 text-left text-xs font-extrabold ${
+                props.backgroundStyle === option.id
+                  ? "border-cyan-300 bg-cyan-400/10 text-white"
+                  : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
               }`}
               type="button"
               key={option.id}
               onClick={() => props.onBackgroundStyleChange(option.id)}
             >
-              <span />
+              <span className={`block h-14 rounded-md ${swatchClasses[option.id]}`} />
               <strong>{option.label}</strong>
             </button>
           ))}
       </div>
       <button
-        className={`secondary-tool-button ${
-          props.backgroundStyle === "custom" ? "tool-option-active" : ""
+        className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-extrabold ${
+          props.backgroundStyle === "custom"
+            ? "border-cyan-300 bg-cyan-400/10 text-white"
+            : "border-white/10 bg-white/[0.06] text-white hover:bg-white/10"
         }`}
         type="button"
         onClick={props.onUploadCustomBackground}
@@ -89,12 +110,16 @@ export function StylePanel(props: {
         <Upload size={16} />
         Upload custom background
       </button>
-      <div className="layout-control-group">
-        <span>Video corners</span>
-        <div className="segmented-control">
+      <div className="grid gap-2">
+        <span className="text-xs font-extrabold text-slate-400">Video corners</span>
+        <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
           {(["flat", "soft", "round"] as VideoCornerStyle[]).map((shape) => (
             <button
-              className={props.videoCornerStyle === shape ? "segmented-active" : ""}
+              className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+                props.videoCornerStyle === shape
+                  ? "bg-white text-[#111827]"
+                  : "text-slate-300 hover:bg-white/10 hover:text-white"
+              }`}
               type="button"
               key={shape}
               onClick={() => props.onCornerStyleChange(shape)}

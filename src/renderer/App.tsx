@@ -1,22 +1,39 @@
 import { AlertTriangle, Film, FolderOpen, ScreenShare, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { ProjectLibraryEntry } from "../shared/types";
+import type {
+  DesktopPermissionKind,
+  DesktopPermissionStatus,
+  ProjectLibraryEntry
+} from "../shared/types";
 import appLogo from "./assets/app.png";
 import { cx } from "./classNames";
+import { PermissionOnboarding } from "./PermissionOnboarding";
 
 type LaunchAction = "record" | "edit" | "open-existing" | "remove-recent";
 
 export function App() {
   const [busyAction, setBusyAction] = useState<LaunchAction | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<DesktopPermissionStatus | null>(null);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [recentProjects, setRecentProjects] = useState<ProjectLibraryEntry[]>([]);
   const [recentProjectsLoading, setRecentProjectsLoading] = useState(true);
 
   useEffect(() => {
     void loadRecentProjects();
+    void loadPermissionsStatus();
   }, []);
 
   async function openRecorder() {
+    const status = await loadPermissionsStatus();
+
+    if (requiresScreenPermission(status)) {
+      setErrorMessage(
+        "Screen Recording permission is required before Open Video Craft can list screen sources."
+      );
+      return;
+    }
+
     await runLaunchAction("record", () =>
       window.openVideoCraft.windows.openRecorderController()
     );
@@ -61,6 +78,40 @@ export function App() {
     }
   }
 
+  async function loadPermissionsStatus(): Promise<DesktopPermissionStatus | null> {
+    setPermissionsLoading(true);
+    try {
+      const status = await window.openVideoCraft.permissions.getStatus();
+      setPermissionStatus(status);
+      return status;
+    } catch (error) {
+      console.warn("Failed to read desktop permissions.", error);
+      return null;
+    } finally {
+      setPermissionsLoading(false);
+    }
+  }
+
+  async function openPermissionSettings(kind: DesktopPermissionKind) {
+    setErrorMessage(null);
+    try {
+      await window.openVideoCraft.permissions.openSettings(kind);
+      await loadPermissionsStatus();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function requestMediaPermission(kind: Extract<DesktopPermissionKind, "camera" | "microphone">) {
+    setErrorMessage(null);
+    try {
+      await window.openVideoCraft.permissions.requestMedia(kind);
+      await loadPermissionsStatus();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function runLaunchAction(
     action: LaunchAction,
     callback: () => Promise<boolean>
@@ -100,6 +151,15 @@ export function App() {
             {errorMessage}
           </div>
         ) : null}
+
+        <PermissionOnboarding
+          loading={permissionsLoading}
+          status={permissionStatus}
+          onOpenSettings={openPermissionSettings}
+          onRefresh={() => void loadPermissionsStatus()}
+          onRequestMedia={requestMediaPermission}
+          onStartAppDrag={() => window.openVideoCraft.permissions.startAppDrag()}
+        />
 
         <div className="grid grid-cols-3 gap-4">
           <button
@@ -218,6 +278,13 @@ export function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function requiresScreenPermission(status: DesktopPermissionStatus | null): boolean {
+  return (
+    status?.platform === "darwin" &&
+    (status.screen === "denied" || status.screen === "restricted")
   );
 }
 

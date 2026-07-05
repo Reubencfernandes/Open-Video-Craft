@@ -35,6 +35,10 @@ import type {
  */
 export function Timeline(props: {
   bodyRef: RefObject<HTMLDivElement | null>;
+  onResizePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onResizePointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onResizePointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
+  onResizeDoubleClick: () => void;
   activeTool: EditorTool;
   playing: boolean;
   scrubbing: boolean;
@@ -79,7 +83,21 @@ export function Timeline(props: {
   onContextMenuDelete: () => void;
 }) {
   return (
-    <section className="grid min-w-0 content-start gap-[0.45rem] border-t border-white/[0.08] bg-[#141518] px-[1.1rem] pb-4 pt-3 [--timeline-body-pad:0.7rem] [--timeline-label-width:132px] [--timeline-track-gap:0.85rem]">
+    <section className="relative grid h-full min-h-0 min-w-0 content-start gap-[0.45rem] overflow-auto border-t border-white/[0.08] bg-[#141518] px-[1.1rem] pb-4 pt-4 [--timeline-body-pad:0.7rem] [--timeline-label-width:132px] [--timeline-track-gap:0.85rem]">
+      <button
+        className="group absolute left-0 right-0 top-0 z-30 grid h-7 cursor-row-resize place-items-center border-0 bg-transparent p-0"
+        type="button"
+        aria-label="Resize timeline"
+        title="Drag to resize timeline"
+        onPointerDown={props.onResizePointerDown}
+        onPointerMove={props.onResizePointerMove}
+        onPointerUp={props.onResizePointerUp}
+        onPointerCancel={props.onResizePointerUp}
+        onDoubleClick={props.onResizeDoubleClick}
+      >
+        <span className="h-1.5 w-20 rounded-full bg-cyan-300/80 shadow-[0_0_18px_rgb(34_211_238_/_0.35)] transition group-hover:bg-cyan-200" />
+      </button>
+
       <TimelineToolbar
         playing={props.playing}
         currentFrame={props.currentFrame}

@@ -1,24 +1,5 @@
-import {
-  CheckCircle2,
-  CircleStop,
-  Eye,
-  EyeOff,
-  FolderOpen,
-  Mic,
-  MicOff,
-  Minimize2,
-  Pause,
-  Play,
-  Video,
-  VideoOff,
-  X
-} from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import type {
-  DeviceSelection,
-  ProjectDevices,
   ProjectSource,
   ProjectView,
   RecordingTrack,
@@ -26,39 +7,28 @@ import type {
 } from "../shared/types";
 import {
   createDisplayCaptureOptions,
-  createMediaRecorderOptions,
-  recordingRuntime,
-  type RecorderKind
+  recordingRuntime
 } from "./recording-runtime";
-import appLogo from "./assets/app.png";
-import { cx } from "./classNames";
-
-type FloatingState =
-  | "ready"
-  | "preparing"
-  | "countdown"
-  | "recording"
-  | "paused"
-  | "stopping"
-  | "processing"
-  | "complete"
-  | "failed";
-
-type DeviceOption = {
-  deviceId: string;
-  label: string;
-};
-
-type RecorderMap = Partial<Record<RecordingTrack, MediaRecorder>>;
-type WriteQueues = Partial<Record<RecordingTrack, Promise<unknown>>>;
-
-const videoMimeCandidates = [
-  "video/webm;codecs=vp9",
-  "video/webm;codecs=vp8",
-  "video/webm"
-];
-
-const audioMimeCandidates = ["audio/webm;codecs=opus", "audio/webm"];
+import { RecorderControllerView } from "./recorder/RecorderControllerView";
+import {
+  audioMimeCandidates,
+  createProjectDevices,
+  createRecorders,
+  getDeviceLabel,
+  getOptionalCameraStream,
+  getOptionalMicStream,
+  getSupportedMimeType,
+  runCountdown,
+  stopRecorder,
+  toErrorMessage,
+  videoMimeCandidates
+} from "./recorder/recorder-utils";
+import type {
+  DeviceOption,
+  FloatingState,
+  RecorderMap,
+  WriteQueues
+} from "./recorder/types";
 
 export function RecorderController() {
   const [sources, setSources] = useState<SourceSummary[]>([]);
@@ -573,489 +543,43 @@ export function RecorderController() {
     return activeRecordedMsRef.current + Date.now() - segmentStartedAt;
   }
 
-  if (compact) {
-    return (
-      <main className="floating-recorder-root floating-recorder-root-compact grid size-full place-items-center bg-transparent">
-        <div className="floating-compact-pill app-drag inline-flex h-full w-full items-center justify-between gap-3 rounded-full border border-white/15 bg-slate-950/95 py-0 pl-4 pr-2 font-bold text-white shadow-2xl">
-          <button
-            className="floating-compact-restore app-no-drag inline-flex min-w-0 flex-1 items-center gap-3 border-0 bg-transparent font-bold text-white"
-            type="button"
-            onClick={() => void setCompactMode(false)}
-            title="Restore recorder"
-          >
-            <span
-              className={cx(
-                "floating-compact-dot size-3.5 flex-none rounded-full bg-cyan-500 shadow-[0_0_0_4px_rgb(6_182_212_/_0.14)]",
-                (state === "recording" || state === "paused") &&
-                  "floating-compact-dot-recording bg-red-500 shadow-[0_0_0_4px_rgb(248_60_72_/_0.18)]"
-              )}
-            />
-            <span className="truncate">{state === "paused" ? "Paused" : formatDuration(elapsedMs)}</span>
-          </button>
-
-          {state === "recording" || state === "paused" ? (
-            <div className="floating-compact-actions app-no-drag inline-flex flex-none items-center gap-1.5">
-              <button
-                className="grid size-9 place-items-center rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/15"
-                type="button"
-                onClick={state === "paused" ? resumeRecording : pauseRecording}
-                title={state === "paused" ? "Resume recording" : "Pause recording"}
-              >
-                {state === "paused" ? <Play size={17} /> : <Pause size={17} />}
-              </button>
-              <button
-                className="floating-compact-stop grid size-9 place-items-center rounded-full border border-red-300/30 bg-red-600 text-white hover:bg-red-700"
-                type="button"
-                onClick={() => void stopRecording()}
-                title="Stop recording"
-              >
-                <CircleStop size={18} />
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="floating-recorder-root grid size-full place-items-center bg-transparent">
-      <section className="floating-recorder-card flex h-[460px] w-[430px] flex-col overflow-hidden rounded-[9px] border border-white/15 bg-[#121317] text-white shadow-[0_24px_62px_rgb(0_0_0_/_0.42)]">
-        <div className="floating-titlebar app-drag flex h-12 flex-none items-center justify-between border-b border-white/[0.07] px-4">
-          <div className="floating-title inline-flex min-w-0 items-center gap-2.5 text-[0.82rem] font-extrabold">
-            <img src={appLogo} alt="" />
-            <span>Open Video Craft</span>
-          </div>
-          <div className="floating-title-actions app-no-drag inline-flex items-center gap-1">
-            <button
-              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
-              type="button"
-              title={borderOverlayEnabled ? "Hide screen border" : "Show screen border"}
-              onClick={() => setBorderOverlayEnabled((value) => !value)}
-            >
-              {borderOverlayEnabled ? <Eye size={19} /> : <EyeOff size={19} />}
-            </button>
-            <button
-              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
-              type="button"
-              title="Collapse"
-              onClick={() => void setCompactMode(true)}
-            >
-              <Minimize2 size={20} />
-            </button>
-            <button
-              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
-              type="button"
-              title="Close"
-              onClick={() => void window.openVideoCraft.windows.closeCurrent()}
-            >
-              <X size={22} />
-            </button>
-          </div>
-        </div>
-
-        {errorMessage ? (
-          <div className="floating-error relative m-4 rounded-lg border border-red-400/35 bg-red-950/70 p-4 pr-12 text-red-50">
-            <button
-              className="floating-error-close absolute right-3 top-3 grid size-8 place-items-center rounded-md border-0 bg-transparent text-white hover:bg-white/10"
-              type="button"
-              onClick={() => setErrorMessage(null)}
-              title="Dismiss"
-            >
-              <X size={24} />
-            </button>
-            <div className="floating-error-title mb-2 text-base font-bold">Error</div>
-            <p className="m-0 text-sm font-semibold leading-5">{errorMessage}</p>
-          </div>
-        ) : null}
-
-        <div className="floating-record-area relative grid min-h-0 flex-1 place-items-center px-4 pb-6 pt-4">
-          {state === "complete" ? (
-            <div className="floating-complete absolute top-4 grid justify-items-center gap-1 text-emerald-300">
-              <CheckCircle2 size={28} />
-              <span className="text-sm font-extrabold">Saved</span>
-              <small
-                className="max-w-[360px] break-all text-center text-xs leading-4 text-slate-400"
-                title={project?.rootPath ?? ""}
-              >
-                {project?.rootPath ?? ""}
-              </small>
-            </div>
-          ) : null}
-
-          <button
-            className={cx(
-              "floating-record-button grid size-[76px] place-items-center rounded-full border-0 bg-rose-600 text-3xl font-extrabold text-white transition hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70",
-              (state === "recording" || state === "paused") &&
-                "floating-recording bg-red-700 hover:bg-red-800"
-            )}
-            type="button"
-            disabled={
-              state === "preparing" ||
-              state === "countdown" ||
-              state === "processing" ||
-              state === "stopping"
-            }
-            onClick={() => {
-              if (state === "recording" || state === "paused") {
-                void stopRecording();
-              } else {
-                void startRecording();
-              }
-            }}
-            title={state === "recording" || state === "paused" ? "Stop recording" : "Start recording"}
-          >
-            {state === "countdown" ? countdown : state === "recording" || state === "paused" ? <CircleStop size={34} /> : null}
-          </button>
-
-          {state === "recording" || state === "paused" ? (
-            <div className="floating-record-controls absolute bottom-14 inline-flex items-center gap-2">
-              <button
-                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 text-sm font-bold text-white hover:bg-white/15"
-                type="button"
-                onClick={state === "paused" ? resumeRecording : pauseRecording}
-              >
-                {state === "paused" ? <Play size={17} /> : <Pause size={17} />}
-                <span>{state === "paused" ? "Resume" : "Pause"}</span>
-              </button>
-              <button
-                className="floating-record-cancel inline-flex h-9 items-center gap-2 rounded-full border border-red-300/30 bg-red-500/15 px-4 text-sm font-bold text-red-100 hover:bg-red-500/25"
-                type="button"
-                onClick={() => void cancelRecording()}
-              >
-                <X size={17} />
-                <span>Cancel</span>
-              </button>
-              <button
-                className="floating-record-done inline-flex h-9 items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-500/15 px-4 text-sm font-bold text-emerald-100 hover:bg-emerald-500/25"
-                type="button"
-                onClick={() => void stopRecording()}
-              >
-                <CheckCircle2 size={17} />
-                <span>Done</span>
-              </button>
-            </div>
-          ) : null}
-
-          <div className="floating-status absolute bottom-5 max-w-[86%] truncate text-center text-xs font-bold text-slate-400">
-            {state === "recording"
-              ? `${formatDuration(elapsedMs)} - recording`
-              : state === "paused"
-                ? `${formatDuration(elapsedMs)} - paused`
-              : state === "countdown"
-                ? "Starting"
-                : state === "processing"
-                  ? "Processing audio"
-                  : state === "preparing"
-                    ? "Preparing"
-                    : selectedSource
-                      ? `Recording screen: ${selectedSource.name}`
-                      : "No screen found"}
-          </div>
-        </div>
-
-        <footer className="floating-footer grid grid-cols-3 gap-2 border-t border-white/[0.07] p-3">
-          <FloatingDeviceControl
-            enabled={micEnabled}
-            enabledIcon={<Mic size={25} />}
-            disabledIcon={<MicOff size={25} />}
-            enabledLabel="Mic on"
-            disabledLabel="Mic off"
-            options={microphones}
-            value={selectedMicId}
-            disabled={!canStart}
-            onToggle={() =>
-              setMicEnabled((enabled) => (microphones.length > 0 ? !enabled : false))
-            }
-            onValueChange={setSelectedMicId}
-          />
-
-          <button
-            className="floating-footer-control grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45"
-            type="button"
-            onClick={() => void chooseFolder()}
-            disabled={!canStart}
-            title={baseDirectory ?? "Choose project folder"}
-          >
-            <FolderOpen size={25} />
-            <span>{baseDirectory ? "Project set" : "Project"}</span>
-          </button>
-
-          <FloatingDeviceControl
-            enabled={cameraEnabled}
-            enabledIcon={<Video size={25} />}
-            disabledIcon={<VideoOff size={25} />}
-            enabledLabel={truncateLabel(selectedCameraLabel)}
-            disabledLabel="Camera off"
-            options={cameras}
-            value={selectedCameraId}
-            disabled={!canStart}
-            onToggle={() =>
-              setCameraEnabled((enabled) => (cameras.length > 0 ? !enabled : false))
-            }
-            onValueChange={setSelectedCameraId}
-          />
-        </footer>
-      </section>
-    </main>
-  );
-}
-
-function FloatingDeviceControl(props: {
-  enabled: boolean;
-  enabledIcon: ReactNode;
-  disabledIcon: ReactNode;
-  enabledLabel: string;
-  disabledLabel: string;
-  options: DeviceOption[];
-  value: string | null;
-  disabled: boolean;
-  onToggle: () => void;
-  onValueChange: (value: string | null) => void;
-}) {
-  return (
-    <div className="floating-footer-control floating-device-control grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200">
-      <motion.button
-        className="floating-device-toggle grid w-full min-w-0 place-items-center gap-1 border-0 bg-transparent text-inherit disabled:cursor-not-allowed disabled:opacity-45"
-        type="button"
-        onClick={props.onToggle}
-        disabled={props.disabled}
-        whileTap={props.disabled ? undefined : { scale: 0.88 }}
-        transition={{ type: "spring", stiffness: 520, damping: 28 }}
-      >
-        <span className="floating-device-icon inline-flex min-h-7 items-center justify-center text-cyan-300">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.span
-              key={props.enabled ? "on" : "off"}
-              initial={{ opacity: 0, scale: 0.5, rotate: -18 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0 }}
-              exit={{ opacity: 0, scale: 0.5, rotate: 18 }}
-              transition={{ type: "spring", stiffness: 520, damping: 26 }}
-              style={{ display: "inline-flex" }}
-            >
-              {props.enabled ? props.enabledIcon : props.disabledIcon}
-            </motion.span>
-          </AnimatePresence>
-        </span>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={props.enabled ? props.enabledLabel : props.disabledLabel}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.16 }}
-          >
-            {props.enabled ? props.enabledLabel : props.disabledLabel}
-          </motion.span>
-        </AnimatePresence>
-      </motion.button>
-      {props.enabled && props.options.length > 1 ? (
-        <select
-          className="floating-device-select h-7 w-full min-w-0 rounded-md border border-white/10 bg-slate-950/80 px-1.5 text-[0.65rem] text-slate-100"
-          value={props.value ?? ""}
-          onChange={(event) => props.onValueChange(event.target.value || null)}
-          disabled={props.disabled}
-        >
-          {props.options.map((option) => (
-            <option key={option.deviceId} value={option.deviceId}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      ) : null}
-    </div>
-  );
-}
-
-async function runCountdown(setCountdown: (value: number) => void): Promise<void> {
-  for (let value = 3; value >= 1; value -= 1) {
-    setCountdown(value);
-    await delay(1000);
-  }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-async function getOptionalCameraStream(
-  enabled: boolean,
-  deviceId: string | null
-): Promise<MediaStream | null> {
-  if (!enabled || !deviceId) {
-    return null;
-  }
-
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      video: {
-        deviceId: {
-          exact: deviceId
-        }
-      },
-      audio: false
-    });
-  } catch {
-    return null;
-  }
-}
-
-async function getOptionalMicStream(
-  enabled: boolean,
-  deviceId: string | null
-): Promise<MediaStream | null> {
-  if (!enabled || !deviceId) {
-    return null;
-  }
-
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      video: false,
-      audio: {
-        deviceId: {
-          exact: deviceId
-        }
+    <RecorderControllerView
+      compact={compact}
+      state={state}
+      countdown={countdown}
+      elapsedMs={elapsedMs}
+      errorMessage={errorMessage}
+      projectRootPath={project?.rootPath ?? null}
+      borderOverlayEnabled={borderOverlayEnabled}
+      selectedSourceName={selectedSource?.name ?? null}
+      baseDirectory={baseDirectory}
+      microphones={microphones}
+      cameras={cameras}
+      selectedMicId={selectedMicId}
+      selectedCameraId={selectedCameraId}
+      selectedCameraLabel={selectedCameraLabel}
+      micEnabled={micEnabled}
+      cameraEnabled={cameraEnabled}
+      canStart={canStart}
+      onSetCompactMode={(nextCompact) => void setCompactMode(nextCompact)}
+      onDismissError={() => setErrorMessage(null)}
+      onToggleBorderOverlay={() => setBorderOverlayEnabled((value) => !value)}
+      onClose={() => void window.openVideoCraft.windows.closeCurrent()}
+      onStartRecording={() => void startRecording()}
+      onStopRecording={() => void stopRecording()}
+      onCancelRecording={() => void cancelRecording()}
+      onPauseRecording={pauseRecording}
+      onResumeRecording={resumeRecording}
+      onChooseFolder={() => void chooseFolder()}
+      onToggleMic={() =>
+        setMicEnabled((enabled) => (microphones.length > 0 ? !enabled : false))
       }
-    });
-  } catch {
-    return null;
-  }
-}
-
-function createRecorders(input: {
-  screenStream: MediaStream;
-  cameraStream: MediaStream | null;
-  micStream: MediaStream | null;
-  screenMimeType: string;
-  cameraMimeType: string | null;
-  micMimeType: string | null;
-  onChunk: (track: RecordingTrack, blob: Blob) => void;
-  onError: (error: unknown) => void;
-}): RecorderMap {
-  const recorders: RecorderMap = {
-    screen: createRecorder(
-      input.screenStream,
-      input.screenMimeType,
-      (blob) => input.onChunk("screen", blob),
-      "video"
-    )
-  };
-
-  if (input.cameraStream && input.cameraMimeType) {
-    recorders.camera = createRecorder(
-      input.cameraStream,
-      input.cameraMimeType,
-      (blob) => input.onChunk("camera", blob),
-      "video"
-    );
-  }
-
-  if (input.micStream && input.micMimeType) {
-    recorders.mic = createRecorder(
-      input.micStream,
-      input.micMimeType,
-      (blob) => input.onChunk("mic", blob),
-      "audio"
-    );
-  }
-
-  Object.values(recorders).forEach((recorder) => {
-    if (recorder) {
-      recorder.onerror = (event) => input.onError(event);
-    }
-  });
-
-  return recorders;
-}
-
-function createRecorder(
-  stream: MediaStream,
-  mimeType: string,
-  onChunk: (blob: Blob) => void,
-  kind: RecorderKind
-): MediaRecorder {
-  const recorder = new MediaRecorder(stream, createMediaRecorderOptions(kind, mimeType));
-  recorder.ondataavailable = (event) => onChunk(event.data);
-  return recorder;
-}
-
-function stopRecorder(recorder: MediaRecorder): Promise<void> {
-  if (recorder.state === "inactive") {
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    recorder.addEventListener("stop", () => resolve(), { once: true });
-    recorder.addEventListener(
-      "error",
-      (event) => reject(new Error(`Recorder failed: ${event.type}`)),
-      { once: true }
-    );
-    recorder.stop();
-  });
-}
-
-function getSupportedMimeType(candidates: string[]): string {
-  const supported = candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate));
-
-  if (!supported) {
-    throw new Error("This version of Chromium cannot record WebM media.");
-  }
-
-  return supported;
-}
-
-function createProjectDevices(input: {
-  microphones: DeviceOption[];
-  cameras: DeviceOption[];
-  micEnabled: boolean;
-  cameraEnabled: boolean;
-  selectedMicId: string | null;
-  selectedCameraId: string | null;
-}): ProjectDevices {
-  return {
-    microphone: createDeviceSelection(
-      input.micEnabled,
-      input.selectedMicId,
-      input.microphones
-    ),
-    camera: createDeviceSelection(input.cameraEnabled, input.selectedCameraId, input.cameras)
-  };
-}
-
-function createDeviceSelection(
-  enabled: boolean,
-  deviceId: string | null,
-  options: DeviceOption[]
-): DeviceSelection {
-  const match = options.find((option) => option.deviceId === deviceId);
-
-  return {
-    enabled,
-    deviceId: enabled ? deviceId : null,
-    label: enabled ? match?.label ?? null : null
-  };
-}
-
-function getDeviceLabel(options: DeviceOption[], value: string | null, fallback: string): string {
-  return options.find((option) => option.deviceId === value)?.label ?? fallback;
-}
-
-function formatDuration(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
-}
-
-function truncateLabel(value: string): string {
-  return value.length > 14 ? `${value.slice(0, 13)}...` : value;
-}
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
+      onToggleCamera={() =>
+        setCameraEnabled((enabled) => (cameras.length > 0 ? !enabled : false))
+      }
+      onMicChange={setSelectedMicId}
+      onCameraChange={setSelectedCameraId}
+    />
+  );
 }

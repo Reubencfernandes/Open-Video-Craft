@@ -11,23 +11,18 @@
  *   - PreviewContent  the media shown inside the preview frame
  *   - ExportDialog    the export modal
  *
- * Pure timeline/zoom/media math lives in ./editor/{timeline,zoom,media}-utils.
+ * Pure math, storage, and larger render sections live in focused modules under
+ * ./editor so individual files stay easier to reason about.
  */
-import { Download, Home, Save } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
-  CSSProperties,
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent
 } from "react";
 import type {
-  ExportResolution,
-  ExportVideoFormat,
-  ExportVideoRequest,
   ProjectView
 } from "../shared/types";
-import appLogo from "./assets/app.png";
 import {
   constrainZoomEnd,
   constrainZoomMove,
@@ -35,32 +30,25 @@ import {
   placeZoomInFirstGap,
   zoomMinDurationSeconds
 } from "./zoom-timing";
-import { ToolPanelHeader } from "./editor/controls";
 import { ExportDialog } from "./editor/ExportDialog";
-import { PreviewContent } from "./editor/PreviewContent";
-import { Timeline } from "./editor/Timeline";
-import { editorTools } from "./editor/tools";
-import { AudioPanel } from "./editor/panels/AudioPanel";
-import { CutPanel } from "./editor/panels/CutPanel";
-import { LayoutPanel } from "./editor/panels/LayoutPanel";
-import { MediaPanel } from "./editor/panels/MediaPanel";
-import { StylePanel } from "./editor/panels/StylePanel";
-import { SubtitlesPanel } from "./editor/panels/SubtitlesPanel";
-import { ZoomPanel } from "./editor/panels/ZoomPanel";
-import {
-  canDriftSeek,
-  createProjectMedia,
-  decodeAudioTo16kMono,
-  toEditorMediaItem
-} from "./editor/media-utils";
+import { EditorPreviewPanel } from "./editor/EditorPreviewPanel";
+import { EditorTimelineSection } from "./editor/EditorTimelineSection";
+import { EditorToolPanel } from "./editor/EditorToolPanel";
+import { EditorTopbar } from "./editor/EditorTopbar";
+import { ToolRail } from "./editor/ToolRail";
+import { decodeAudioTo16kMono } from "./editor/media-utils";
+import { getCameraFrameFromPreset } from "./editor/layout-geometry";
+import { useEditorDerivedData } from "./editor/useEditorDerivedData";
+import { useEditorExport } from "./editor/useEditorExport";
+import { useEditorMediaActions } from "./editor/useEditorMediaActions";
+import { useEditorPlayback } from "./editor/useEditorPlayback";
+import { useEditorPersistence } from "./editor/useEditorPersistence";
+import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
+import { useTimelineViewport } from "./editor/useTimelineViewport";
 import {
   areTimelineSegmentsEqual,
-  calculateTimelineDuration,
   canSplitTimelineSegment,
   canSplitTimelineSegmentAt,
-  createAudioTimelineTracks,
-  createClipPlaybackKey,
-  createTimelineMediaClips,
   findTimelineSegmentAtTime,
   getTimelineMediaDuration,
   getTimelineTrackKind,
@@ -69,25 +57,24 @@ import {
   syncTimelineSegments,
   trimTimelineSegment
 } from "./editor/timeline-utils";
-import { clampNumber, createId, formatBytes } from "./editor/utils";
-import { getActiveZoom, isZoomActiveAtTime } from "./editor/zoom-utils";
-import { frameRate, mediaDragType } from "./editor/types";
+import { clampNumber, createId } from "./editor/utils";
+import { mediaDragType } from "./editor/types";
 import type {
   BackgroundCategory,
   BackgroundStyle,
   CameraBorderStyle,
+  CameraContentTransform,
+  CameraFrame,
   CameraPosition,
   CameraShape,
   EditorMediaItem,
   EditorTool,
   LayoutMode,
   MediaPanel as MediaPanelTab,
-  ScreenLayoutDrag,
-  ScreenLayoutDragMode,
+  ScreenAspectRatio,
   SubtitleSegment,
   SubtitleStyle,
   TimelineContextMenu,
-  TimelineMediaClip,
   TimelineSegment,
   TimelineTrimDrag,
   TimelineTrimEdge,
@@ -115,8 +102,19 @@ export function EditorView() {
     y: 0,
     scale: 100
   });
+  const [screenAspectRatio, setScreenAspectRatio] = useState<ScreenAspectRatio>("16:9");
   const [cameraSize, setCameraSize] = useState(24);
   const [cameraPosition, setCameraPosition] = useState<CameraPosition>("bottom-right");
+  const [cameraFrame, setCameraFrame] = useState<CameraFrame>(() =>
+    getCameraFrameFromPreset("bottom-right", 24)
+  );
+  const [cameraContentTransform, setCameraContentTransform] =
+    useState<CameraContentTransform>({
+      x: 0,
+      y: 0,
+      scale: 100,
+      mirrored: false
+    });
   const [cameraShape, setCameraShape] = useState<CameraShape>("circle");
   const [cameraBorderStyle, setCameraBorderStyle] = useState<CameraBorderStyle>("light");
   const [videoCornerStyle, setVideoCornerStyle] = useState<VideoCornerStyle>("soft");
@@ -139,10 +137,6 @@ export function EditorView() {
   const [timelineContextMenu, setTimelineContextMenu] = useState<TimelineContextMenu>(null);
   const [timelineUndoStack, setTimelineUndoStack] = useState<TimelineSegment[][]>([]);
   const [timelineRedoStack, setTimelineRedoStack] = useState<TimelineSegment[][]>([]);
-  const [exportFormat, setExportFormat] = useState<ExportVideoFormat>("mp4");
-  const [exportResolution, setExportResolution] = useState<ExportResolution>("1080p");
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -150,22 +144,8 @@ export function EditorView() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [timelineViewDuration, setTimelineViewDuration] = useState(0);
+  const [previewZoom, setPreviewZoom] = useState(1);
 
-  const mainVideoRef = useRef<HTMLVideoElement | null>(null);
-  const cameraRef = useRef<HTMLVideoElement | null>(null);
-  const audioElsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-  const currentTimeRef = useRef(0);
-  const playingRef = useRef(false);
-  const rafRef = useRef<number | null>(null);
-  const videoClipsRef = useRef<TimelineMediaClip[]>([]);
-  const audioClipsRef = useRef<TimelineMediaClip[]>([]);
-  const zoomEffectsRef = useRef<ZoomEffect[]>([]);
-  const syncedVideoClipKeyRef = useRef<string | null>(null);
-  const syncedCameraClipKeyRef = useRef<string | null>(null);
-  const masterVolumeRef = useRef(100);
-  const audioLevelsRef = useRef<Record<string, { volume: number; muted: boolean }>>({});
-  const timelineDurationRef = useRef(0);
-  const timelineBodyRef = useRef<HTMLDivElement | null>(null);
   const timelineDragRef = useRef(false);
   const timelineTrimDragRef = useRef<TimelineTrimDrag | null>(null);
   const timelineMoveDragRef = useRef<{
@@ -183,121 +163,52 @@ export function EditorView() {
     origEnd: number;
     moved: boolean;
   } | null>(null);
-  const screenLayoutDragRef = useRef<ScreenLayoutDrag | null>(null);
   const previousTimelineDurationRef = useRef(0);
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
-  const saveStateRef = useRef<() => void>(() => undefined);
-  const restoredRef = useRef(false);
 
-  const stateStorageKey = projectId ? `ovc-editor-state:${projectId}` : null;
-
-  useEffect(() => {
-    if (!projectId) {
-      return;
-    }
-
-    void window.openVideoCraft.projects
-      .get(projectId)
-      .then(setProject)
-      .catch((loadError: unknown) => {
-        setError(loadError instanceof Error ? loadError.message : String(loadError));
-      });
-  }, [projectId]);
-
-  // Restore a previously saved editing session (once) for this project.
-  useEffect(() => {
-    if (restoredRef.current || !stateStorageKey) {
-      return;
-    }
-    restoredRef.current = true;
-
-    const raw = localStorage.getItem(stateStorageKey);
-    if (!raw) {
-      return;
-    }
-
-    try {
-      const snapshot = JSON.parse(raw) as Record<string, unknown>;
-      if (Array.isArray(snapshot.timelineSegments)) {
-        const segments = snapshot.timelineSegments as TimelineSegment[];
-        setTimelineSegments(segments);
-        for (const segment of segments) {
-          knownTimelineItemIdsRef.current.add(segment.itemId);
-        }
-      }
-      if (Array.isArray(snapshot.zoomEffects)) setZoomEffects(snapshot.zoomEffects as ZoomEffect[]);
-      if (Array.isArray(snapshot.subtitles)) setSubtitles(snapshot.subtitles as SubtitleSegment[]);
-      if (snapshot.subtitleStyle) setSubtitleStyle(snapshot.subtitleStyle as SubtitleStyle);
-      if (snapshot.layoutMode) setLayoutMode(snapshot.layoutMode as LayoutMode);
-      if (snapshot.backgroundStyle) setBackgroundStyle(snapshot.backgroundStyle as BackgroundStyle);
-      if (snapshot.activeBackgroundCategory)
-        setActiveBackgroundCategory(snapshot.activeBackgroundCategory as BackgroundCategory);
-      if (typeof snapshot.cameraSize === "number") setCameraSize(snapshot.cameraSize);
-      if (snapshot.cameraPosition) setCameraPosition(snapshot.cameraPosition as CameraPosition);
-      if (snapshot.cameraShape) setCameraShape(snapshot.cameraShape as CameraShape);
-      if (snapshot.cameraBorderStyle)
-        setCameraBorderStyle(snapshot.cameraBorderStyle as CameraBorderStyle);
-      if (snapshot.videoCornerStyle)
-        setVideoCornerStyle(snapshot.videoCornerStyle as VideoCornerStyle);
-      if (snapshot.screenPosition)
-        setScreenPosition(snapshot.screenPosition as { x: number; y: number; scale: number });
-      if (typeof snapshot.masterVolume === "number") setMasterVolume(snapshot.masterVolume);
-      if (snapshot.audioLevels && typeof snapshot.audioLevels === "object") {
-        setAudioLevels(
-          snapshot.audioLevels as Record<string, { volume: number; muted: boolean }>
-        );
-      }
-    } catch {
-      // corrupt snapshot — start fresh
-    }
-  }, [stateStorageKey]);
-
-  // Persist the editable session (timeline, effects, look) to localStorage.
-  const saveState = () => {
-    if (!stateStorageKey) {
-      return;
-    }
-
-    const snapshot = {
-      v: 1,
-      timelineSegments,
-      zoomEffects,
-      subtitles,
-      subtitleStyle,
-      layoutMode,
-      backgroundStyle,
-      activeBackgroundCategory,
-      cameraSize,
-      cameraPosition,
-      cameraShape,
-      cameraBorderStyle,
-      videoCornerStyle,
-      screenPosition,
-      masterVolume,
-      audioLevels
-    };
-
-    try {
-      localStorage.setItem(stateStorageKey, JSON.stringify(snapshot));
-      setError(null);
-      setExportMessage("Project saved");
-    } catch {
-      setError("Could not save the project state.");
-    }
-  };
-  saveStateRef.current = saveState;
-
-  useEffect(() => {
-    function handleSaveShortcut(event: KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        saveStateRef.current();
-      }
-    }
-
-    window.addEventListener("keydown", handleSaveShortcut);
-    return () => window.removeEventListener("keydown", handleSaveShortcut);
-  }, []);
+  const { saveState } = useEditorPersistence({
+    activeBackgroundCategory,
+    audioLevels,
+    backgroundStyle,
+    cameraBorderStyle,
+    cameraContentTransform,
+    cameraFrame,
+    cameraPosition,
+    cameraShape,
+    cameraSize,
+    knownTimelineItemIdsRef,
+    layoutMode,
+    masterVolume,
+    projectId,
+    screenAspectRatio,
+    screenPosition,
+    setActiveBackgroundCategory,
+    setAudioLevels,
+    setBackgroundStyle,
+    setCameraBorderStyle,
+    setCameraContentTransform,
+    setCameraFrame,
+    setCameraPosition,
+    setCameraShape,
+    setCameraSize,
+    setError,
+    setExportMessage,
+    setLayoutMode,
+    setMasterVolume,
+    setProject,
+    setScreenAspectRatio,
+    setScreenPosition,
+    setSubtitleStyle,
+    setSubtitles,
+    setTimelineSegments,
+    setVideoCornerStyle,
+    setZoomEffects,
+    subtitleStyle,
+    subtitles,
+    timelineSegments,
+    videoCornerStyle,
+    zoomEffects
+  });
 
   // Auto-dismiss the "Project saved" toast.
   useEffect(() => {
@@ -309,169 +220,194 @@ export function EditorView() {
     return () => window.clearTimeout(timeout);
   }, [exportMessage]);
 
-  // Screen layout drags (move/resize in the preview) track the pointer globally
-  // so they keep working when the pointer leaves the preview frame.
-  useEffect(() => {
-    function handlePointerMove(event: PointerEvent) {
-      updateScreenLayoutDrag(event.clientX, event.clientY);
-    }
-
-    function handlePointerUp() {
-      finishScreenLayoutDrag();
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, []);
-
   // ---------------------------------------------------------------------------
   // Derived data: media library, timeline clips, playback geometry.
   // ---------------------------------------------------------------------------
 
-  const projectMedia = useMemo(() => createProjectMedia(project), [project]);
-  const allMedia = useMemo(
-    () => [...projectMedia, ...importedMedia],
-    [importedMedia, projectMedia]
-  );
-  const selectedItem =
-    allMedia.find((item) => item.id === selectedItemId) ?? allMedia[0] ?? null;
-  const visibleMedia = allMedia.filter((item) =>
-    activePanel === "all" ? true : item.kind === activePanel
-  );
-  const projectName = project?.name ?? "New Edit";
-  const projectScreen = projectMedia.find((item) => item.track === "screen") ?? null;
-  const projectCamera = projectMedia.find((item) => item.track === "camera") ?? null;
-  const activeDuration =
-    duration > 0 ? duration : selectedItem?.duration ?? (project?.durationMs ?? 0) / 1000;
-  const selectedTimelineItemId = selectedItem?.id ?? null;
-  // Items that may appear on the timeline (the camera feed rides along with the
-  // screen recording and is never an independent clip).
-  const timelineEditableItems = useMemo(
-    () =>
-      allMedia.filter(
-        (item) =>
-          item.kind === "audio" ||
-          ((item.kind === "video" || item.kind === "image") && item.track !== "camera")
-      ),
-    [allMedia]
-  );
-  const mediaById = useMemo(
-    () => new Map(allMedia.map((item) => [item.id, item])),
-    [allMedia]
-  );
-  const mediaDurationById = useMemo(
-    () =>
-      new Map(
-        timelineEditableItems.map((item) => [
-          item.id,
-          getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
-        ])
-      ),
-    [activeDuration, selectedTimelineItemId, timelineEditableItems]
-  );
-  const timelineClips = useMemo(
-    () => createTimelineMediaClips(timelineSegments, mediaById),
-    [mediaById, timelineSegments]
-  );
-  const videoTimelineClips = useMemo(
-    () => timelineClips.filter((clip) => clip.track === "video"),
-    [timelineClips]
-  );
-  const audioTimelineClips = useMemo(
-    () => timelineClips.filter((clip) => clip.track === "audio"),
-    [timelineClips]
-  );
-  const audioTimelineTracks = useMemo(
-    () => createAudioTimelineTracks(audioTimelineClips),
-    [audioTimelineClips]
-  );
-  // The video clip under the playhead — this is what the preview shows.
-  const activeVideoClip = useMemo(
-    () =>
-      videoTimelineClips.find(
-        (clip) => currentTime >= clip.start && currentTime < clip.start + clip.duration
-      ) ?? null,
-    [videoTimelineClips, currentTime]
-  );
-  const previewItem = activeVideoClip?.item ?? null;
-  const isProjectCompositionSelected = Boolean(
-    previewItem && previewItem.origin === "project" && previewItem.track === "screen"
-  );
-  const timelineDuration = calculateTimelineDuration(
-    videoTimelineClips,
+  const {
+    activeDuration,
+    activeSubtitle,
+    activeVideoClip,
+    allMedia,
+    audioSources,
     audioTimelineClips,
-    zoomEffects,
+    audioTimelineTracks,
+    cameraEditEnabled,
+    cameraStyle,
+    cameraVideoStyle,
+    currentFrame,
+    isProjectCompositionSelected,
+    mediaById,
+    mediaDurationById,
+    playheadPercent,
+    previewClassName,
+    previewFrameStyle,
+    previewItem,
+    projectCamera,
+    projectMedia,
+    projectName,
+    projectScreen,
+    screenAspectEnabled,
+    screenEditEnabled,
+    screenStyle,
+    selectedItem,
+    selectedSubtitle,
+    selectedTimelineClip,
+    selectedTimelineItemId,
+    selectedZoomEffect,
+    timelineDuration,
+    timelineEditableItems,
+    timelineRenderDuration,
+    timelineVisible,
+    totalFrames,
+    videoTimelineClips,
+    visibleMedia
+  } = useEditorDerivedData({
+    activePanel,
+    activeTool,
+    backgroundStyle,
+    cameraBorderStyle,
+    cameraContentTransform,
+    cameraFrame,
+    cameraPosition,
+    cameraShape,
+    cameraSize,
+    currentTime,
+    customBackgroundUrl,
+    duration,
+    importedMedia,
+    layoutMode,
+    project,
+    screenAspectRatio,
+    screenPosition,
+    selectedItemId,
+    selectedSubtitleId,
+    selectedTimelineSegmentId,
+    selectedZoomId,
     subtitles,
-    activeDuration
-  );
-  // The rendered timeline scale never shrinks: trimming or deleting a clip
-  // leaves an empty gap (for future clips) instead of rescaling everything.
-  const timelineRenderDuration = Math.max(timelineViewDuration, timelineDuration);
-  const totalFrames = Math.max(1, Math.floor(timelineRenderDuration * frameRate));
-  const currentFrame = Math.min(totalFrames, Math.max(0, Math.round(currentTime * frameRate)));
-  const playheadPercent =
-    timelineRenderDuration > 0
-      ? Math.min(100, Math.max(0, (currentTime / timelineRenderDuration) * 100))
-      : 0;
-  const activeZoom = getActiveZoom(zoomEffects, currentTime);
-  const activeSubtitle =
-    subtitles.find((subtitle) => currentTime >= subtitle.start && currentTime <= subtitle.end) ??
-    null;
-  const selectedSubtitle =
-    subtitles.find((subtitle) => subtitle.id === selectedSubtitleId) ?? subtitles[0] ?? null;
-  const selectedZoomEffect =
-    zoomEffects.find((effect) => effect.id === selectedZoomId) ?? null;
-  const audioSources = allMedia.filter((item) => item.kind === "audio");
-  const selectedTimelineClip =
-    timelineClips.find((clip) => clip.id === selectedTimelineSegmentId) ?? null;
-  // The preview's screen transform combines the user layout scale/offset with
-  // the currently animating zoom effect.
-  const screenScale = (screenPosition.scale / 100) * activeZoom.scale;
-  const screenStyle: CSSProperties = {
-    transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
-      3
-    )})`,
-    transformOrigin: `${activeZoom.originX}% ${activeZoom.originY}%`
-  };
-  const screenEditEnabled = activeTool === "layout" && layoutMode !== "camera-only";
-  const previewFrameStyle = {
-    "--camera-size": `${cameraSize}%`,
-    ...(backgroundStyle === "custom" && customBackgroundUrl
-      ? {
-          backgroundImage: `linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("${customBackgroundUrl}")`
-        }
-      : {})
-  } as CSSProperties;
-  const previewClassName = [
-    "preview-composition-frame",
-    `preview-layout-${layoutMode}`,
-    `preview-style-${backgroundStyle}`,
-    `preview-camera-position-${cameraPosition}`,
-    `preview-camera-shape-${cameraShape}`,
-    `preview-camera-border-${cameraBorderStyle}`,
-    `preview-corner-${videoCornerStyle}`
-  ].join(" ");
-  // The timeline is the drop target for assets, so it must be visible on the
-  // "media" (Setup) tool as well — otherwise the asset grid and the timeline
-  // are never on screen together and there is nothing to drag onto.
-  const timelineVisible =
-    activeTool === "media" ||
-    activeTool === "cut" ||
-    activeTool === "zoom" ||
-    activeTool === "audio" ||
-    activeTool === "subtitles";
+    timelineSegments,
+    timelineViewDuration,
+    videoCornerStyle,
+    zoomEffects
+  });
 
-  useEffect(() => {
-    if (!screenEditEnabled) {
-      finishScreenLayoutDrag();
-    }
-  }, [screenEditEnabled]);
+  const {
+    audioElsRef,
+    cameraRef,
+    currentTimeRef,
+    mainVideoRef,
+    playingRef,
+    scheduleTimelinePlaybackSync,
+    seek,
+    seekFrame,
+    syncMediaToTime,
+    togglePlayback
+  } = useEditorPlayback({
+    activeDuration,
+    activeVideoClip,
+    audioLevels,
+    audioTimelineClips,
+    currentTime,
+    layoutMode,
+    masterVolume,
+    mediaById,
+    playing,
+    previewItem,
+    projectCamera,
+    setCurrentTime,
+    setError,
+    setPlaying,
+    subtitles,
+    timelineDuration,
+    timelineSegments,
+    totalFrames,
+    zoomEffects
+  });
+
+  const {
+    beginTimelinePanelResize,
+    bodyRef: timelineBodyRef,
+    endTimelinePanelResize,
+    getTimelineTimeFromClientX,
+    moveTimelinePanelResize,
+    resetTimelinePanelHeight,
+    seekTimelinePointer,
+    timelinePanelHeight
+  } = useTimelineViewport({
+    renderDuration: timelineRenderDuration,
+    seek
+  });
+
+  const {
+    importCustomBackground,
+    importMedia,
+    removeImportedMedia,
+    selectTimelineItem,
+    setAudioLevel,
+    updateDuration,
+    updateMediaDuration
+  } = useEditorMediaActions({
+    knownTimelineItemIdsRef,
+    projectMedia,
+    scheduleTimelinePlaybackSync,
+    seek,
+    setActivePanel,
+    setActiveTool,
+    setAudioLevels,
+    setBackgroundAudioIds,
+    setBackgroundStyle,
+    setCustomBackgroundUrl,
+    setDuration,
+    setError,
+    setImportedMedia,
+    setSelectedItemId,
+    setSelectedTimelineSegmentId,
+    setTimelineSegments,
+    timelineSegments
+  });
+
+  const {
+    canExport,
+    closeExportDialog,
+    exportCurrentVideo,
+    exportDialogOpen,
+    exportFormat,
+    exporting,
+    exportResolution,
+    openExportDialog,
+    setExportFormat,
+    setExportResolution
+  } = useEditorExport({
+    backgroundAudioIds,
+    masterVolume,
+    project,
+    projectScreen,
+    selectedItem,
+    setError,
+    setExportMessage,
+    trimRange
+  });
+
+  const {
+    beginCameraLayoutDrag,
+    beginScreenLayoutDrag,
+    resetCameraContentTransform,
+    selectCameraPosition,
+    selectCameraSize,
+    updateCameraContentTransform
+  } = usePreviewLayoutControls({
+    activeTool,
+    cameraEditEnabled,
+    cameraFrame,
+    layoutMode,
+    screenEditEnabled,
+    screenPosition,
+    setCameraContentTransform,
+    setCameraFrame,
+    setCameraPosition,
+    setCameraSize,
+    setScreenPosition
+  });
 
   useEffect(() => {
     if (!selectedItemId && allMedia.length > 0) {
@@ -546,114 +482,10 @@ export function EditorView() {
     };
   }, [timelineEditableItems]);
 
-  useEffect(() => {
-    syncTimelinePlaybackRefs(timelineSegments);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDuration, mediaById, subtitles, timelineSegments, zoomEffects]);
-
-  useEffect(() => {
-    zoomEffectsRef.current = zoomEffects;
-  }, [zoomEffects]);
-
-  useEffect(() => {
-    masterVolumeRef.current = masterVolume;
-  }, [masterVolume]);
-
-  useEffect(() => {
-    audioLevelsRef.current = audioLevels;
-  }, [audioLevels]);
-
-  useEffect(() => {
-    timelineDurationRef.current = timelineDuration;
-  }, [timelineDuration]);
-
   // Grow (never shrink) the rendered timeline scale as content grows.
   useEffect(() => {
     setTimelineViewDuration((current) => Math.max(current, timelineDuration));
   }, [timelineDuration]);
-
-  useEffect(() => {
-    playingRef.current = playing;
-  }, [playing]);
-
-  useEffect(() => {
-    currentTimeRef.current = currentTime;
-  }, [currentTime]);
-
-  useEffect(() => {
-    syncMediaToTime(currentTimeRef.current, playingRef.current, true);
-    // The media element is swapped by React when the active clip/source changes;
-    // sync after commit so the new element starts at the timeline time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    activeVideoClip?.id,
-    activeVideoClip?.start,
-    activeVideoClip?.duration,
-    activeVideoClip?.sourceStart,
-    previewItem?.url,
-    projectCamera?.url,
-    layoutMode
-  ]);
-
-  // Master playback clock: advances the global timeline time while playing and
-  // keeps every media element slaved to it (see syncMediaToTime).
-  useEffect(() => {
-    if (!playing) {
-      return undefined;
-    }
-
-    let last = performance.now();
-    let lastUiUpdate = 0;
-    const step = (now: number) => {
-      const dt = Math.min(0.1, (now - last) / 1000);
-      last = now;
-      const next = currentTimeRef.current + dt;
-
-      if (next >= timelineDurationRef.current) {
-        currentTimeRef.current = timelineDurationRef.current;
-        setCurrentTime(timelineDurationRef.current);
-        syncMediaToTime(timelineDurationRef.current, false, true);
-        setPlaying(false);
-        return;
-      }
-
-      currentTimeRef.current = next;
-      // Sync media every frame for tight A/V alignment, but throttle the (heavy)
-      // React re-render that moves the playhead/UI to ~30fps.
-      syncMediaToTime(next, true);
-      const frameInterval = isZoomActiveAtTime(zoomEffectsRef.current, next) ? 16 : 33;
-      if (now - lastUiUpdate >= frameInterval) {
-        lastUiUpdate = now;
-        setCurrentTime(next);
-      }
-      rafRef.current = requestAnimationFrame(step);
-    };
-
-    rafRef.current = requestAnimationFrame(step);
-    return () => {
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing]);
-
-  // Apply volume changes immediately to the live media elements.
-  useEffect(() => {
-    const master = Math.min(1, Math.max(0, masterVolume / 100));
-    if (mainVideoRef.current) {
-      mainVideoRef.current.volume = master;
-    }
-    for (const clip of audioTimelineClips) {
-      const element = audioElsRef.current.get(clip.id);
-      if (!element) {
-        continue;
-      }
-      const level = audioLevels[clip.item.id] ?? { volume: 100, muted: false };
-      element.volume = level.muted ? 0 : Math.min(1, master * (level.volume / 100));
-    }
-  }, [masterVolume, audioLevels, audioTimelineClips]);
 
   // Keep the export trim range sensible as the timeline duration changes.
   useEffect(() => {
@@ -745,253 +577,6 @@ export function EditorView() {
   ]);
 
   // ---------------------------------------------------------------------------
-  // Media library actions.
-  // ---------------------------------------------------------------------------
-
-  async function importMedia(options: {
-    backgroundAudio?: boolean;
-    selectFirst?: boolean;
-  } = {}) {
-    const files = await window.openVideoCraft.editor.importMedia();
-    if (files.length === 0) {
-      return;
-    }
-
-    const nextItems = files.map(toEditorMediaItem);
-    setImportedMedia((current) => [...current, ...nextItems]);
-
-    if (options.backgroundAudio) {
-      const audioIds = nextItems
-        .filter((item) => item.kind === "audio")
-        .map((item) => item.id);
-      setBackgroundAudioIds((current) => [...new Set([...current, ...audioIds])]);
-      setActiveTool("audio");
-    }
-
-    if (options.selectFirst ?? true) {
-      setSelectedItemId(nextItems[0].id);
-    }
-
-    setActivePanel("all");
-  }
-
-  async function importCustomBackground() {
-    const files = await window.openVideoCraft.editor.importMedia();
-    const background = files.find((file) => file.kind === "image");
-
-    if (!background) {
-      setError("Choose an image file for the custom background.");
-      return;
-    }
-
-    setError(null);
-    setCustomBackgroundUrl(background.url);
-    setBackgroundStyle("custom");
-  }
-
-  function removeImportedMedia(itemId: string) {
-    void window.openVideoCraft.editor.removeImportedMedia(itemId);
-    setImportedMedia((current) => current.filter((item) => item.id !== itemId));
-    setBackgroundAudioIds((current) => current.filter((id) => id !== itemId));
-    setTimelineSegments((current) => {
-      const next = current.filter((segment) => segment.itemId !== itemId);
-      if (!areTimelineSegmentsEqual(current, next)) {
-        scheduleTimelinePlaybackSync(next);
-      }
-      return next;
-    });
-    knownTimelineItemIdsRef.current.delete(itemId);
-    setSelectedItemId((current) => (current === itemId ? projectMedia[0]?.id ?? null : current));
-    setSelectedTimelineSegmentId((current) => {
-      const segment = timelineSegments.find((item) => item.id === current);
-      return segment?.itemId === itemId ? null : current;
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Playback: a rAF clock drives the timeline time; media elements are slaves.
-  // ---------------------------------------------------------------------------
-
-  function effectiveClipVolume(itemId: string): number {
-    const master = Math.max(0, masterVolumeRef.current / 100);
-    const level = audioLevelsRef.current[itemId] ?? { volume: 100, muted: false };
-    if (level.muted) {
-      return 0;
-    }
-    return Math.min(1, master * (level.volume / 100));
-  }
-
-  // Slave every media element to the global timeline time `t`. The main video
-  // element shows whichever video clip is under the playhead; each audio clip
-  // plays when the playhead is inside it. Elements only hard-seek when they
-  // drift more than ~0.3s so normal playback stays smooth.
-  function syncMediaToTime(t: number, isPlaying: boolean, forceSeek = false) {
-    const master = Math.min(1, Math.max(0, masterVolumeRef.current / 100));
-    const videoClip =
-      videoClipsRef.current.find(
-        (clip) => t >= clip.start && t < clip.start + clip.duration
-      ) ?? null;
-
-    const videoEl = mainVideoRef.current;
-    if (videoEl && videoClip && videoClip.item.kind === "video") {
-      const desired = videoClip.sourceStart + (t - videoClip.start);
-      const clipPlaybackKey = createClipPlaybackKey(videoClip);
-      const clipChanged = syncedVideoClipKeyRef.current !== clipPlaybackKey;
-      syncedVideoClipKeyRef.current = clipPlaybackKey;
-      // Drift correction must wait for in-flight seeks: re-seeking every frame
-      // while the element is still seeking freezes playback on a single frame.
-      if (
-        Number.isFinite(desired) &&
-        (forceSeek || clipChanged || (canDriftSeek(videoEl) && Math.abs(videoEl.currentTime - desired) > 0.3))
-      ) {
-        try {
-          videoEl.currentTime = desired;
-        } catch {
-          // element not ready yet
-        }
-      }
-      // Screen recordings carry no (or duplicate) audio — the mic track plays as
-      // its own audio clip — so mute them, but keep imported video audio.
-      videoEl.muted = videoClip.item.origin === "project";
-      videoEl.volume = master;
-      if (isPlaying && videoEl.paused) {
-        void videoEl.play().catch(() => undefined);
-      } else if (!isPlaying && !videoEl.paused) {
-        videoEl.pause();
-      }
-    } else if (videoEl && !videoEl.paused) {
-      videoEl.pause();
-      syncedVideoClipKeyRef.current = null;
-    } else if (!videoClip) {
-      syncedVideoClipKeyRef.current = null;
-    }
-
-    const cameraEl = cameraRef.current;
-    if (cameraEl && videoClip) {
-      const desired = videoClip.sourceStart + (t - videoClip.start);
-      const clipPlaybackKey = createClipPlaybackKey(videoClip);
-      const clipChanged = syncedCameraClipKeyRef.current !== clipPlaybackKey;
-      syncedCameraClipKeyRef.current = clipPlaybackKey;
-      if (
-        Number.isFinite(desired) &&
-        (forceSeek || clipChanged || (canDriftSeek(cameraEl) && Math.abs(cameraEl.currentTime - desired) > 0.3))
-      ) {
-        try {
-          cameraEl.currentTime = desired;
-        } catch {
-          // element not ready yet
-        }
-      }
-      if (isPlaying && cameraEl.paused) {
-        void cameraEl.play().catch(() => undefined);
-      } else if (!isPlaying && !cameraEl.paused) {
-        cameraEl.pause();
-      }
-    } else {
-      syncedCameraClipKeyRef.current = null;
-    }
-
-    for (const clip of audioClipsRef.current) {
-      const el = audioElsRef.current.get(clip.id);
-      if (!el) {
-        continue;
-      }
-
-      const active = t >= clip.start && t < clip.start + clip.duration;
-      if (active) {
-        const desired = clip.sourceStart + (t - clip.start);
-        if (
-          Number.isFinite(desired) &&
-          (forceSeek || (canDriftSeek(el) && Math.abs(el.currentTime - desired) > 0.3))
-        ) {
-          try {
-            el.currentTime = desired;
-          } catch {
-            // element not ready yet
-          }
-        }
-        el.volume = effectiveClipVolume(clip.item.id);
-        if (isPlaying && el.paused) {
-          void el.play().catch(() => undefined);
-        } else if (!isPlaying && !el.paused) {
-          el.pause();
-        }
-      } else if (!el.paused) {
-        el.pause();
-      }
-    }
-  }
-
-  function togglePlayback() {
-    if (playing) {
-      setPlaying(false);
-      syncMediaToTime(currentTimeRef.current, false, true);
-      return;
-    }
-
-    let startAt = currentTimeRef.current;
-    if (startAt >= timelineDuration - 0.05) {
-      startAt = 0;
-      currentTimeRef.current = 0;
-      setCurrentTime(0);
-    }
-
-    syncMediaToTime(startAt, true, true);
-    setPlaying(true);
-  }
-
-  function seek(value: number) {
-    const nextTime = Math.max(0, Math.min(value, timelineDuration || value));
-    currentTimeRef.current = nextTime;
-    setCurrentTime(nextTime);
-    syncMediaToTime(nextTime, playingRef.current, true);
-  }
-
-  // Selecting an asset also jumps the playhead to its first clip (if any).
-  function selectTimelineItem(itemId: string) {
-    setSelectedItemId(itemId);
-    const segment = [...timelineSegments]
-      .sort((first, second) => first.start - second.start)
-      .find((item) => item.itemId === itemId);
-    if (segment) {
-      setSelectedTimelineSegmentId(segment.id);
-      seek(segment.start);
-    }
-  }
-
-  function seekFrame(frame: number) {
-    const nextFrame = Math.max(0, Math.min(frame, totalFrames));
-    seek(nextFrame / frameRate);
-  }
-
-  // Convert a pointer X coordinate into timeline seconds using the clip lane's
-  // bounds (the lane, not the body, so the label column is excluded).
-  function getTimelineTimeFromClientX(clientX: number): number | null {
-    const timelineBody = timelineBodyRef.current;
-    if (!timelineBody || timelineRenderDuration <= 0) {
-      return null;
-    }
-
-    const lane = timelineBody.querySelector<HTMLElement>(".track-lane");
-    const bounds = lane?.getBoundingClientRect() ?? timelineBody.getBoundingClientRect();
-    if (bounds.width <= 0) {
-      return null;
-    }
-
-    const progress = Math.min(1, Math.max(0, (clientX - bounds.left) / bounds.width));
-    return progress * timelineRenderDuration;
-  }
-
-  function seekTimelinePointer(clientX: number) {
-    const nextTime = getTimelineTimeFromClientX(clientX);
-    if (nextTime === null) {
-      return;
-    }
-
-    seek(nextTime);
-  }
-
-  // ---------------------------------------------------------------------------
   // Drag & drop from the asset grid onto the timeline.
   // ---------------------------------------------------------------------------
 
@@ -1025,7 +610,7 @@ export function EditorView() {
     const itemDuration = Math.max(
       0.1,
       mediaDurationById.get(item.id) ??
-        getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
+      getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
     );
     const start = Math.max(0, dropTime);
     const end = start + itemDuration;
@@ -1052,108 +637,8 @@ export function EditorView() {
   }
 
   // ---------------------------------------------------------------------------
-  // Screen layout drag (move/resize the screen video inside the preview).
-  // ---------------------------------------------------------------------------
-
-  function beginScreenLayoutDrag(
-    event: ReactPointerEvent<HTMLElement>,
-    mode: ScreenLayoutDragMode
-  ) {
-    if (event.button !== 0 || activeTool !== "layout" || layoutMode === "camera-only") {
-      return;
-    }
-
-    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-    const overlay = target?.classList.contains("studio-screen-edit-overlay")
-      ? target
-      : target?.closest<HTMLElement>(".studio-screen-edit-overlay");
-    const bounds = overlay?.getBoundingClientRect();
-    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    screenLayoutDragRef.current = {
-      mode,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startPosition: screenPosition,
-      boundsWidth: bounds.width,
-      boundsHeight: bounds.height
-    };
-  }
-
-  function updateScreenLayoutDrag(clientX: number, clientY: number) {
-    const drag = screenLayoutDragRef.current;
-    if (!drag) {
-      return;
-    }
-
-    const deltaX = clientX - drag.startClientX;
-    const deltaY = clientY - drag.startClientY;
-    if (drag.mode === "move") {
-      setScreenPosition({
-        ...drag.startPosition,
-        x: clampNumber(drag.startPosition.x + (deltaX / drag.boundsWidth) * 100, -120, 120),
-        y: clampNumber(drag.startPosition.y + (deltaY / drag.boundsHeight) * 100, -120, 120)
-      });
-      return;
-    }
-
-    // Corner resize: average the two axes' movement into a scale delta.
-    const direction = getScreenResizeDirection(drag.mode);
-    const scaleDelta =
-      (((deltaX * direction.x) / drag.boundsWidth +
-        (deltaY * direction.y) / drag.boundsHeight) /
-        2) *
-      100;
-    setScreenPosition({
-      ...drag.startPosition,
-      scale: clampNumber(drag.startPosition.scale + scaleDelta, 35, 220)
-    });
-  }
-
-  function finishScreenLayoutDrag() {
-    screenLayoutDragRef.current = null;
-  }
-
-  // ---------------------------------------------------------------------------
   // Timeline editing: commit (with undo), trim, move, split, delete, scrub.
   // ---------------------------------------------------------------------------
-
-  // Recompute the playback refs (clip lists + duration) for a segment list so
-  // the rAF clock sees edits immediately, without waiting for a re-render.
-  function syncTimelinePlaybackRefs(segments: TimelineSegment[]): number {
-    const nextTimelineClips = createTimelineMediaClips(segments, mediaById);
-    const nextVideoClips = nextTimelineClips.filter((clip) => clip.track === "video");
-    const nextAudioClips = nextTimelineClips.filter((clip) => clip.track === "audio");
-    const nextTimelineDuration = calculateTimelineDuration(
-      nextVideoClips,
-      nextAudioClips,
-      zoomEffects,
-      subtitles,
-      activeDuration
-    );
-
-    videoClipsRef.current = nextVideoClips;
-    audioClipsRef.current = nextAudioClips;
-    timelineDurationRef.current = nextTimelineDuration;
-    return nextTimelineDuration;
-  }
-
-  function forceSyncCurrentTimelineMedia() {
-    const safeDuration = Math.max(timelineDurationRef.current, 1);
-    const nextTime = clampNumber(currentTimeRef.current, 0, safeDuration);
-    currentTimeRef.current = nextTime;
-    setCurrentTime(nextTime);
-    syncMediaToTime(nextTime, playingRef.current, true);
-  }
-
-  function scheduleTimelinePlaybackSync(segments: TimelineSegment[]) {
-    syncTimelinePlaybackRefs(segments);
-    window.queueMicrotask(forceSyncCurrentTimelineMedia);
-  }
 
   // All segment edits flow through here so each change lands on the undo stack.
   function commitTimelineSegments(updater: (segments: TimelineSegment[]) => TimelineSegment[]) {
@@ -1521,24 +1006,8 @@ export function EditorView() {
   }
 
   // ---------------------------------------------------------------------------
-  // Duration bookkeeping, zoom effects, subtitles, audio levels.
+  // Zoom effects, subtitles, audio levels.
   // ---------------------------------------------------------------------------
-
-  function updateDuration(value: number | null) {
-    if (value && Number.isFinite(value)) {
-      setDuration(value);
-    }
-  }
-
-  function updateMediaDuration(itemId: string, value: number | null) {
-    if (!value || !Number.isFinite(value)) {
-      return;
-    }
-
-    setImportedMedia((current) =>
-      current.map((item) => (item.id === itemId ? { ...item, duration: value } : item))
-    );
-  }
 
   function addZoomEffect() {
     const start = currentTime;
@@ -1565,29 +1034,19 @@ export function EditorView() {
       targetY: 50
     };
     setError(null);
-    setZoomEffects((current) => {
-      const next = [...current, nextEffect];
-      zoomEffectsRef.current = next;
-      return next;
-    });
+    setZoomEffects((current) => [...current, nextEffect]);
     setSelectedZoomId(nextEffect.id);
     setActiveTool("zoom");
   }
 
   function updateZoomEffect(id: string, updates: Partial<ZoomEffect>) {
-    setZoomEffects((current) => {
-      const next = current.map((effect) => (effect.id === id ? { ...effect, ...updates } : effect));
-      zoomEffectsRef.current = next;
-      return next;
-    });
+    setZoomEffects((current) =>
+      current.map((effect) => (effect.id === id ? { ...effect, ...updates } : effect))
+    );
   }
 
   function removeZoomEffect(id: string) {
-    setZoomEffects((current) => {
-      const next = current.filter((effect) => effect.id !== id);
-      zoomEffectsRef.current = next;
-      return next;
-    });
+    setZoomEffects((current) => current.filter((effect) => effect.id !== id));
     setSelectedZoomId((current) => (current === id ? null : current));
   }
 
@@ -1663,8 +1122,7 @@ export function EditorView() {
       setSttStatus("done");
     } catch (sttError) {
       setError(
-        `Speech-to-text failed: ${
-          sttError instanceof Error ? sttError.message : String(sttError)
+        `Speech-to-text failed: ${sttError instanceof Error ? sttError.message : String(sttError)
         }`
       );
       setSttStatus("error");
@@ -1677,136 +1135,35 @@ export function EditorView() {
     );
   }
 
-  function setAudioLevel(itemId: string, patch: Partial<{ volume: number; muted: boolean }>) {
-    setAudioLevels((current) => {
-      const previous = current[itemId] ?? { volume: 100, muted: false };
-      return { ...current, [itemId]: { ...previous, ...patch } };
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Export.
-  // ---------------------------------------------------------------------------
-
-  function getExportSource(): ExportVideoRequest["source"] | null {
-    if (selectedItem?.origin === "imported" && selectedItem.kind === "video") {
-      return {
-        kind: "import",
-        importId: selectedItem.importId ?? selectedItem.id
-      };
-    }
-
-    if (project && projectScreen) {
-      return {
-        kind: "project",
-        projectId: project.id
-      };
-    }
-
-    return null;
-  }
-
-  async function exportCurrentVideo() {
-    const source = getExportSource();
-
-    if (!source) {
-      setError("Select a video clip before exporting.");
-      return;
-    }
-
-    setError(null);
-    setExportMessage(null);
-    setExporting(true);
-
-    try {
-      const result = await window.openVideoCraft.editor.exportVideo({
-        source,
-        format: exportFormat,
-        resolution: exportResolution,
-        trimStart: trimRange.start,
-        trimEnd: trimRange.end > trimRange.start ? trimRange.end : null,
-        volume: masterVolume / 100,
-        backgroundAudioImportIds: backgroundAudioIds
-      });
-
-      if (result) {
-        setExportMessage(`Exported ${formatBytes(result.bytesWritten)} to ${result.path}`);
-        setExportDialogOpen(false);
-      }
-    } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : String(exportError));
-    } finally {
-      setExporting(false);
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // Render.
   // ---------------------------------------------------------------------------
 
-  const activeToolMeta = editorTools.find((tool) => tool.id === activeTool);
-
   return (
-    <main className="editor-root">
+    <main className="grid h-screen min-h-screen overflow-hidden bg-[#121317] p-0 text-[#f7f7f8]">
       <section
-        className={`studio-shell ${
-          timelineVisible ? "studio-shell-timeline-visible" : "studio-shell-timeline-hidden"
-        }`}
+        className="grid h-screen w-screen min-h-0 overflow-hidden bg-[#121317]"
+        style={{
+          gridTemplateRows: timelineVisible
+            ? `auto minmax(0, 1fr) ${timelinePanelHeight}px`
+            : "auto minmax(0, 1fr)"
+        }}
       >
-        <header className="studio-topbar">
-          <div className="studio-brand">
-            <div className="studio-brand-mark">
-              <img src={appLogo} alt="" />
-            </div>
-            <div>
-              <strong>Open Video Craft</strong>
-              <small>Video Editor</small>
-            </div>
-          </div>
-
-          <button className="studio-project-select" type="button">
-            <span>{projectName}</span>
-          </button>
-
-          <div className="studio-top-actions">
-            <button
-              className="studio-icon-button"
-              type="button"
-              title="Back to main menu"
-              onClick={() => void window.openVideoCraft.windows.openMain()}
-            >
-              <Home size={17} />
-            </button>
-            <button
-              className="studio-icon-button"
-              type="button"
-              title="Save project (Ctrl+S)"
-              onClick={saveState}
-            >
-              <Save size={17} />
-            </button>
-            <button
-              className="studio-export-button"
-              type="button"
-              disabled={exporting || !getExportSource()}
-              onClick={() => setExportDialogOpen(true)}
-            >
-              <Download size={16} />
-              Export
-            </button>
-          </div>
-        </header>
+        <EditorTopbar
+          projectName={projectName}
+          exporting={exporting}
+          canExport={canExport}
+          onBackHome={() => void window.openVideoCraft.windows.openMain()}
+          onSave={saveState}
+          onOpenExport={openExportDialog}
+        />
 
         {exportDialogOpen ? (
           <ExportDialog
             exportFormat={exportFormat}
             exportResolution={exportResolution}
             exporting={exporting}
-            onClose={() => {
-              if (!exporting) {
-                setExportDialogOpen(false);
-              }
-            }}
+            onClose={closeExportDialog}
             onExport={() => void exportCurrentVideo()}
             onFormatChange={setExportFormat}
             onResolutionChange={setExportResolution}
@@ -1814,268 +1171,192 @@ export function EditorView() {
         ) : null}
 
         {error ? (
-          <div className="studio-error" role="alert">
+          <div
+            className="fixed right-[1.1rem] top-[4.4rem] z-40 min-h-[2.35rem] w-[min(34rem,calc(100vw-2rem))] truncate rounded-lg border border-red-400/35 bg-red-950/70 px-4 py-3 text-sm font-extrabold text-red-50 shadow-[0_18px_42px_rgb(0_0_0_/_0.35)]"
+            role="alert"
+          >
             {error}
           </div>
         ) : null}
         {exportMessage ? (
-          <div className="studio-success" role="status" aria-live="polite">
+          <div
+            className="fixed right-[1.1rem] top-[4.4rem] z-40 flex min-h-[2.35rem] w-[min(28rem,calc(100vw-2rem))] items-center truncate rounded-lg border border-green-500/30 bg-green-800/35 px-3 py-2 text-sm font-extrabold text-green-100 shadow-[0_18px_42px_rgb(0_0_0_/_0.35)]"
+            role="status"
+            aria-live="polite"
+          >
             {exportMessage}
           </div>
         ) : null}
 
-        <div className="studio-workspace">
-          {/* Left rail: tool switcher. */}
-          <aside className="studio-rail" aria-label="Editor tools">
-            {editorTools.map((tool) => (
-              <button
-                className={activeTool === tool.id ? "studio-rail-active" : ""}
-                type="button"
-                title={tool.label}
-                key={tool.id}
-                onClick={() => setActiveTool(tool.id)}
-              >
-                <img src={tool.image} alt="" aria-hidden="true" />
-                <span>{tool.label}</span>
-              </button>
-            ))}
-          </aside>
+        <div className="grid min-h-0 grid-cols-[86px_324px_minmax(0,1fr)] gap-[0.9rem] px-[1.1rem] py-[0.9rem]">
+          <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
 
-          {/* Tool panel: one small component per tool. */}
-          <aside className={`tool-panel ${activeTool === "layout" ? "tool-panel-layout" : ""}`}>
-            <ToolPanelHeader
-              icon={activeToolMeta?.icon}
-              title={activeToolMeta?.label ?? "Tools"}
-            />
-
-            {activeTool === "media" ? (
-              <MediaPanel
-                activeTab={activePanel}
-                visibleMedia={visibleMedia}
-                selectedItemId={selectedItem?.id ?? null}
-                onImport={() => void importMedia()}
-                onTabChange={setActivePanel}
-                onSelectItem={selectTimelineItem}
-                onItemDuration={updateMediaDuration}
-                onRemoveItem={removeImportedMedia}
-              />
-            ) : null}
-
-            {activeTool === "layout" ? (
-              <LayoutPanel
-                layoutMode={layoutMode}
-                screenScale={screenPosition.scale}
-                cameraShape={cameraShape}
-                cameraBorderStyle={cameraBorderStyle}
-                cameraPosition={cameraPosition}
-                cameraSize={cameraSize}
-                onLayoutModeChange={setLayoutMode}
-                onScreenScaleChange={(scale) =>
-                  setScreenPosition((current) => ({ ...current, scale }))
-                }
-                onCameraShapeChange={setCameraShape}
-                onCameraBorderStyleChange={setCameraBorderStyle}
-                onCameraPositionChange={setCameraPosition}
-                onCameraSizeChange={setCameraSize}
-              />
-            ) : null}
-
-            {activeTool === "audio" ? (
-              <AudioPanel
-                masterVolume={masterVolume}
-                audioSources={audioSources}
-                audioLevels={audioLevels}
-                onMasterVolumeChange={setMasterVolume}
-                onAddBackgroundMusic={() =>
-                  void importMedia({ backgroundAudio: true, selectFirst: false })
-                }
-                onSelectItem={selectTimelineItem}
-                onSetAudioLevel={setAudioLevel}
-              />
-            ) : null}
-
-            {activeTool === "zoom" ? (
-              <ZoomPanel
-                previewItem={previewItem}
-                selectedZoomEffect={selectedZoomEffect}
-                onAddZoom={addZoomEffect}
-                onUpdateZoom={updateZoomEffect}
-                onRemoveZoom={removeZoomEffect}
-              />
-            ) : null}
-
-            {activeTool === "subtitles" ? (
-              <SubtitlesPanel
-                sttStatus={sttStatus}
-                subtitleStyle={subtitleStyle}
-                subtitles={subtitles}
-                selectedSubtitle={selectedSubtitle}
-                onAddSubtitle={addSubtitle}
-                onGenerateSubtitles={() => void generateSubtitles()}
-                onStyleChange={setSubtitleStyle}
-                onUpdateSubtitle={updateSubtitle}
-                onSelectSubtitle={setSelectedSubtitleId}
-              />
-            ) : null}
-
-            {activeTool === "cut" ? (
-              <CutPanel
-                selectedClip={selectedTimelineClip}
-                onSplitAtPlayhead={() =>
-                  splitTimelineSegment(selectedTimelineSegmentId, currentTime)
-                }
-                onDeleteSelected={deleteSelectedTimelineSegment}
-              />
-            ) : null}
-
-            {activeTool === "style" ? (
-              <StylePanel
-                activeCategory={activeBackgroundCategory}
-                backgroundStyle={backgroundStyle}
-                videoCornerStyle={videoCornerStyle}
-                onCategoryChange={setActiveBackgroundCategory}
-                onBackgroundStyleChange={setBackgroundStyle}
-                onUploadCustomBackground={() => void importCustomBackground()}
-                onCornerStyleChange={setVideoCornerStyle}
-              />
-            ) : null}
-          </aside>
-
-          {/* Preview: shows whatever video/image clip is under the playhead. */}
-          <section className="preview-panel">
-            <div className="preview-canvas">
-              <div className={previewClassName} style={previewFrameStyle}>
-                {previewItem ? (
-                  <PreviewContent
-                    item={previewItem}
-                    isProjectCompositionSelected={isProjectCompositionSelected}
-                    projectCamera={projectCamera}
-                    layoutMode={layoutMode}
-                    screenStyle={screenStyle}
-                    screenEditEnabled={screenEditEnabled}
-                    activeSubtitle={activeSubtitle}
-                    subtitleStyle={subtitleStyle}
-                    currentTime={currentTime}
-                    mainVideoRef={mainVideoRef}
-                    cameraRef={cameraRef}
-                    onScreenEditPointerDown={beginScreenLayoutDrag}
-                    onMediaReady={() =>
-                      syncMediaToTime(currentTimeRef.current, playingRef.current, true)
-                    }
-                    onDuration={(nextDuration) => {
-                      updateDuration(nextDuration);
-                      updateMediaDuration(previewItem.id, nextDuration);
-                    }}
-                    onSubtitleClick={(subtitleId) => {
-                      setSelectedSubtitleId(subtitleId);
-                      setActiveTool("subtitles");
-                    }}
-                  />
-                ) : videoTimelineClips.length > 0 ? null : (
-                  <div className="studio-video-empty">Import media or record a screen.</div>
-                )}
-              </div>
-            </div>
-            {/* Hidden audio elements — one per audio clip, driven by the clock. */}
-            <div className="timeline-audio-players" aria-hidden="true">
-              {audioTimelineClips.map((clip) => (
-                <audio
-                  key={clip.id}
-                  src={clip.item.url}
-                  preload="metadata"
-                  onLoadedMetadata={(event) =>
-                    updateMediaDuration(clip.item.id, event.currentTarget.duration)
-                  }
-                  ref={(element) => {
-                    if (element) {
-                      audioElsRef.current.set(clip.id, element);
-                    } else {
-                      audioElsRef.current.delete(clip.id);
-                    }
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        </div>
-
-        {timelineVisible ? (
-          <Timeline
-            bodyRef={timelineBodyRef}
+          <EditorToolPanel
             activeTool={activeTool}
-            playing={playing}
-            scrubbing={scrubbingTimeline}
-            currentTime={currentTime}
-            currentFrame={currentFrame}
-            totalFrames={totalFrames}
-            playheadPercent={playheadPercent}
-            renderDuration={timelineRenderDuration}
-            videoClips={videoTimelineClips}
-            audioTracks={audioTimelineTracks}
-            zoomEffects={zoomEffects}
+            activePanel={activePanel}
+            visibleMedia={visibleMedia}
+            selectedItemId={selectedItem?.id ?? null}
+            layoutMode={layoutMode}
+            screenScale={screenPosition.scale}
+            screenAspectRatio={screenAspectRatio}
+            screenAspectEnabled={screenAspectEnabled}
+            cameraShape={cameraShape}
+            cameraBorderStyle={cameraBorderStyle}
+            cameraContentTransform={cameraContentTransform}
+            cameraPosition={cameraPosition}
+            cameraSize={cameraSize}
+            masterVolume={masterVolume}
+            audioSources={audioSources}
+            audioLevels={audioLevels}
+            previewItem={previewItem}
+            selectedZoomEffect={selectedZoomEffect}
+            sttStatus={sttStatus}
+            subtitleStyle={subtitleStyle}
             subtitles={subtitles}
-            selectedSegmentId={selectedTimelineSegmentId}
-            selectedZoomId={selectedZoomEffect?.id ?? null}
-            selectedSubtitleId={selectedSubtitle?.id ?? null}
-            contextMenu={timelineContextMenu}
-            canSplitAtContextMenu={
-              timelineContextMenu
-                ? canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)
-                : false
+            selectedSubtitle={selectedSubtitle}
+            selectedClip={selectedTimelineClip}
+            activeBackgroundCategory={activeBackgroundCategory}
+            backgroundStyle={backgroundStyle}
+            videoCornerStyle={videoCornerStyle}
+            onImportMedia={() => void importMedia()}
+            onTabChange={setActivePanel}
+            onSelectItem={selectTimelineItem}
+            onItemDuration={updateMediaDuration}
+            onRemoveItem={removeImportedMedia}
+            onLayoutModeChange={setLayoutMode}
+            onScreenScaleChange={(scale) =>
+              setScreenPosition((current) => ({ ...current, scale }))
             }
-            onTogglePlayback={() => void togglePlayback()}
-            onSeekFrame={seekFrame}
-            onSelectClip={(clip) => {
-              setSelectedItemId(clip.item.id);
-              setSelectedTimelineSegmentId(clip.id);
-            }}
-            onSelectZoom={(effect) => {
-              setSelectedZoomId(effect.id);
-              setActiveTool("zoom");
-              seek((effect.start + effect.end) / 2);
-            }}
-            onSelectSubtitle={(subtitleId) => {
+            onScreenAspectRatioChange={setScreenAspectRatio}
+            onCameraShapeChange={setCameraShape}
+            onCameraBorderStyleChange={setCameraBorderStyle}
+            onCameraContentTransformChange={updateCameraContentTransform}
+            onCameraContentTransformReset={resetCameraContentTransform}
+            onCameraPositionChange={selectCameraPosition}
+            onCameraSizeChange={selectCameraSize}
+            onMasterVolumeChange={setMasterVolume}
+            onAddBackgroundMusic={() =>
+              void importMedia({ backgroundAudio: true, selectFirst: false })
+            }
+            onSetAudioLevel={setAudioLevel}
+            onAddZoom={addZoomEffect}
+            onUpdateZoom={updateZoomEffect}
+            onRemoveZoom={removeZoomEffect}
+            onAddSubtitle={addSubtitle}
+            onGenerateSubtitles={() => void generateSubtitles()}
+            onSubtitleStyleChange={setSubtitleStyle}
+            onUpdateSubtitle={updateSubtitle}
+            onSelectSubtitle={setSelectedSubtitleId}
+            onSplitAtPlayhead={() =>
+              splitTimelineSegment(selectedTimelineSegmentId, currentTime)
+            }
+            onDeleteSelected={deleteSelectedTimelineSegment}
+            onBackgroundCategoryChange={setActiveBackgroundCategory}
+            onBackgroundStyleChange={setBackgroundStyle}
+            onUploadCustomBackground={() => void importCustomBackground()}
+            onCornerStyleChange={setVideoCornerStyle}
+          />
+
+          <EditorPreviewPanel
+            previewClassName={previewClassName}
+            previewFrameStyle={previewFrameStyle}
+            previewZoom={previewZoom}
+            previewItem={previewItem}
+            videoTimelineClips={videoTimelineClips}
+            audioTimelineClips={audioTimelineClips}
+            isProjectCompositionSelected={isProjectCompositionSelected}
+            projectCamera={projectCamera}
+            layoutMode={layoutMode}
+            screenStyle={screenStyle}
+            cameraStyle={cameraStyle}
+            cameraVideoStyle={cameraVideoStyle}
+            screenEditEnabled={screenEditEnabled}
+            cameraEditEnabled={cameraEditEnabled}
+            activeSubtitle={activeSubtitle}
+            subtitleStyle={subtitleStyle}
+            currentTime={currentTime}
+            mainVideoRef={mainVideoRef}
+            cameraRef={cameraRef}
+            audioElsRef={audioElsRef}
+            onScreenEditPointerDown={beginScreenLayoutDrag}
+            onCameraEditPointerDown={beginCameraLayoutDrag}
+            onMediaReady={() =>
+              syncMediaToTime(currentTimeRef.current, playingRef.current, "media-ready")
+            }
+            onDuration={updateDuration}
+            onMediaDuration={updateMediaDuration}
+            onPreviewZoomChange={(zoom) => setPreviewZoom(clampNumber(zoom, 0.65, 1.6))}
+            onSubtitleClick={(subtitleId) => {
               setSelectedSubtitleId(subtitleId);
               setActiveTool("subtitles");
             }}
-            onTrimPointerDown={beginTimelineClipTrim}
-            onMovePointerDown={beginTimelineClipMove}
-            onZoomDragPointerDown={beginZoomClipDrag}
-            onBodyPointerDown={beginTimelineScrub}
-            onBodyPointerMove={moveTimelineScrub}
-            onBodyPointerUp={endTimelineScrub}
-            onBodyContextMenu={openTimelineContextMenu}
-            onBodyDragOver={handleTimelineDragOver}
-            onBodyDrop={handleTimelineDrop}
-            onContextMenuSplit={() => {
-              if (timelineContextMenu) {
-                splitTimelineSegment(timelineContextMenu.segmentId, timelineContextMenu.time);
-              }
-            }}
-            onContextMenuDelete={() => {
-              if (timelineContextMenu) {
-                deleteTimelineSegment(timelineContextMenu.segmentId);
-              }
-            }}
           />
-        ) : null}
+        </div>
+
+        <EditorTimelineSection
+          visible={timelineVisible}
+          bodyRef={timelineBodyRef}
+          onResizePointerDown={beginTimelinePanelResize}
+          onResizePointerMove={moveTimelinePanelResize}
+          onResizePointerUp={endTimelinePanelResize}
+          onResizeDoubleClick={resetTimelinePanelHeight}
+          activeTool={activeTool}
+          playing={playing}
+          scrubbing={scrubbingTimeline}
+          currentTime={currentTime}
+          currentFrame={currentFrame}
+          totalFrames={totalFrames}
+          playheadPercent={playheadPercent}
+          renderDuration={timelineRenderDuration}
+          videoClips={videoTimelineClips}
+          audioTracks={audioTimelineTracks}
+          zoomEffects={zoomEffects}
+          subtitles={subtitles}
+          selectedSegmentId={selectedTimelineSegmentId}
+          selectedZoomId={selectedZoomEffect?.id ?? null}
+          selectedSubtitleId={selectedSubtitle?.id ?? null}
+          contextMenu={timelineContextMenu}
+          canSplitAtContextMenu={
+            timelineContextMenu
+              ? canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)
+              : false
+          }
+          onTogglePlayback={() => void togglePlayback()}
+          onSeekFrame={seekFrame}
+          onSelectClip={(clip) => {
+            setSelectedItemId(clip.item.id);
+            setSelectedTimelineSegmentId(clip.id);
+          }}
+          onSelectZoom={(effect) => {
+            setSelectedZoomId(effect.id);
+            setActiveTool("zoom");
+            seek((effect.start + effect.end) / 2);
+          }}
+          onSelectSubtitle={(subtitleId) => {
+            setSelectedSubtitleId(subtitleId);
+            setActiveTool("subtitles");
+          }}
+          onTrimPointerDown={beginTimelineClipTrim}
+          onMovePointerDown={beginTimelineClipMove}
+          onZoomDragPointerDown={beginZoomClipDrag}
+          onBodyPointerDown={beginTimelineScrub}
+          onBodyPointerMove={moveTimelineScrub}
+          onBodyPointerUp={endTimelineScrub}
+          onBodyContextMenu={openTimelineContextMenu}
+          onBodyDragOver={handleTimelineDragOver}
+          onBodyDrop={handleTimelineDrop}
+          onContextMenuSplit={() => {
+            if (timelineContextMenu) {
+              splitTimelineSegment(timelineContextMenu.segmentId, timelineContextMenu.time);
+            }
+          }}
+          onContextMenuDelete={() => {
+            if (timelineContextMenu) {
+              deleteTimelineSegment(timelineContextMenu.segmentId);
+            }
+          }}
+        />
       </section>
     </main>
   );
-}
-
-/** Maps a corner-resize handle to the drag direction that grows the screen. */
-function getScreenResizeDirection(mode: ScreenLayoutDragMode): { x: number; y: number } {
-  switch (mode) {
-    case "resize-nw":
-      return { x: -1, y: -1 };
-    case "resize-ne":
-      return { x: 1, y: -1 };
-    case "resize-sw":
-      return { x: -1, y: 1 };
-    case "resize-se":
-      return { x: 1, y: 1 };
-    default:
-      return { x: 0, y: 0 };
-  }
 }

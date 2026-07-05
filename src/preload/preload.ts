@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   CreateProjectRequest,
+  DesktopPermissionKind,
+  DesktopPermissionStatus,
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
@@ -18,6 +20,15 @@ import type {
 const api = {
   sources: {
     list: (): Promise<SourceSummary[]> => ipcRenderer.invoke("sources:list")
+  },
+  permissions: {
+    getStatus: (): Promise<DesktopPermissionStatus> =>
+      ipcRenderer.invoke("permissions:get-status"),
+    openSettings: (kind: DesktopPermissionKind): Promise<boolean> =>
+      ipcRenderer.invoke("permissions:open-settings", kind),
+    requestMedia: (kind: Extract<DesktopPermissionKind, "camera" | "microphone">): Promise<boolean> =>
+      ipcRenderer.invoke("permissions:request-media", kind),
+    startAppDrag: (): void => ipcRenderer.send("permissions:start-app-drag")
   },
   capture: {
     selectDisplaySource: (sourceId: string): Promise<boolean> =>
