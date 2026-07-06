@@ -46,6 +46,15 @@ import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
 import { useTimelineViewport } from "./editor/useTimelineViewport";
 import {
+  addLanguageToWhisperWordChunks,
+  createSubtitleSegmentsFromWhisperOutput,
+  formatSubtitleLanguage,
+  getWhisperOutputLanguage,
+  whisperTranscriptionModel,
+  whisperTranscriptionModelLabel
+} from "./editor/subtitle-transcription";
+import type { WhisperTranscriptionOutput } from "./editor/subtitle-transcription";
+import {
   areTimelineSegmentsEqual,
   canSplitTimelineSegment,
   canSplitTimelineSegmentAt,
@@ -81,6 +90,39 @@ import type {
   VideoCornerStyle,
   ZoomEffect
 } from "./editor/types";
+
+function isKeyboardTextTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  if (
+    target.isContentEditable ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  ) {
+    return true;
+  }
+
+  if (!(target instanceof HTMLInputElement)) {
+    return false;
+  }
+
+  return !["button", "checkbox", "color", "file", "radio", "range", "reset", "submit"].includes(
+    target.type
+  );
+}
+
+function blurFocusedShortcutControl(): void {
+  const activeElement = document.activeElement;
+  if (
+    activeElement instanceof HTMLElement &&
+    activeElement !== document.body &&
+    activeElement !== document.documentElement
+  ) {
+    activeElement.blur();
+  }
+}
 
 export function EditorView() {
   const projectId = useMemo(
@@ -127,6 +169,7 @@ export function EditorView() {
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
+  const [subtitleLanguage, setSubtitleLanguage] = useState<string | null>(null);
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>("karaoke");
   const [sttStatus, setSttStatus] = useState<
     "idle" | "loading" | "transcribing" | "done" | "error"
@@ -198,11 +241,13 @@ export function EditorView() {
     setProject,
     setScreenAspectRatio,
     setScreenPosition,
+    setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
     setTimelineSegments,
     setVideoCornerStyle,
     setZoomEffects,
+    subtitleLanguage,
     subtitleStyle,
     subtitles,
     timelineSegments,
@@ -515,12 +560,7 @@ export function EditorView() {
   // Global keyboard shortcuts: play/pause, delete, undo/redo.
   useEffect(() => {
     function handleTimelineKeyDown(event: KeyboardEvent) {
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      const isTyping =
-        target?.tagName === "INPUT" ||
-        target?.tagName === "TEXTAREA" ||
-        target?.tagName === "SELECT" ||
-        target?.isContentEditable;
+      const isTyping = isKeyboardTextTarget(event.target);
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
@@ -545,6 +585,12 @@ export function EditorView() {
 
       if (event.code === "Space") {
         event.preventDefault();
+        event.stopPropagation();
+        if (event.repeat) {
+          return;
+        }
+
+        blurFocusedShortcutControl();
         void togglePlayback();
         return;
       }
@@ -1087,51 +1133,41 @@ export function EditorView() {
 
       const transcriber = (await transformers.pipeline(
         "automatic-speech-recognition",
-        "Xenova/whisper-tiny.en"
+        whisperTranscriptionModel
       )) as unknown as (
         input: Float32Array,
         options: Record<string, unknown>
-      ) => Promise<{ chunks?: Array<{ timestamp: [number, number | null]; text: string }> }>;
+      ) => Promise<WhisperTranscriptionOutput>;
+      addLanguageToWhisperWordChunks(transcriber);
 
       const output = await transcriber(audio, {
-        return_timestamps: true,
+        return_timestamps: "word",
         chunk_length_s: 30,
         stride_length_s: 5
       });
 
-      const chunks = output.chunks ?? [];
-      const segments: SubtitleSegment[] = chunks
-        .filter((chunk) => chunk.text && chunk.text.trim().length > 0)
-        .map((chunk, index, all) => {
-          const start = Math.max(0, chunk.timestamp?.[0] ?? 0);
-          const rawEnd = chunk.timestamp?.[1] ?? all[index + 1]?.timestamp?.[0] ?? start + 2;
-          return {
-            id: createId("subtitle"),
-            start,
-            end: Math.max(start + 0.4, rawEnd),
-            text: chunk.text.trim()
-          };
-        });
+      const segments = createSubtitleSegmentsFromWhisperOutput(output);
 
       if (segments.length > 0) {
+        setSubtitleLanguage(getWhisperOutputLanguage(output));
         setSubtitles(segments);
         setSelectedSubtitleId(segments[0].id);
       } else {
+        setSubtitleLanguage(null);
         setError("No speech was detected in the audio.");
       }
       setSttStatus("done");
     } catch (sttError) {
-      setError(
-        `Speech-to-text failed: ${sttError instanceof Error ? sttError.message : String(sttError)
-        }`
-      );
+      const message = sttError instanceof Error ? sttError.message : String(sttError);
+      setError(`Speech-to-text failed: ${message}`);
       setSttStatus("error");
     }
   }
 
   function updateSubtitle(id: string, updates: Partial<SubtitleSegment>) {
+    const nextUpdates = "text" in updates ? { ...updates, words: undefined } : updates;
     setSubtitles((current) =>
-      current.map((subtitle) => (subtitle.id === id ? { ...subtitle, ...updates } : subtitle))
+      current.map((subtitle) => (subtitle.id === id ? { ...subtitle, ...nextUpdates } : subtitle))
     );
   }
 
@@ -1211,6 +1247,8 @@ export function EditorView() {
             previewItem={previewItem}
             selectedZoomEffect={selectedZoomEffect}
             sttStatus={sttStatus}
+            sttModelLabel={whisperTranscriptionModelLabel}
+            subtitleLanguage={formatSubtitleLanguage(subtitleLanguage)}
             subtitleStyle={subtitleStyle}
             subtitles={subtitles}
             selectedSubtitle={selectedSubtitle}

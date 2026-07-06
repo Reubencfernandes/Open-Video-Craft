@@ -134,11 +134,18 @@ export type ZoomEffect = {
 
 export type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";
 
+export type SubtitleWord = {
+  start: number;
+  end: number;
+  text: string;
+};
+
 export type SubtitleSegment = {
   id: string;
   start: number;
   end: number;
   text: string;
+  words?: SubtitleWord[];
 };
 
 export const frameRate = 30;

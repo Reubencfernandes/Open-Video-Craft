@@ -28,6 +28,7 @@ export type EditorStateSnapshot = {
   timelineSegments: TimelineSegment[];
   zoomEffects: ZoomEffect[];
   subtitles: SubtitleSegment[];
+  subtitleLanguage: string | null;
   subtitleStyle: SubtitleStyle;
   layoutMode: LayoutMode;
   backgroundStyle: BackgroundStyle;
@@ -62,6 +63,7 @@ type RestoreEditorStateActions = {
   setMasterVolume: (value: number) => void;
   setScreenAspectRatio: (value: ScreenAspectRatio) => void;
   setScreenPosition: (value: ScreenPositionState) => void;
+  setSubtitleLanguage: (value: string | null) => void;
   setSubtitleStyle: (value: SubtitleStyle) => void;
   setSubtitles: (value: SubtitleSegment[]) => void;
   setTimelineSegments: (value: TimelineSegment[]) => void;
@@ -96,6 +98,9 @@ export function restoreEditorStateSnapshot(
     }
     if (Array.isArray(snapshot.subtitles)) {
       actions.setSubtitles(snapshot.subtitles as SubtitleSegment[]);
+    }
+    if (snapshot.subtitleLanguage === null || typeof snapshot.subtitleLanguage === "string") {
+      actions.setSubtitleLanguage(snapshot.subtitleLanguage);
     }
     if (snapshot.subtitleStyle) {
       actions.setSubtitleStyle(snapshot.subtitleStyle as SubtitleStyle);

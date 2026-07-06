@@ -5,7 +5,8 @@ import type {
   LayoutMode,
   ScreenLayoutDragMode,
   SubtitleSegment,
-  SubtitleStyle
+  SubtitleStyle,
+  SubtitleWord
 } from "./types";
 
 const screenResizeModes = ["resize-nw", "resize-ne", "resize-sw", "resize-se"] as const;
@@ -263,13 +264,13 @@ function SubtitleOverlay(props: {
     return null;
   }
 
-  const words = props.subtitle.text.trim().split(/\s+/).filter(Boolean);
+  const words = getSubtitleOverlayWords(props.subtitle);
   const duration = Math.max(0.1, props.subtitle.end - props.subtitle.start);
   const perWord = duration / Math.max(1, words.length);
   const elapsed = props.currentTime - props.subtitle.start;
   const highlights = props.style === "karaoke" || props.style === "pop";
   const activeIndex = highlights
-    ? clampNumber(Math.floor(elapsed / perWord), 0, words.length - 1)
+    ? getActiveSubtitleWordIndex(words, props.currentTime, elapsed, perWord)
     : -1;
 
   return (
@@ -282,7 +283,7 @@ function SubtitleOverlay(props: {
     >
       {words.map((word, index) => (
         <span
-          key={`${word}-${index}`}
+          key={`${word.text}-${index}`}
           className={`mx-[0.16em] inline-block rounded transition ${
             index === activeIndex && props.style === "karaoke"
               ? "bg-violet-500 px-[0.16em] text-white"
@@ -291,9 +292,42 @@ function SubtitleOverlay(props: {
                 : ""
           }`}
         >
-          {word}
+          {word.text}
         </span>
       ))}
     </button>
   );
+}
+
+function getSubtitleOverlayWords(subtitle: SubtitleSegment): SubtitleWord[] {
+  if (subtitle.words?.length) {
+    return subtitle.words;
+  }
+
+  const words = subtitle.text.trim().split(/\s+/).filter(Boolean);
+  const duration = Math.max(0.1, subtitle.end - subtitle.start);
+  const perWord = duration / Math.max(1, words.length);
+
+  return words.map((word, index) => ({
+    text: word,
+    start: subtitle.start + index * perWord,
+    end: subtitle.start + (index + 1) * perWord
+  }));
+}
+
+function getActiveSubtitleWordIndex(
+  words: SubtitleWord[],
+  currentTime: number,
+  fallbackElapsed: number,
+  fallbackPerWord: number
+): number {
+  const timedIndex = words.findIndex(
+    (word) => currentTime >= word.start && currentTime < word.end
+  );
+
+  if (timedIndex >= 0) {
+    return timedIndex;
+  }
+
+  return clampNumber(Math.floor(fallbackElapsed / fallbackPerWord), 0, words.length - 1);
 }

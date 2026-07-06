@@ -59,12 +59,14 @@ type UseEditorPersistenceParams = {
   setProject: Dispatch<SetStateAction<ProjectView | null>>;
   setScreenAspectRatio: Dispatch<SetStateAction<ScreenAspectRatio>>;
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
+  setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitleStyle: Dispatch<SetStateAction<SubtitleStyle>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setVideoCornerStyle: Dispatch<SetStateAction<VideoCornerStyle>>;
   setZoomEffects: Dispatch<SetStateAction<ZoomEffect[]>>;
   subtitleStyle: SubtitleStyle;
+  subtitleLanguage: string | null;
   subtitles: SubtitleSegment[];
   timelineSegments: TimelineSegment[];
   videoCornerStyle: VideoCornerStyle;
@@ -104,12 +106,14 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setProject,
     setScreenAspectRatio,
     setScreenPosition,
+    setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
     setTimelineSegments,
     setVideoCornerStyle,
     setZoomEffects,
     subtitleStyle,
+    subtitleLanguage,
     subtitles,
     timelineSegments,
     videoCornerStyle,
@@ -159,6 +163,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       setMasterVolume,
       setScreenAspectRatio,
       setScreenPosition,
+      setSubtitleLanguage,
       setSubtitleStyle,
       setSubtitles,
       setTimelineSegments,
@@ -180,6 +185,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setMasterVolume,
     setScreenAspectRatio,
     setScreenPosition,
+    setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
     setTimelineSegments,
@@ -207,6 +213,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       masterVolume,
       screenAspectRatio,
       screenPosition,
+      subtitleLanguage,
       subtitleStyle,
       subtitles,
       timelineSegments,

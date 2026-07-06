@@ -18,6 +18,8 @@ const subtitleStyleOptions: Array<{ id: SubtitleStyle; label: string }> = [
  */
 export function SubtitlesPanel(props: {
   sttStatus: SttStatus;
+  sttModelLabel: string;
+  subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
   selectedSubtitle: SubtitleSegment | null;
@@ -47,7 +49,7 @@ export function SubtitlesPanel(props: {
       >
         <WandSparkles size={16} />
         {props.sttStatus === "loading"
-          ? "Loading model…"
+          ? `Loading ${props.sttModelLabel}…`
           : props.sttStatus === "transcribing"
             ? "Transcribing…"
           : "Auto-generate (speech-to-text)"}
@@ -56,8 +58,14 @@ export function SubtitlesPanel(props: {
         <WandSparkles size={14} />
         <span>
           Runs an open-source Whisper model on your device. The first run downloads the model
-          (~40MB), then transcribes the recording's audio into subtitles.
+          once, then transcribes the recording's audio into subtitles.
         </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-xs font-extrabold text-slate-400">
+        <span>Model</span>
+        <span className="truncate text-right text-white">{props.sttModelLabel}</span>
+        <span>Language</span>
+        <span className="truncate text-right text-white">{props.subtitleLanguage}</span>
       </div>
       <div className="grid gap-2">
         <span className="text-xs font-extrabold text-slate-400">Subtitle style</span>

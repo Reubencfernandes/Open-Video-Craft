@@ -46,6 +46,8 @@ export function EditorToolPanel(props: {
   previewItem: EditorMediaItem | null;
   selectedZoomEffect: ZoomEffect | null;
   sttStatus: "idle" | "loading" | "transcribing" | "done" | "error";
+  sttModelLabel: string;
+  subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
   selectedSubtitle: SubtitleSegment | null;
@@ -152,6 +154,8 @@ export function EditorToolPanel(props: {
       {props.activeTool === "subtitles" ? (
         <SubtitlesPanel
           sttStatus={props.sttStatus}
+          sttModelLabel={props.sttModelLabel}
+          subtitleLanguage={props.subtitleLanguage}
           subtitleStyle={props.subtitleStyle}
           subtitles={props.subtitles}
           selectedSubtitle={props.selectedSubtitle}
