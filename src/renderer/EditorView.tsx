@@ -45,6 +45,7 @@ import { useEditorPlayback } from "./editor/useEditorPlayback";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
 import { useTimelineViewport } from "./editor/useTimelineViewport";
+import { defaultSpeedRate, speedMinDurationSeconds } from "./editor/speed-utils";
 import {
   addLanguageToWhisperWordChunks,
   createSubtitleSegmentsFromWhisperOutput,
@@ -81,6 +82,7 @@ import type {
   LayoutMode,
   MediaPanel as MediaPanelTab,
   ScreenAspectRatio,
+  SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
   TimelineContextMenu,
@@ -167,6 +169,8 @@ export function EditorView() {
   const [backgroundAudioIds, setBackgroundAudioIds] = useState<string[]>([]);
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
+  const [speedEffects, setSpeedEffects] = useState<SpeedEffect[]>([]);
+  const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
   const [subtitleLanguage, setSubtitleLanguage] = useState<string | null>(null);
@@ -199,6 +203,14 @@ export function EditorView() {
     originalSegments: TimelineSegment[];
   } | null>(null);
   const zoomDragRef = useRef<{
+    id: string;
+    mode: "move" | "start" | "end";
+    pointerStartTime: number;
+    origStart: number;
+    origEnd: number;
+    moved: boolean;
+  } | null>(null);
+  const speedDragRef = useRef<{
     id: string;
     mode: "move" | "start" | "end";
     pointerStartTime: number;
@@ -241,12 +253,14 @@ export function EditorView() {
     setProject,
     setScreenAspectRatio,
     setScreenPosition,
+    setSpeedEffects,
     setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
     setTimelineSegments,
     setVideoCornerStyle,
     setZoomEffects,
+    speedEffects,
     subtitleLanguage,
     subtitleStyle,
     subtitles,
@@ -297,6 +311,7 @@ export function EditorView() {
     screenStyle,
     selectedItem,
     selectedSubtitle,
+    selectedSpeedEffect,
     selectedTimelineClip,
     selectedTimelineItemId,
     selectedZoomEffect,
@@ -329,6 +344,8 @@ export function EditorView() {
     selectedSubtitleId,
     selectedTimelineSegmentId,
     selectedZoomId,
+    selectedSpeedId,
+    speedEffects,
     subtitles,
     timelineSegments,
     timelineViewDuration,
@@ -362,6 +379,7 @@ export function EditorView() {
     setCurrentTime,
     setError,
     setPlaying,
+    speedEffects,
     subtitles,
     timelineDuration,
     timelineSegments,
@@ -602,6 +620,11 @@ export function EditorView() {
           return;
         }
 
+        if (activeTool === "speed" && selectedSpeedId) {
+          removeSpeedEffect(selectedSpeedId);
+          return;
+        }
+
         deleteSelectedTimelineSegment();
       }
     }
@@ -616,6 +639,7 @@ export function EditorView() {
     playing,
     selectedItem?.id,
     selectedTimelineSegmentId,
+    selectedSpeedId,
     selectedZoomId,
     timelineRedoStack,
     timelineSegments,
@@ -997,10 +1021,86 @@ export function EditorView() {
     zoomDragRef.current = null;
   }
 
+  function beginSpeedClipDrag(
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) {
+    if (mode !== "move") {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    const time = getTimelineTimeFromClientX(event.clientX);
+    const effect = speedEffects.find((item) => item.id === id);
+    if (time === null || !effect) {
+      return;
+    }
+
+    speedDragRef.current = {
+      id,
+      mode,
+      pointerStartTime: time,
+      origStart: effect.start,
+      origEnd: effect.end,
+      moved: false
+    };
+    setSelectedSpeedId(id);
+    timelineBodyRef.current?.setPointerCapture(event.pointerId);
+  }
+
+  function updateSpeedClipDrag(clientX: number) {
+    const drag = speedDragRef.current;
+    const time = getTimelineTimeFromClientX(clientX);
+    if (!drag || time === null) {
+      return;
+    }
+
+    if (drag.mode === "move") {
+      const delta = time - drag.pointerStartTime;
+      if (!drag.moved && Math.abs(delta) < 0.02) {
+        return;
+      }
+      drag.moved = true;
+      const constrained = constrainZoomMove(
+        speedEffects,
+        drag.id,
+        drag.origStart + delta,
+        timelineDuration
+      );
+      if (constrained) {
+        updateSpeedEffect(drag.id, constrained);
+      }
+      return;
+    }
+
+    if (drag.mode === "start") {
+      const constrained = constrainZoomStart(speedEffects, drag.id, time);
+      if (constrained) {
+        updateSpeedEffect(drag.id, constrained);
+      }
+      return;
+    }
+
+    const constrained = constrainZoomEnd(speedEffects, drag.id, time, timelineDuration);
+    if (constrained) {
+      updateSpeedEffect(drag.id, constrained);
+    }
+  }
+
+  function finishSpeedClipDrag() {
+    speedDragRef.current = null;
+  }
+
   // Pointer handlers on the timeline body dispatch to whichever drag is active
   // (trim / zoom / move) and otherwise treat the pointer as a playhead scrub.
   function beginTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
-    if (timelineTrimDragRef.current || timelineMoveDragRef.current || zoomDragRef.current) {
+    if (
+      timelineTrimDragRef.current ||
+      timelineMoveDragRef.current ||
+      zoomDragRef.current ||
+      speedDragRef.current
+    ) {
       return;
     }
 
@@ -1027,6 +1127,11 @@ export function EditorView() {
       return;
     }
 
+    if (speedDragRef.current) {
+      updateSpeedClipDrag(event.clientX);
+      return;
+    }
+
     if (timelineMoveDragRef.current) {
       updateTimelineClipMove(event.clientX);
       return;
@@ -1047,6 +1152,7 @@ export function EditorView() {
     finishTimelineClipTrim();
     finishTimelineClipMove();
     finishZoomClipDrag();
+    finishSpeedClipDrag();
     timelineDragRef.current = false;
     setScrubbingTimeline(false);
   }
@@ -1094,6 +1200,62 @@ export function EditorView() {
   function removeZoomEffect(id: string) {
     setZoomEffects((current) => current.filter((effect) => effect.id !== id));
     setSelectedZoomId((current) => (current === id ? null : current));
+  }
+
+  function addSpeedEffect() {
+    const start = currentTime;
+    const desiredDuration = Math.min(
+      2.5,
+      Math.max(speedMinDurationSeconds, timelineDuration - start)
+    );
+    const placement =
+      placeZoomInFirstGap(speedEffects, start, desiredDuration, timelineDuration) ??
+      placeZoomInFirstGap(speedEffects, start, speedMinDurationSeconds, timelineDuration);
+
+    if (!placement) {
+      setError("There is no room for another speed section after the playhead.");
+      return;
+    }
+
+    const nextEffect: SpeedEffect = {
+      id: createId("speed"),
+      start: placement.start,
+      end: placement.end,
+      rate: defaultSpeedRate
+    };
+    setError(null);
+    setSpeedEffects((current) => [...current, nextEffect]);
+    setSelectedSpeedId(nextEffect.id);
+    setActiveTool("speed");
+  }
+
+  function updateSpeedEffect(id: string, updates: Partial<SpeedEffect>) {
+    setSpeedEffects((current) => {
+      const constrainedStart =
+        typeof updates.start === "number"
+          ? constrainZoomStart(current, id, updates.start)
+          : null;
+      const constrainedEnd =
+        typeof updates.end === "number"
+          ? constrainZoomEnd(current, id, updates.end, timelineDuration)
+          : null;
+      const nextUpdates = {
+        ...updates,
+        ...(constrainedStart ?? {}),
+        ...(constrainedEnd ?? {})
+      };
+
+      return current.map((effect) =>
+        effect.id === id ? { ...effect, ...nextUpdates } : effect
+      );
+    });
+    syncMediaToTime(currentTimeRef.current, playingRef.current, "clip-change");
+  }
+
+  function removeSpeedEffect(id: string) {
+    setSpeedEffects((current) => current.filter((effect) => effect.id !== id));
+    setSelectedSpeedId((current) => (current === id ? null : current));
+    syncMediaToTime(currentTimeRef.current, playingRef.current, "clip-change");
   }
 
   function addSubtitle() {
@@ -1246,6 +1408,7 @@ export function EditorView() {
             audioLevels={audioLevels}
             previewItem={previewItem}
             selectedZoomEffect={selectedZoomEffect}
+            selectedSpeedEffect={selectedSpeedEffect}
             sttStatus={sttStatus}
             sttModelLabel={whisperTranscriptionModelLabel}
             subtitleLanguage={formatSubtitleLanguage(subtitleLanguage)}
@@ -1280,6 +1443,9 @@ export function EditorView() {
             onAddZoom={addZoomEffect}
             onUpdateZoom={updateZoomEffect}
             onRemoveZoom={removeZoomEffect}
+            onAddSpeed={addSpeedEffect}
+            onUpdateSpeed={updateSpeedEffect}
+            onRemoveSpeed={removeSpeedEffect}
             onAddSubtitle={addSubtitle}
             onGenerateSubtitles={() => void generateSubtitles()}
             onSubtitleStyleChange={setSubtitleStyle}
@@ -1349,9 +1515,11 @@ export function EditorView() {
           videoClips={videoTimelineClips}
           audioTracks={audioTimelineTracks}
           zoomEffects={zoomEffects}
+          speedEffects={speedEffects}
           subtitles={subtitles}
           selectedSegmentId={selectedTimelineSegmentId}
           selectedZoomId={selectedZoomEffect?.id ?? null}
+          selectedSpeedId={selectedSpeedEffect?.id ?? null}
           selectedSubtitleId={selectedSubtitle?.id ?? null}
           contextMenu={timelineContextMenu}
           canSplitAtContextMenu={
@@ -1370,6 +1538,11 @@ export function EditorView() {
             setActiveTool("zoom");
             seek((effect.start + effect.end) / 2);
           }}
+          onSelectSpeed={(effect) => {
+            setSelectedSpeedId(effect.id);
+            setActiveTool("speed");
+            seek((effect.start + effect.end) / 2);
+          }}
           onSelectSubtitle={(subtitleId) => {
             setSelectedSubtitleId(subtitleId);
             setActiveTool("subtitles");
@@ -1377,6 +1550,7 @@ export function EditorView() {
           onTrimPointerDown={beginTimelineClipTrim}
           onMovePointerDown={beginTimelineClipMove}
           onZoomDragPointerDown={beginZoomClipDrag}
+          onSpeedDragPointerDown={beginSpeedClipDrag}
           onBodyPointerDown={beginTimelineScrub}
           onBodyPointerMove={moveTimelineScrub}
           onBodyPointerUp={endTimelineScrub}

@@ -1,7 +1,15 @@
 import type { ImportedMediaKind } from "../../shared/types";
 
 export type MediaPanel = "all" | "video" | "audio" | "image";
-export type EditorTool = "media" | "layout" | "audio" | "zoom" | "subtitles" | "cut" | "style";
+export type EditorTool =
+  | "media"
+  | "layout"
+  | "audio"
+  | "zoom"
+  | "speed"
+  | "subtitles"
+  | "cut"
+  | "style";
 export type LayoutMode =
   | "screen-only"
   | "camera-only"
@@ -130,6 +138,15 @@ export type ZoomEffect = {
   scale: number;
   targetX: number;
   targetY: number;
+};
+
+export type SpeedRate = 1 | 2 | 3 | 4 | 5;
+
+export type SpeedEffect = {
+  id: string;
+  start: number;
+  end: number;
+  rate: SpeedRate;
 };
 
 export type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";

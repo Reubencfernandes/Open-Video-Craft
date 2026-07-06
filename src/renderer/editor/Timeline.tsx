@@ -1,4 +1,4 @@
-import { AudioLines, Captions, Film, WandSparkles } from "lucide-react";
+import { AudioLines, Captions, Film, Gauge, WandSparkles } from "lucide-react";
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
@@ -13,10 +13,16 @@ import {
   TimelineRuler,
   TimelineToolbar
 } from "./TimelineChrome";
-import { TimelineClip, TimelineSubtitleClip, TimelineZoomClip } from "./TimelineClips";
+import {
+  TimelineClip,
+  TimelineSpeedClip,
+  TimelineSubtitleClip,
+  TimelineZoomClip
+} from "./TimelineClips";
 import { TimelineTrack } from "./TimelineTrack";
 import type {
   EditorTool,
+  SpeedEffect,
   SubtitleSegment,
   TimelineContextMenu,
   TimelineMediaClip,
@@ -51,9 +57,11 @@ export function Timeline(props: {
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   zoomEffects: ZoomEffect[];
+  speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
   selectedSegmentId: string | null;
   selectedZoomId: string | null;
+  selectedSpeedId: string | null;
   selectedSubtitleId: string | null;
   contextMenu: TimelineContextMenu;
   canSplitAtContextMenu: boolean;
@@ -61,6 +69,7 @@ export function Timeline(props: {
   onSeekFrame: (frame: number) => void;
   onSelectClip: (clip: TimelineMediaClip) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
+  onSelectSpeed: (effect: SpeedEffect) => void;
   onSelectSubtitle: (subtitleId: string) => void;
   onTrimPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -69,6 +78,11 @@ export function Timeline(props: {
   ) => void;
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>, segmentId: string) => void;
   onZoomDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
+  onSpeedDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     id: string,
     mode: "move" | "start" | "end"
@@ -152,6 +166,21 @@ export function Timeline(props: {
                 selected={props.selectedZoomId === effect.id}
                 onSelect={() => props.onSelectZoom(effect)}
                 onDragPointerDown={props.onZoomDragPointerDown}
+              />
+            ))}
+          </TimelineTrack>
+        ) : null}
+
+        {props.activeTool === "speed" ? (
+          <TimelineTrack label="Speed" accent="cyan" icon={<Gauge size={14} />}>
+            {getOrderedZoomTimingItems(props.speedEffects).map((effect) => (
+              <TimelineSpeedClip
+                key={effect.id}
+                effect={effect}
+                duration={props.renderDuration}
+                selected={props.selectedSpeedId === effect.id}
+                onSelect={() => props.onSelectSpeed(effect)}
+                onDragPointerDown={props.onSpeedDragPointerDown}
               />
             ))}
           </TimelineTrack>

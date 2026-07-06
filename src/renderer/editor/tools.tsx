@@ -1,6 +1,7 @@
 import {
   Captions,
   FolderOpen,
+  Gauge,
   LayoutTemplate,
   Palette,
   Scissors,
@@ -25,12 +26,13 @@ export const editorTools: Array<{
   id: EditorTool;
   label: string;
   icon: ReactNode;
-  image: string;
+  image?: string;
 }> = [
   { id: "media", label: "Setup", icon: <FolderOpen size={18} />, image: setupIcon },
   { id: "cut", label: "Cut", icon: <Scissors size={18} />, image: cutIcon },
   { id: "layout", label: "Layout", icon: <LayoutTemplate size={18} />, image: layoutIcon },
   { id: "zoom", label: "Zoom", icon: <ZoomIn size={18} />, image: zoomIcon },
+  { id: "speed", label: "Speed", icon: <Gauge size={18} /> },
   { id: "style", label: "Style", icon: <Palette size={18} />, image: styleIcon },
   { id: "subtitles", label: "Subs", icon: <Captions size={18} />, image: subtitleIcon },
   { id: "audio", label: "Audio", icon: <Volume2 size={18} />, image: audioIcon }

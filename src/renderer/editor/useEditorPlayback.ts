@@ -15,10 +15,12 @@ import {
   createClipPlaybackKey,
   createTimelineMediaClips
 } from "./timeline-utils";
+import { getActiveSpeedRate } from "./speed-utils";
 import { frameRate } from "./types";
 import type {
   EditorMediaItem,
   LayoutMode,
+  SpeedEffect,
   SubtitleSegment,
   TimelineMediaClip,
   TimelineSegment,
@@ -44,6 +46,7 @@ type UseEditorPlaybackParams = {
   setCurrentTime: Dispatch<SetStateAction<number>>;
   setError: Dispatch<SetStateAction<string | null>>;
   setPlaying: Dispatch<SetStateAction<boolean>>;
+  speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
   timelineDuration: number;
   timelineSegments: TimelineSegment[];
@@ -84,6 +87,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     setCurrentTime,
     setError,
     setPlaying,
+    speedEffects,
     subtitles,
     timelineDuration,
     timelineSegments,
@@ -100,6 +104,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const videoClipsRef = useRef<TimelineMediaClip[]>([]);
   const audioClipsRef = useRef<TimelineMediaClip[]>([]);
   const zoomEffectsRef = useRef<ZoomEffect[]>([]);
+  const speedEffectsRef = useRef<SpeedEffect[]>([]);
   const syncedVideoClipKeyRef = useRef<string | null>(null);
   const syncedCameraClipKeyRef = useRef<string | null>(null);
   const pendingVideoSeekKeyRef = useRef<string | null>(null);
@@ -119,11 +124,15 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   useEffect(() => {
     syncTimelinePlaybackRefs(timelineSegments);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDuration, mediaById, subtitles, timelineSegments, zoomEffects]);
+  }, [activeDuration, mediaById, speedEffects, subtitles, timelineSegments, zoomEffects]);
 
   useEffect(() => {
     zoomEffectsRef.current = zoomEffects;
   }, [zoomEffects]);
+
+  useEffect(() => {
+    speedEffectsRef.current = speedEffects;
+  }, [speedEffects]);
 
   useEffect(() => {
     masterVolumeRef.current = masterVolume;
@@ -276,7 +285,11 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       return currentTimeRef.current;
     }
 
-    return currentTimeRef.current + dt;
+    return currentTimeRef.current + dt * getPlaybackRate(currentTimeRef.current);
+  }
+
+  function getPlaybackRate(time: number): number {
+    return getActiveSpeedRate(speedEffectsRef.current, time);
   }
 
   function canSetMediaTime(element: HTMLMediaElement): boolean {
@@ -417,6 +430,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
     input.element.muted = input.muted;
     input.element.volume = input.volume;
+    input.element.playbackRate = getPlaybackRate(input.timelineTime);
     if (input.isPlaying && input.element.paused) {
       playMediaElement(input.element, input.label);
     } else if (!input.isPlaying && !input.element.paused) {
@@ -455,6 +469,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     }
 
     input.element.volume = input.volume;
+    input.element.playbackRate = getPlaybackRate(input.timelineTime);
     if (input.isPlaying && input.element.paused) {
       playMediaElement(input.element, input.label);
     } else if (!input.isPlaying && !input.element.paused) {
@@ -614,6 +629,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       nextVideoClips,
       nextAudioClips,
       zoomEffects,
+      speedEffects,
       subtitles,
       activeDuration
     );

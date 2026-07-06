@@ -22,12 +22,21 @@ export function ToolRail(props: {
           key={tool.id}
           onClick={() => props.onToolChange(tool.id)}
         >
-          <img
-            className="size-[3.15rem] object-contain drop-shadow-[0_5px_8px_rgb(0_0_0_/_0.28)]"
-            src={tool.image}
-            alt=""
-            aria-hidden="true"
-          />
+          {tool.image ? (
+            <img
+              className="size-[3.15rem] object-contain drop-shadow-[0_5px_8px_rgb(0_0_0_/_0.28)]"
+              src={tool.image}
+              alt=""
+              aria-hidden="true"
+            />
+          ) : (
+            <span
+              className="grid size-[3.15rem] place-items-center rounded-xl border border-white/10 bg-cyan-400/12 text-cyan-200 shadow-[0_5px_8px_rgb(0_0_0_/_0.28)]"
+              aria-hidden="true"
+            >
+              {tool.icon}
+            </span>
+          )}
           <span className="max-w-full truncate">{tool.label}</span>
         </button>
       ))}

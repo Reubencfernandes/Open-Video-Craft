@@ -20,6 +20,7 @@ import type {
   CameraShape,
   LayoutMode,
   ScreenAspectRatio,
+  SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
   TimelineSegment,
@@ -59,12 +60,14 @@ type UseEditorPersistenceParams = {
   setProject: Dispatch<SetStateAction<ProjectView | null>>;
   setScreenAspectRatio: Dispatch<SetStateAction<ScreenAspectRatio>>;
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
+  setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
   setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitleStyle: Dispatch<SetStateAction<SubtitleStyle>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setVideoCornerStyle: Dispatch<SetStateAction<VideoCornerStyle>>;
   setZoomEffects: Dispatch<SetStateAction<ZoomEffect[]>>;
+  speedEffects: SpeedEffect[];
   subtitleStyle: SubtitleStyle;
   subtitleLanguage: string | null;
   subtitles: SubtitleSegment[];
@@ -106,12 +109,14 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setProject,
     setScreenAspectRatio,
     setScreenPosition,
+    setSpeedEffects,
     setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
     setTimelineSegments,
     setVideoCornerStyle,
     setZoomEffects,
+    speedEffects,
     subtitleStyle,
     subtitleLanguage,
     subtitles,
@@ -163,6 +168,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       setMasterVolume,
       setScreenAspectRatio,
       setScreenPosition,
+      setSpeedEffects,
       setSubtitleLanguage,
       setSubtitleStyle,
       setSubtitles,
@@ -185,6 +191,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setMasterVolume,
     setScreenAspectRatio,
     setScreenPosition,
+    setSpeedEffects,
     setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
@@ -213,6 +220,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       masterVolume,
       screenAspectRatio,
       screenPosition,
+      speedEffects,
       subtitleLanguage,
       subtitleStyle,
       subtitles,

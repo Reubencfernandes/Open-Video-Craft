@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type {
   EditorMediaItem,
+  SpeedEffect,
   SubtitleSegment,
   TimelineContextMenu,
   TimelineMediaClip,
@@ -383,6 +384,7 @@ export function calculateTimelineDuration(
   videoClips: TimelineMediaClip[],
   audioClips: TimelineMediaClip[],
   zoomEffects: ZoomEffect[],
+  speedEffects: SpeedEffect[],
   subtitles: SubtitleSegment[],
   activeDuration: number
 ): number {
@@ -391,6 +393,7 @@ export function calculateTimelineDuration(
     ...videoClips.map((clip) => clip.start + clip.duration),
     ...audioClips.map((clip) => clip.start + clip.duration),
     ...zoomEffects.map((effect) => effect.end),
+    ...speedEffects.map((effect) => effect.end),
     ...subtitles.map((subtitle) => subtitle.end)
   );
 

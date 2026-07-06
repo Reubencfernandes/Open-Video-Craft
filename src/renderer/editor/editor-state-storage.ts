@@ -8,6 +8,7 @@ import type {
   CameraShape,
   LayoutMode,
   ScreenAspectRatio,
+  SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
   TimelineSegment,
@@ -27,6 +28,7 @@ export type EditorStateSnapshot = {
   v: 1;
   timelineSegments: TimelineSegment[];
   zoomEffects: ZoomEffect[];
+  speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
   subtitleLanguage: string | null;
   subtitleStyle: SubtitleStyle;
@@ -63,6 +65,7 @@ type RestoreEditorStateActions = {
   setMasterVolume: (value: number) => void;
   setScreenAspectRatio: (value: ScreenAspectRatio) => void;
   setScreenPosition: (value: ScreenPositionState) => void;
+  setSpeedEffects: (value: SpeedEffect[]) => void;
   setSubtitleLanguage: (value: string | null) => void;
   setSubtitleStyle: (value: SubtitleStyle) => void;
   setSubtitles: (value: SubtitleSegment[]) => void;
@@ -95,6 +98,9 @@ export function restoreEditorStateSnapshot(
     }
     if (Array.isArray(snapshot.zoomEffects)) {
       actions.setZoomEffects(snapshot.zoomEffects as ZoomEffect[]);
+    }
+    if (Array.isArray(snapshot.speedEffects)) {
+      actions.setSpeedEffects(snapshot.speedEffects as SpeedEffect[]);
     }
     if (Array.isArray(snapshot.subtitles)) {
       actions.setSubtitles(snapshot.subtitles as SubtitleSegment[]);

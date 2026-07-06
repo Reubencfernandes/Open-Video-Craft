@@ -1,4 +1,4 @@
-import { Captions, Film, ZoomIn } from "lucide-react";
+import { Captions, Film, Gauge, ZoomIn } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import { memo, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -6,6 +6,7 @@ import { cx } from "../classNames";
 import { loadWaveSurferBlob } from "./media-utils";
 import { createTimelineClipStyle } from "./timeline-utils";
 import type {
+  SpeedEffect,
   SubtitleSegment,
   TimelineMediaClip,
   TimelineTrimEdge,
@@ -114,6 +115,40 @@ export function TimelineZoomClip(props: {
     >
       <ZoomIn className="relative z-[2] flex-none" size={13} />
       <strong className="relative z-[2] min-w-0 truncate">Zoom</strong>
+      <ClipTrimEdges
+        onTrimPointerDown={(event, edge) => props.onDragPointerDown(event, props.effect.id, edge)}
+      />
+    </button>
+  );
+}
+
+/** A speed effect region on the speed track; movable and trimmable like zoom. */
+export function TimelineSpeedClip(props: {
+  effect: SpeedEffect;
+  duration: number;
+  selected: boolean;
+  onSelect: () => void;
+  onDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
+}) {
+  return (
+    <button
+      className={cx(clipBaseClassName, "bg-[#256f7a]", props.selected && clipSelectedClassName)}
+      type="button"
+      title={`Speed ${props.effect.rate}x`}
+      style={createTimelineClipStyle(
+        props.effect.start,
+        props.effect.end - props.effect.start,
+        props.duration
+      )}
+      onClick={props.onSelect}
+      onPointerDown={(event) => props.onDragPointerDown(event, props.effect.id, "move")}
+    >
+      <Gauge className="relative z-[2] flex-none" size={13} />
+      <strong className="relative z-[2] min-w-0 truncate">{props.effect.rate}x</strong>
       <ClipTrimEdges
         onTrimPointerDown={(event, edge) => props.onDragPointerDown(event, props.effect.id, edge)}
       />

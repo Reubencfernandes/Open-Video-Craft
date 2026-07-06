@@ -23,6 +23,7 @@ import type {
   LayoutMode,
   MediaPanel,
   ScreenAspectRatio,
+  SpeedEffect,
   SubtitleSegment,
   TimelineSegment,
   VideoCornerStyle,
@@ -48,6 +49,8 @@ type UseEditorDerivedDataParams = {
   currentTime: number;
   zoomEffects: ZoomEffect[];
   selectedZoomId: string | null;
+  speedEffects: SpeedEffect[];
+  selectedSpeedId: string | null;
   subtitles: SubtitleSegment[];
   selectedSubtitleId: string | null;
   layoutMode: LayoutMode;
@@ -97,6 +100,8 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     currentTime,
     zoomEffects,
     selectedZoomId,
+    speedEffects,
+    selectedSpeedId,
     subtitles,
     selectedSubtitleId,
     layoutMode,
@@ -189,10 +194,11 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
         videoTimelineClips,
         audioTimelineClips,
         zoomEffects,
+        speedEffects,
         subtitles,
         activeDuration
       ),
-    [activeDuration, audioTimelineClips, subtitles, videoTimelineClips, zoomEffects]
+    [activeDuration, audioTimelineClips, speedEffects, subtitles, videoTimelineClips, zoomEffects]
   );
   const timelineRenderDuration = Math.max(timelineViewDuration, timelineDuration);
   const totalFrames = Math.max(1, Math.floor(timelineRenderDuration * frameRate));
@@ -209,6 +215,8 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     subtitles.find((subtitle) => subtitle.id === selectedSubtitleId) ?? subtitles[0] ?? null;
   const selectedZoomEffect =
     zoomEffects.find((effect) => effect.id === selectedZoomId) ?? null;
+  const selectedSpeedEffect =
+    speedEffects.find((effect) => effect.id === selectedSpeedId) ?? null;
   const audioSources = allMedia.filter((item) => item.kind === "audio");
   const selectedTimelineClip =
     timelineClips.find((clip) => clip.id === selectedTimelineSegmentId) ?? null;
@@ -324,6 +332,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     activeTool === "media" ||
     activeTool === "cut" ||
     activeTool === "zoom" ||
+    activeTool === "speed" ||
     activeTool === "audio" ||
     activeTool === "subtitles";
 
@@ -355,6 +364,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     screenStyle,
     selectedItem,
     selectedSubtitle,
+    selectedSpeedEffect,
     selectedTimelineClip,
     selectedTimelineItemId,
     selectedZoomEffect,

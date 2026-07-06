@@ -3,6 +3,7 @@ import { AudioPanel } from "./panels/AudioPanel";
 import { CutPanel } from "./panels/CutPanel";
 import { LayoutPanel } from "./panels/LayoutPanel";
 import { MediaPanel } from "./panels/MediaPanel";
+import { SpeedPanel } from "./panels/SpeedPanel";
 import { StylePanel } from "./panels/StylePanel";
 import { SubtitlesPanel } from "./panels/SubtitlesPanel";
 import { ZoomPanel } from "./panels/ZoomPanel";
@@ -19,6 +20,7 @@ import type {
   LayoutMode,
   MediaPanel as MediaPanelTab,
   ScreenAspectRatio,
+  SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
   TimelineMediaClip,
@@ -45,6 +47,7 @@ export function EditorToolPanel(props: {
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   previewItem: EditorMediaItem | null;
   selectedZoomEffect: ZoomEffect | null;
+  selectedSpeedEffect: SpeedEffect | null;
   sttStatus: "idle" | "loading" | "transcribing" | "done" | "error";
   sttModelLabel: string;
   subtitleLanguage: string;
@@ -75,6 +78,9 @@ export function EditorToolPanel(props: {
   onAddZoom: () => void;
   onUpdateZoom: (id: string, updates: Partial<ZoomEffect>) => void;
   onRemoveZoom: (id: string) => void;
+  onAddSpeed: () => void;
+  onUpdateSpeed: (id: string, updates: Partial<SpeedEffect>) => void;
+  onRemoveSpeed: (id: string) => void;
   onAddSubtitle: () => void;
   onGenerateSubtitles: () => void;
   onSubtitleStyleChange: (style: SubtitleStyle) => void;
@@ -148,6 +154,15 @@ export function EditorToolPanel(props: {
           onAddZoom={props.onAddZoom}
           onUpdateZoom={props.onUpdateZoom}
           onRemoveZoom={props.onRemoveZoom}
+        />
+      ) : null}
+
+      {props.activeTool === "speed" ? (
+        <SpeedPanel
+          selectedSpeedEffect={props.selectedSpeedEffect}
+          onAddSpeed={props.onAddSpeed}
+          onUpdateSpeed={props.onUpdateSpeed}
+          onRemoveSpeed={props.onRemoveSpeed}
         />
       ) : null}
 

@@ -7,6 +7,7 @@ import type {
 import { Timeline } from "./Timeline";
 import type {
   EditorTool,
+  SpeedEffect,
   SubtitleSegment,
   TimelineContextMenu,
   TimelineMediaClip,
@@ -31,9 +32,11 @@ export function EditorTimelineSection(props: {
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   zoomEffects: ZoomEffect[];
+  speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
   selectedSegmentId: string | null;
   selectedZoomId: string | null;
+  selectedSpeedId: string | null;
   selectedSubtitleId: string | null;
   contextMenu: TimelineContextMenu;
   canSplitAtContextMenu: boolean;
@@ -41,6 +44,7 @@ export function EditorTimelineSection(props: {
   onSeekFrame: (frame: number) => void;
   onSelectClip: (clip: TimelineMediaClip) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
+  onSelectSpeed: (effect: SpeedEffect) => void;
   onSelectSubtitle: (subtitleId: string) => void;
   onTrimPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -49,6 +53,11 @@ export function EditorTimelineSection(props: {
   ) => void;
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>, segmentId: string) => void;
   onZoomDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
+  onSpeedDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     id: string,
     mode: "move" | "start" | "end"
@@ -84,9 +93,11 @@ export function EditorTimelineSection(props: {
       videoClips={props.videoClips}
       audioTracks={props.audioTracks}
       zoomEffects={props.zoomEffects}
+      speedEffects={props.speedEffects}
       subtitles={props.subtitles}
       selectedSegmentId={props.selectedSegmentId}
       selectedZoomId={props.selectedZoomId}
+      selectedSpeedId={props.selectedSpeedId}
       selectedSubtitleId={props.selectedSubtitleId}
       contextMenu={props.contextMenu}
       canSplitAtContextMenu={props.canSplitAtContextMenu}
@@ -94,10 +105,12 @@ export function EditorTimelineSection(props: {
       onSeekFrame={props.onSeekFrame}
       onSelectClip={props.onSelectClip}
       onSelectZoom={props.onSelectZoom}
+      onSelectSpeed={props.onSelectSpeed}
       onSelectSubtitle={props.onSelectSubtitle}
       onTrimPointerDown={props.onTrimPointerDown}
       onMovePointerDown={props.onMovePointerDown}
       onZoomDragPointerDown={props.onZoomDragPointerDown}
+      onSpeedDragPointerDown={props.onSpeedDragPointerDown}
       onBodyPointerDown={props.onBodyPointerDown}
       onBodyPointerMove={props.onBodyPointerMove}
       onBodyPointerUp={props.onBodyPointerUp}
