@@ -36,7 +36,7 @@ export function AppVersionStatus({ className }: AppVersionStatusProps) {
   return (
     <div
       className={cx(
-        "fixed bottom-3 left-3 z-[80] flex max-w-[min(34rem,calc(100vw-1.5rem))] items-center gap-2 rounded-full border border-white/10 bg-[#111216]/95 px-3 py-2 text-xs font-extrabold text-slate-200 shadow-[0_14px_34px_rgb(0_0_0_/_0.38)] backdrop-blur",
+        "fixed bottom-3 left-1/2 z-[80] flex max-w-[min(40rem,calc(100vw-1.5rem))] -translate-x-1/2 items-center gap-2 rounded-full border border-white/10 bg-[#111216]/95 px-3 py-2 text-xs font-extrabold text-slate-200 shadow-[0_14px_34px_rgb(0_0_0_/_0.38)] backdrop-blur",
         className
       )}
       role="status"
@@ -46,7 +46,18 @@ export function AppVersionStatus({ className }: AppVersionStatusProps) {
       <span className="shrink-0 text-slate-400">v{versionLabel}</span>
       <span className="h-1 w-1 shrink-0 rounded-full bg-slate-600" />
       <Icon className={cx("shrink-0", getUpdateStatusColor(state))} size={14} />
+      <span className="shrink-0 text-slate-500">Updates:</span>
       <span className="min-w-0 truncate text-slate-300">{statusText}</span>
+      {state === "downloading" && typeof updateStatus?.downloadProgress === "number" ? (
+        <span className="relative h-1.5 w-20 shrink-0 overflow-hidden rounded-full bg-white/10">
+          <span
+            className="absolute inset-y-0 left-0 rounded-full bg-cyan-300"
+            style={{
+              width: `${Math.max(0, Math.min(100, updateStatus.downloadProgress))}%`
+            }}
+          />
+        </span>
+      ) : null}
 
       {canInstall ? (
         <button

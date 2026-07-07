@@ -14,6 +14,7 @@ import {
   audioMimeCandidates,
   createProjectDevices,
   createRecorders,
+  delay,
   getDeviceLabel,
   getOptionalCameraStream,
   getOptionalMicStream,
@@ -23,6 +24,7 @@ import {
   toErrorMessage,
   videoMimeCandidates
 } from "./recorder/recorder-utils";
+import { shouldShowSourceSelectionOverlay } from "./recorder/source-overlay-state";
 import type {
   DeviceOption,
   FloatingState,
@@ -66,19 +68,15 @@ export function RecorderController() {
   );
   const selectedCameraLabel = getDeviceLabel(cameras, selectedCameraId, "Camera");
   const canStart = state === "ready" || state === "complete" || state === "failed";
-  // The border stays visible while recording as an on-screen indicator; the
-  // overlay window is content-protected, so it never appears in the capture.
-  const shouldShowSelectionOverlay =
-    borderOverlayEnabled &&
-    (state === "ready" ||
-      state === "preparing" ||
-      state === "countdown" ||
-      state === "recording" ||
-      state === "paused");
-  const overlaySourceId =
-    shouldShowSelectionOverlay && selectedSource?.kind === "screen"
-      ? selectedSource.id
-      : null;
+  // The full-screen border is only a pre-recording selection guide. Keeping a
+  // protected overlay visible while capturing can make macOS record a black
+  // protected window instead of the screen.
+  const shouldShowSelectionOverlay = shouldShowSourceSelectionOverlay({
+    borderOverlayEnabled,
+    state,
+    selectedSourceKind: selectedSource?.kind ?? null
+  });
+  const overlaySourceId = shouldShowSelectionOverlay ? selectedSource?.id ?? null : null;
 
   const refreshSources = useCallback(async () => {
     const nextSources = await window.openVideoCraft.sources.list();
@@ -178,9 +176,8 @@ export function RecorderController() {
       .catch(() => undefined);
   }, [selectedSourceId]);
 
-  // Single source of truth for the screen border overlay: visible whenever a
-  // screen source is selected, the eye toggle is on, and the recorder is in a
-  // selection or recording state.
+  // Single source of truth for the screen border overlay: it is only visible
+  // before capture starts, then hidden so it cannot cover the recorded screen.
   useEffect(() => {
     if (!overlaySourceId) {
       void window.openVideoCraft.overlays.hideSourceBorder();
@@ -271,6 +268,7 @@ export function RecorderController() {
       }
 
       setBaseDirectory(folder);
+      await hideSourceOverlayBeforeCapture();
       await window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
 
       const screenStream = await navigator.mediaDevices.getDisplayMedia(
@@ -371,6 +369,11 @@ export function RecorderController() {
       setState("failed");
       setErrorMessage(toErrorMessage(error));
     }
+  }
+
+  async function hideSourceOverlayBeforeCapture() {
+    await window.openVideoCraft.overlays.hideSourceBorder();
+    await delay(recordingRuntime.overlayHideBeforeCaptureMs);
   }
 
   async function stopRecording() {

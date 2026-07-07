@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -63,6 +63,9 @@
       "notarize": true,
       "category": "public.app-category.video",
       "extendInfo": {
+        "CFBundleDisplayName": "Open Video Craft",
+        "CFBundleName": "Open Video Craft",
+        "LSApplicationCategoryType": "public.app-category.video",
         "NSCameraUsageDescription": "Open Video Craft uses the camera when recording face camera video.",
         "NSMicrophoneUsageDescription": "Open Video Craft uses the microphone when recording audio.",
         "NSScreenCaptureDescription": "Open Video Craft records the selected screen or window."

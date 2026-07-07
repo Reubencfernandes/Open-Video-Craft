@@ -23,6 +23,10 @@ const macPermissionSettingsUrls: Record<DesktopPermissionKind, string> = {
   camera: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
   microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
 };
+const appDragIconSize = {
+  width: 40,
+  height: 40
+};
 
 // Electron asks the main process for every browser permission request. Only the
 // app-owned windows can capture media, and only the selected display is exposed.
@@ -125,7 +129,7 @@ export function startAppBundleDrag(
     return;
   }
 
-  const icon = nativeImage.createFromPath(getAppIconPath());
+  const icon = createAppDragIcon(getAppIconPath);
   event.sender.startDrag({
     file: appBundlePath,
     icon: icon.isEmpty() ? getAppIconPath() : icon
@@ -168,4 +172,14 @@ function getAppBundlePath(): string | null {
   const contentsMarker = `${path.sep}Contents${path.sep}MacOS${path.sep}`;
   const markerIndex = process.execPath.indexOf(contentsMarker);
   return markerIndex > 0 ? process.execPath.slice(0, markerIndex) : null;
+}
+
+function createAppDragIcon(getAppIconPath: () => string): Electron.NativeImage {
+  const icon = nativeImage.createFromPath(getAppIconPath());
+  return icon.isEmpty()
+    ? icon
+    : icon.resize({
+        ...appDragIconSize,
+        quality: "best"
+      });
 }

@@ -352,7 +352,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   overlayWindow.setAlwaysOnTop(true, "screen-saver");
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  // Visible on screen while recording, but never captured into the video.
+  // The renderer only shows this as a pre-recording selection guide.
   overlayWindow.setContentProtection(true);
   overlayWindow.on("closed", () => {
     if (displayOverlayWindow === overlayWindow) {
