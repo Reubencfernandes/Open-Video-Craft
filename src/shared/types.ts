@@ -36,6 +36,45 @@ export interface DesktopPermissionStatus {
   microphone: DesktopPermissionState;
 }
 
+export interface AppInfo {
+  version: string;
+  isPackaged: boolean;
+  platform: NodePlatform;
+}
+
+export type NodePlatform =
+  | "aix"
+  | "android"
+  | "darwin"
+  | "freebsd"
+  | "haiku"
+  | "linux"
+  | "openbsd"
+  | "sunos"
+  | "win32"
+  | "cygwin"
+  | "netbsd";
+
+export type UpdateStatusState =
+  | "disabled"
+  | "idle"
+  | "checking"
+  | "available"
+  | "not-available"
+  | "downloading"
+  | "downloaded"
+  | "error";
+
+export interface UpdateStatus {
+  state: UpdateStatusState;
+  currentVersion: string;
+  latestVersion: string | null;
+  message: string;
+  checkedAt: string | null;
+  downloadProgress: number | null;
+  isPackaged: boolean;
+}
+
 export interface DeviceSelection {
   enabled: boolean;
   deviceId: string | null;

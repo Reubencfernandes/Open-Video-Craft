@@ -1,36 +1,46 @@
 import {
   app,
   BrowserWindow,
-  desktopCapturer,
-  dialog,
   globalShortcut,
   ipcMain,
   Menu,
-  net,
-  nativeImage,
   protocol,
   screen as electronScreen,
-  session,
-  shell,
-  systemPreferences
 } from "electron";
-import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { configureAppIdentity, getAppIconPath } from "./app-shell";
+import { registerAppStatusIpc } from "./app-status-ipc";
+import { getProductVersion } from "./app-version";
 import { startAutoUpdates } from "./auto-updates";
+import {
+  assertDesktopPermissionKind,
+  assertMediaPermissionKind,
+  getDesktopPermissionStatus,
+  openPermissionSettings,
+  registerPermissionRequestHandlers,
+  revealAppBundleInFinder,
+  requestMediaPermission,
+  startAppBundleDrag
+} from "./desktop-permissions";
+import { createFallbackThumbnail, listDesktopCapturerSources } from "./desktop-sources";
+import {
+  chooseBaseDirectory as showBaseDirectoryDialog,
+  chooseExistingProjectFolder as showExistingProjectFolderDialog,
+  chooseExportPath as showExportPathDialog,
+  importMediaFiles as showImportMediaDialog
+} from "./file-dialogs";
 import { convertWebmAudioToWav, exportVideo, getFfmpegStatus, remuxWebm } from "./ffmpeg";
+import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
 import { ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
-  DesktopPermissionKind,
-  DesktopPermissionState,
   DesktopPermissionStatus,
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
   ImportedMediaFile,
-  ImportedMediaKind,
   ProjectView,
   SourceOverlayResult,
   SourceSummary,
@@ -61,21 +71,16 @@ protocol.registerSchemesAsPrivileged([
 ]);
 
 const projectStore = new ProjectStore({
-  appVersion: app.getVersion()
+  appVersion: getProductVersion()
 });
 
 const sourceCache = new Map<string, Electron.DesktopCapturerSource>();
 const importedMediaCache = new Map<string, string>();
-const appId = "com.openvideocraft.app";
-const macPermissionSettingsUrls: Record<DesktopPermissionKind, string> = {
-  screen: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-  camera: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
-  microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-};
 let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
 let displayOverlayWindow: BrowserWindow | null = null;
+let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
 
 const recorderWindowSize = {
@@ -88,30 +93,6 @@ const recorderWindowSize = {
     height: 86
   }
 };
-
-function getAppIconPath(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, "app.png")
-    : path.join(__dirname, "../../src/renderer/assets/app.png");
-}
-
-function configureAppIdentity(): void {
-  app.setName("Open Video Craft");
-  app.setAppUserModelId(appId);
-
-  if (process.platform === "darwin" && app.dock) {
-    const icon = nativeImage.createFromPath(getAppIconPath());
-
-    if (!icon.isEmpty()) {
-      app.dock.setIcon(icon);
-      app.setAboutPanelOptions({
-        applicationName: "Open Video Craft",
-        applicationVersion: app.getVersion(),
-        iconPath: getAppIconPath()
-      });
-    }
-  }
-}
 
 function getProjectLibrary(): ProjectLibrary {
   projectLibrary ??= new ProjectLibrary(path.join(app.getPath("userData"), "projects.json"));
@@ -138,38 +119,11 @@ async function createWindow(): Promise<void> {
   mainWindow.on("closed", () => {
     mainWindow = null;
     closeDisplayOverlay();
+    closePermissionGuideWindow();
   });
   attachDevToolsShortcuts(mainWindow);
 
   await loadRendererView(mainWindow, "main");
-}
-
-function registerPermissions(): void {
-  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    const isTrustedWindow =
-      webContents === mainWindow?.webContents || webContents === recorderWindow?.webContents;
-
-    if (isTrustedWindow && (permission === "media" || permission === "display-capture")) {
-      callback(true);
-      return;
-    }
-
-    callback(false);
-  });
-
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    if (!selectedDisplaySource) {
-      callback({});
-      return;
-    }
-
-    callback({
-      video: {
-        id: selectedDisplaySource.id,
-        name: selectedDisplaySource.name
-      }
-    });
-  });
 }
 
 async function createRecorderWindow(): Promise<void> {
@@ -211,7 +165,7 @@ async function createRecorderWindow(): Promise<void> {
 
 async function loadRendererView(
   window: BrowserWindow,
-  view: "main" | "controller" | "display-border" | "editor",
+  view: "main" | "controller" | "display-border" | "editor" | "permission-guide",
   params: Record<string, string> = {}
 ): Promise<void> {
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -226,6 +180,87 @@ async function loadRendererView(
   }
 
   await window.loadURL(url.toString());
+}
+
+async function showPermissionGuideWindow(kind: "screen" | "camera" | "microphone"): Promise<void> {
+  if (process.platform !== "darwin") {
+    return;
+  }
+
+  if (permissionGuideWindow && !permissionGuideWindow.isDestroyed()) {
+    await loadRendererView(permissionGuideWindow, "permission-guide", { kind });
+    positionPermissionGuideWindow(permissionGuideWindow);
+    permissionGuideWindow.showInactive();
+    permissionGuideWindow.moveTop();
+    return;
+  }
+
+  const display = electronScreen.getPrimaryDisplay();
+  const width = getPermissionGuideSize(display).width;
+  const height = getPermissionGuideSize(display).height;
+  const { x, y } = getPermissionGuidePosition(display, width, height);
+
+  permissionGuideWindow = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    acceptFirstMouse: true,
+    title: "Open Video Craft Permission Guide",
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "../preload/preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  permissionGuideWindow.setAlwaysOnTop(true, "screen-saver");
+  permissionGuideWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  permissionGuideWindow.on("closed", () => {
+    permissionGuideWindow = null;
+  });
+  attachDevToolsShortcuts(permissionGuideWindow);
+
+  await loadRendererView(permissionGuideWindow, "permission-guide", { kind });
+  permissionGuideWindow.showInactive();
+  permissionGuideWindow.moveTop();
+}
+
+function positionPermissionGuideWindow(window: BrowserWindow): void {
+  const display = electronScreen.getPrimaryDisplay();
+  const size = getPermissionGuideSize(display);
+  const position = getPermissionGuidePosition(display, size.width, size.height);
+
+  window.setBounds({
+    ...position,
+    ...size
+  });
+}
+
+function getPermissionGuideSize(display: Electron.Display): Electron.Size {
+  return {
+    width: Math.min(980, Math.max(720, display.workArea.width - 72)),
+    height: 220
+  };
+}
+
+function getPermissionGuidePosition(
+  display: Electron.Display,
+  width: number,
+  height: number
+): Electron.Point {
+  return {
+    x: Math.round(display.workArea.x + (display.workArea.width - width) / 2),
+    y: Math.round(display.workArea.y + display.workArea.height - height - 54)
+  };
 }
 
 async function openEditorWindow(projectId?: string | null): Promise<void> {
@@ -248,6 +283,7 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
     mainWindow.on("closed", () => {
       mainWindow = null;
       closeDisplayOverlay();
+      closePermissionGuideWindow();
     });
     attachDevToolsShortcuts(mainWindow);
   }
@@ -354,6 +390,14 @@ function closeDisplayOverlay(): void {
   displayOverlayWindow = null;
 }
 
+function closePermissionGuideWindow(): void {
+  if (permissionGuideWindow && !permissionGuideWindow.isDestroyed()) {
+    permissionGuideWindow.close();
+  }
+
+  permissionGuideWindow = null;
+}
+
 function attachDevToolsShortcuts(window: BrowserWindow): void {
   window.webContents.on("before-input-event", (event, input) => {
     const opensDevTools =
@@ -400,198 +444,9 @@ function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.D
   return electronScreen.getPrimaryDisplay();
 }
 
-type CapturerSourceType = "screen" | "window";
-
-async function listDesktopCapturerSources(): Promise<Electron.DesktopCapturerSource[]> {
-  const attempts: Array<{
-    label: string;
-    types: CapturerSourceType[];
-    thumbnailSize: Electron.Size;
-  }> = [
-    {
-      label: "screens and windows without thumbnails",
-      types: ["screen", "window"],
-      thumbnailSize: { width: 0, height: 0 }
-    },
-    {
-      label: "screens only without thumbnails",
-      types: ["screen"],
-      thumbnailSize: { width: 0, height: 0 }
-    },
-    {
-      label: "screens only with minimal thumbnails",
-      types: ["screen"],
-      thumbnailSize: { width: 1, height: 1 }
-    }
-  ];
-
-  let lastError: unknown = null;
-  for (const attempt of attempts) {
-    try {
-      return await desktopCapturer.getSources({
-        types: attempt.types,
-        thumbnailSize: attempt.thumbnailSize,
-        fetchWindowIcons: false
-      });
-    } catch (error) {
-      lastError = error;
-      console.warn(`Failed to list ${attempt.label}.`, error);
-    }
-  }
-
-  const detail = lastError instanceof Error ? lastError.message : String(lastError);
-  if (process.platform === "darwin") {
-    throw new Error(
-      `Failed to get screen sources. Allow screen recording for ${app.getName()} in macOS System Settings > Privacy & Security > Screen & System Audio Recording, then restart the app. ${detail}`
-    );
-  }
-
-  throw new Error(`Failed to get screen sources. ${detail}`);
-}
-
-function getPermissionPlatform(): DesktopPermissionStatus["platform"] {
-  if (process.platform === "darwin" || process.platform === "win32" || process.platform === "linux") {
-    return process.platform;
-  }
-
-  return "other";
-}
-
-function getDesktopPermissionStatus(): DesktopPermissionStatus {
-  if (process.platform !== "darwin") {
-    return {
-      platform: getPermissionPlatform(),
-      canDragAppBundle: false,
-      screen: "unavailable",
-      camera: "unavailable",
-      microphone: "unavailable"
-    };
-  }
-
-  return {
-    platform: "darwin",
-    canDragAppBundle: getAppBundlePath() !== null,
-    screen: getMacPermissionState("screen"),
-    camera: getMacPermissionState("camera"),
-    microphone: getMacPermissionState("microphone")
-  };
-}
-
-function getMacPermissionState(kind: DesktopPermissionKind): DesktopPermissionState {
-  try {
-    return systemPreferences.getMediaAccessStatus(kind);
-  } catch (error) {
-    console.warn(`Failed to read ${kind} permission status.`, error);
-    return "unknown";
-  }
-}
-
-function assertDesktopPermissionKind(value: unknown): DesktopPermissionKind {
-  if (value === "screen" || value === "camera" || value === "microphone") {
-    return value;
-  }
-
-  throw new Error("Unknown permission type.");
-}
-
-function assertMediaPermissionKind(
-  value: unknown
-): Extract<DesktopPermissionKind, "camera" | "microphone"> {
-  if (value === "camera" || value === "microphone") {
-    return value;
-  }
-
-  throw new Error("Only camera and microphone permissions can be requested directly.");
-}
-
-async function openPermissionSettings(kind: DesktopPermissionKind): Promise<boolean> {
-  if (process.platform !== "darwin") {
-    return false;
-  }
-
-  await shell.openExternal(macPermissionSettingsUrls[kind]);
-  return true;
-}
-
-async function requestMediaPermission(
-  kind: Extract<DesktopPermissionKind, "camera" | "microphone">
-): Promise<boolean> {
-  if (process.platform !== "darwin") {
-    return false;
-  }
-
-  return systemPreferences.askForMediaAccess(kind);
-}
-
-function getAppBundlePath(): string | null {
-  if (process.platform !== "darwin" || !app.isPackaged) {
-    return null;
-  }
-
-  const contentsMarker = `${path.sep}Contents${path.sep}MacOS${path.sep}`;
-  const markerIndex = process.execPath.indexOf(contentsMarker);
-  return markerIndex > 0 ? process.execPath.slice(0, markerIndex) : null;
-}
-
-function startAppBundleDrag(event: Electron.IpcMainEvent): void {
-  const appBundlePath = getAppBundlePath();
-
-  if (!appBundlePath) {
-    return;
-  }
-
-  const icon = nativeImage.createFromPath(getAppIconPath());
-  event.sender.startDrag({
-    file: appBundlePath,
-    icon: icon.isEmpty() ? getAppIconPath() : icon
-  });
-}
-
-function registerMediaProtocol(): void {
-  protocol.handle("ovc-media", async (request) => {
-    try {
-      const url = new URL(request.url);
-      const pathSegments = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-      const [projectId, ...relativePathSegments] = pathSegments;
-
-      if (url.hostname !== "project" || !projectId || relativePathSegments.length === 0) {
-        return new Response("Not found", { status: 404 });
-      }
-
-      const filePath = projectStore.resolveProjectFile(
-        projectId,
-        relativePathSegments.join(path.sep)
-      );
-
-      // Forward headers so Range requests work; media seeking depends on it.
-      return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers });
-    } catch (error) {
-      return new Response(error instanceof Error ? error.message : "Not found", {
-        status: 404
-      });
-    }
-  });
-
-  protocol.handle("ovc-import", async (request) => {
-    try {
-      const url = new URL(request.url);
-      const id = url.pathname.split("/").filter(Boolean).map(decodeURIComponent)[0];
-      const filePath = id ? importedMediaCache.get(id) : null;
-
-      if (url.hostname !== "file" || !filePath) {
-        return new Response("Not found", { status: 404 });
-      }
-
-      return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers });
-    } catch (error) {
-      return new Response(error instanceof Error ? error.message : "Not found", {
-        status: 404
-      });
-    }
-  });
-}
-
 function registerIpc(): void {
+  registerAppStatusIpc();
+
   ipcMain.handle("sources:list", async (): Promise<SourceSummary[]> => {
     // Request sources without live thumbnails or window icons. Capturing a
     // thumbnail per source forces Windows Graphics Capture to start a capturer
@@ -623,12 +478,24 @@ function registerIpc(): void {
     return openPermissionSettings(assertDesktopPermissionKind(kind));
   });
 
+  ipcMain.handle("permissions:show-guide", async (_event, kind: unknown): Promise<boolean> => {
+    const permissionKind = assertDesktopPermissionKind(kind);
+    const opened = await openPermissionSettings(permissionKind);
+    await delay(450);
+    await showPermissionGuideWindow(permissionKind);
+    return opened;
+  });
+
   ipcMain.handle("permissions:request-media", async (_event, kind: unknown): Promise<boolean> => {
     return requestMediaPermission(assertMediaPermissionKind(kind));
   });
 
   ipcMain.on("permissions:start-app-drag", (event): void => {
-    startAppBundleDrag(event);
+    startAppBundleDrag(event, getAppIconPath);
+  });
+
+  ipcMain.handle("permissions:reveal-app", (): boolean => {
+    return revealAppBundleInFinder();
   });
 
   ipcMain.handle("capture:select-display-source", (_event, sourceId: string): boolean => {
@@ -694,7 +561,9 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("editor:import-media", async (): Promise<ImportedMediaFile[]> => {
-    return importMediaFiles();
+    return showImportMediaDialog(getDialogParentWindow(), (id, filePath) => {
+      importedMediaCache.set(id, filePath);
+    });
   });
 
   ipcMain.handle("editor:remove-imported-media", (_event, importId: string): boolean => {
@@ -720,7 +589,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:choose-base-directory", async (): Promise<string | null> => {
-    return chooseBaseDirectory();
+    return showBaseDirectoryDialog(getDialogParentWindow());
   });
 
   ipcMain.handle("projects:list-recent", async () => {
@@ -732,7 +601,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:open-existing-project-folder", async (): Promise<ProjectView | null> => {
-    const projectRootPath = await chooseExistingProjectFolder();
+    const projectRootPath = await showExistingProjectFolderDialog(getDialogParentWindow());
     if (!projectRootPath) {
       return null;
     }
@@ -758,7 +627,7 @@ function registerIpc(): void {
       let baseDirectory = request.baseDirectory;
 
       if (!baseDirectory) {
-        baseDirectory = await chooseBaseDirectory();
+        baseDirectory = await showBaseDirectoryDialog(getDialogParentWindow());
 
         if (!baseDirectory) {
           throw new Error("A project folder is required before recording.");
@@ -874,98 +743,11 @@ function setRecorderWindowCompact(compact: boolean): void {
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
 }
 
-async function chooseBaseDirectory(): Promise<string | null> {
-  const options: Electron.OpenDialogOptions = {
-    title: "Choose where Open Video Craft should save this project",
-    properties: ["openDirectory", "createDirectory"]
-  };
-  const parentWindow = BrowserWindow.getFocusedWindow() ?? recorderWindow ?? mainWindow;
-  const result = parentWindow
-    ? await dialog.showOpenDialog(parentWindow, options)
-    : await dialog.showOpenDialog(options);
-
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-
-  return result.filePaths[0];
-}
-
-async function chooseExistingProjectFolder(): Promise<string | null> {
-  const options: Electron.OpenDialogOptions = {
-    title: "Open an Open Video Craft project folder",
-    properties: ["openDirectory"]
-  };
-  const parentWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
-  const result = parentWindow
-    ? await dialog.showOpenDialog(parentWindow, options)
-    : await dialog.showOpenDialog(options);
-
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-
-  return result.filePaths[0];
-}
-
-async function importMediaFiles(): Promise<ImportedMediaFile[]> {
-  const options: Electron.OpenDialogOptions = {
-    title: "Import media into Open Video Craft",
-    properties: ["openFile", "multiSelections"],
-    filters: [
-      {
-        name: "Media",
-        extensions: [
-          "mp4",
-          "mov",
-          "mkv",
-          "webm",
-          "avi",
-          "mp3",
-          "wav",
-          "m4a",
-          "aac",
-          "ogg",
-          "png",
-          "jpg",
-          "jpeg",
-          "webp",
-          "gif"
-        ]
-      },
-      { name: "All Files", extensions: ["*"] }
-    ]
-  };
-  const parentWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
-  const result = parentWindow
-    ? await dialog.showOpenDialog(parentWindow, options)
-    : await dialog.showOpenDialog(options);
-
-  if (result.canceled) {
-    return [];
-  }
-
-  return result.filePaths.map((filePath) => {
-    const id = randomUUID();
-    importedMediaCache.set(id, filePath);
-    const extension = path.extname(filePath).replace(/^\./, "").toLowerCase();
-
-    return {
-      id,
-      name: path.basename(filePath),
-      path: filePath,
-      url: `ovc-import://file/${encodeURIComponent(id)}`,
-      kind: getImportedMediaKind(extension),
-      extension
-    };
-  });
-}
-
 async function exportEditorVideo(
   request: ExportVideoRequest
 ): Promise<ExportVideoResult | null> {
   const source = resolveExportSource(request);
-  const outputPath = await chooseExportPath({
+  const outputPath = await showExportPathDialog(getDialogParentWindow(), {
     format: request.format,
     name: source.name
   });
@@ -1030,39 +812,6 @@ function resolveExportSource(request: ExportVideoRequest): {
   };
 }
 
-async function chooseExportPath(input: {
-  format: ExportVideoRequest["format"];
-  name: string;
-}): Promise<string | null> {
-  const extension = input.format;
-  const parentWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
-  const result = parentWindow
-    ? await dialog.showSaveDialog(parentWindow, createExportDialogOptions(input.name, extension))
-    : await dialog.showSaveDialog(createExportDialogOptions(input.name, extension));
-
-  if (result.canceled || !result.filePath) {
-    return null;
-  }
-
-  return path.extname(result.filePath).toLowerCase() === `.${extension}`
-    ? result.filePath
-    : `${result.filePath}.${extension}`;
-}
-
-function createExportDialogOptions(
-  name: string,
-  extension: ExportVideoRequest["format"]
-): Electron.SaveDialogOptions {
-  return {
-    title: "Export video",
-    defaultPath: `${slugForFileName(name)}.${extension}`,
-    filters: [
-      { name: extension.toUpperCase(), extensions: [extension] },
-      { name: "Video", extensions: ["mp4", "webm", "mov"] }
-    ]
-  };
-}
-
 function resolveImportedMediaPath(importId: string): string {
   const filePath = importedMediaCache.get(importId);
 
@@ -1073,40 +822,25 @@ function resolveImportedMediaPath(importId: string): string {
   return filePath;
 }
 
-function slugForFileName(value: string): string {
-  const safeValue = value
-    .trim()
-    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "-")
-    .replace(/\s+/g, " ")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-
-  return safeValue || "open-video-craft-export";
+function getDialogParentWindow(): BrowserWindow | null {
+  return BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
 }
 
-function getImportedMediaKind(extension: string): ImportedMediaKind {
-  if (["mp3", "wav", "m4a", "aac", "ogg"].includes(extension)) {
-    return "audio";
-  }
-
-  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) {
-    return "image";
-  }
-
-  return "video";
-}
-
-function createFallbackThumbnail(label: string): string {
-  const safeLabel = label.replace(/[<>&"]/g, "");
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270"><rect width="480" height="270" fill="#18181b"/><rect x="108" y="60" width="264" height="150" rx="10" fill="#27272a" stroke="#3f3f46" stroke-width="2"/><text x="240" y="236" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#d4d4d8">${safeLabel.slice(0, 36)}</text></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 app.whenReady().then(async () => {
   configureAppIdentity();
   Menu.setApplicationMenu(null);
-  registerPermissions();
-  registerMediaProtocol();
+  registerPermissionRequestHandlers({
+    getMainWindow: () => mainWindow,
+    getRecorderWindow: () => recorderWindow,
+    getSelectedDisplaySource: () => selectedDisplaySource
+  });
+  registerCustomMediaProtocol({ projectStore, importedMediaCache });
   registerIpc();
   globalShortcut.register("CommandOrControl+Shift+S", () => {
     recorderWindow?.webContents.send("recording:global-stop");
@@ -1123,15 +857,18 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   closeDisplayOverlay();
+  closePermissionGuideWindow();
 });
 
 app.on("will-quit", () => {
   closeDisplayOverlay();
+  closePermissionGuideWindow();
   globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {
   closeDisplayOverlay();
+  closePermissionGuideWindow();
   if (process.platform !== "darwin") {
     app.quit();
   }

@@ -25,6 +25,12 @@ npm test
 npm run build
 ```
 
+## Codebase Structure
+
+The source code is split by runtime and feature. See [src/README.md](src/README.md)
+for where main-process services, preload IPC, renderer components, editor hooks,
+and utility modules live.
+
 ## Releases And Auto Updates
 
 Packaged builds check the configured GitHub release feed on startup and every four hours. Updates download automatically, install on app quit, and prompt the user when a restart can finish installation.

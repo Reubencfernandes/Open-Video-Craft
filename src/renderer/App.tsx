@@ -5,6 +5,7 @@ import type {
   DesktopPermissionStatus,
   ProjectLibraryEntry
 } from "../shared/types";
+import { AppVersionStatus } from "./AppVersionStatus";
 import appLogo from "./assets/app.png";
 import { cx } from "./classNames";
 import { PermissionOnboarding } from "./PermissionOnboarding";
@@ -102,6 +103,15 @@ export function App() {
     }
   }
 
+  async function openPermissionGuide(kind: DesktopPermissionKind) {
+    setErrorMessage(null);
+    try {
+      await window.openVideoCraft.permissions.showGuide(kind);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function requestMediaPermission(kind: Extract<DesktopPermissionKind, "camera" | "microphone">) {
     setErrorMessage(null);
     try {
@@ -155,10 +165,10 @@ export function App() {
         <PermissionOnboarding
           loading={permissionsLoading}
           status={permissionStatus}
+          onOpenGuide={openPermissionGuide}
           onOpenSettings={openPermissionSettings}
           onRefresh={() => void loadPermissionsStatus()}
           onRequestMedia={requestMediaPermission}
-          onStartAppDrag={() => window.openVideoCraft.permissions.startAppDrag()}
         />
 
         <div className="grid grid-cols-3 gap-4">
@@ -277,6 +287,7 @@ export function App() {
           )}
         </section>
       </section>
+      <AppVersionStatus />
     </main>
   );
 }

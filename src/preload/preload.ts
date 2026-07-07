@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  AppInfo,
   CreateProjectRequest,
   DesktopPermissionKind,
   DesktopPermissionStatus,
@@ -14,10 +15,24 @@ import type {
   SourceSummary,
   StartRecordingRequest,
   StopRecordingRequest,
+  UpdateStatus,
   WriteChunkRequest
 } from "../shared/types";
 
 const api = {
+  app: {
+    getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info")
+  },
+  updates: {
+    getStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updates:get-status"),
+    check: (): Promise<UpdateStatus> => ipcRenderer.invoke("updates:check"),
+    install: (): Promise<boolean> => ipcRenderer.invoke("updates:install"),
+    onStatus: (callback: (status: UpdateStatus) => void): (() => void) => {
+      const listener = (_event: unknown, status: UpdateStatus) => callback(status);
+      ipcRenderer.on("updates:status", listener);
+      return () => ipcRenderer.removeListener("updates:status", listener);
+    }
+  },
   sources: {
     list: (): Promise<SourceSummary[]> => ipcRenderer.invoke("sources:list")
   },
@@ -26,8 +41,11 @@ const api = {
       ipcRenderer.invoke("permissions:get-status"),
     openSettings: (kind: DesktopPermissionKind): Promise<boolean> =>
       ipcRenderer.invoke("permissions:open-settings", kind),
+    showGuide: (kind: DesktopPermissionKind): Promise<boolean> =>
+      ipcRenderer.invoke("permissions:show-guide", kind),
     requestMedia: (kind: Extract<DesktopPermissionKind, "camera" | "microphone">): Promise<boolean> =>
       ipcRenderer.invoke("permissions:request-media", kind),
+    revealApp: (): Promise<boolean> => ipcRenderer.invoke("permissions:reveal-app"),
     startAppDrag: (): void => ipcRenderer.send("permissions:start-app-drag")
   },
   capture: {

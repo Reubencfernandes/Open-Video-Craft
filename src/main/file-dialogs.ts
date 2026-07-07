@@ -1,0 +1,149 @@
+import { dialog } from "electron";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import type {
+  ExportVideoRequest,
+  ImportedMediaFile,
+  ImportedMediaKind
+} from "../shared/types";
+
+export async function chooseBaseDirectory(
+  parentWindow: Electron.BrowserWindow | null
+): Promise<string | null> {
+  const options: Electron.OpenDialogOptions = {
+    title: "Choose where Open Video Craft should save this project",
+    properties: ["openDirectory", "createDirectory"]
+  };
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, options)
+    : await dialog.showOpenDialog(options);
+
+  return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+}
+
+export async function chooseExistingProjectFolder(
+  parentWindow: Electron.BrowserWindow | null
+): Promise<string | null> {
+  const options: Electron.OpenDialogOptions = {
+    title: "Open an Open Video Craft project folder",
+    properties: ["openDirectory"]
+  };
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, options)
+    : await dialog.showOpenDialog(options);
+
+  return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+}
+
+export async function importMediaFiles(
+  parentWindow: Electron.BrowserWindow | null,
+  registerImport: (id: string, filePath: string) => void
+): Promise<ImportedMediaFile[]> {
+  const options: Electron.OpenDialogOptions = {
+    title: "Import media into Open Video Craft",
+    properties: ["openFile", "multiSelections"],
+    filters: [
+      {
+        name: "Media",
+        extensions: [
+          "mp4",
+          "mov",
+          "mkv",
+          "webm",
+          "avi",
+          "mp3",
+          "wav",
+          "m4a",
+          "aac",
+          "ogg",
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif"
+        ]
+      },
+      { name: "All Files", extensions: ["*"] }
+    ]
+  };
+  const result = parentWindow
+    ? await dialog.showOpenDialog(parentWindow, options)
+    : await dialog.showOpenDialog(options);
+
+  if (result.canceled) {
+    return [];
+  }
+
+  return result.filePaths.map((filePath) => {
+    const id = randomUUID();
+    registerImport(id, filePath);
+    const extension = path.extname(filePath).replace(/^\./, "").toLowerCase();
+
+    return {
+      id,
+      name: path.basename(filePath),
+      path: filePath,
+      url: `ovc-import://file/${encodeURIComponent(id)}`,
+      kind: getImportedMediaKind(extension),
+      extension
+    };
+  });
+}
+
+export async function chooseExportPath(
+  parentWindow: Electron.BrowserWindow | null,
+  input: {
+    format: ExportVideoRequest["format"];
+    name: string;
+  }
+): Promise<string | null> {
+  const extension = input.format;
+  const result = parentWindow
+    ? await dialog.showSaveDialog(parentWindow, createExportDialogOptions(input.name, extension))
+    : await dialog.showSaveDialog(createExportDialogOptions(input.name, extension));
+
+  if (result.canceled || !result.filePath) {
+    return null;
+  }
+
+  return path.extname(result.filePath).toLowerCase() === `.${extension}`
+    ? result.filePath
+    : `${result.filePath}.${extension}`;
+}
+
+function createExportDialogOptions(
+  name: string,
+  extension: ExportVideoRequest["format"]
+): Electron.SaveDialogOptions {
+  return {
+    title: "Export video",
+    defaultPath: `${slugForFileName(name)}.${extension}`,
+    filters: [
+      { name: extension.toUpperCase(), extensions: [extension] },
+      { name: "Video", extensions: ["mp4", "webm", "mov"] }
+    ]
+  };
+}
+
+function getImportedMediaKind(extension: string): ImportedMediaKind {
+  if (["mp3", "wav", "m4a", "aac", "ogg"].includes(extension)) {
+    return "audio";
+  }
+
+  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) {
+    return "image";
+  }
+
+  return "video";
+}
+
+function slugForFileName(value: string): string {
+  const safeValue = value
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "-")
+    .replace(/\s+/g, " ")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+
+  return safeValue || "open-video-craft-export";
+}

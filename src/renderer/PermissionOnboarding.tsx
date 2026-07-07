@@ -1,5 +1,4 @@
 import {
-  ArrowUp,
   Camera,
   CheckCircle2,
   ExternalLink,
@@ -13,7 +12,6 @@ import type {
   DesktopPermissionState,
   DesktopPermissionStatus
 } from "../shared/types";
-import appLogo from "./assets/app.png";
 import { cx } from "./classNames";
 
 type MediaPermissionKind = Extract<DesktopPermissionKind, "camera" | "microphone">;
@@ -21,10 +19,10 @@ type MediaPermissionKind = Extract<DesktopPermissionKind, "camera" | "microphone
 interface PermissionOnboardingProps {
   loading: boolean;
   status: DesktopPermissionStatus | null;
+  onOpenGuide: (kind: DesktopPermissionKind) => void;
   onOpenSettings: (kind: DesktopPermissionKind) => void;
   onRefresh: () => void;
   onRequestMedia: (kind: MediaPermissionKind) => void;
-  onStartAppDrag: () => void;
 }
 
 const permissionLabels: Record<DesktopPermissionKind, string> = {
@@ -48,10 +46,10 @@ const permissionIcons = {
 export function PermissionOnboarding({
   loading,
   status,
+  onOpenGuide,
   onOpenSettings,
   onRefresh,
-  onRequestMedia,
-  onStartAppDrag
+  onRequestMedia
 }: PermissionOnboardingProps) {
   if (!status || status.platform !== "darwin" || !hasPendingPermission(status)) {
     return null;
@@ -85,26 +83,30 @@ export function PermissionOnboarding({
       </div>
 
       {status.canDragAppBundle ? (
-        <div
-          className="grid cursor-grab grid-cols-[auto_1fr] items-center gap-3 rounded-[10px] border border-white/12 bg-[#14181f] p-3 active:cursor-grabbing"
-          draggable
-          onDragStart={(event) => {
-            event.dataTransfer.setData("text/plain", "Open Video Craft");
-            onStartAppDrag();
-          }}
-          title="Drag Open Video Craft into the macOS privacy list"
-        >
-          <span className="grid size-11 place-items-center rounded-lg bg-white/10 text-sky-100">
-            <ArrowUp size={25} />
-          </span>
-          <div className="flex min-w-0 items-center gap-3">
-            <img className="size-9 shrink-0 rounded-lg object-contain" src={appLogo} alt="" />
-            <strong className="truncate text-sm text-white">
-              Drag Open Video Craft to the list above if it is missing.
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-white/[0.12] bg-[#14181f] p-3">
+          <div className="min-w-0">
+            <strong className="block text-sm text-white">
+              Open System Settings with a guide overlay.
             </strong>
+            <span className="min-w-0 text-xs font-bold leading-5 text-slate-400">
+              The draggable app tile appears over System Settings, not inside this window.
+            </span>
           </div>
+          <button
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-sky-300/25 bg-sky-300/10 px-3 py-2 text-xs font-extrabold text-sky-100 hover:bg-sky-300/15"
+            type="button"
+            onClick={() => onOpenGuide("screen")}
+          >
+            Open guide
+            <ExternalLink size={13} />
+          </button>
         </div>
-      ) : null}
+      ) : (
+        <div className="rounded-[10px] border border-white/10 bg-[#14181f] px-3 py-2.5 text-xs font-bold leading-5 text-slate-300">
+          Install and open the packaged Open Video Craft app to enable drag-and-drop into
+          System Settings. Development mode can only grant Electron, not the final app.
+        </div>
+      )}
 
       <div className="grid gap-2">
         {rows.map((row) => (
@@ -112,6 +114,8 @@ export function PermissionOnboarding({
             key={row.kind}
             kind={row.kind}
             state={row.state}
+            canShowGuide={status.canDragAppBundle}
+            onOpenGuide={onOpenGuide}
             onOpenSettings={onOpenSettings}
             onRequestMedia={onRequestMedia}
           />
@@ -124,11 +128,15 @@ export function PermissionOnboarding({
 function PermissionRow({
   kind,
   state,
+  canShowGuide,
+  onOpenGuide,
   onOpenSettings,
   onRequestMedia
 }: {
   kind: DesktopPermissionKind;
   state: DesktopPermissionState;
+  canShowGuide: boolean;
+  onOpenGuide: (kind: DesktopPermissionKind) => void;
   onOpenSettings: (kind: DesktopPermissionKind) => void;
   onRequestMedia: (kind: MediaPermissionKind) => void;
 }) {
@@ -163,9 +171,15 @@ function PermissionRow({
         <button
           className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-extrabold text-slate-100 hover:bg-white/10"
           type="button"
-          onClick={() => (canRequest ? onRequestMedia(kind) : onOpenSettings(kind))}
+          onClick={() =>
+            canRequest
+              ? onRequestMedia(kind)
+              : kind === "screen" && canShowGuide
+                ? onOpenGuide(kind)
+                : onOpenSettings(kind)
+          }
         >
-          {canRequest ? "Allow" : "Settings"}
+          {canRequest ? "Allow" : kind === "screen" && canShowGuide ? "Guide" : "Settings"}
           <ExternalLink size={13} />
         </button>
       )}

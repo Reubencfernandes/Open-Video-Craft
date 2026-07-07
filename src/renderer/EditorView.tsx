@@ -23,6 +23,7 @@ import type {
 import type {
   ProjectView
 } from "../shared/types";
+import { AppVersionStatus } from "./AppVersionStatus";
 import {
   constrainZoomEnd,
   constrainZoomMove,
@@ -31,11 +32,16 @@ import {
   zoomMinDurationSeconds
 } from "./zoom-timing";
 import { ExportDialog } from "./editor/ExportDialog";
+import { EditorNotifications } from "./editor/EditorNotifications";
 import { EditorPreviewPanel } from "./editor/EditorPreviewPanel";
 import { EditorTimelineSection } from "./editor/EditorTimelineSection";
 import { EditorToolPanel } from "./editor/EditorToolPanel";
 import { EditorTopbar } from "./editor/EditorTopbar";
 import { ToolRail } from "./editor/ToolRail";
+import {
+  blurFocusedShortcutControl,
+  isKeyboardTextTarget
+} from "./editor/keyboard-utils";
 import { decodeAudioTo16kMono } from "./editor/media-utils";
 import { getCameraFrameFromPreset } from "./editor/layout-geometry";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
@@ -92,39 +98,6 @@ import type {
   VideoCornerStyle,
   ZoomEffect
 } from "./editor/types";
-
-function isKeyboardTextTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  if (
-    target.isContentEditable ||
-    target instanceof HTMLTextAreaElement ||
-    target instanceof HTMLSelectElement
-  ) {
-    return true;
-  }
-
-  if (!(target instanceof HTMLInputElement)) {
-    return false;
-  }
-
-  return !["button", "checkbox", "color", "file", "radio", "range", "reset", "submit"].includes(
-    target.type
-  );
-}
-
-function blurFocusedShortcutControl(): void {
-  const activeElement = document.activeElement;
-  if (
-    activeElement instanceof HTMLElement &&
-    activeElement !== document.body &&
-    activeElement !== document.documentElement
-  ) {
-    activeElement.blur();
-  }
-}
 
 export function EditorView() {
   const projectId = useMemo(
@@ -1367,24 +1340,8 @@ export function EditorView() {
             onResolutionChange={setExportResolution}
           />
         ) : null}
-
-        {error ? (
-          <div
-            className="fixed right-[1.1rem] top-[4.4rem] z-40 min-h-[2.35rem] w-[min(34rem,calc(100vw-2rem))] truncate rounded-lg border border-red-400/35 bg-red-950/70 px-4 py-3 text-sm font-extrabold text-red-50 shadow-[0_18px_42px_rgb(0_0_0_/_0.35)]"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-        {exportMessage ? (
-          <div
-            className="fixed right-[1.1rem] top-[4.4rem] z-40 flex min-h-[2.35rem] w-[min(28rem,calc(100vw-2rem))] items-center truncate rounded-lg border border-green-500/30 bg-green-800/35 px-3 py-2 text-sm font-extrabold text-green-100 shadow-[0_18px_42px_rgb(0_0_0_/_0.35)]"
-            role="status"
-            aria-live="polite"
-          >
-            {exportMessage}
-          </div>
-        ) : null}
+        <AppVersionStatus />
+        <EditorNotifications error={error} exportMessage={exportMessage} />
 
         <div className="grid min-h-0 grid-cols-[86px_324px_minmax(0,1fr)] gap-[0.9rem] px-[1.1rem] py-[0.9rem]">
           <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />

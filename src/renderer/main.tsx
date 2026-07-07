@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { DisplayBorder } from "./DisplayBorder";
 import { EditorView } from "./EditorView";
+import { PermissionGuideOverlay } from "./PermissionGuideOverlay";
 import { RecorderController } from "./RecorderController";
 import "tailwindcss/index.css";
 
@@ -10,7 +11,7 @@ const view = new URLSearchParams(window.location.search).get("view") ?? "main";
 document.documentElement.dataset.view = view;
 document.documentElement.className = "h-full w-full overflow-hidden bg-[#121317]";
 document.body.className =
-  view === "controller" || view === "display-border"
+  view === "controller" || view === "display-border" || view === "permission-guide"
     ? "m-0 h-full w-full overflow-hidden bg-transparent"
     : view === "editor"
       ? "m-0 h-full w-full overflow-hidden bg-[#121317]"
@@ -24,6 +25,8 @@ const component =
     <RecorderController />
   ) : view === "display-border" ? (
     <DisplayBorder />
+  ) : view === "permission-guide" ? (
+    <PermissionGuideOverlay />
   ) : view === "editor" ? (
     <EditorView />
   ) : (
