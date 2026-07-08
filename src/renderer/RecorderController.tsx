@@ -14,7 +14,6 @@ import {
   audioMimeCandidates,
   createProjectDevices,
   createRecorders,
-  delay,
   getDeviceLabel,
   getOptionalCameraStream,
   getOptionalMicStream,
@@ -68,9 +67,8 @@ export function RecorderController() {
   );
   const selectedCameraLabel = getDeviceLabel(cameras, selectedCameraId, "Camera");
   const canStart = state === "ready" || state === "complete" || state === "failed";
-  // The full-screen border is only a pre-recording selection guide. Keeping a
-  // protected overlay visible while capturing can make macOS record a black
-  // protected window instead of the screen.
+  // The border overlay windows are opaque and content-protected, so they can
+  // stay visible through the whole recording without showing up in the video.
   const shouldShowSelectionOverlay = shouldShowSourceSelectionOverlay({
     borderOverlayEnabled,
     state,
@@ -268,7 +266,6 @@ export function RecorderController() {
       }
 
       setBaseDirectory(folder);
-      await hideSourceOverlayBeforeCapture();
       await window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
 
       const screenStream = await navigator.mediaDevices.getDisplayMedia(
@@ -353,8 +350,6 @@ export function RecorderController() {
 
       setState("countdown");
       await runCountdown(setCountdown);
-      await window.openVideoCraft.windows.setRecorderContentProtection(true);
-      await delay(recordingRuntime.recorderProtectionSettleMs);
 
       activeRecordedMsRef.current = 0;
       activeSegmentStartedAtRef.current = Date.now();
@@ -367,16 +362,9 @@ export function RecorderController() {
       await refreshDevices();
     } catch (error) {
       stopAllStreams();
-      await window.openVideoCraft.windows.setRecorderContentProtection(false);
-      await window.openVideoCraft.overlays.hideSourceBorder();
       setState("failed");
       setErrorMessage(toErrorMessage(error));
     }
-  }
-
-  async function hideSourceOverlayBeforeCapture() {
-    await window.openVideoCraft.overlays.hideSourceBorder();
-    await delay(recordingRuntime.overlayHideBeforeCaptureMs);
   }
 
   async function stopRecording() {
@@ -392,7 +380,6 @@ export function RecorderController() {
     activeRecordedMsRef.current = durationMs;
     activeSegmentStartedAtRef.current = null;
     setState("stopping");
-    await window.openVideoCraft.overlays.hideSourceBorder();
     await window.openVideoCraft.windows.showCurrent();
     await setCompactMode(false);
 
@@ -406,7 +393,6 @@ export function RecorderController() {
       );
       await Promise.all(Object.values(writeQueuesRef.current));
       stopAllStreams();
-      await window.openVideoCraft.windows.setRecorderContentProtection(false);
 
       if (!currentProject) {
         throw new Error("Recording stopped before a project was created.");
@@ -452,8 +438,6 @@ export function RecorderController() {
       );
       await Promise.all(Object.values(writeQueuesRef.current));
       stopAllStreams();
-      await window.openVideoCraft.overlays.hideSourceBorder();
-      await window.openVideoCraft.windows.setRecorderContentProtection(false);
       await setCompactMode(false);
 
       const currentProject = projectRef.current;
@@ -476,8 +460,6 @@ export function RecorderController() {
 
   async function failRecording(message: string) {
     stopAllStreams();
-    await window.openVideoCraft.windows.setRecorderContentProtection(false);
-    await window.openVideoCraft.overlays.hideSourceBorder();
     await window.openVideoCraft.windows.showCurrent();
     await setCompactMode(false);
     setErrorMessage(message);

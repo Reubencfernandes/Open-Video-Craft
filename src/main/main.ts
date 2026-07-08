@@ -79,9 +79,12 @@ const importedMediaCache = new Map<string, string>();
 let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
-let displayOverlayWindow: BrowserWindow | null = null;
+let displayOverlayWindows: BrowserWindow[] = [];
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
+
+const displayOverlayStripThickness = 6;
+const displayOverlayStripColor = "#34d399";
 
 const recorderWindowSize = {
   expanded: {
@@ -164,7 +167,7 @@ async function createRecorderWindow(): Promise<void> {
 
 async function loadRendererView(
   window: BrowserWindow,
-  view: "main" | "controller" | "display-border" | "editor" | "permission-guide",
+  view: "main" | "controller" | "editor" | "permission-guide",
   params: Record<string, string> = {}
 ): Promise<void> {
   const devServerUrl = process.env.VITE_DEV_SERVER_URL;
@@ -326,52 +329,45 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   const display = getDisplayForSource(source);
   await closeDisplayOverlay();
 
-  const overlayWindow = new BrowserWindow({
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    movable: false,
-    focusable: false,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    hasShadow: false,
-    backgroundColor: "#00000000",
-    webPreferences: {
-      preload: path.join(__dirname, "../preload/preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  });
-  displayOverlayWindow = overlayWindow;
+  const { x, y, width, height } = display.bounds;
+  const thickness = displayOverlayStripThickness;
+  const stripBounds = [
+    { x, y, width, height: thickness },
+    { x, y: y + height - thickness, width, height: thickness },
+    { x, y: y + thickness, width: thickness, height: height - thickness * 2 },
+    { x: x + width - thickness, y: y + thickness, width: thickness, height: height - thickness * 2 }
+  ];
 
-  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-  overlayWindow.setAlwaysOnTop(true, "screen-saver");
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  overlayWindow.on("closed", () => {
-    if (displayOverlayWindow === overlayWindow) {
-      displayOverlayWindow = null;
-    }
-  });
-
-  try {
-    await loadRendererView(overlayWindow, "display-border", {
-      label: source.name || "Primary Display"
+  displayOverlayWindows = stripBounds.map((bounds) => {
+    const strip = new BrowserWindow({
+      ...bounds,
+      show: false,
+      frame: false,
+      transparent: false,
+      resizable: false,
+      movable: false,
+      focusable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      roundedCorners: false,
+      backgroundColor: displayOverlayStripColor,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false
+      }
     });
-  } catch (error) {
-    if (overlayWindow.isDestroyed()) {
-      // A hide closed the window while it was still loading.
-      return {
-        shown: false,
-        reason: null
-      };
-    }
 
-    throw error;
-  }
+    strip.setIgnoreMouseEvents(true, { forward: true });
+    strip.setAlwaysOnTop(true, "screen-saver");
+    strip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // Content protection keeps the border out of the recorded video. It is only
+    // safe on opaque windows: protecting a transparent window makes macOS
+    // composite the whole window as solid black on screen.
+    strip.setContentProtection(true);
+    strip.showInactive();
+    return strip;
+  });
 
   return {
     shown: true,
@@ -380,21 +376,14 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
 }
 
 async function closeDisplayOverlay(): Promise<void> {
-  const overlayWindow = displayOverlayWindow;
-  displayOverlayWindow = null;
+  const strips = displayOverlayWindows;
+  displayOverlayWindows = [];
 
-  if (!overlayWindow || overlayWindow.isDestroyed()) {
-    return;
+  for (const strip of strips) {
+    if (!strip.isDestroyed()) {
+      strip.close();
+    }
   }
-
-  await new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 300);
-    overlayWindow.once("closed", () => {
-      clearTimeout(timeout);
-      resolve();
-    });
-    overlayWindow.close();
-  });
 }
 
 function closePermissionGuideWindow(): void {
@@ -547,14 +536,6 @@ function registerIpc(): void {
     setRecorderWindowCompact(compact);
     return true;
   });
-
-  ipcMain.handle(
-    "windows:set-recorder-content-protection",
-    (_event, protectedFromCapture: boolean): boolean => {
-      setRecorderWindowContentProtection(protectedFromCapture);
-      return true;
-    }
-  );
 
   ipcMain.handle("windows:open-editor", async (_event, projectId?: string | null): Promise<boolean> => {
     await openEditorWindow(projectId);
@@ -756,14 +737,6 @@ function setRecorderWindowCompact(compact: boolean): void {
   recorderWindow.show();
   recorderWindow.focus();
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
-}
-
-function setRecorderWindowContentProtection(protectedFromCapture: boolean): void {
-  if (!recorderWindow || recorderWindow.isDestroyed()) {
-    return;
-  }
-
-  recorderWindow.setContentProtection(protectedFromCapture);
 }
 
 async function exportEditorVideo(

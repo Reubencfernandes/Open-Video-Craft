@@ -16,7 +16,7 @@ import {
 import appLogo from "../assets/app.png";
 import { cx } from "../classNames";
 import { FloatingDeviceControl } from "./FloatingDeviceControl";
-import { formatDuration, truncateLabel } from "./recorder-utils";
+import { truncateLabel } from "./recorder-utils";
 import type { DeviceOption, FloatingState } from "./types";
 
 export function RecorderControllerView(props: {
@@ -80,7 +80,11 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
             )}
           />
           <span className="truncate">
-            {props.state === "paused" ? "Paused" : formatDuration(props.elapsedMs)}
+            {props.state === "paused"
+              ? "Paused"
+              : props.state === "recording"
+                ? "Recording"
+                : "Ready"}
           </span>
         </button>
 
@@ -299,9 +303,11 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
 
       <div className="absolute bottom-5 max-w-[86%] truncate text-center text-xs font-bold text-slate-400">
         {props.state === "recording"
-          ? `${formatDuration(props.elapsedMs)} - recording`
+          ? props.selectedSourceName
+            ? `Recording screen: ${props.selectedSourceName}`
+            : "Recording"
           : props.state === "paused"
-            ? `${formatDuration(props.elapsedMs)} - paused`
+            ? "Paused"
             : props.state === "countdown"
               ? "Starting"
               : props.state === "processing"
