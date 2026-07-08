@@ -92,6 +92,8 @@ const api = {
     showCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:show-current"),
     setRecorderCompact: (compact: boolean): Promise<boolean> =>
       ipcRenderer.invoke("windows:set-recorder-compact", compact),
+    setRecorderContentProtection: (protectedFromCapture: boolean): Promise<boolean> =>
+      ipcRenderer.invoke("windows:set-recorder-content-protection", protectedFromCapture),
     openEditor: (projectId?: string | null): Promise<boolean> =>
       ipcRenderer.invoke("windows:open-editor", projectId),
     openMain: (): Promise<boolean> => ipcRenderer.invoke("windows:open-main")

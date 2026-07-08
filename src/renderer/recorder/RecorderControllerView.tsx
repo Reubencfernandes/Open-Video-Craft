@@ -60,6 +60,8 @@ export function RecorderControllerView(props: {
 }
 
 function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]) {
+  const isRecordingActive = props.state === "recording" || props.state === "paused";
+
   return (
     <main className="grid size-full place-items-center bg-transparent">
       <div className="inline-flex h-full w-full items-center justify-between gap-3 rounded-full border border-white/15 bg-slate-950/95 py-0 pl-4 pr-2 font-bold text-white shadow-2xl [-webkit-app-region:drag]">
@@ -67,7 +69,8 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
           className="inline-flex min-w-0 flex-1 items-center gap-3 border-0 bg-transparent font-bold text-white [-webkit-app-region:no-drag]"
           type="button"
           onClick={() => props.onSetCompactMode(false)}
-          title="Restore recorder"
+          aria-label="Restore recorder"
+          title={isRecordingActive ? undefined : "Restore recorder"}
         >
           <span
             className={cx(
@@ -81,7 +84,7 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
           </span>
         </button>
 
-        {props.state === "recording" || props.state === "paused" ? (
+        {isRecordingActive ? (
           <div className="inline-flex flex-none items-center gap-1.5 [-webkit-app-region:no-drag]">
             <button
               className="grid size-9 place-items-center rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/15"
@@ -89,7 +92,7 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
               onClick={
                 props.state === "paused" ? props.onResumeRecording : props.onPauseRecording
               }
-              title={props.state === "paused" ? "Resume recording" : "Pause recording"}
+              aria-label={props.state === "paused" ? "Resume recording" : "Pause recording"}
             >
               {props.state === "paused" ? <Play size={17} /> : <Pause size={17} />}
             </button>
@@ -97,7 +100,7 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
               className="grid size-9 place-items-center rounded-full border border-red-300/30 bg-red-600 text-white hover:bg-red-700"
               type="button"
               onClick={props.onStopRecording}
-              title="Stop recording"
+              aria-label="Stop recording"
             >
               <CircleStop size={18} />
             </button>
@@ -109,6 +112,11 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
 }
 
 function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0]) {
+  const isRecordingActive = props.state === "recording" || props.state === "paused";
+  const borderOverlayLabel = props.borderOverlayEnabled
+    ? "Hide screen border"
+    : "Show screen border";
+
   return (
     <main className="grid size-full place-items-center bg-transparent">
       <section className="flex h-[460px] w-[430px] flex-col overflow-hidden rounded-[9px] border border-white/15 bg-[#121317] pb-[20px] text-white shadow-[0_24px_62px_rgb(0_0_0_/_0.42)]">
@@ -121,9 +129,8 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             <button
               className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
-              title={
-                props.borderOverlayEnabled ? "Hide screen border" : "Show screen border"
-              }
+              aria-label={borderOverlayLabel}
+              title={isRecordingActive ? undefined : borderOverlayLabel}
               onClick={props.onToggleBorderOverlay}
             >
               {props.borderOverlayEnabled ? <Eye size={19} /> : <EyeOff size={19} />}
@@ -131,7 +138,8 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             <button
               className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
-              title="Collapse"
+              aria-label="Collapse"
+              title={isRecordingActive ? undefined : "Collapse"}
               onClick={() => props.onSetCompactMode(true)}
             >
               <Minimize2 size={20} />
@@ -139,7 +147,8 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             <button
               className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
-              title="Close"
+              aria-label="Close"
+              title={isRecordingActive ? undefined : "Close"}
               onClick={props.onClose}
             >
               <X size={22} />
@@ -208,6 +217,9 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
 }
 
 function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
+  const isRecordingActive = props.state === "recording" || props.state === "paused";
+  const primaryActionLabel = isRecordingActive ? "Stop recording" : "Start recording";
+
   return (
     <div className="relative grid min-h-0 flex-1 place-items-center px-4 pb-6 pt-4">
       {props.state === "complete" ? (
@@ -237,31 +249,29 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
           props.state === "stopping"
         }
         onClick={() => {
-          if (props.state === "recording" || props.state === "paused") {
+          if (isRecordingActive) {
             props.onStopRecording();
           } else {
             props.onStartRecording();
           }
         }}
-        title={
-          props.state === "recording" || props.state === "paused"
-            ? "Stop recording"
-            : "Start recording"
-        }
+        aria-label={primaryActionLabel}
+        title={isRecordingActive ? undefined : primaryActionLabel}
       >
         {props.state === "countdown" ? (
           props.countdown
-        ) : props.state === "recording" || props.state === "paused" ? (
+        ) : isRecordingActive ? (
           <CircleStop size={34} />
         ) : null}
       </button>
 
-      {props.state === "recording" || props.state === "paused" ? (
+      {isRecordingActive ? (
         <div className="absolute bottom-14 inline-flex items-center gap-2">
           <button
             className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 text-sm font-bold text-white hover:bg-white/15"
             type="button"
             onClick={props.state === "paused" ? props.onResumeRecording : props.onPauseRecording}
+            aria-label={props.state === "paused" ? "Resume recording" : "Pause recording"}
           >
             {props.state === "paused" ? <Play size={17} /> : <Pause size={17} />}
             <span>{props.state === "paused" ? "Resume" : "Pause"}</span>
@@ -270,6 +280,7 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
             className="inline-flex h-9 items-center gap-2 rounded-full border border-red-300/30 bg-red-500/15 px-4 text-sm font-bold text-red-100 hover:bg-red-500/25"
             type="button"
             onClick={props.onCancelRecording}
+            aria-label="Cancel recording"
           >
             <X size={17} />
             <span>Cancel</span>
@@ -278,6 +289,7 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
             className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-500/15 px-4 text-sm font-bold text-emerald-100 hover:bg-emerald-500/25"
             type="button"
             onClick={props.onStopRecording}
+            aria-label="Finish recording"
           >
             <CheckCircle2 size={17} />
             <span>Done</span>

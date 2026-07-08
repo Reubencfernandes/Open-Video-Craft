@@ -353,6 +353,8 @@ export function RecorderController() {
 
       setState("countdown");
       await runCountdown(setCountdown);
+      await window.openVideoCraft.windows.setRecorderContentProtection(true);
+      await delay(recordingRuntime.recorderProtectionSettleMs);
 
       activeRecordedMsRef.current = 0;
       activeSegmentStartedAtRef.current = Date.now();
@@ -365,6 +367,7 @@ export function RecorderController() {
       await refreshDevices();
     } catch (error) {
       stopAllStreams();
+      await window.openVideoCraft.windows.setRecorderContentProtection(false);
       await window.openVideoCraft.overlays.hideSourceBorder();
       setState("failed");
       setErrorMessage(toErrorMessage(error));
@@ -403,6 +406,7 @@ export function RecorderController() {
       );
       await Promise.all(Object.values(writeQueuesRef.current));
       stopAllStreams();
+      await window.openVideoCraft.windows.setRecorderContentProtection(false);
 
       if (!currentProject) {
         throw new Error("Recording stopped before a project was created.");
@@ -449,6 +453,7 @@ export function RecorderController() {
       await Promise.all(Object.values(writeQueuesRef.current));
       stopAllStreams();
       await window.openVideoCraft.overlays.hideSourceBorder();
+      await window.openVideoCraft.windows.setRecorderContentProtection(false);
       await setCompactMode(false);
 
       const currentProject = projectRef.current;
@@ -471,6 +476,7 @@ export function RecorderController() {
 
   async function failRecording(message: string) {
     stopAllStreams();
+    await window.openVideoCraft.windows.setRecorderContentProtection(false);
     await window.openVideoCraft.overlays.hideSourceBorder();
     await window.openVideoCraft.windows.showCurrent();
     await setCompactMode(false);

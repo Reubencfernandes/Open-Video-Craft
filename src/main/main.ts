@@ -118,7 +118,7 @@ async function createWindow(): Promise<void> {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
-    closeDisplayOverlay();
+    void closeDisplayOverlay();
     closePermissionGuideWindow();
   });
   attachDevToolsShortcuts(mainWindow);
@@ -153,10 +153,9 @@ async function createRecorderWindow(): Promise<void> {
 
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
   recorderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  recorderWindow.setContentProtection(true);
   recorderWindow.on("closed", () => {
     recorderWindow = null;
-    closeDisplayOverlay();
+    void closeDisplayOverlay();
   });
   attachDevToolsShortcuts(recorderWindow);
 
@@ -282,7 +281,7 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
     });
     mainWindow.on("closed", () => {
       mainWindow = null;
-      closeDisplayOverlay();
+      void closeDisplayOverlay();
       closePermissionGuideWindow();
     });
     attachDevToolsShortcuts(mainWindow);
@@ -309,7 +308,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   const source = sourceCache.get(sourceId);
 
   if (!source) {
-    closeDisplayOverlay();
+    await closeDisplayOverlay();
     return {
       shown: false,
       reason: "Selected source is no longer available."
@@ -317,7 +316,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   }
 
   if (!source.id.startsWith("screen:")) {
-    closeDisplayOverlay();
+    await closeDisplayOverlay();
     return {
       shown: false,
       reason: "Display border is only shown for full-screen sources."
@@ -325,7 +324,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   }
 
   const display = getDisplayForSource(source);
-  closeDisplayOverlay();
+  await closeDisplayOverlay();
 
   const overlayWindow = new BrowserWindow({
     x: display.bounds.x,
@@ -352,8 +351,6 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   overlayWindow.setAlwaysOnTop(true, "screen-saver");
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  // The renderer only shows this as a pre-recording selection guide.
-  overlayWindow.setContentProtection(true);
   overlayWindow.on("closed", () => {
     if (displayOverlayWindow === overlayWindow) {
       displayOverlayWindow = null;
@@ -382,12 +379,22 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   };
 }
 
-function closeDisplayOverlay(): void {
-  if (displayOverlayWindow && !displayOverlayWindow.isDestroyed()) {
-    displayOverlayWindow.close();
+async function closeDisplayOverlay(): Promise<void> {
+  const overlayWindow = displayOverlayWindow;
+  displayOverlayWindow = null;
+
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    return;
   }
 
-  displayOverlayWindow = null;
+  await new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, 300);
+    overlayWindow.once("closed", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    overlayWindow.close();
+  });
 }
 
 function closePermissionGuideWindow(): void {
@@ -541,6 +548,14 @@ function registerIpc(): void {
     return true;
   });
 
+  ipcMain.handle(
+    "windows:set-recorder-content-protection",
+    (_event, protectedFromCapture: boolean): boolean => {
+      setRecorderWindowContentProtection(protectedFromCapture);
+      return true;
+    }
+  );
+
   ipcMain.handle("windows:open-editor", async (_event, projectId?: string | null): Promise<boolean> => {
     await openEditorWindow(projectId);
     return true;
@@ -582,8 +597,8 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("overlays:hide-source-border", (): Promise<boolean> => {
-    return enqueueOverlayOp(() => {
-      closeDisplayOverlay();
+    return enqueueOverlayOp(async () => {
+      await closeDisplayOverlay();
       return true;
     });
   });
@@ -743,6 +758,14 @@ function setRecorderWindowCompact(compact: boolean): void {
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
 }
 
+function setRecorderWindowContentProtection(protectedFromCapture: boolean): void {
+  if (!recorderWindow || recorderWindow.isDestroyed()) {
+    return;
+  }
+
+  recorderWindow.setContentProtection(protectedFromCapture);
+}
+
 async function exportEditorVideo(
   request: ExportVideoRequest
 ): Promise<ExportVideoResult | null> {
@@ -856,18 +879,18 @@ app.whenReady().then(async () => {
 });
 
 app.on("before-quit", () => {
-  closeDisplayOverlay();
+  void closeDisplayOverlay();
   closePermissionGuideWindow();
 });
 
 app.on("will-quit", () => {
-  closeDisplayOverlay();
+  void closeDisplayOverlay();
   closePermissionGuideWindow();
   globalShortcut.unregisterAll();
 });
 
 app.on("window-all-closed", () => {
-  closeDisplayOverlay();
+  void closeDisplayOverlay();
   closePermissionGuideWindow();
   if (process.platform !== "darwin") {
     app.quit();
