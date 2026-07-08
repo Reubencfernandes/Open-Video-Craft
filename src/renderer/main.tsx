@@ -7,10 +7,13 @@ import { RecorderController } from "./RecorderController";
 import "tailwindcss/index.css";
 
 const view = new URLSearchParams(window.location.search).get("view") ?? "main";
+const isTransparentView = view === "controller" || view === "permission-guide";
 document.documentElement.dataset.view = view;
-document.documentElement.className = "h-full w-full overflow-hidden bg-[#121317]";
+document.documentElement.className = isTransparentView
+  ? "h-full w-full overflow-hidden bg-transparent"
+  : "h-full w-full overflow-hidden bg-[#121317]";
 document.body.className =
-  view === "controller" || view === "permission-guide"
+  isTransparentView
     ? "m-0 h-full w-full overflow-hidden bg-transparent"
     : view === "editor"
       ? "m-0 h-full w-full overflow-hidden bg-[#121317]"

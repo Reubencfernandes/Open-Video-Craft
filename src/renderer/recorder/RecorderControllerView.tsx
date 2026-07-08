@@ -123,7 +123,7 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
 
   return (
     <main className="grid size-full place-items-center bg-transparent">
-      <section className="flex h-[460px] w-[430px] flex-col overflow-hidden rounded-[9px] border border-white/15 bg-[#121317] pb-[20px] text-white shadow-[0_24px_62px_rgb(0_0_0_/_0.42)]">
+      <section className="flex h-full w-full flex-col overflow-hidden rounded-[12px] bg-[#121317] pb-[20px] text-white">
         <div className="flex h-12 flex-none items-center justify-between border-b border-white/[0.07] px-4 [-webkit-app-region:drag]">
           <div className="inline-flex min-w-0 items-center gap-2.5 text-[0.82rem] font-extrabold">
             <img className="block size-7 object-contain" src={appLogo} alt="" />
