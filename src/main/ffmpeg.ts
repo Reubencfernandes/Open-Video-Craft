@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic = require("ffprobe-static");
@@ -16,12 +17,31 @@ interface ExportVideoJob {
   preserveSourceAudio: boolean;
 }
 
+// ffmpeg-static and ffprobe-static report paths inside app.asar, but asar
+// archives are files, so spawning from them fails with ENOTDIR. The binaries
+// are asarUnpack'ed next to the archive; point at that copy when packaged.
+export function toUnpackedPath(binaryPath: string): string {
+  return binaryPath.replace(/([/\\])app\.asar([/\\])/, "$1app.asar.unpacked$2");
+}
+
+function resolveBundledBinaryPath(binaryPath: string, binaryName: string): string {
+  const unpackedPath = toUnpackedPath(binaryPath);
+
+  if (unpackedPath !== binaryPath && !existsSync(unpackedPath)) {
+    throw new Error(
+      `${binaryName} was resolved inside app.asar, but the unpacked binary was not found at "${unpackedPath}". Check the electron-builder asarUnpack configuration.`
+    );
+  }
+
+  return unpackedPath;
+}
+
 export function resolveFfmpegPath(): string {
   if (!ffmpegStatic) {
     throw new Error("No FFmpeg binary is available for this platform.");
   }
 
-  return ffmpegStatic;
+  return resolveBundledBinaryPath(ffmpegStatic, "FFmpeg");
 }
 
 export function resolveFfprobePath(): string {
@@ -29,7 +49,7 @@ export function resolveFfprobePath(): string {
     throw new Error("No FFprobe binary is available for this platform.");
   }
 
-  return ffprobeStatic.path;
+  return resolveBundledBinaryPath(ffprobeStatic.path, "FFprobe");
 }
 
 export function getFfmpegStatus(): FfmpegStatus {
@@ -249,7 +269,10 @@ function runProcess(command: string, args: string[]): Promise<void> {
       stderr += chunk.toString();
     });
 
-    child.on("error", reject);
+    child.on("error", (error: Error & { code?: string }) => {
+      const reason = error.code ? `${error.code}: ${error.message}` : error.message;
+      reject(new Error(`Failed to start FFmpeg at "${command}". ${reason}`));
+    });
     child.on("close", (code) => {
       if (code === 0) {
         resolve();
