@@ -63,6 +63,20 @@ export function registerPermissionRequestHandlers(
 }
 
 export function getDesktopPermissionStatus(): DesktopPermissionStatus {
+  if (process.platform === "win32") {
+    // Windows grants desktop capture through the selected capture source, not a
+    // macOS-style per-app Screen Recording permission. Camera and microphone
+    // access are requested by Chromium at use time and can be restricted by OS
+    // privacy policy, so Electron cannot reliably report a preflight state.
+    return {
+      platform: "win32",
+      canDragAppBundle: false,
+      screen: "unavailable",
+      camera: "unavailable",
+      microphone: "unavailable"
+    };
+  }
+
   if (process.platform !== "darwin") {
     return {
       platform: getPermissionPlatform(),

@@ -25,6 +25,10 @@ import {
 } from "./desktop-permissions";
 import { createFallbackThumbnail, listDesktopCapturerSources } from "./desktop-sources";
 import {
+  getDisplayOverlayStripBounds,
+  resolveDisplayForOverlay
+} from "./display-overlay";
+import {
   chooseBaseDirectory as showBaseDirectoryDialog,
   chooseExistingProjectFolder as showExistingProjectFolderDialog,
   chooseExportPath as showExportPathDialog,
@@ -84,10 +88,10 @@ let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
 let activeRecordingProjectId: string | null = null;
 let displayOverlayWindows: BrowserWindow[] = [];
+let activeDisplayOverlaySourceId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
 
-const displayOverlayStripThickness = 6;
 const displayOverlayStripColor = "#34d399";
 
 const recorderWindowSize = {
@@ -339,14 +343,17 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   const display = getDisplayForSource(source);
   await closeDisplayOverlay();
 
-  const { x, y, width, height } = display.bounds;
-  const thickness = displayOverlayStripThickness;
-  const stripBounds = [
-    { x, y, width, height: thickness },
-    { x, y: y + height - thickness, width, height: thickness },
-    { x, y: y + thickness, width: thickness, height: height - thickness * 2 },
-    { x: x + width - thickness, y: y + thickness, width: thickness, height: height - thickness * 2 }
-  ];
+  if (!display) {
+    return {
+      shown: false,
+      reason: "The selected display is no longer connected."
+    };
+  }
+
+  // Electron Screen and BrowserWindow bounds are both DIP coordinates. Keeping
+  // the overlay in that coordinate space prevents Windows DPI scaling from
+  // creating a border larger than the selected display.
+  const stripBounds = getDisplayOverlayStripBounds(display, process.platform);
 
   displayOverlayWindows = stripBounds.map((bounds) => {
     const strip = new BrowserWindow({
@@ -378,6 +385,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
     strip.showInactive();
     return strip;
   });
+  activeDisplayOverlaySourceId = sourceId;
 
   return {
     shown: true,
@@ -388,6 +396,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
 async function closeDisplayOverlay(): Promise<void> {
   const strips = displayOverlayWindows;
   displayOverlayWindows = [];
+  activeDisplayOverlaySourceId = null;
 
   for (const strip of strips) {
     if (!strip.isDestroyed()) {
@@ -425,29 +434,27 @@ function attachDevToolsShortcuts(window: BrowserWindow): void {
   });
 }
 
-function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.Display {
-  const displays = electronScreen.getAllDisplays();
+function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.Display | null {
+  return resolveDisplayForOverlay(
+    { id: source.id, displayId: source.display_id },
+    electronScreen.getAllDisplays(),
+    electronScreen.getPrimaryDisplay()
+  );
+}
 
-  if (source.display_id) {
-    const display = displays.find((item) => String(item.id) === source.display_id);
-
-    if (display) {
-      return display;
-    }
+function refreshDisplayOverlay(): void {
+  const sourceId = activeDisplayOverlaySourceId;
+  if (!sourceId) {
+    return;
   }
 
-  const idParts = source.id.split(":");
-  const numericId = idParts.find((part) => /^\d+$/.test(part));
+  void enqueueOverlayOp(() => showDisplayOverlay(sourceId));
+}
 
-  if (numericId) {
-    const display = displays.find((item) => String(item.id) === numericId);
-
-    if (display) {
-      return display;
-    }
-  }
-
-  return electronScreen.getPrimaryDisplay();
+function registerDisplayOverlayRefreshHandlers(): void {
+  electronScreen.on("display-added", refreshDisplayOverlay);
+  electronScreen.on("display-removed", refreshDisplayOverlay);
+  electronScreen.on("display-metrics-changed", refreshDisplayOverlay);
 }
 
 function registerIpc(): void {
@@ -912,6 +919,7 @@ app.whenReady().then(async () => {
   });
   registerCustomMediaProtocol({ projectStore, importedMediaCache });
   registerIpc();
+  registerDisplayOverlayRefreshHandlers();
   globalShortcut.register("CommandOrControl+Shift+S", () => {
     recorderWindow?.webContents.send("recording:global-stop");
   });
