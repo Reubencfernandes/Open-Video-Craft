@@ -1,3 +1,6 @@
+/**
+ * Types shared by the recorder controller and its view.
+ */
 import type { RecordingTrack } from "../../shared/types";
 
 export type FloatingState =

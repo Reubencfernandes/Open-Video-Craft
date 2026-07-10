@@ -1,3 +1,7 @@
+/**
+ * desktopCapturer source listing with fallbacks, plus an SVG placeholder
+ * thumbnail for sources that cannot provide one.
+ */
 import { app, desktopCapturer } from "electron";
 
 type CapturerSourceType = "screen" | "window";

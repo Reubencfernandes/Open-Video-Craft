@@ -1,3 +1,8 @@
+/**
+ * Main-process bootstrap and orchestrator: creates the app windows (main,
+ * floating recorder, editor, permission guide, recording-border overlay),
+ * registers every IPC handler, and wires the focused modules together.
+ */
 import {
   app,
   BrowserWindow,

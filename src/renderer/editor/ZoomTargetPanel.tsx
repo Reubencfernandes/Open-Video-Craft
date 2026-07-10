@@ -1,3 +1,6 @@
+/**
+ * Preview overlay for picking a zoom effect's focal point.
+ */
 import { AudioLines, ZoomIn } from "lucide-react";
 import { useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";

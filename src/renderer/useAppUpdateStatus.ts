@@ -1,3 +1,7 @@
+/**
+ * Hook that loads app info + update status over IPC and subscribes to
+ * update-status change events.
+ */
 import { useEffect, useState } from "react";
 import type { AppInfo, UpdateStatus } from "../shared/types";
 

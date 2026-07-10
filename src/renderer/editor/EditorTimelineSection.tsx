@@ -1,3 +1,6 @@
+/**
+ * Visibility wrapper that mounts the Timeline and forwards its props.
+ */
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,

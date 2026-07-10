@@ -1,3 +1,8 @@
+/**
+ * Renders whatever the playhead is over inside the preview frame: image,
+ * project composition (screen + camera bubble), or plain video, plus the
+ * subtitle overlay and layout-edit handles.
+ */
 import type { CSSProperties, PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { clampNumber } from "./utils";
 import type {

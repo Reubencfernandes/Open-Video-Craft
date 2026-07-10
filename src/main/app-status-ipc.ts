@@ -1,3 +1,6 @@
+/**
+ * IPC handlers exposing the app version and auto-update status to renderers.
+ */
 import { app, ipcMain } from "electron";
 import {
   checkForAppUpdates,

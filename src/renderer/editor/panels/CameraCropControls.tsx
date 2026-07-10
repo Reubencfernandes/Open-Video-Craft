@@ -1,3 +1,6 @@
+/**
+ * Camera content pan/zoom/mirror controls used inside the Layout panel.
+ */
 import { FlipHorizontal, RotateCcw } from "lucide-react";
 import { RangeControl } from "../controls";
 import type { CameraContentTransform } from "../types";

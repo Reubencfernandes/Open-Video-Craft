@@ -1,3 +1,8 @@
+/**
+ * On-disk project store: creates project folders, appends recording chunks
+ * per track, finalizes recordings, persists editor state + imports, and
+ * resolves media paths safely inside the project root.
+ */
 import { promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";

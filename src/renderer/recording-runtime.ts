@@ -1,3 +1,7 @@
+/**
+ * Recording constants (bitrates, chunk cadence, frame rate) and option
+ * builders for MediaRecorder and getDisplayMedia.
+ */
 export const recordingRuntime = {
   audioBitsPerSecond: 128_000,
   chunkMs: 5_000,

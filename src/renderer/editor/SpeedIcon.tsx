@@ -1,3 +1,6 @@
+/**
+ * Speedometer image icon used by the Speed tool's small contexts.
+ */
 import speedometerIcon from "../assets/speedometer.png";
 
 export function SpeedIcon(props: { size?: number; className?: string }) {

@@ -1,3 +1,8 @@
+/**
+ * The bottom timeline panel: transport toolbar, horizontal zoom, ruler,
+ * playhead, and the track lanes. Purely presentational; all interaction state
+ * lives in EditorView's hooks.
+ */
 import { AudioLines, Captions, Film, Maximize2, Minus, Plus, WandSparkles } from "lucide-react";
 import type {
   DragEvent as ReactDragEvent,

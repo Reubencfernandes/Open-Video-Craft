@@ -1,3 +1,6 @@
+/**
+ * Background style catalog for the Style tool.
+ */
 import type { BackgroundStyle } from "./types";
 
 // Single source of truth for the built-in composition backgrounds. The Style

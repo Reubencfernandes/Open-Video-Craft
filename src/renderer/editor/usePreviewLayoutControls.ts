@@ -1,3 +1,6 @@
+/**
+ * Pointer drag/resize of the screen and camera inside the preview frame.
+ */
 import { useEffect, useRef } from "react";
 import type {
   Dispatch,

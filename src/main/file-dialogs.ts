@@ -1,3 +1,7 @@
+/**
+ * Native open/save dialogs: project folder selection, media import (with kind
+ * classification), and export destination.
+ */
 import { dialog } from "electron";
 import { randomUUID } from "node:crypto";
 import path from "node:path";

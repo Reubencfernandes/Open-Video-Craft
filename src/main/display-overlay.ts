@@ -1,3 +1,7 @@
+/**
+ * Pure geometry for the recording-border overlay: resolving which display a
+ * capture source belongs to and computing the border strip bounds.
+ */
 export interface DisplayOverlayBounds {
   x: number;
   y: number;

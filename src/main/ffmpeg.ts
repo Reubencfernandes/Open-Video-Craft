@@ -1,3 +1,8 @@
+/**
+ * FFmpeg integration: resolving the bundled binary (asar-unpacked), remuxing
+ * chunked WebM recordings so they seek, converting mic/system audio to WAV,
+ * and running the export encode.
+ */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promises as fs } from "node:fs";

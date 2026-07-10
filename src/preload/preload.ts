@@ -1,3 +1,7 @@
+/**
+ * Preload script: exposes the typed `window.openVideoCraft` IPC bridge that is
+ * the renderer's only path into the main process.
+ */
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppInfo,

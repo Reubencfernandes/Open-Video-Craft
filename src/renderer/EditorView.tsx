@@ -1,36 +1,26 @@
 /**
- * EditorView: the video editor window.
+ * EditorView: the video editor window's composition root.
  *
- * This component is the orchestrator — it owns every piece of editor state
- * (media library, timeline segments, playback clock, zoom/subtitle effects,
- * layout/style settings) and all the handlers that mutate it. Rendering is
- * delegated to the small presentational components under ./editor/:
+ * This component intentionally contains no editing logic. It does three
+ * things only:
  *
- *   - panels/*        one component per left-rail tool
- *   - Timeline        the bottom timeline panel (tracks, clips, playhead)
- *   - PreviewContent  the media shown inside the preview frame
- *   - ExportDialog    the export modal
+ *   1. Declares the editor's shared state (media library, timeline segments,
+ *      effects, layout/style settings, selection).
+ *   2. Wires that state into the focused hooks under ./editor/ that implement
+ *      every behavior — persistence, derived view data, playback, viewport,
+ *      media actions, export, preview layout, and the timeline controller
+ *      facade (editing, drags, clipboard, effects, transcription, shortcuts).
+ *   3. Renders the layout from the presentational components under ./editor/
+ *      (ToolRail, EditorToolPanel, EditorPreviewPanel, EditorTimelineSection,
+ *      ExportDialog, notifications).
  *
- * Pure math, storage, and larger render sections live in focused modules under
- * ./editor so individual files stay easier to reason about.
+ * See docs/FILES.md for the full map of which file owns which behavior.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  DragEvent as ReactDragEvent,
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ProjectView
 } from "../shared/types";
 import { AppVersionStatus } from "./AppVersionStatus";
-import {
-  constrainZoomEnd,
-  constrainZoomMove,
-  constrainZoomStart,
-  placeZoomInFirstGap,
-  zoomMinDurationSeconds
-} from "./zoom-timing";
 import { ExportDialog } from "./editor/ExportDialog";
 import { EditorNotifications } from "./editor/EditorNotifications";
 import { EditorPreviewPanel } from "./editor/EditorPreviewPanel";
@@ -38,11 +28,6 @@ import { EditorTimelineSection } from "./editor/EditorTimelineSection";
 import { EditorToolPanel } from "./editor/EditorToolPanel";
 import { EditorTopbar } from "./editor/EditorTopbar";
 import { ToolRail } from "./editor/ToolRail";
-import {
-  blurFocusedShortcutControl,
-  isKeyboardTextTarget
-} from "./editor/keyboard-utils";
-import { decodeAudioTo16kMono } from "./editor/media-utils";
 import { getCameraFrameFromPreset } from "./editor/layout-geometry";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
 import { useEditorExport } from "./editor/useEditorExport";
@@ -50,31 +35,14 @@ import { useEditorMediaActions } from "./editor/useEditorMediaActions";
 import { useEditorPlayback } from "./editor/useEditorPlayback";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
+import { useTimelineController } from "./editor/useTimelineController";
 import { useTimelineViewport } from "./editor/useTimelineViewport";
-import { defaultSpeedRate, speedMinDurationSeconds } from "./editor/speed-utils";
 import {
-  addLanguageToWhisperWordChunks,
-  createSubtitleSegmentsFromWhisperOutput,
   formatSubtitleLanguage,
-  getWhisperOutputLanguage,
-  whisperTranscriptionModel,
   whisperTranscriptionModelLabel
 } from "./editor/subtitle-transcription";
-import type { WhisperTranscriptionOutput } from "./editor/subtitle-transcription";
-import {
-  areTimelineSegmentsEqual,
-  canSplitTimelineSegment,
-  canSplitTimelineSegmentAt,
-  findTimelineSegmentAtTime,
-  getTimelineMediaDuration,
-  getTimelineTrackKind,
-  moveTimelineSegment,
-  resolveAudioLane,
-  syncTimelineSegments,
-  trimTimelineSegment
-} from "./editor/timeline-utils";
-import { clampNumber, createId } from "./editor/utils";
-import { mediaDragType } from "./editor/types";
+import { canSplitTimelineSegmentAt } from "./editor/timeline-utils";
+import { clampNumber } from "./editor/utils";
 import type {
   BackgroundCategory,
   BackgroundStyle,
@@ -93,8 +61,6 @@ import type {
   SubtitleStyle,
   TimelineContextMenu,
   TimelineSegment,
-  TimelineTrimDrag,
-  TimelineTrimEdge,
   VideoCornerStyle,
   ZoomEffect
 } from "./editor/types";
@@ -150,15 +116,10 @@ export function EditorView() {
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
   const [subtitleLanguage, setSubtitleLanguage] = useState<string | null>(null);
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>("karaoke");
-  const [sttStatus, setSttStatus] = useState<
-    "idle" | "loading" | "transcribing" | "done" | "error"
-  >("idle");
   const [trimRange, setTrimRange] = useState({ start: 0, end: 0 });
   const [timelineSegments, setTimelineSegments] = useState<TimelineSegment[]>([]);
   const [selectedTimelineSegmentId, setSelectedTimelineSegmentId] = useState<string | null>(null);
   const [timelineContextMenu, setTimelineContextMenu] = useState<TimelineContextMenu>(null);
-  const [timelineUndoStack, setTimelineUndoStack] = useState<TimelineSegment[][]>([]);
-  const [timelineRedoStack, setTimelineRedoStack] = useState<TimelineSegment[][]>([]);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -168,45 +129,7 @@ export function EditorView() {
   const [timelineViewDuration, setTimelineViewDuration] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(1);
 
-  const timelineDragRef = useRef(false);
-  const timelineTrimDragRef = useRef<TimelineTrimDrag | null>(null);
-  const timelineMoveDragRef = useRef<{
-    segmentId: string;
-    pointerStartTime: number;
-    segmentStart: number;
-    moved: boolean;
-    originalSegments: TimelineSegment[];
-  } | null>(null);
-  const zoomDragRef = useRef<{
-    id: string;
-    mode: "move" | "start" | "end";
-    pointerStartTime: number;
-    origStart: number;
-    origEnd: number;
-    moved: boolean;
-  } | null>(null);
-  const speedDragRef = useRef<{
-    id: string;
-    mode: "move" | "start" | "end";
-    pointerStartTime: number;
-    origStart: number;
-    origEnd: number;
-    moved: boolean;
-  } | null>(null);
-  const subtitleDragRef = useRef<{
-    mode: "move" | "start" | "end";
-    pointerStartTime: number;
-    original: SubtitleSegment;
-    moved: boolean;
-  } | null>(null);
-  const previousTimelineDurationRef = useRef(0);
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
-  const timelineClipboardRef = useRef<{
-    itemId: string;
-    track: "video" | "audio";
-    sourceStart: number;
-    duration: number;
-  } | null>(null);
 
   const { isReady: isEditorStateReady, saveState } = useEditorPersistence({
     activeBackgroundCategory,
@@ -488,1098 +411,86 @@ export function EditorView() {
     setScreenPosition
   });
 
-  useEffect(() => {
-    if (!selectedItemId && allMedia.length > 0) {
-      setSelectedItemId(allMedia[0].id);
-    }
-  }, [allMedia, selectedItemId]);
-
-  // Keep timeline segments consistent with the media library.
-  useEffect(() => {
-    if (!isEditorStateReady) {
-      return;
-    }
-
-    const availableItemIds = new Set(timelineEditableItems.map((item) => item.id));
-    const nextKnownItemIds = new Set(
-      [...knownTimelineItemIdsRef.current].filter((itemId) => availableItemIds.has(itemId))
-    );
-    // Only project recordings load onto the timeline automatically; imported
-    // media stays in the asset grid until it is dragged onto the timeline.
-    const newItemIds = new Set(
-      timelineEditableItems
-        .filter((item) => item.origin === "project")
-        .map((item) => item.id)
-        .filter((itemId) => !nextKnownItemIds.has(itemId))
-    );
-
-    for (const itemId of newItemIds) {
-      nextKnownItemIds.add(itemId);
-    }
-    knownTimelineItemIdsRef.current = nextKnownItemIds;
-
-    setTimelineSegments((current) =>
-      syncTimelineSegments(
-        current,
-        timelineEditableItems,
-        mediaDurationById,
-        newItemIds
-      )
-    );
-    setSelectedTimelineSegmentId((current) =>
-      current && availableItemIds.has(current.split(":segment-")[0]) ? current : null
-    );
-  }, [isEditorStateReady, mediaDurationById, timelineEditableItems]);
-
-  // Probe durations for media whose length is still unknown (throwaway
-  // elements; the real duration lands in the library via updateMediaDuration).
-  useEffect(() => {
-    const unresolvedMedia = timelineEditableItems.filter(
-      (item) => item.kind !== "image" && (!item.duration || item.duration <= 0)
-    );
-    if (unresolvedMedia.length === 0) {
-      return undefined;
-    }
-
-    const cleanups = unresolvedMedia.map((item) => {
-      const element = document.createElement(item.kind === "audio" ? "audio" : "video");
-      const reportDuration = () => updateMediaDuration(item.id, element.duration);
-      element.preload = "metadata";
-      element.addEventListener("loadedmetadata", reportDuration);
-      element.addEventListener("durationchange", reportDuration);
-      element.src = item.url;
-      element.load();
-
-      return () => {
-        element.removeEventListener("loadedmetadata", reportDuration);
-        element.removeEventListener("durationchange", reportDuration);
-        element.removeAttribute("src");
-        element.load();
-      };
-    });
-
-    return () => {
-      for (const cleanup of cleanups) {
-        cleanup();
-      }
-    };
-  }, [timelineEditableItems]);
-
-  // Grow (never shrink) the rendered timeline scale as content grows.
-  useEffect(() => {
-    setTimelineViewDuration((current) => Math.max(current, timelineDuration));
-  }, [timelineDuration]);
-
-  // Keep the export trim range sensible as the timeline duration changes.
-  useEffect(() => {
-    if (timelineDuration <= 0) {
-      return;
-    }
-
-    const previousTimelineDuration = previousTimelineDurationRef.current;
-    setTrimRange((current) => {
-      const shouldUseFullDuration =
-        current.end <= 0 ||
-        Math.abs(current.end - previousTimelineDuration) < 0.05 ||
-        (previousTimelineDuration <= 1.05 && current.end <= 1.05 && timelineDuration > 1.05);
-      const start = Math.min(current.start, timelineDuration);
-      const end = shouldUseFullDuration
-        ? timelineDuration
-        : Math.min(Math.max(current.end, start + 0.1), timelineDuration);
-
-      return {
-        start,
-        end
-      };
-    });
-    previousTimelineDurationRef.current = timelineDuration;
-  }, [timelineDuration]);
-
-  // Global keyboard shortcuts. Copy/paste/cut and split use the platform accel
-  // key (Cmd on macOS, Ctrl on Windows/Linux); arrows scrub the playhead.
-  useEffect(() => {
-    function seekBy(deltaSeconds: number) {
-      seek(currentTimeRef.current + deltaSeconds);
-    }
-
-    function handleTimelineKeyDown(event: KeyboardEvent) {
-      const isTyping = isKeyboardTextTarget(event.target);
-      const accel = event.ctrlKey || event.metaKey;
-      const key = event.key.toLowerCase();
-
-      if (accel && key === "z") {
-        event.preventDefault();
-        if (event.shiftKey) {
-          redoTimelineEdit();
-          return;
-        }
-
-        undoTimelineEdit();
-        return;
-      }
-
-      if (accel && key === "y") {
-        event.preventDefault();
-        redoTimelineEdit();
-        return;
-      }
-
-      if (isTyping) {
-        return;
-      }
-
-      // Ctrl/Cmd+E opens export.
-      if (accel && key === "e") {
-        event.preventDefault();
-        openExportDialog();
-        return;
-      }
-
-      // Clip clipboard: copy, cut (copy + delete), paste at the playhead.
-      if (accel && key === "c") {
-        event.preventDefault();
-        copySelectedTimelineSegment();
-        return;
-      }
-
-      if (accel && key === "x") {
-        event.preventDefault();
-        cutSelectedTimelineSegment();
-        return;
-      }
-
-      if (accel && key === "v") {
-        event.preventDefault();
-        pasteTimelineSegment();
-        return;
-      }
-
-      // Ctrl/Cmd+B blades the selected clip at the playhead.
-      if (accel && key === "b") {
-        event.preventDefault();
-        splitTimelineSegment(selectedTimelineSegmentId, currentTime);
-        return;
-      }
-
-      // Arrow seeking: 1s, Shift = 10s, Ctrl/Cmd = 60s. A focused range slider
-      // keeps its own arrow behavior.
-      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        const activeElement = document.activeElement;
-        if (activeElement instanceof HTMLInputElement && activeElement.type === "range") {
-          return;
-        }
-
-        event.preventDefault();
-        const direction = event.key === "ArrowRight" ? 1 : -1;
-        const step = accel ? 60 : event.shiftKey ? 10 : 1;
-        seekBy(direction * step);
-        return;
-      }
-
-      if (event.code === "Space") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.repeat) {
-          return;
-        }
-
-        blurFocusedShortcutControl();
-        void togglePlayback();
-        return;
-      }
-
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        if (activeTool === "zoom" && selectedZoomId) {
-          removeZoomEffect(selectedZoomId);
-          return;
-        }
-
-        if (activeTool === "speed" && selectedSpeedId) {
-          removeSpeedEffect(selectedSpeedId);
-          return;
-        }
-
-        deleteSelectedTimelineSegment();
-      }
-    }
-
-    window.addEventListener("keydown", handleTimelineKeyDown);
-    return () => window.removeEventListener("keydown", handleTimelineKeyDown);
-  }, [
-    currentTime,
+  // Everything the timeline does — editing (commit/undo/split/delete), effect
+  // regions, subtitle transcription, pointer drags, clipboard, and keyboard
+  // shortcuts — is assembled by one controller facade.
+  const {
+    addSpeedEffect,
+    addSubtitle,
+    addZoomEffect,
+    beginSpeedClipDrag,
+    beginSubtitleClipDrag,
+    beginTimelineClipMove,
+    beginTimelineClipTrim,
+    beginTimelineScrub,
+    beginZoomClipDrag,
+    deleteSelectedTimelineSegment,
+    deleteTimelineSegment,
+    endTimelineScrub,
+    generateSubtitles,
+    handleTimelineDragOver,
+    handleTimelineDrop,
+    moveTimelineScrub,
+    openTimelineContextMenu,
+    removeSpeedEffect,
+    removeZoomEffect,
+    splitTimelineSegment,
+    sttStatus,
+    updateSpeedEffect,
+    updateSubtitle,
+    updateZoomEffect
+  } = useTimelineController({
+    activeDuration,
     activeTool,
-    masterVolume,
-    isProjectCompositionSelected,
+    allMedia,
+    audioElsRef,
+    audioSources,
+    currentTime,
+    currentTimeRef,
+    getTimelineTimeFromClientX,
+    isEditorStateReady,
+    knownTimelineItemIdsRef,
     mediaById,
+    mediaDurationById,
     openExportDialog,
-    playing,
+    playingRef,
+    scheduleTimelinePlaybackSync,
     seek,
-    selectedItem?.id,
-    selectedTimelineSegmentId,
+    seekTimelinePointer,
+    selectedItemId,
     selectedSpeedId,
+    selectedTimelineItemId,
+    selectedTimelineSegmentId,
     selectedZoomId,
+    setActiveTool,
+    setError,
+    setExportMessage,
+    setScrubbingTimeline,
+    setSelectedItemId,
+    setSelectedSpeedId,
+    setSelectedSubtitleId,
+    setSelectedTimelineSegmentId,
+    setSelectedZoomId,
+    setSpeedEffects,
+    setSubtitleLanguage,
+    setSubtitles,
+    setTimelineContextMenu,
+    setTimelineSegments,
+    setTimelineViewDuration,
+    setTrimRange,
+    setZoomEffects,
+    speedEffects,
+    subtitles,
+    syncMediaToTime,
+    timelineBodyRef,
     timelineDuration,
-    timelineRedoStack,
+    timelineEditableItems,
     timelineRenderDuration,
     timelineSegments,
-    timelineUndoStack,
-    togglePlayback
-  ]);
-
-  // ---------------------------------------------------------------------------
-  // Drag & drop from the asset grid onto the timeline.
-  // ---------------------------------------------------------------------------
-
-  function handleTimelineDragOver(event: ReactDragEvent<HTMLDivElement>) {
-    if (event.dataTransfer.types.includes(mediaDragType)) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "copy";
-    }
-  }
-
-  function handleTimelineDrop(event: ReactDragEvent<HTMLDivElement>) {
-    const itemId = event.dataTransfer.getData(mediaDragType);
-    const item = itemId ? mediaById.get(itemId) : null;
-    const dropTime = getTimelineTimeFromClientX(event.clientX);
-    if (!item || dropTime === null) {
-      return;
-    }
-
-    event.preventDefault();
-    addTimelineClipAt(item, dropTime);
-  }
-
-  // Adds a new clip for the media item at the drop position. The same asset
-  // can be dropped multiple times to build a multi-clip sequence.
-  function addTimelineClipAt(item: EditorMediaItem, dropTime: number) {
-    if (item.track === "camera") {
-      return;
-    }
-
-    const track = getTimelineTrackKind(item);
-    const itemDuration = Math.max(
-      0.1,
-      mediaDurationById.get(item.id) ??
-      getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
-    );
-    const start = Math.max(0, dropTime);
-    const end = start + itemDuration;
-    // The "itemId:segment-" id format is load-bearing: selection code maps a
-    // segment back to its media item by splitting on ":segment-".
-    const segmentId = `${item.id}:segment-${createId("drop")}`;
-
-    knownTimelineItemIdsRef.current.add(item.id);
-    commitTimelineSegments((segments) => {
-      const draft: TimelineSegment = {
-        id: segmentId,
-        itemId: item.id,
-        track,
-        lane: track === "audio" ? resolveAudioLane(segments, segmentId, start, end, 0) : 0,
-        start,
-        end,
-        sourceStart: 0
-      };
-      // Route through the move logic so drops snap to clip edges like drags do.
-      return moveTimelineSegment([...segments, draft], segmentId, start, timelineRenderDuration);
-    });
-    setSelectedItemId(item.id);
-    setSelectedTimelineSegmentId(segmentId);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Timeline editing: commit (with undo), trim, move, split, delete, scrub.
-  // ---------------------------------------------------------------------------
-
-  // All segment edits flow through here so each change lands on the undo stack.
-  function commitTimelineSegments(updater: (segments: TimelineSegment[]) => TimelineSegment[]) {
-    setTimelineSegments((current) => {
-      const next = updater(current);
-      if (areTimelineSegmentsEqual(current, next)) {
-        return current;
-      }
-
-      scheduleTimelinePlaybackSync(next);
-      setTimelineUndoStack((stack) => [...stack.slice(-49), current]);
-      setTimelineRedoStack([]);
-      return next;
-    });
-  }
-
-  function undoTimelineEdit() {
-    if (timelineUndoStack.length === 0) {
-      return;
-    }
-
-    const previous = timelineUndoStack[timelineUndoStack.length - 1];
-    setTimelineUndoStack((stack) => stack.slice(0, -1));
-    setTimelineRedoStack((stack) => [timelineSegments, ...stack.slice(0, 49)]);
-    scheduleTimelinePlaybackSync(previous);
-    setTimelineSegments(previous);
-    setSelectedTimelineSegmentId(null);
-  }
-
-  function redoTimelineEdit() {
-    if (timelineRedoStack.length === 0) {
-      return;
-    }
-
-    const next = timelineRedoStack[0];
-    setTimelineRedoStack((stack) => stack.slice(1));
-    setTimelineUndoStack((stack) => [...stack.slice(-49), timelineSegments]);
-    scheduleTimelinePlaybackSync(next);
-    setTimelineSegments(next);
-    setSelectedTimelineSegmentId(null);
-  }
-
-  function deleteTimelineSegment(segmentId: string | null) {
-    if (!segmentId) {
-      return;
-    }
-
-    const audioElement = audioElsRef.current.get(segmentId);
-    audioElement?.pause();
-    commitTimelineSegments((segments) => segments.filter((segment) => segment.id !== segmentId));
-    setSelectedTimelineSegmentId((current) => (current === segmentId ? null : current));
-    setTimelineContextMenu(null);
-  }
-
-  function deleteSelectedTimelineSegment() {
-    deleteTimelineSegment(selectedTimelineSegmentId);
-  }
-
-  // Clip clipboard. Only the placement (item, source window, length, track) is
-  // copied; paste re-derives a fresh segment id and drops it at the playhead.
-  function copySelectedTimelineSegment() {
-    const segment = timelineSegments.find((item) => item.id === selectedTimelineSegmentId);
-    if (!segment) {
-      return;
-    }
-
-    timelineClipboardRef.current = {
-      itemId: segment.itemId,
-      track: segment.track,
-      sourceStart: segment.sourceStart,
-      duration: Math.max(0.1, segment.end - segment.start)
-    };
-    setExportMessage("Clip copied");
-  }
-
-  function cutSelectedTimelineSegment() {
-    copySelectedTimelineSegment();
-    deleteSelectedTimelineSegment();
-  }
-
-  function pasteTimelineSegment() {
-    const clip = timelineClipboardRef.current;
-    const item = clip ? mediaById.get(clip.itemId) : null;
-    if (!clip || !item) {
-      return;
-    }
-
-    const start = Math.max(0, currentTimeRef.current);
-    const end = start + clip.duration;
-    const segmentId = `${clip.itemId}:segment-${createId("paste")}`;
-
-    knownTimelineItemIdsRef.current.add(clip.itemId);
-    commitTimelineSegments((segments) => {
-      const draft: TimelineSegment = {
-        id: segmentId,
-        itemId: clip.itemId,
-        track: clip.track,
-        lane: clip.track === "audio" ? resolveAudioLane(segments, segmentId, start, end, 0) : 0,
-        start,
-        end,
-        sourceStart: clip.sourceStart
-      };
-      // Route through move logic so the paste snaps and never overlaps a
-      // neighbor on the video track (audio resolves onto a free lane).
-      return moveTimelineSegment([...segments, draft], segmentId, start, timelineRenderDuration);
-    });
-    setSelectedItemId(clip.itemId);
-    setSelectedTimelineSegmentId(segmentId);
-    setExportMessage("Clip pasted");
-  }
-
-  function splitTimelineSegment(segmentId: string | null, time: number) {
-    const targetSegment =
-      (segmentId ? timelineSegments.find((segment) => segment.id === segmentId) : null) ??
-      findTimelineSegmentAtTime(timelineSegments, time);
-
-    if (!targetSegment || !canSplitTimelineSegment(targetSegment, time)) {
-      setTimelineContextMenu(null);
-      return;
-    }
-
-    const splitTime = clampNumber(time, targetSegment.start + 0.1, targetSegment.end - 0.1);
-    const nextSegmentId = `${targetSegment.id}-split-${Date.now()}`;
-
-    commitTimelineSegments((segments) =>
-      segments.flatMap((segment) => {
-        if (segment.id !== targetSegment.id) {
-          return [segment];
-        }
-
-        return [
-          {
-            ...segment,
-            end: splitTime
-          },
-          {
-            ...segment,
-            id: nextSegmentId,
-            start: splitTime,
-            sourceStart: segment.sourceStart + (splitTime - segment.start)
-          }
-        ];
-      })
-    );
-    setSelectedTimelineSegmentId(nextSegmentId);
-    setTimelineContextMenu(null);
-  }
-
-  function openTimelineContextMenu(event: ReactMouseEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const time = getTimelineTimeFromClientX(event.clientX);
-    if (time === null) {
-      return;
-    }
-
-    const target = event.target instanceof Element ? event.target : null;
-    const targetSegmentId =
-      target?.closest<HTMLElement>("[data-segment-id]")?.dataset.segmentId ??
-      findTimelineSegmentAtTime(timelineSegments, time)?.id ??
-      null;
-
-    if (targetSegmentId) {
-      setSelectedTimelineSegmentId(targetSegmentId);
-      const targetSegment = timelineSegments.find((segment) => segment.id === targetSegmentId);
-      if (targetSegment) {
-        setSelectedItemId(targetSegment.itemId);
-      }
-    }
-
-    setTimelineContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      time,
-      segmentId: targetSegmentId
-    });
-  }
-
-  function beginTimelineClipTrim(
-    event: ReactPointerEvent<HTMLElement>,
-    segmentId: string,
-    edge: TimelineTrimEdge
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
-    timelineTrimDragRef.current = {
-      segmentId,
-      edge,
-      originalSegments: timelineSegments
-    };
-    setSelectedTimelineSegmentId(segmentId);
-    timelineBodyRef.current?.setPointerCapture(event.pointerId);
-  }
-
-  function updateTimelineClipTrim(clientX: number) {
-    const drag = timelineTrimDragRef.current;
-    const time = getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) {
-      return;
-    }
-
-    setTimelineSegments((current) => {
-      const next = trimTimelineSegment(current, drag.segmentId, drag.edge, time, mediaDurationById);
-      if (!areTimelineSegmentsEqual(current, next)) {
-        scheduleTimelinePlaybackSync(next);
-      }
-      return next;
-    });
-  }
-
-  // Trims mutate live during the drag; push a single undo entry at the end.
-  function finishTimelineClipTrim() {
-    const drag = timelineTrimDragRef.current;
-    if (!drag) {
-      return;
-    }
-
-    setTimelineSegments((current) => {
-      if (!areTimelineSegmentsEqual(drag.originalSegments, current)) {
-        setTimelineUndoStack((stack) => [...stack.slice(-49), drag.originalSegments]);
-        setTimelineRedoStack([]);
-      }
-
-      return current;
-    });
-    timelineTrimDragRef.current = null;
-  }
-
-  function beginTimelineClipMove(event: ReactPointerEvent<HTMLElement>, segmentId: string) {
-    if (timelineTrimDragRef.current) {
-      return;
-    }
-
-    const time = getTimelineTimeFromClientX(event.clientX);
-    const segment = timelineSegments.find((item) => item.id === segmentId);
-    if (time === null || !segment) {
-      return;
-    }
-
-    timelineMoveDragRef.current = {
-      segmentId,
-      pointerStartTime: time,
-      segmentStart: segment.start,
-      moved: false,
-      originalSegments: timelineSegments
-    };
-    setSelectedTimelineSegmentId(segmentId);
-    // Clips can cover the whole lane, so a click on a clip must still move the
-    // playhead; a real drag only starts after the move threshold.
-    seek(time);
-    timelineBodyRef.current?.setPointerCapture(event.pointerId);
-  }
-
-  function updateTimelineClipMove(clientX: number) {
-    const drag = timelineMoveDragRef.current;
-    const time = getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) {
-      return;
-    }
-
-    // Ignore sub-frame jitters so a plain click doesn't count as a move.
-    const delta = time - drag.pointerStartTime;
-    if (!drag.moved && Math.abs(delta) < 0.02) {
-      return;
-    }
-
-    drag.moved = true;
-    const rawStart = Math.max(0, drag.segmentStart + delta);
-    setTimelineSegments((current) => {
-      const next = moveTimelineSegment(current, drag.segmentId, rawStart, timelineRenderDuration, [
-        currentTimeRef.current
-      ]);
-      if (!areTimelineSegmentsEqual(current, next)) {
-        scheduleTimelinePlaybackSync(next);
-      }
-      return next;
-    });
-  }
-
-  function finishTimelineClipMove() {
-    const drag = timelineMoveDragRef.current;
-    if (!drag) {
-      return;
-    }
-
-    timelineMoveDragRef.current = null;
-    if (!drag.moved) {
-      return;
-    }
-
-    setTimelineSegments((current) => {
-      if (!areTimelineSegmentsEqual(drag.originalSegments, current)) {
-        setTimelineUndoStack((stack) => [...stack.slice(-49), drag.originalSegments]);
-        setTimelineRedoStack([]);
-      }
-
-      return current;
-    });
-  }
-
-  function beginZoomClipDrag(
-    event: ReactPointerEvent<HTMLElement>,
-    id: string,
-    mode: "move" | "start" | "end"
-  ) {
-    if (mode !== "move") {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-
-    const time = getTimelineTimeFromClientX(event.clientX);
-    const effect = zoomEffects.find((item) => item.id === id);
-    if (time === null || !effect) {
-      return;
-    }
-
-    zoomDragRef.current = {
-      id,
-      mode,
-      pointerStartTime: time,
-      origStart: effect.start,
-      origEnd: effect.end,
-      moved: false
-    };
-    setSelectedZoomId(id);
-    if (mode === "move") {
-      seek(time);
-    }
-    timelineBodyRef.current?.setPointerCapture(event.pointerId);
-  }
-
-  function updateZoomClipDrag(clientX: number) {
-    const drag = zoomDragRef.current;
-    const time = getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) {
-      return;
-    }
-
-    if (drag.mode === "move") {
-      const delta = time - drag.pointerStartTime;
-      if (!drag.moved && Math.abs(delta) < 0.02) {
-        return;
-      }
-      drag.moved = true;
-      const constrained = constrainZoomMove(
-        zoomEffects,
-        drag.id,
-        drag.origStart + delta,
-        timelineDuration
-      );
-      if (constrained) {
-        updateZoomEffect(drag.id, constrained);
-      }
-      return;
-    }
-
-    if (drag.mode === "start") {
-      const constrained = constrainZoomStart(zoomEffects, drag.id, time);
-      if (constrained) {
-        updateZoomEffect(drag.id, constrained);
-      }
-      return;
-    }
-
-    const constrained = constrainZoomEnd(zoomEffects, drag.id, time, timelineDuration);
-    if (constrained) {
-      updateZoomEffect(drag.id, constrained);
-    }
-  }
-
-  function finishZoomClipDrag() {
-    zoomDragRef.current = null;
-  }
-
-  function beginSpeedClipDrag(
-    event: ReactPointerEvent<HTMLElement>,
-    id: string,
-    mode: "move" | "start" | "end"
-  ) {
-    if (mode !== "move") {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-
-    const time = getTimelineTimeFromClientX(event.clientX);
-    const effect = speedEffects.find((item) => item.id === id);
-    if (time === null || !effect) {
-      return;
-    }
-
-    speedDragRef.current = {
-      id,
-      mode,
-      pointerStartTime: time,
-      origStart: effect.start,
-      origEnd: effect.end,
-      moved: false
-    };
-    setSelectedSpeedId(id);
-    if (mode === "move") {
-      seek(time);
-    }
-    timelineBodyRef.current?.setPointerCapture(event.pointerId);
-  }
-
-  function updateSpeedClipDrag(clientX: number) {
-    const drag = speedDragRef.current;
-    const time = getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) {
-      return;
-    }
-
-    if (drag.mode === "move") {
-      const delta = time - drag.pointerStartTime;
-      if (!drag.moved && Math.abs(delta) < 0.02) {
-        return;
-      }
-      drag.moved = true;
-      const constrained = constrainZoomMove(
-        speedEffects,
-        drag.id,
-        drag.origStart + delta,
-        timelineDuration
-      );
-      if (constrained) {
-        updateSpeedEffect(drag.id, constrained);
-      }
-      return;
-    }
-
-    if (drag.mode === "start") {
-      const constrained = constrainZoomStart(speedEffects, drag.id, time);
-      if (constrained) {
-        updateSpeedEffect(drag.id, constrained);
-      }
-      return;
-    }
-
-    const constrained = constrainZoomEnd(speedEffects, drag.id, time, timelineDuration);
-    if (constrained) {
-      updateSpeedEffect(drag.id, constrained);
-    }
-  }
-
-  function finishSpeedClipDrag() {
-    speedDragRef.current = null;
-  }
-
-  function beginSubtitleClipDrag(
-    event: ReactPointerEvent<HTMLElement>,
-    id: string,
-    mode: "move" | "start" | "end"
-  ) {
-    if (mode !== "move") {
-      event.preventDefault();
-      event.stopPropagation();
-    }
-
-    const time = getTimelineTimeFromClientX(event.clientX);
-    const subtitle = subtitles.find((item) => item.id === id);
-    if (time === null || !subtitle) {
-      return;
-    }
-
-    subtitleDragRef.current = {
-      mode,
-      pointerStartTime: time,
-      original: subtitle,
-      moved: false
-    };
-    setSelectedSubtitleId(id);
-    setActiveTool("subtitles");
-    if (mode === "move") {
-      seek(time);
-    }
-    timelineBodyRef.current?.setPointerCapture(event.pointerId);
-  }
-
-  function updateSubtitleClipDrag(clientX: number) {
-    const drag = subtitleDragRef.current;
-    const time = getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) {
-      return;
-    }
-
-    const original = drag.original;
-    const minDuration = 0.2;
-
-    if (drag.mode === "move") {
-      const delta = time - drag.pointerStartTime;
-      if (!drag.moved && Math.abs(delta) < 0.02) {
-        return;
-      }
-      drag.moved = true;
-      const start = Math.max(0, original.start + delta);
-      const shift = start - original.start;
-      setSubtitles((current) =>
-        current.map((subtitle) =>
-          subtitle.id === original.id
-            ? {
-                ...subtitle,
-                start,
-                end: original.end + shift,
-                // Keep word-level karaoke timings aligned with the moved clip.
-                words: original.words?.map((word) => ({
-                  ...word,
-                  start: word.start + shift,
-                  end: word.end + shift
-                }))
-              }
-            : subtitle
-        )
-      );
-      return;
-    }
-
-    if (drag.mode === "start") {
-      const start = clampNumber(time, 0, original.end - minDuration);
-      updateSubtitle(original.id, { start });
-      return;
-    }
-
-    const end = Math.max(original.start + minDuration, time);
-    updateSubtitle(original.id, { end });
-  }
-
-  function finishSubtitleClipDrag() {
-    subtitleDragRef.current = null;
-  }
-
-  // Pointer handlers on the timeline body dispatch to whichever drag is active
-  // (trim / zoom / move) and otherwise treat the pointer as a playhead scrub.
-  function beginTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
-    if (
-      timelineTrimDragRef.current ||
-      timelineMoveDragRef.current ||
-      zoomDragRef.current ||
-      speedDragRef.current ||
-      subtitleDragRef.current
-    ) {
-      return;
-    }
-
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("button, input, select, textarea")) {
-      return;
-    }
-
-    setTimelineContextMenu(null);
-    timelineDragRef.current = true;
-    setScrubbingTimeline(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    seekTimelinePointer(event.clientX);
-  }
-
-  function moveTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
-    // While a clip/effect is being dragged, suppress the clip reflow transition
-    // so it follows the pointer exactly (the transition animates drops instead).
-    if (
-      timelineTrimDragRef.current ||
-      timelineMoveDragRef.current ||
-      zoomDragRef.current ||
-      speedDragRef.current ||
-      subtitleDragRef.current
-    ) {
-      timelineBodyRef.current?.setAttribute("data-interacting", "true");
-    }
-
-    if (timelineTrimDragRef.current) {
-      updateTimelineClipTrim(event.clientX);
-      return;
-    }
-
-    if (zoomDragRef.current) {
-      updateZoomClipDrag(event.clientX);
-      return;
-    }
-
-    if (speedDragRef.current) {
-      updateSpeedClipDrag(event.clientX);
-      return;
-    }
-
-    if (subtitleDragRef.current) {
-      updateSubtitleClipDrag(event.clientX);
-      return;
-    }
-
-    if (timelineMoveDragRef.current) {
-      updateTimelineClipMove(event.clientX);
-      return;
-    }
-
-    if (!timelineDragRef.current) {
-      return;
-    }
-
-    seekTimelinePointer(event.clientX);
-  }
-
-  function endTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-
-    finishTimelineClipTrim();
-    finishTimelineClipMove();
-    finishZoomClipDrag();
-    finishSpeedClipDrag();
-    finishSubtitleClipDrag();
-    // Re-enable clip reflow animation so the drop settles smoothly.
-    timelineBodyRef.current?.removeAttribute("data-interacting");
-    timelineDragRef.current = false;
-    setScrubbingTimeline(false);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Zoom effects, subtitles, audio levels.
-  // ---------------------------------------------------------------------------
-
-  function addZoomEffect() {
-    const start = currentTime;
-    const desiredDuration = Math.min(
-      2.5,
-      Math.max(zoomMinDurationSeconds, timelineDuration - start)
-    );
-    const placement =
-      placeZoomInFirstGap(zoomEffects, start, desiredDuration, timelineDuration) ??
-      placeZoomInFirstGap(zoomEffects, start, zoomMinDurationSeconds, timelineDuration);
-
-    if (!placement) {
-      setError("There is no room for another zoom after the playhead.");
-      return;
-    }
-
-    const nextEffect: ZoomEffect = {
-      id: createId("zoom"),
-      start: placement.start,
-      end: placement.end,
-      speed: "medium",
-      scale: 1.5,
-      targetX: 50,
-      targetY: 50
-    };
-    setError(null);
-    setZoomEffects((current) => [...current, nextEffect]);
-    setSelectedZoomId(nextEffect.id);
-    setActiveTool("zoom");
-  }
-
-  function updateZoomEffect(id: string, updates: Partial<ZoomEffect>) {
-    setZoomEffects((current) =>
-      current.map((effect) => (effect.id === id ? { ...effect, ...updates } : effect))
-    );
-  }
-
-  function removeZoomEffect(id: string) {
-    setZoomEffects((current) => current.filter((effect) => effect.id !== id));
-    setSelectedZoomId((current) => (current === id ? null : current));
-  }
-
-  function addSpeedEffect() {
-    const start = currentTime;
-    const desiredDuration = Math.min(
-      2.5,
-      Math.max(speedMinDurationSeconds, timelineDuration - start)
-    );
-    const placement =
-      placeZoomInFirstGap(speedEffects, start, desiredDuration, timelineDuration) ??
-      placeZoomInFirstGap(speedEffects, start, speedMinDurationSeconds, timelineDuration);
-
-    if (!placement) {
-      setError("There is no room for another speed section after the playhead.");
-      return;
-    }
-
-    const nextEffect: SpeedEffect = {
-      id: createId("speed"),
-      start: placement.start,
-      end: placement.end,
-      rate: defaultSpeedRate
-    };
-    setError(null);
-    setSpeedEffects((current) => [...current, nextEffect]);
-    setSelectedSpeedId(nextEffect.id);
-    setActiveTool("speed");
-  }
-
-  function updateSpeedEffect(id: string, updates: Partial<SpeedEffect>) {
-    setSpeedEffects((current) => {
-      const constrainedStart =
-        typeof updates.start === "number"
-          ? constrainZoomStart(current, id, updates.start)
-          : null;
-      const constrainedEnd =
-        typeof updates.end === "number"
-          ? constrainZoomEnd(current, id, updates.end, timelineDuration)
-          : null;
-      const nextUpdates = {
-        ...updates,
-        ...(constrainedStart ?? {}),
-        ...(constrainedEnd ?? {})
-      };
-
-      return current.map((effect) =>
-        effect.id === id ? { ...effect, ...nextUpdates } : effect
-      );
-    });
-    syncMediaToTime(currentTimeRef.current, playingRef.current, "clip-change");
-  }
-
-  function removeSpeedEffect(id: string) {
-    setSpeedEffects((current) => current.filter((effect) => effect.id !== id));
-    setSelectedSpeedId((current) => (current === id ? null : current));
-    syncMediaToTime(currentTimeRef.current, playingRef.current, "clip-change");
-  }
-
-  function addSubtitle() {
-    const start = currentTime;
-    const end = activeDuration > 0 ? Math.min(activeDuration, start + 3) : start + 3;
-    const nextSubtitle: SubtitleSegment = {
-      id: createId("subtitle"),
-      start,
-      end: Math.max(start + 0.5, end),
-      text: "New subtitle"
-    };
-    setSubtitles((current) => [...current, nextSubtitle]);
-    setSelectedSubtitleId(nextSubtitle.id);
-    setActiveTool("subtitles");
-  }
-
-  // On-device speech-to-text (Whisper via transformers.js). Loaded lazily and
-  // only when the user asks for it, so the model download/compute never happens
-  // automatically and never affects the rest of the app if it fails.
-  async function generateSubtitles() {
-    const source =
-      audioSources[0] ?? allMedia.find((item) => item.kind === "video") ?? null;
-    if (!source) {
-      setError("Add audio or a video with speech before generating subtitles.");
-      return;
-    }
-
-    setError(null);
-    setSttStatus("loading");
-
-    try {
-      const transformers = await import("@xenova/transformers");
-      transformers.env.allowLocalModels = false;
-
-      const audio = await decodeAudioTo16kMono(source.url);
-      setSttStatus("transcribing");
-
-      const transcriber = (await transformers.pipeline(
-        "automatic-speech-recognition",
-        whisperTranscriptionModel
-      )) as unknown as (
-        input: Float32Array,
-        options: Record<string, unknown>
-      ) => Promise<WhisperTranscriptionOutput>;
-      addLanguageToWhisperWordChunks(transcriber);
-
-      const output = await transcriber(audio, {
-        return_timestamps: "word",
-        chunk_length_s: 30,
-        stride_length_s: 5
-      });
-
-      const segments = createSubtitleSegmentsFromWhisperOutput(output);
-
-      if (segments.length > 0) {
-        setSubtitleLanguage(getWhisperOutputLanguage(output));
-        setSubtitles(segments);
-        setSelectedSubtitleId(segments[0].id);
-      } else {
-        setSubtitleLanguage(null);
-        setError("No speech was detected in the audio.");
-      }
-      setSttStatus("done");
-    } catch (sttError) {
-      const message = sttError instanceof Error ? sttError.message : String(sttError);
-      setError(`Speech-to-text failed: ${message}`);
-      setSttStatus("error");
-    }
-  }
-
-  function updateSubtitle(id: string, updates: Partial<SubtitleSegment>) {
-    const nextUpdates = "text" in updates ? { ...updates, words: undefined } : updates;
-    setSubtitles((current) =>
-      current.map((subtitle) => (subtitle.id === id ? { ...subtitle, ...nextUpdates } : subtitle))
-    );
-  }
+    togglePlayback: () => void togglePlayback(),
+    updateMediaDuration,
+    zoomEffects
+  });
 
   // ---------------------------------------------------------------------------
   // Render.

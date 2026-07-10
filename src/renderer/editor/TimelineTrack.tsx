@@ -1,3 +1,7 @@
+/**
+ * One timeline row: label column + clip lane (the `track-lane` class is used
+ * to map pointer X to time).
+ */
 import type { ReactNode } from "react";
 import { cx } from "../classNames";
 

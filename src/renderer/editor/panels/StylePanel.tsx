@@ -1,3 +1,7 @@
+/**
+ * Style tool: background category/style selection, custom background upload,
+ * and video corner styling.
+ */
 import { Upload } from "lucide-react";
 import { previewBackgrounds } from "../backgrounds";
 import type { BackgroundCategory, BackgroundStyle, VideoCornerStyle } from "../types";

@@ -1,3 +1,6 @@
+/**
+ * CSS transform for the camera feed inside its frame (pan/zoom/mirror).
+ */
 import type { CameraContentTransform } from "./types";
 import { clampNumber } from "./utils";
 

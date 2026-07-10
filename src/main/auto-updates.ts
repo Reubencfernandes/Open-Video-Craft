@@ -1,3 +1,7 @@
+/**
+ * electron-updater lifecycle: scheduled checks, download progress, restart
+ * prompts, and update-status broadcasts to all windows.
+ */
 import { app, BrowserWindow, dialog } from "electron";
 import type { MessageBoxOptions } from "electron";
 import { autoUpdater } from "electron-updater";

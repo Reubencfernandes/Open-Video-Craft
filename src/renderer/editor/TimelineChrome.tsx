@@ -1,3 +1,7 @@
+/**
+ * Timeline chrome: transport toolbar, time ruler, playhead, and the
+ * right-click context menu.
+ */
 import { CircleStop, Play, Scissors, SkipBack, SkipForward, SlidersHorizontal, Trash2 } from "lucide-react";
 import type { CSSProperties } from "react";
 import { createTimelineTicks, formatTimecode } from "./utils";

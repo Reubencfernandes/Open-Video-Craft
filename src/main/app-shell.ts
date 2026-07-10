@@ -1,3 +1,7 @@
+/**
+ * App identity: app id/name, dock and about-panel configuration, and the
+ * platform icon path.
+ */
 import { app, nativeImage } from "electron";
 import path from "node:path";
 import { getProductVersion } from "./app-version";

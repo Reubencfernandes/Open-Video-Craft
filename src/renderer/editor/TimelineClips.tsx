@@ -1,3 +1,7 @@
+/**
+ * Clip components for every lane (media, zoom, speed, subtitle) and the
+ * wavesurfer-based audio waveform.
+ */
 import { Captions, Film, ZoomIn } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import { memo, useEffect, useRef, useState } from "react";

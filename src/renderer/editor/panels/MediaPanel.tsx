@@ -1,3 +1,6 @@
+/**
+ * Setup tool: import button, kind filter tabs, and the draggable asset grid.
+ */
 import { Plus, Upload } from "lucide-react";
 import { AssetCard } from "../AssetCard";
 import { mediaDragType } from "../types";

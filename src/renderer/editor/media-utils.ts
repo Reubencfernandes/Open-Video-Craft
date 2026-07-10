@@ -1,3 +1,8 @@
+/**
+ * Media helpers: project recording -> media items, video thumbnail capture,
+ * waveform blob loading with mime inference, and 16 kHz mono decoding for
+ * speech-to-text.
+ */
 import type WaveSurfer from "wavesurfer.js";
 import type { ImportedMediaFile, ProjectView } from "../../shared/types";
 import type { EditorMediaItem } from "./types";

@@ -1,3 +1,6 @@
+/**
+ * Editor top bar: back to launcher, project name, save, and export.
+ */
 import { Download, Home, Save } from "lucide-react";
 import appLogo from "../assets/app.png";
 

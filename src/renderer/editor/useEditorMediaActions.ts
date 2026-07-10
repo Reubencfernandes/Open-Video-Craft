@@ -1,3 +1,7 @@
+/**
+ * Media library actions: import (incl. background music onto the timeline),
+ * remove, select-with-seek, duration updates, and per-source audio levels.
+ */
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { toEditorMediaItem } from "./media-utils";
 import { areTimelineSegmentsEqual, resolveAudioLane } from "./timeline-utils";

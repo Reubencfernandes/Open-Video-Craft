@@ -1,3 +1,7 @@
+/**
+ * Subtitles tool: Whisper transcription, style selection, and per-subtitle
+ * text/timing editing.
+ */
 import { Captions, WandSparkles } from "lucide-react";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 

@@ -1,3 +1,6 @@
+/**
+ * The left-rail tool catalog (order, labels, icons, rail artwork).
+ */
 import {
   Captions,
   FolderOpen,

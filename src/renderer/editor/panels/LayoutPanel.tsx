@@ -1,3 +1,7 @@
+/**
+ * Layout tool: layout mode, screen scale/aspect, and camera shape/size/
+ * position/crop controls.
+ */
 import { RangeControl } from "../controls";
 import type {
   CameraBorderStyle,

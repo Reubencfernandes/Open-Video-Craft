@@ -1,3 +1,7 @@
+/**
+ * Timeline viewport: panel height resize, horizontal time-axis zoom, and
+ * mapping pointer X positions to timeline time.
+ */
 import { useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { clampNumber } from "./utils";

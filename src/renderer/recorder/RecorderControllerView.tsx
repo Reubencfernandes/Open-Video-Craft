@@ -1,3 +1,7 @@
+/**
+ * Floating recorder UI: expanded and compact layouts, record/pause/stop
+ * controls, system-audio and border toggles, and device pickers.
+ */
 import {
   CheckCircle2,
   CircleStop,

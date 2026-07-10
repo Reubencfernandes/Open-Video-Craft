@@ -1,3 +1,7 @@
+/**
+ * Routes the active left-rail tool to its panel component and forwards the
+ * relevant slice of editor state/handlers.
+ */
 import { ToolPanelHeader } from "./controls";
 import { AudioPanel } from "./panels/AudioPanel";
 import { CutPanel } from "./panels/CutPanel";

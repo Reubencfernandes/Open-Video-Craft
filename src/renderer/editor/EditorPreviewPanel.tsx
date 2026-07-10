@@ -1,3 +1,7 @@
+/**
+ * Preview shell: the framed preview area, preview zoom controls, and the
+ * hidden audio elements that play timeline audio clips.
+ */
 import type {
   CSSProperties,
   MutableRefObject,
@@ -135,9 +139,6 @@ export function EditorPreviewPanel(props: {
             key={clip.id}
             src={clip.item.url}
             preload="metadata"
-            // Opt into CORS so the Web Audio graph (boost + meter) stays audible
-            // for custom-protocol media instead of outputting silence.
-            crossOrigin="anonymous"
             onLoadedMetadata={(event) =>
               props.onMediaDuration(clip.item.id, event.currentTarget.duration)
             }

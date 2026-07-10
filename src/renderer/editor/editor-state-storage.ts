@@ -1,3 +1,7 @@
+/**
+ * Serialization of editor state to/from the project's editor.json (versioned
+ * snapshot shape + restore parsing).
+ */
 import type {
   BackgroundCategory,
   BackgroundStyle,

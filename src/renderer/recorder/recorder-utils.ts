@@ -1,3 +1,7 @@
+/**
+ * Recorder helpers: mime-type candidates, optional camera/mic streams,
+ * MediaRecorder construction per track, and small formatting utilities.
+ */
 import type { DeviceSelection, ProjectDevices, RecordingTrack } from "../../shared/types";
 import {
   createMediaRecorderOptions,

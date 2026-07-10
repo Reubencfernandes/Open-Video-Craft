@@ -1,3 +1,7 @@
+/**
+ * Resolves the product version reported to renderers and written into
+ * project files.
+ */
 import { app } from "electron";
 import fs from "node:fs";
 import path from "node:path";

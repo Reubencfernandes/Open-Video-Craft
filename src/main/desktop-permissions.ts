@@ -1,3 +1,8 @@
+/**
+ * Browser permission-request handlers (only app windows may capture media),
+ * the display-media handler that selects the capture source and offers
+ * loopback system audio, and macOS permission status/settings helpers.
+ */
 import {
   app,
   nativeImage,

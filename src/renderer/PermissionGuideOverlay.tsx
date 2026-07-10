@@ -1,3 +1,7 @@
+/**
+ * Transparent always-on-top window content that points at the macOS
+ * permission prompt/settings while the user grants access.
+ */
 import { ArrowUp, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DesktopPermissionKind } from "../shared/types";

@@ -1,3 +1,6 @@
+/**
+ * Export modal: format and resolution selection.
+ */
 import { Download, X } from "lucide-react";
 import type { ExportResolution, ExportVideoFormat } from "../../shared/types";
 

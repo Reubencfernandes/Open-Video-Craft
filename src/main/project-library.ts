@@ -1,3 +1,7 @@
+/**
+ * Recent-projects index persisted in userData; powers the launcher's project
+ * list and editor project lookup.
+ */
 import { promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";

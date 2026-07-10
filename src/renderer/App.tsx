@@ -1,3 +1,7 @@
+/**
+ * Launcher screen: recent project library, opening existing projects, and
+ * launching the floating recorder.
+ */
 import { AlertTriangle, Film, FolderOpen, ScreenShare, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {

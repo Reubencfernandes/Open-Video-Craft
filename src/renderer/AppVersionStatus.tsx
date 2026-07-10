@@ -1,3 +1,6 @@
+/**
+ * Bottom-left version/update pill shown in every window.
+ */
 import { AlertTriangle, CheckCircle2, Download, RefreshCw } from "lucide-react";
 import type { UpdateStatusState } from "../shared/types";
 import {

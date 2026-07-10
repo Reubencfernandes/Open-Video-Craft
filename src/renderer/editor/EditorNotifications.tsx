@@ -1,3 +1,6 @@
+/**
+ * Floating error and status/toast messages for the editor.
+ */
 interface EditorNotificationsProps {
   error: string | null;
   exportMessage: string | null;

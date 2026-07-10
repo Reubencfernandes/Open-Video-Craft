@@ -1,3 +1,6 @@
+/**
+ * Left tool rail: one artwork button per editor tool.
+ */
 import { editorTools } from "./tools";
 import type { EditorTool } from "./types";
 

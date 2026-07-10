@@ -1,6 +1,11 @@
+/**
+ * Playback engine: the rAF clock, primary-video-driven timeline time, media
+ * element seek/play/pause/volume sync, stall watchdog, and the output level
+ * for the audio meter.
+ */
 import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { EditorAudioEngine } from "./audio-engine";
+import { AudioMeter } from "./audio-meter";
 import { canDriftSeek } from "./media-utils";
 import {
   getClampedTimelineTimeForMediaTime,
@@ -118,30 +123,35 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<AudioLevelState>({});
   const timelineDurationRef = useRef(0);
-  const audioEngineRef = useRef<EditorAudioEngine | null>(null);
+  const audioMeterRef = useRef<AudioMeter | null>(null);
 
-  function getAudioEngine(): EditorAudioEngine {
-    audioEngineRef.current ??= new EditorAudioEngine();
-    return audioEngineRef.current;
+  function getAudioMeter(): AudioMeter {
+    audioMeterRef.current ??= new AudioMeter();
+    return audioMeterRef.current;
   }
 
-  // Routes an element through the Web Audio graph (for the meter and >0 dB
-  // boost) and splits the target gain: attenuation stays on element.volume so
-  // audio keeps playing even if the graph can't attach; only boost uses gain.
+  // A media element's own `volume` maxes at 1, so preview applies attenuation
+  // only; any dB boost above unity is applied on export and shown on the meter.
   function applyAudioGain(element: HTMLMediaElement, linear: number) {
-    const safe = Math.max(0, linear);
-    element.volume = Math.min(1, safe);
-    const engine = getAudioEngine();
-    engine.attach(element);
-    engine.setBoost(element, Math.max(1, safe));
+    element.volume = Math.min(1, Math.max(0, linear));
   }
 
   useEffect(() => {
     return () => {
       clearPrimaryVideoWatchdog();
-      audioEngineRef.current?.dispose();
+      audioMeterRef.current?.dispose();
     };
   }, []);
+
+  // Decode a small peak envelope for each audio clip so the meter has content to
+  // sample. Decoding is cached per URL inside the meter.
+  useEffect(() => {
+    const meter = getAudioMeter();
+    for (const clip of audioTimelineClips) {
+      meter.ensureEnvelope(clip.item.url);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioTimelineClips]);
 
   useEffect(() => {
     syncTimelinePlaybackRefs(timelineSegments);
@@ -260,8 +270,39 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     if (level.muted) {
       return 0;
     }
-    // Full linear gain (can exceed 1 for a dB boost); applyAudioGain splits it.
+    // Full linear gain (can exceed 1 for a dB boost); the meter uses it directly
+    // and applyAudioGain clamps it to the element's 0..1 range for preview.
     return master * (level.volume / 100);
+  }
+
+  // Peak output level (0..1) at the playhead across every active audio clip,
+  // sampled from decoded envelopes and scaled by each clip's effective gain.
+  function getAudioMeterLevel(): number {
+    const meter = audioMeterRef.current;
+    if (!meter) {
+      return 0;
+    }
+
+    const time = currentTimeRef.current;
+    let peak = 0;
+    for (const clip of audioClipsRef.current) {
+      if (time < clip.start || time >= clip.start + clip.duration) {
+        continue;
+      }
+
+      const gain = effectiveClipVolume(clip.item.id);
+      if (gain <= 0) {
+        continue;
+      }
+
+      const sourceTime = clip.sourceStart + (time - clip.start);
+      const level = meter.sample(clip.item.url, sourceTime) * gain;
+      if (level > peak) {
+        peak = level;
+      }
+    }
+
+    return Math.min(1, peak);
   }
 
   function findVideoClipAtTime(time: number): TimelineMediaClip | null {
@@ -635,8 +676,6 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     playingRef.current = true;
     setPlaying(true);
     setError(null);
-    // Browsers start an AudioContext suspended; resume it on this user gesture.
-    getAudioEngine().resume();
     syncMediaToTime(startAt, true, "play-start");
     armPrimaryVideoWatchdog();
   }
@@ -695,7 +734,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     audioElsRef,
     cameraRef,
     currentTimeRef,
-    getAudioLevel: () => audioEngineRef.current?.getLevel() ?? 0,
+    getAudioLevel: () => getAudioMeterLevel(),
     mainVideoRef,
     playingRef,
     scheduleTimelinePlaybackSync,

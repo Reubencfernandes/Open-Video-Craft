@@ -1,3 +1,7 @@
+/**
+ * macOS permission onboarding: shows screen/camera/microphone permission
+ * state and walks the user through granting them.
+ */
 import {
   Camera,
   CheckCircle2,

@@ -1,3 +1,6 @@
+/**
+ * Mic/camera footer control: enable toggle plus a device dropdown.
+ */
 import { AnimatePresence, motion } from "framer-motion";
 import type { ReactNode } from "react";
 import type { DeviceOption } from "./types";

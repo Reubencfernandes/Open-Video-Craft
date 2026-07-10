@@ -1,3 +1,7 @@
+/**
+ * Types shared by the main process, preload bridge, and renderer: recording
+ * tracks, project files, permissions, editor imports, and export requests.
+ */
 export type RecordingStatus =
   | "created"
   | "recording"

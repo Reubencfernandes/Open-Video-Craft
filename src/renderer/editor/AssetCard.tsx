@@ -1,3 +1,6 @@
+/**
+ * Asset grid card with drag support and a decoded video thumbnail.
+ */
 import { AudioLines, Film, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent as ReactDragEvent } from "react";

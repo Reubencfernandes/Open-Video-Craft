@@ -1,3 +1,9 @@
+/**
+ * Floating recorder state machine: source/device selection, capture streams
+ * (screen, camera, mic, system audio), MediaRecorder chunk writing over IPC,
+ * pause/resume/stop/cancel, and the border-overlay lifecycle. Rendering is
+ * delegated to recorder/RecorderControllerView.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProjectSource,

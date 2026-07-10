@@ -1,3 +1,6 @@
+/**
+ * Pure formatting helpers for the version/update pill.
+ */
 import type { UpdateStatus, UpdateStatusState } from "../shared/types";
 
 export function formatUpdateStatus(status: UpdateStatus | null): string {

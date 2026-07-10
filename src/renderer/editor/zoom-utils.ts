@@ -1,3 +1,6 @@
+/**
+ * Zoom effect math: active-zoom lookup and the preview transform it drives.
+ */
 import type { ZoomEffect, ZoomSpeed } from "./types";
 import { clampNumber } from "./utils";
 

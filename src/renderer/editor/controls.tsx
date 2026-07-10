@@ -1,3 +1,6 @@
+/**
+ * Small shared controls: tool panel header and labeled range slider.
+ */
 import { MoreHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 
