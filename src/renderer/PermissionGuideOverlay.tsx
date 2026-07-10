@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUp } from "lucide-react";
+import { ArrowUp, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DesktopPermissionKind } from "../shared/types";
 import appLogo from "./assets/app.png";
@@ -64,28 +64,29 @@ export function PermissionGuideOverlay() {
   }
 
   return (
-    <main className="grid h-full w-full place-items-center bg-transparent p-3 text-white">
-      <section className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-4 rounded-[28px] border border-white/[0.16] bg-[#20292c]/95 p-5 shadow-[0_24px_58px_rgb(0_0_0_/_0.48)] backdrop-blur">
+    <main className="grid h-full w-full place-items-center bg-transparent p-2 text-white">
+      <section className="relative w-full rounded-[20px] border border-white/[0.16] bg-[#20292c]/95 p-3.5 shadow-[0_18px_42px_rgb(0_0_0_/_0.44)] backdrop-blur">
         <button
-          className="grid size-12 shrink-0 place-items-center self-center rounded-full bg-white/[0.08] text-white hover:bg-white/[0.12]"
+          className="absolute right-3 top-3 grid size-8 place-items-center rounded-full bg-white/[0.08] text-slate-100 hover:bg-white/[0.16]"
           type="button"
           onClick={() => void window.openVideoCraft.windows.closeCurrent()}
           title="Close guide"
+          aria-label="Close permission guide"
         >
-          <ArrowLeft size={24} />
+          <X size={17} strokeWidth={2.5} />
         </button>
 
-        <div className="grid min-w-0 gap-3">
-          <div className="flex min-w-0 items-center gap-4">
-            <ArrowUp className="shrink-0 text-sky-200 drop-shadow-[0_2px_0_rgb(255_255_255_/_0.5)]" size={48} />
-            <h1 className="m-0 min-w-0 text-[1.25rem] font-extrabold leading-7 text-white">
+        <div className="grid min-w-0 gap-2 pr-9">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <ArrowUp className="shrink-0 text-sky-200 drop-shadow-[0_1px_0_rgb(255_255_255_/_0.5)]" size={31} />
+            <h1 className="m-0 min-w-0 text-[0.95rem] font-extrabold leading-5 text-white">
               Drag Open Video Craft to the list above to allow {permissionName}
             </h1>
           </div>
 
           <div
             className={cx(
-              "grid grid-cols-[auto_1fr] items-center gap-3 rounded-xl border border-white/10 bg-[#273033] px-3 py-3 transition",
+              "grid grid-cols-[auto_1fr] items-center gap-2.5 rounded-xl border border-white/10 bg-[#273033] px-2.5 py-2 transition",
               draggingApp ? "cursor-default opacity-70" : "cursor-grab active:cursor-grabbing"
             )}
             draggable={!draggingApp}
@@ -96,9 +97,9 @@ export function PermissionGuideOverlay() {
             }}
             title="Drag this app tile into the System Settings permission list"
           >
-            <img className="size-12 shrink-0 rounded-xl object-contain" src={appLogo} alt="" />
+            <img className="size-9 shrink-0 rounded-lg object-contain" src={appLogo} alt="" />
             <div className="min-w-0">
-              <strong className="block truncate text-[1.05rem] text-white">Open Video Craft</strong>
+              <strong className="block truncate text-sm text-white">Open Video Craft</strong>
             </div>
           </div>
         </div>

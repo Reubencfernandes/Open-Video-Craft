@@ -259,8 +259,8 @@ function positionPermissionGuideWindow(window: BrowserWindow): void {
 
 function getPermissionGuideSize(display: Electron.Display): Electron.Size {
   return {
-    width: Math.min(980, Math.max(720, display.workArea.width - 72)),
-    height: 220
+    width: Math.min(680, Math.max(520, display.workArea.width - 160)),
+    height: 168
   };
 }
 
