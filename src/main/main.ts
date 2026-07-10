@@ -154,6 +154,9 @@ async function createRecorderWindow(): Promise<void> {
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    // Created hidden and revealed on `ready-to-show`, so the transparent window
+    // never flashes empty while the recorder UI paints — it appears fully drawn.
+    show: false,
     title: "Open Video Craft Recorder",
     icon: getAppIconPath(),
     backgroundColor: "#00000000",
@@ -166,6 +169,12 @@ async function createRecorderWindow(): Promise<void> {
 
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
   recorderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  recorderWindow.once("ready-to-show", () => {
+    if (recorderWindow && !recorderWindow.isDestroyed()) {
+      recorderWindow.show();
+      recorderWindow.focus();
+    }
+  });
   recorderWindow.on("close", (event) => {
     if (activeRecordingProjectId) {
       event.preventDefault();
@@ -179,6 +188,13 @@ async function createRecorderWindow(): Promise<void> {
   attachDevToolsShortcuts(recorderWindow);
 
   await loadRendererView(recorderWindow, "controller");
+
+  // Fallback in case ready-to-show has already fired or is skipped, so the
+  // window can never get stuck hidden.
+  if (recorderWindow && !recorderWindow.isDestroyed() && !recorderWindow.isVisible()) {
+    recorderWindow.show();
+    recorderWindow.focus();
+  }
 }
 
 async function loadRendererView(
