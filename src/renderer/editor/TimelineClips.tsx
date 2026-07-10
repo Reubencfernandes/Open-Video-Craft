@@ -19,7 +19,7 @@ import type {
  * the same base shape; only the fill differs by media kind.
  */
 const clipBaseClassName =
-  "group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-[3px] border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white hover:brightness-110";
+  "group absolute top-[0.22rem] z-[1] inline-flex h-[1.95rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-[3px] border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
 
 /** Inset outline so selection is visible inside lanes with overflow:hidden. */
 const clipSelectedClassName = "outline outline-1 -outline-offset-1 outline-white/90";
@@ -157,26 +157,37 @@ export function TimelineSpeedClip(props: {
   );
 }
 
-/** A subtitle entry on the subtitles track (selectable, edited via the panel). */
+/** A subtitle entry on the subtitles track. Drag the body to move it across the
+ * timeline; drag either edge to change when it starts/ends. */
 export function TimelineSubtitleClip(props: {
   subtitle: SubtitleSegment;
   duration: number;
   selected: boolean;
   onSelect: () => void;
+  onDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
 }) {
   return (
     <button
       className={cx(clipBaseClassName, "bg-[#20707f]", props.selected && clipSelectedClassName)}
       type="button"
+      title={props.subtitle.text}
       style={createTimelineClipStyle(
         props.subtitle.start,
         props.subtitle.end - props.subtitle.start,
         props.duration
       )}
       onClick={props.onSelect}
+      onPointerDown={(event) => props.onDragPointerDown(event, props.subtitle.id, "move")}
     >
       <Captions className="relative z-[2] flex-none" size={13} />
       <strong className="relative z-[2] min-w-0 truncate">{props.subtitle.text}</strong>
+      <ClipTrimEdges
+        onTrimPointerDown={(event, edge) => props.onDragPointerDown(event, props.subtitle.id, edge)}
+      />
     </button>
   );
 }

@@ -24,11 +24,15 @@ export function createMediaRecorderOptions(
       };
 }
 
-export function createDisplayCaptureOptions(): DisplayMediaStreamOptions {
+export function createDisplayCaptureOptions(
+  systemAudio: boolean
+): DisplayMediaStreamOptions {
   return {
     video: {
       frameRate: recordingRuntime.screenFrameRate
     },
-    audio: false
+    // System/desktop audio comes through the main-process loopback handler; it
+    // only yields a track when this constraint asks for audio.
+    audio: systemAudio
   };
 }

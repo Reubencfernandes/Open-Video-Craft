@@ -93,6 +93,8 @@ let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
 
 const displayOverlayStripColor = "#34d399";
+// Slightly translucent so the Windows border can be seen through.
+const displayOverlayBorderColor = "rgba(52, 211, 153, 0.55)";
 
 const recorderWindowSize = {
   expanded: {
@@ -353,9 +355,69 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   // Electron Screen and BrowserWindow bounds are both DIP coordinates. Keeping
   // the overlay in that coordinate space prevents Windows DPI scaling from
   // creating a border larger than the selected display.
-  const stripBounds = getDisplayOverlayStripBounds(display, process.platform);
+  displayOverlayWindows = await createDisplayOverlayWindows(display);
+  activeDisplayOverlaySourceId = sourceId;
 
-  displayOverlayWindows = stripBounds.map((bounds) => {
+  return {
+    shown: true,
+    reason: null
+  };
+}
+
+// The recording border is drawn differently per platform:
+//
+// - Windows enforces a minimum window size, so the four thin strip windows used
+//   elsewhere balloon into wide opaque bands that cover the screen edges and
+//   obstruct clicks. One transparent, fully click-through window that draws a
+//   thin semi-transparent border in CSS avoids that entirely and lets the user
+//   see through it. On Windows, content protection maps to
+//   WDA_EXCLUDEFROMCAPTURE, which is safe on a transparent window and still
+//   keeps the border out of the recording.
+//
+// - macOS/Linux use opaque, content-protected strips. Protecting an opaque
+//   window is the only combination that keeps the border out of the recording
+//   without triggering the macOS bug where transparent + protected composites
+//   the whole window as solid black on screen.
+async function createDisplayOverlayWindows(
+  display: Electron.Display
+): Promise<BrowserWindow[]> {
+  if (process.platform === "win32") {
+    const overlay = new BrowserWindow({
+      ...display.bounds,
+      show: false,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      focusable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      roundedCorners: false,
+      backgroundColor: "#00000000",
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    });
+
+    overlay.setIgnoreMouseEvents(true, { forward: true });
+    overlay.setAlwaysOnTop(true, "screen-saver");
+    overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    overlay.setContentProtection(true);
+    try {
+      await overlay.loadURL(createDisplayOverlayBorderHtml());
+    } catch {
+      // A failed load still leaves a harmless invisible click-through window.
+    }
+    if (!overlay.isDestroyed()) {
+      overlay.showInactive();
+    }
+    return [overlay];
+  }
+
+  const stripBounds = getDisplayOverlayStripBounds(display, process.platform);
+  return stripBounds.map((bounds) => {
     const strip = new BrowserWindow({
       ...bounds,
       show: false,
@@ -378,19 +440,18 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
     strip.setIgnoreMouseEvents(true, { forward: true });
     strip.setAlwaysOnTop(true, "screen-saver");
     strip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    // Content protection keeps the border out of the recorded video. It is only
-    // safe on opaque windows: protecting a transparent window makes macOS
-    // composite the whole window as solid black on screen.
     strip.setContentProtection(true);
     strip.showInactive();
     return strip;
   });
-  activeDisplayOverlaySourceId = sourceId;
+}
 
-  return {
-    shown: true,
-    reason: null
-  };
+function createDisplayOverlayBorderHtml(): string {
+  // A thin, semi-transparent green rectangle outline. box-sizing keeps the
+  // border inside the display bounds; pointer-events:none makes doubly sure the
+  // click-through window never intercepts input.
+  const html = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:transparent;overflow:hidden;cursor:default}#border{position:fixed;inset:0;box-sizing:border-box;border:4px solid ${displayOverlayBorderColor};border-radius:3px;pointer-events:none}</style><div id="border"></div>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
 async function closeDisplayOverlay(): Promise<void> {
@@ -728,17 +789,20 @@ function registerIpc(): void {
       }
     }
 
-    const inputPath = projectStore.getMicWebmPath(projectId);
+    const micInputPath = projectStore.getMicWebmPath(projectId);
+    const systemInputPath = projectStore.getSystemWebmPath(projectId);
 
-    if (!inputPath) {
-      const project = await projectStore.completeAudio(projectId, 0);
-      await getProjectLibrary().upsert(project);
-      return project;
-    }
+    const micBytes = micInputPath
+      ? await convertWebmAudioToWav(micInputPath, projectStore.getMicWavPath(projectId))
+      : 0;
+    const systemBytes = systemInputPath
+      ? await convertWebmAudioToWav(systemInputPath, projectStore.getSystemWavPath(projectId))
+      : 0;
 
-    const outputPath = projectStore.getMicWavPath(projectId);
-    const bytesWritten = await convertWebmAudioToWav(inputPath, outputPath);
-    const project = await projectStore.completeAudio(projectId, bytesWritten);
+    const project = await projectStore.completeAudio(projectId, {
+      mic: micBytes,
+      system: systemBytes
+    });
     await getProjectLibrary().upsert(project);
     return project;
   });

@@ -72,9 +72,11 @@ export function createRecorders(input: {
   screenStream: MediaStream;
   cameraStream: MediaStream | null;
   micStream: MediaStream | null;
+  systemStream: MediaStream | null;
   screenMimeType: string;
   cameraMimeType: string | null;
   micMimeType: string | null;
+  systemMimeType: string | null;
   onChunk: (track: RecordingTrack, blob: Blob) => void;
   onError: (error: unknown) => void;
 }): RecorderMap {
@@ -101,6 +103,15 @@ export function createRecorders(input: {
       input.micStream,
       input.micMimeType,
       (blob) => input.onChunk("mic", blob),
+      "audio"
+    );
+  }
+
+  if (input.systemStream && input.systemMimeType) {
+    recorders.system = createRecorder(
+      input.systemStream,
+      input.systemMimeType,
+      (blob) => input.onChunk("system", blob),
       "audio"
     );
   }

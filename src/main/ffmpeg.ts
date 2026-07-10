@@ -234,7 +234,8 @@ function clampVolume(volume: number): number {
     return 1;
   }
 
-  return Math.min(2, Math.max(0, volume));
+  // Allow up to a ~+12 dB boost to match the editor's master gain range.
+  return Math.min(4, Math.max(0, volume));
 }
 
 function formatFfmpegNumber(value: number): string {

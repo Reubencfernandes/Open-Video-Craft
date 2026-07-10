@@ -99,6 +99,8 @@ import type {
   ZoomEffect
 } from "./editor/types";
 
+const transientEditorMessages = new Set(["Project saved", "Clip copied", "Clip pasted"]);
+
 export function EditorView() {
   const [projectId, setProjectId] = useState(() =>
     new URLSearchParams(window.location.search).get("projectId")
@@ -191,8 +193,20 @@ export function EditorView() {
     origEnd: number;
     moved: boolean;
   } | null>(null);
+  const subtitleDragRef = useRef<{
+    mode: "move" | "start" | "end";
+    pointerStartTime: number;
+    original: SubtitleSegment;
+    moved: boolean;
+  } | null>(null);
   const previousTimelineDurationRef = useRef(0);
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
+  const timelineClipboardRef = useRef<{
+    itemId: string;
+    track: "video" | "audio";
+    sourceStart: number;
+    duration: number;
+  } | null>(null);
 
   const { isReady: isEditorStateReady, saveState } = useEditorPersistence({
     activeBackgroundCategory,
@@ -264,9 +278,9 @@ export function EditorView() {
     setCustomBackgroundUrl(customBackground?.url ?? null);
   }, [customBackgroundImportId, importedMedia]);
 
-  // Auto-dismiss the "Project saved" toast.
+  // Auto-dismiss transient confirmation toasts (save / clipboard).
   useEffect(() => {
-    if (exportMessage !== "Project saved") {
+    if (!exportMessage || !transientEditorMessages.has(exportMessage)) {
       return undefined;
     }
 
@@ -352,6 +366,7 @@ export function EditorView() {
     audioElsRef,
     cameraRef,
     currentTimeRef,
+    getAudioLevel,
     mainVideoRef,
     playingRef,
     scheduleTimelinePlaybackSync,
@@ -389,8 +404,12 @@ export function EditorView() {
     getTimelineTimeFromClientX,
     moveTimelinePanelResize,
     resetTimelinePanelHeight,
+    resetTimelineZoom,
     seekTimelinePointer,
-    timelinePanelHeight
+    timelinePanelHeight,
+    timelineZoom,
+    zoomTimelineIn,
+    zoomTimelineOut
   } = useTimelineViewport({
     renderDuration: timelineRenderDuration,
     seek
@@ -576,12 +595,19 @@ export function EditorView() {
     previousTimelineDurationRef.current = timelineDuration;
   }, [timelineDuration]);
 
-  // Global keyboard shortcuts: play/pause, delete, undo/redo.
+  // Global keyboard shortcuts. Copy/paste/cut and split use the platform accel
+  // key (Cmd on macOS, Ctrl on Windows/Linux); arrows scrub the playhead.
   useEffect(() => {
+    function seekBy(deltaSeconds: number) {
+      seek(currentTimeRef.current + deltaSeconds);
+    }
+
     function handleTimelineKeyDown(event: KeyboardEvent) {
       const isTyping = isKeyboardTextTarget(event.target);
+      const accel = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
 
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+      if (accel && key === "z") {
         event.preventDefault();
         if (event.shiftKey) {
           redoTimelineEdit();
@@ -592,13 +618,61 @@ export function EditorView() {
         return;
       }
 
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+      if (accel && key === "y") {
         event.preventDefault();
         redoTimelineEdit();
         return;
       }
 
       if (isTyping) {
+        return;
+      }
+
+      // Ctrl/Cmd+E opens export.
+      if (accel && key === "e") {
+        event.preventDefault();
+        openExportDialog();
+        return;
+      }
+
+      // Clip clipboard: copy, cut (copy + delete), paste at the playhead.
+      if (accel && key === "c") {
+        event.preventDefault();
+        copySelectedTimelineSegment();
+        return;
+      }
+
+      if (accel && key === "x") {
+        event.preventDefault();
+        cutSelectedTimelineSegment();
+        return;
+      }
+
+      if (accel && key === "v") {
+        event.preventDefault();
+        pasteTimelineSegment();
+        return;
+      }
+
+      // Ctrl/Cmd+B blades the selected clip at the playhead.
+      if (accel && key === "b") {
+        event.preventDefault();
+        splitTimelineSegment(selectedTimelineSegmentId, currentTime);
+        return;
+      }
+
+      // Arrow seeking: 1s, Shift = 10s, Ctrl/Cmd = 60s. A focused range slider
+      // keeps its own arrow behavior.
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLInputElement && activeElement.type === "range") {
+          return;
+        }
+
+        event.preventDefault();
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const step = accel ? 60 : event.shiftKey ? 10 : 1;
+        seekBy(direction * step);
         return;
       }
 
@@ -637,14 +711,20 @@ export function EditorView() {
     activeTool,
     masterVolume,
     isProjectCompositionSelected,
+    mediaById,
+    openExportDialog,
     playing,
+    seek,
     selectedItem?.id,
     selectedTimelineSegmentId,
     selectedSpeedId,
     selectedZoomId,
+    timelineDuration,
     timelineRedoStack,
+    timelineRenderDuration,
     timelineSegments,
-    timelineUndoStack
+    timelineUndoStack,
+    togglePlayback
   ]);
 
   // ---------------------------------------------------------------------------
@@ -766,6 +846,59 @@ export function EditorView() {
 
   function deleteSelectedTimelineSegment() {
     deleteTimelineSegment(selectedTimelineSegmentId);
+  }
+
+  // Clip clipboard. Only the placement (item, source window, length, track) is
+  // copied; paste re-derives a fresh segment id and drops it at the playhead.
+  function copySelectedTimelineSegment() {
+    const segment = timelineSegments.find((item) => item.id === selectedTimelineSegmentId);
+    if (!segment) {
+      return;
+    }
+
+    timelineClipboardRef.current = {
+      itemId: segment.itemId,
+      track: segment.track,
+      sourceStart: segment.sourceStart,
+      duration: Math.max(0.1, segment.end - segment.start)
+    };
+    setExportMessage("Clip copied");
+  }
+
+  function cutSelectedTimelineSegment() {
+    copySelectedTimelineSegment();
+    deleteSelectedTimelineSegment();
+  }
+
+  function pasteTimelineSegment() {
+    const clip = timelineClipboardRef.current;
+    const item = clip ? mediaById.get(clip.itemId) : null;
+    if (!clip || !item) {
+      return;
+    }
+
+    const start = Math.max(0, currentTimeRef.current);
+    const end = start + clip.duration;
+    const segmentId = `${clip.itemId}:segment-${createId("paste")}`;
+
+    knownTimelineItemIdsRef.current.add(clip.itemId);
+    commitTimelineSegments((segments) => {
+      const draft: TimelineSegment = {
+        id: segmentId,
+        itemId: clip.itemId,
+        track: clip.track,
+        lane: clip.track === "audio" ? resolveAudioLane(segments, segmentId, start, end, 0) : 0,
+        start,
+        end,
+        sourceStart: clip.sourceStart
+      };
+      // Route through move logic so the paste snaps and never overlaps a
+      // neighbor on the video track (audio resolves onto a free lane).
+      return moveTimelineSegment([...segments, draft], segmentId, start, timelineRenderDuration);
+    });
+    setSelectedItemId(clip.itemId);
+    setSelectedTimelineSegmentId(segmentId);
+    setExportMessage("Clip pasted");
   }
 
   function splitTimelineSegment(segmentId: string | null, time: number) {
@@ -1104,6 +1237,88 @@ export function EditorView() {
     speedDragRef.current = null;
   }
 
+  function beginSubtitleClipDrag(
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) {
+    if (mode !== "move") {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    const time = getTimelineTimeFromClientX(event.clientX);
+    const subtitle = subtitles.find((item) => item.id === id);
+    if (time === null || !subtitle) {
+      return;
+    }
+
+    subtitleDragRef.current = {
+      mode,
+      pointerStartTime: time,
+      original: subtitle,
+      moved: false
+    };
+    setSelectedSubtitleId(id);
+    setActiveTool("subtitles");
+    if (mode === "move") {
+      seek(time);
+    }
+    timelineBodyRef.current?.setPointerCapture(event.pointerId);
+  }
+
+  function updateSubtitleClipDrag(clientX: number) {
+    const drag = subtitleDragRef.current;
+    const time = getTimelineTimeFromClientX(clientX);
+    if (!drag || time === null) {
+      return;
+    }
+
+    const original = drag.original;
+    const minDuration = 0.2;
+
+    if (drag.mode === "move") {
+      const delta = time - drag.pointerStartTime;
+      if (!drag.moved && Math.abs(delta) < 0.02) {
+        return;
+      }
+      drag.moved = true;
+      const start = Math.max(0, original.start + delta);
+      const shift = start - original.start;
+      setSubtitles((current) =>
+        current.map((subtitle) =>
+          subtitle.id === original.id
+            ? {
+                ...subtitle,
+                start,
+                end: original.end + shift,
+                // Keep word-level karaoke timings aligned with the moved clip.
+                words: original.words?.map((word) => ({
+                  ...word,
+                  start: word.start + shift,
+                  end: word.end + shift
+                }))
+              }
+            : subtitle
+        )
+      );
+      return;
+    }
+
+    if (drag.mode === "start") {
+      const start = clampNumber(time, 0, original.end - minDuration);
+      updateSubtitle(original.id, { start });
+      return;
+    }
+
+    const end = Math.max(original.start + minDuration, time);
+    updateSubtitle(original.id, { end });
+  }
+
+  function finishSubtitleClipDrag() {
+    subtitleDragRef.current = null;
+  }
+
   // Pointer handlers on the timeline body dispatch to whichever drag is active
   // (trim / zoom / move) and otherwise treat the pointer as a playhead scrub.
   function beginTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
@@ -1111,7 +1326,8 @@ export function EditorView() {
       timelineTrimDragRef.current ||
       timelineMoveDragRef.current ||
       zoomDragRef.current ||
-      speedDragRef.current
+      speedDragRef.current ||
+      subtitleDragRef.current
     ) {
       return;
     }
@@ -1129,6 +1345,18 @@ export function EditorView() {
   }
 
   function moveTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
+    // While a clip/effect is being dragged, suppress the clip reflow transition
+    // so it follows the pointer exactly (the transition animates drops instead).
+    if (
+      timelineTrimDragRef.current ||
+      timelineMoveDragRef.current ||
+      zoomDragRef.current ||
+      speedDragRef.current ||
+      subtitleDragRef.current
+    ) {
+      timelineBodyRef.current?.setAttribute("data-interacting", "true");
+    }
+
     if (timelineTrimDragRef.current) {
       updateTimelineClipTrim(event.clientX);
       return;
@@ -1141,6 +1369,11 @@ export function EditorView() {
 
     if (speedDragRef.current) {
       updateSpeedClipDrag(event.clientX);
+      return;
+    }
+
+    if (subtitleDragRef.current) {
+      updateSubtitleClipDrag(event.clientX);
       return;
     }
 
@@ -1165,6 +1398,9 @@ export function EditorView() {
     finishTimelineClipMove();
     finishZoomClipDrag();
     finishSpeedClipDrag();
+    finishSubtitleClipDrag();
+    // Re-enable clip reflow animation so the drop settles smoothly.
+    timelineBodyRef.current?.removeAttribute("data-interacting");
     timelineDragRef.current = false;
     setScrubbingTimeline(false);
   }
@@ -1402,6 +1638,8 @@ export function EditorView() {
             masterVolume={masterVolume}
             audioSources={audioSources}
             audioLevels={audioLevels}
+            audioPlaying={playing}
+            getAudioLevel={getAudioLevel}
             previewItem={previewItem}
             selectedZoomEffect={selectedZoomEffect}
             selectedSpeedEffect={selectedSpeedEffect}
@@ -1500,6 +1738,10 @@ export function EditorView() {
           onResizePointerMove={moveTimelinePanelResize}
           onResizePointerUp={endTimelinePanelResize}
           onResizeDoubleClick={resetTimelinePanelHeight}
+          timelineZoom={timelineZoom}
+          onZoomIn={zoomTimelineIn}
+          onZoomOut={zoomTimelineOut}
+          onZoomReset={resetTimelineZoom}
           activeTool={activeTool}
           playing={playing}
           scrubbing={scrubbingTimeline}
@@ -1547,6 +1789,7 @@ export function EditorView() {
           onMovePointerDown={beginTimelineClipMove}
           onZoomDragPointerDown={beginZoomClipDrag}
           onSpeedDragPointerDown={beginSpeedClipDrag}
+          onSubtitleDragPointerDown={beginSubtitleClipDrag}
           onBodyPointerDown={beginTimelineScrub}
           onBodyPointerMove={moveTimelineScrub}
           onBodyPointerUp={endTimelineScrub}

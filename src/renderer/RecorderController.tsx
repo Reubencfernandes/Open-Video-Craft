@@ -48,10 +48,12 @@ export function RecorderController() {
   const [project, setProject] = useState<ProjectView | null>(null);
   const [compact, setCompact] = useState(false);
   const [borderOverlayEnabled, setBorderOverlayEnabled] = useState(true);
+  const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 
   const screenStreamRef = useRef<MediaStream | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const systemStreamRef = useRef<MediaStream | null>(null);
   const recordersRef = useRef<RecorderMap>({});
   const writeQueuesRef = useRef<WriteQueues>({});
   const projectRef = useRef<ProjectView | null>(null);
@@ -268,10 +270,36 @@ export function RecorderController() {
       setBaseDirectory(folder);
       await window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
 
-      const screenStream = await navigator.mediaDevices.getDisplayMedia(
-        createDisplayCaptureOptions()
-      );
+      const wantsSystemAudio = systemAudioEnabled;
+      let screenStream: MediaStream;
+      try {
+        screenStream = await navigator.mediaDevices.getDisplayMedia(
+          createDisplayCaptureOptions(wantsSystemAudio)
+        );
+      } catch (captureError) {
+        if (!wantsSystemAudio) {
+          throw captureError;
+        }
+        // Some platforms/OS versions reject a display capture that also asks for
+        // audio. Retry video-only so recording still works without system audio.
+        screenStream = await navigator.mediaDevices.getDisplayMedia(
+          createDisplayCaptureOptions(false)
+        );
+      }
       screenStreamRef.current = screenStream;
+
+      // Move the loopback audio onto its own stream so the screen video track
+      // stays audio-free (the editor treats screen.webm as a video-only track).
+      let systemStream: MediaStream | null = null;
+      const systemAudioTracks = screenStream.getAudioTracks();
+      if (systemAudioTracks.length > 0) {
+        systemStream = new MediaStream(systemAudioTracks);
+        systemAudioTracks.forEach((track) => screenStream.removeTrack(track));
+      }
+      systemStreamRef.current = systemStream;
+      if (wantsSystemAudio && !systemStream) {
+        setSystemAudioEnabled(false);
+      }
 
       const cameraStream = await getOptionalCameraStream(cameraEnabled, selectedCameraId);
       cameraStreamRef.current = cameraStream;
@@ -289,6 +317,7 @@ export function RecorderController() {
       const screenMimeType = getSupportedMimeType(videoMimeCandidates);
       const cameraMimeType = cameraStream ? getSupportedMimeType(videoMimeCandidates) : null;
       const micMimeType = micStream ? getSupportedMimeType(audioMimeCandidates) : null;
+      const systemMimeType = systemStream ? getSupportedMimeType(audioMimeCandidates) : null;
 
       const createdProject = await window.openVideoCraft.projects.create({
         name: `Floating Recording ${new Date().toLocaleString()}`,
@@ -326,6 +355,10 @@ export function RecorderController() {
           mic: {
             enabled: Boolean(micStream),
             mimeType: micMimeType
+          },
+          system: {
+            enabled: Boolean(systemStream),
+            mimeType: systemMimeType
           }
         }
       });
@@ -337,9 +370,11 @@ export function RecorderController() {
         screenStream,
         cameraStream,
         micStream,
+        systemStream,
         screenMimeType,
         cameraMimeType,
         micMimeType,
+        systemMimeType,
         onChunk: (track, blob) => queueChunkWrite(startedProject.id, track, blob),
         onError: (error) => void failRecording(toErrorMessage(error))
       });
@@ -527,7 +562,8 @@ export function RecorderController() {
     for (const stream of [
       screenStreamRef.current,
       cameraStreamRef.current,
-      micStreamRef.current
+      micStreamRef.current,
+      systemStreamRef.current
     ]) {
       stream?.getTracks().forEach((track) => track.stop());
     }
@@ -535,6 +571,7 @@ export function RecorderController() {
     screenStreamRef.current = null;
     cameraStreamRef.current = null;
     micStreamRef.current = null;
+    systemStreamRef.current = null;
   }
 
   function getCurrentRecordedDurationMs(): number {
@@ -556,6 +593,7 @@ export function RecorderController() {
       errorMessage={errorMessage}
       projectRootPath={project?.rootPath ?? null}
       borderOverlayEnabled={borderOverlayEnabled}
+      systemAudioEnabled={systemAudioEnabled}
       selectedSourceName={selectedSource?.name ?? null}
       baseDirectory={baseDirectory}
       microphones={microphones}
@@ -569,6 +607,7 @@ export function RecorderController() {
       onSetCompactMode={(nextCompact) => void setCompactMode(nextCompact)}
       onDismissError={() => setErrorMessage(null)}
       onToggleBorderOverlay={() => setBorderOverlayEnabled((value) => !value)}
+      onToggleSystemAudio={() => setSystemAudioEnabled((value) => !value)}
       onClose={() => void window.openVideoCraft.windows.closeCurrent()}
       onStartRecording={() => void startRecording()}
       onStopRecording={() => void stopRecording()}

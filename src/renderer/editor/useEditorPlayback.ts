@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { EditorAudioEngine } from "./audio-engine";
 import { canDriftSeek } from "./media-utils";
 import {
   getClampedTimelineTimeForMediaTime,
@@ -58,6 +59,7 @@ type UseEditorPlaybackResult = {
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
   cameraRef: MutableRefObject<HTMLVideoElement | null>;
   currentTimeRef: MutableRefObject<number>;
+  getAudioLevel: () => number;
   mainVideoRef: MutableRefObject<HTMLVideoElement | null>;
   playingRef: MutableRefObject<boolean>;
   scheduleTimelinePlaybackSync: (segments: TimelineSegment[]) => void;
@@ -116,9 +118,29 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<AudioLevelState>({});
   const timelineDurationRef = useRef(0);
+  const audioEngineRef = useRef<EditorAudioEngine | null>(null);
+
+  function getAudioEngine(): EditorAudioEngine {
+    audioEngineRef.current ??= new EditorAudioEngine();
+    return audioEngineRef.current;
+  }
+
+  // Routes an element through the Web Audio graph (for the meter and >0 dB
+  // boost) and splits the target gain: attenuation stays on element.volume so
+  // audio keeps playing even if the graph can't attach; only boost uses gain.
+  function applyAudioGain(element: HTMLMediaElement, linear: number) {
+    const safe = Math.max(0, linear);
+    element.volume = Math.min(1, safe);
+    const engine = getAudioEngine();
+    engine.attach(element);
+    engine.setBoost(element, Math.max(1, safe));
+  }
 
   useEffect(() => {
-    return () => clearPrimaryVideoWatchdog();
+    return () => {
+      clearPrimaryVideoWatchdog();
+      audioEngineRef.current?.dispose();
+    };
   }, []);
 
   useEffect(() => {
@@ -213,11 +235,13 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
-  // Apply volume changes immediately to the live media elements.
+  // Apply volume changes immediately to the live media elements. The primary
+  // video keeps plain element.volume (attenuation only); the dedicated audio
+  // elements route through the engine so they can boost and feed the meter.
   useEffect(() => {
-    const master = Math.min(1, Math.max(0, masterVolume / 100));
+    const master = Math.max(0, masterVolume / 100);
     if (mainVideoRef.current) {
-      mainVideoRef.current.volume = master;
+      mainVideoRef.current.volume = Math.min(1, master);
     }
     for (const clip of audioTimelineClips) {
       const element = audioElsRef.current.get(clip.id);
@@ -225,8 +249,9 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
         continue;
       }
       const level = audioLevels[clip.item.id] ?? { volume: 100, muted: false };
-      element.volume = level.muted ? 0 : Math.min(1, master * (level.volume / 100));
+      applyAudioGain(element, level.muted ? 0 : master * (level.volume / 100));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterVolume, audioLevels, audioTimelineClips]);
 
   function effectiveClipVolume(itemId: string): number {
@@ -235,7 +260,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     if (level.muted) {
       return 0;
     }
-    return Math.min(1, master * (level.volume / 100));
+    // Full linear gain (can exceed 1 for a dB boost); applyAudioGain splits it.
+    return master * (level.volume / 100);
   }
 
   function findVideoClipAtTime(time: number): TimelineMediaClip | null {
@@ -448,6 +474,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     clipChanged: boolean;
     volume: number;
     label: string;
+    useEngine: boolean;
   }) {
     const desired = getMediaTimeForTimelineTime(input.clip, input.timelineTime);
     const now = performance.now();
@@ -468,7 +495,11 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       secondaryDriftSeekTimesRef.current.set(input.syncKey, now);
     }
 
-    input.element.volume = input.volume;
+    if (input.useEngine) {
+      applyAudioGain(input.element, input.volume);
+    } else {
+      input.element.volume = input.volume;
+    }
     input.element.playbackRate = getPlaybackRate(input.timelineTime);
     if (input.isPlaying && input.element.paused) {
       playMediaElement(input.element, input.label);
@@ -540,7 +571,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
           syncKey: "camera",
           clipChanged,
           volume: 0,
-          label: "camera"
+          label: "camera",
+          useEngine: false
         });
         cameraEl.muted = true;
       }
@@ -566,7 +598,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
           syncKey: clip.id,
           clipChanged: false,
           volume: effectiveClipVolume(clip.item.id),
-          label: "audio"
+          label: "audio",
+          useEngine: true
         });
       } else if (!element.paused) {
         element.pause();
@@ -602,6 +635,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     playingRef.current = true;
     setPlaying(true);
     setError(null);
+    // Browsers start an AudioContext suspended; resume it on this user gesture.
+    getAudioEngine().resume();
     syncMediaToTime(startAt, true, "play-start");
     armPrimaryVideoWatchdog();
   }
@@ -660,6 +695,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     audioElsRef,
     cameraRef,
     currentTimeRef,
+    getAudioLevel: () => audioEngineRef.current?.getLevel() ?? 0,
     mainVideoRef,
     playingRef,
     scheduleTimelinePlaybackSync,

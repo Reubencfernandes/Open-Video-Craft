@@ -1,3 +1,29 @@
+/* This is a desktop app, not a document: chrome text (button labels, panel
+   headings, timecodes) should not be selectable and should not show an I-beam
+   cursor when the pointer passes over it. Genuinely editable surfaces opt back
+   in below so typing, selecting, and copying still work where it matters. */
+:root {
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea,
+select,
+[contenteditable="true"],
+[data-selectable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: auto;
+}
+
+/* Clips ease into their new position when the timeline reflows after a
+   drop/delete, but must track the pointer 1:1 while a clip is being dragged. */
+[data-interacting="true"] .track-lane button {
+  transition: none !important;
+}
+
 /* Slim, dark scrollbars matching the editor chrome; replaces the stock
    Chromium bars that stand out against the dark panels. */
 ::-webkit-scrollbar {

@@ -21,6 +21,10 @@ export function EditorTimelineSection(props: {
   onResizePointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onResizePointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   onResizeDoubleClick: () => void;
+  timelineZoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
   activeTool: EditorTool;
   playing: boolean;
   scrubbing: boolean;
@@ -62,6 +66,11 @@ export function EditorTimelineSection(props: {
     id: string,
     mode: "move" | "start" | "end"
   ) => void;
+  onSubtitleDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
   onBodyPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onBodyPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onBodyPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -82,6 +91,10 @@ export function EditorTimelineSection(props: {
       onResizePointerMove={props.onResizePointerMove}
       onResizePointerUp={props.onResizePointerUp}
       onResizeDoubleClick={props.onResizeDoubleClick}
+      timelineZoom={props.timelineZoom}
+      onZoomIn={props.onZoomIn}
+      onZoomOut={props.onZoomOut}
+      onZoomReset={props.onZoomReset}
       activeTool={props.activeTool}
       playing={props.playing}
       scrubbing={props.scrubbing}
@@ -111,6 +124,7 @@ export function EditorTimelineSection(props: {
       onMovePointerDown={props.onMovePointerDown}
       onZoomDragPointerDown={props.onZoomDragPointerDown}
       onSpeedDragPointerDown={props.onSpeedDragPointerDown}
+      onSubtitleDragPointerDown={props.onSubtitleDragPointerDown}
       onBodyPointerDown={props.onBodyPointerDown}
       onBodyPointerMove={props.onBodyPointerMove}
       onBodyPointerUp={props.onBodyPointerUp}

@@ -11,6 +11,8 @@ import {
   Play,
   Video,
   VideoOff,
+  Volume2,
+  VolumeX,
   X
 } from "lucide-react";
 import appLogo from "../assets/app.png";
@@ -27,6 +29,7 @@ export function RecorderControllerView(props: {
   errorMessage: string | null;
   projectRootPath: string | null;
   borderOverlayEnabled: boolean;
+  systemAudioEnabled: boolean;
   selectedSourceName: string | null;
   baseDirectory: string | null;
   microphones: DeviceOption[];
@@ -40,6 +43,7 @@ export function RecorderControllerView(props: {
   onSetCompactMode: (compact: boolean) => void;
   onDismissError: () => void;
   onToggleBorderOverlay: () => void;
+  onToggleSystemAudio: () => void;
   onClose: () => void;
   onStartRecording: () => void;
   onStopRecording: () => void;
@@ -120,6 +124,9 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
   const borderOverlayLabel = props.borderOverlayEnabled
     ? "Hide screen border"
     : "Show screen border";
+  const systemAudioLabel = props.systemAudioEnabled
+    ? "System audio on"
+    : "System audio off";
 
   return (
     <main className="grid size-full place-items-center bg-transparent">
@@ -130,6 +137,20 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             <span>Open Video Craft</span>
           </div>
           <div className="inline-flex items-center gap-1 [-webkit-app-region:no-drag]">
+            <button
+              className={cx(
+                "grid size-8 place-items-center rounded-md border-0 bg-transparent hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40",
+                props.systemAudioEnabled ? "text-emerald-300" : "text-slate-300"
+              )}
+              type="button"
+              aria-label={systemAudioLabel}
+              aria-pressed={props.systemAudioEnabled}
+              title={systemAudioLabel}
+              onClick={props.onToggleSystemAudio}
+              disabled={!props.canStart}
+            >
+              {props.systemAudioEnabled ? <Volume2 size={19} /> : <VolumeX size={19} />}
+            </button>
             <button
               className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"

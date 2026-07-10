@@ -48,6 +48,19 @@ export function createProjectMedia(project: ProjectView | null): EditorMediaItem
     });
   }
 
+  const systemAudioUrl = project.mediaUrls.systemWav ?? project.mediaUrls.systemWebm;
+  if (systemAudioUrl) {
+    items.push({
+      id: `${project.id}:system-audio`,
+      name: project.mediaUrls.systemWav ? "system.wav" : "system.webm",
+      url: systemAudioUrl,
+      kind: "audio",
+      origin: "project",
+      track: "audio",
+      duration
+    });
+  }
+
   return items;
 }
 
@@ -76,6 +89,12 @@ export async function captureVideoThumbnail(
   const video = document.createElement("video");
   video.muted = true;
   video.preload = "auto";
+  // Both ovc-media and ovc-import responses carry Access-Control-Allow-Origin,
+  // but a media element only stays origin-clean (so the frame can be read back
+  // with canvas.toDataURL) when it opts into CORS. Without this the capture
+  // throws a SecurityError on the drawn frame and every thumbnail silently
+  // falls back to the placeholder icon.
+  video.crossOrigin = "anonymous";
   video.src = url;
   video.load();
 

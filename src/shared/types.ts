@@ -5,9 +5,15 @@ export type RecordingStatus =
   | "complete"
   | "failed";
 
-export type RecordingTrack = "screen" | "camera" | "mic";
+export type RecordingTrack = "screen" | "camera" | "mic" | "system";
 
-export type MediaTrackKey = "screen" | "camera" | "micWebm" | "micWav";
+export type MediaTrackKey =
+  | "screen"
+  | "camera"
+  | "micWebm"
+  | "micWav"
+  | "systemWebm"
+  | "systemWav";
 
 export interface SourceSummary {
   id: string;
@@ -153,6 +159,7 @@ export interface StartRecordingRequest {
     screen: { enabled: true; mimeType: string };
     camera: { enabled: boolean; mimeType: string | null };
     mic: { enabled: boolean; mimeType: string | null };
+    system: { enabled: boolean; mimeType: string | null };
   };
 }
 

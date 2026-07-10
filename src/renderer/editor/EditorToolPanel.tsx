@@ -45,6 +45,8 @@ export function EditorToolPanel(props: {
   masterVolume: number;
   audioSources: EditorMediaItem[];
   audioLevels: Record<string, { volume: number; muted: boolean }>;
+  audioPlaying: boolean;
+  getAudioLevel: () => number;
   previewItem: EditorMediaItem | null;
   selectedZoomEffect: ZoomEffect | null;
   selectedSpeedEffect: SpeedEffect | null;
@@ -140,6 +142,8 @@ export function EditorToolPanel(props: {
           masterVolume={props.masterVolume}
           audioSources={props.audioSources}
           audioLevels={props.audioLevels}
+          playing={props.audioPlaying}
+          getAudioLevel={props.getAudioLevel}
           onMasterVolumeChange={props.onMasterVolumeChange}
           onAddBackgroundMusic={props.onAddBackgroundMusic}
           onSelectItem={props.onSelectItem}

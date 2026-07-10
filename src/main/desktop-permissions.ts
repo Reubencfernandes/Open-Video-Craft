@@ -46,20 +46,29 @@ export function registerPermissionRequestHandlers(
     callback(false);
   });
 
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    const selectedDisplaySource = dependencies.getSelectedDisplaySource();
-    if (!selectedDisplaySource) {
-      callback({});
-      return;
-    }
-
-    callback({
-      video: {
-        id: selectedDisplaySource.id,
-        name: selectedDisplaySource.name
+  // `audio: "loopback"` offers the system/desktop audio. It only produces a
+  // track when the renderer's getDisplayMedia call also asks for audio, so the
+  // renderer's "record system audio" toggle stays in full control. Loopback is
+  // supported on Windows and on macOS 13+ (ScreenCaptureKit); where it is not,
+  // the renderer falls back to a video-only capture.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      const selectedDisplaySource = dependencies.getSelectedDisplaySource();
+      if (!selectedDisplaySource) {
+        callback({});
+        return;
       }
-    });
-  });
+
+      callback({
+        video: {
+          id: selectedDisplaySource.id,
+          name: selectedDisplaySource.name
+        },
+        audio: "loopback"
+      });
+    },
+    { useSystemPicker: false }
+  );
 }
 
 export function getDesktopPermissionStatus(): DesktopPermissionStatus {

@@ -7,9 +7,14 @@ type UseTimelineViewportParams = {
   seek: (time: number) => void;
 };
 
+const minTimelineZoom = 1;
+const maxTimelineZoom = 10;
+const timelineZoomStep = 1.5;
+
 export function useTimelineViewport(params: UseTimelineViewportParams) {
   const { renderDuration, seek } = params;
   const [timelinePanelHeight, setTimelinePanelHeight] = useState(360);
+  const [timelineZoom, setTimelineZoom] = useState(1);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const resizeDragRef = useRef<{
     startClientY: number;
@@ -89,6 +94,18 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
     document.body.style.userSelect = "";
   }
 
+  function zoomTimelineIn() {
+    setTimelineZoom((zoom) => clampNumber(zoom * timelineZoomStep, minTimelineZoom, maxTimelineZoom));
+  }
+
+  function zoomTimelineOut() {
+    setTimelineZoom((zoom) => clampNumber(zoom / timelineZoomStep, minTimelineZoom, maxTimelineZoom));
+  }
+
+  function resetTimelineZoom() {
+    setTimelineZoom(1);
+  }
+
   return {
     beginTimelinePanelResize,
     bodyRef,
@@ -96,7 +113,11 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
     getTimelineTimeFromClientX,
     moveTimelinePanelResize,
     resetTimelinePanelHeight,
+    resetTimelineZoom,
     seekTimelinePointer,
-    timelinePanelHeight
+    timelinePanelHeight,
+    timelineZoom,
+    zoomTimelineIn,
+    zoomTimelineOut
   };
 }
