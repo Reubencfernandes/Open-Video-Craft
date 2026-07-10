@@ -1,79 +1,160 @@
+<div align="center">
+
+<img src="src/renderer/assets/app.png" alt="Open Video Craft" width="96" />
+
 # Open Video Craft
 
-Open Video Craft is an Electron desktop recorder MVP for creating project-based screen recordings with separate screen, microphone, and camera tracks.
+**Record your screen, camera, and audio — then polish everything on a real timeline and export a finished video. All local, no account, no upload.**
 
-## Current MVP
+[![Latest release](https://img.shields.io/github/v/release/Reubencfernandes/Open-Video-Craft?label=download&color=34d399)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-6366f1)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
+[![Built with Electron](https://img.shields.io/badge/Electron%2043-React%20%2B%20TypeScript-38bdf8)](#development)
 
-- Electron 43 + React + TypeScript + Vite + Tailwind CSS.
-- Display/window source picker using `desktopCapturer`.
-- Secure preload API for project, recording, source, and FFmpeg actions.
-- Separate recording tracks under a user-chosen project folder.
-- `mic.wav` generation through FFmpeg after recording stops.
-- Local preview player that synchronizes screen, camera, and audio tracks.
+</div>
 
-## Development
+![The editor with the timeline, subtitle lanes, and karaoke subtitle overlay](docs/screenshots/editor-timeline.png)
 
-```sh
-npm run dev
-```
+## What it does
 
-## Verification
+Open Video Craft is a desktop screen studio in two parts:
 
-```sh
-npm run typecheck
-npm test
-npm run build
-```
+1. **A floating recorder** captures your selected display with optional camera,
+   microphone, and **system audio** tracks — each saved as its own file inside a
+   plain project folder you can open, move, or back up like any other folder.
+2. **A timeline editor** opens the recording (or any imported media) for real
+   editing: cut, move, trim, copy/paste, zoom-in effects, speed ramps,
+   AI-generated subtitles, camera layouts, backgrounds, and dB-based audio
+   mixing — then exports to MP4, WebM, or MOV with FFmpeg.
 
-## Codebase Structure
+Everything runs locally. Even the speech-to-text subtitles use an on-device
+Whisper model — your recordings never leave your machine.
 
-The source code is split by runtime and feature. See [src/README.md](src/README.md)
-for where main-process services, preload IPC, renderer components, editor hooks,
-and utility modules live.
+## Screenshots
 
-## Releases And Auto Updates
+| Launcher | Floating recorder |
+| :---: | :---: |
+| ![Launcher with recent projects](docs/screenshots/launcher.png) | ![Floating recorder controller](docs/screenshots/recorder.png) |
 
-Packaged builds check the configured GitHub release feed on startup and every four hours. Updates download automatically, install on app quit, and prompt the user when a restart can finish installation.
+| Layout tool | Timeline & subtitles |
+| :---: | :---: |
+| ![Editor layout presets and live preview](docs/screenshots/editor.png) | ![Timeline with clips and subtitle lane](docs/screenshots/editor-timeline.png) |
 
-```sh
-npm run dist:win
-npm run dist:mac
-npm run verify:mac-release
-```
+## Features
 
-macOS release builds require a Developer ID Application certificate and notarization credentials. Set one of the notarization credential groups before running `npm run dist:mac`:
+### Recording
 
-- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
-- `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
-- `APPLE_KEYCHAIN_PROFILE`, optionally `APPLE_KEYCHAIN`
+- Floating always-on-top recorder with pause/resume, countdown, and a compact pill mode.
+- Screen, camera, microphone, and **system/desktop audio** as separate tracks.
+- A subtle, click-through border marks the recorded display (and is excluded
+  from the capture itself).
+- Crash-safe: media is written to disk in chunks while you record.
 
-`verify:mac-release` is a required shipping gate: it checks the ZIP used by Squirrel.Mac, its `latest-mac.yml` checksum, the expected Developer ID team, the designated requirement, strict signature validation, and the stapled notarization ticket. The GitHub release workflow runs it before uploading anything.
+### Editing
 
-Ad-hoc builds are still available for trusted local testing with `npm run dist:mac:adhoc`, but they must never be uploaded as GitHub-release assets or referenced by `latest-mac.yml`. Public auto-updating Mac releases must use the configured Developer ID identity and notarization.
+- Multi-lane timeline: video, audio lanes, zoom, speed, and subtitle tracks.
+- Move, trim, split, delete, and **copy/paste clips** — with undo/redo.
+- Horizontal timeline zoom and a resizable timeline panel.
+- Zoom-in effects with an adjustable focal point; speed sections up to 5×.
+- Camera layouts (bubble, side-by-side, presenter…), draggable/resizable
+  screen and camera, backgrounds and corner styling.
+- **On-device Whisper subtitles** with word-level karaoke highlighting, plus
+  manual subtitle editing and draggable subtitle clips.
+- Audio mixing in **decibels** with a live output level meter; background
+  music drops straight onto the timeline.
+- Export to MP4 / WebM / MOV at source, 720p, 1080p, or 1440p.
 
-If an ad-hoc ZIP was already published, publish a new, higher version with `dist:mac` and `verify:mac-release`. Users on the signed release must install that corrected release manually once; subsequent signed updates will work normally.
+### Keyboard shortcuts
 
-## Project Folder Shape
+| Action | macOS | Windows |
+| --- | --- | --- |
+| Play / pause | `Space` | `Space` |
+| Seek 1 s / 10 s / 60 s | `←→` / `⇧←→` / `⌘←→` | `←→` / `Shift ←→` / `Ctrl ←→` |
+| Copy / cut / paste clip | `⌘C` / `⌘X` / `⌘V` | `Ctrl C` / `Ctrl X` / `Ctrl V` |
+| Split clip at playhead | `⌘B` | `Ctrl B` |
+| Delete selected | `⌫` | `Delete` |
+| Undo / redo | `⌘Z` / `⇧⌘Z` | `Ctrl Z` / `Ctrl Y` |
+| Export | `⌘E` | `Ctrl E` |
+
+## Install
+
+Grab the latest installer from the
+[**Releases page**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest):
+
+- **macOS** — `.dmg` (Apple Silicon and Intel; signed and notarized)
+- **Windows** — `.exe` installer
+
+Packaged builds check for updates on startup and every four hours; updates
+download in the background and install on quit.
+
+> **macOS permissions:** the first recording asks for Screen Recording (and
+> optionally Camera/Microphone) in System Settings → Privacy & Security. The
+> app walks you through it.
+
+## Project folder shape
+
+Every recording is a normal folder — no databases, no proprietary formats:
 
 ```txt
 my-recording-project/
-  project.json
-  editor.json
+  project.json      # recording metadata
+  editor.json       # saved editor state (timeline, effects, subtitles…)
   edits.json
   subtitles.json
-  imports/
+  imports/          # media you imported into the editor
     <asset-id>.ext
   media/
     screen.webm
     camera.webm
-    mic.webm
-    mic.wav
+    mic.webm  mic.wav
+    system.webm  system.wav   # system audio, when enabled
 ```
 
-`project.json` and `editor.json` use relative paths. Imported editor assets are copied into `imports/`, so a saved project can be reopened after an app restart or moved to another machine.
+Paths are relative, so a project keeps working after moving folders or machines.
 
-## Cross-Platform Follow-Up Checks
+## Development
 
-- Windows: verify display/window capture, camera, microphone, and FFmpeg conversion on a clean install.
-- macOS: verify Screen Recording, Camera, and Microphone permissions, plus hardened runtime/package entitlement requirements before release packaging.
-- Linux: verify behavior on X11 and Wayland separately, because source availability and permissions vary by desktop environment.
+```sh
+npm install
+npm run dev        # Vite + Electron with hot reload
+
+npm run typecheck  # main + renderer TypeScript
+npm test           # vitest unit tests
+npm run build      # production build
+```
+
+Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. FFmpeg is
+bundled (`ffmpeg-static`) for remuxing, audio conversion, and export.
+
+- Code layout and conventions: [`src/README.md`](src/README.md)
+- What every file does + editor architecture: [`docs/FILES.md`](docs/FILES.md)
+
+The README screenshots are generated, not hand-captured: with the dev server
+running, `npx electron scripts/capture-screenshots.cjs` loads each app view
+with a mocked IPC bridge and demo data and saves PNGs to `docs/screenshots/`.
+
+## Releases
+
+Releases are tag-triggered: pushing a `v*` tag that matches `package.json`
+builds, signs, and publishes both platforms via GitHub Actions.
+
+```sh
+npm run dist:win           # local Windows build
+npm run dist:mac           # local macOS build (signed + notarized)
+npm run verify:mac-release # required shipping gate for macOS artifacts
+```
+
+macOS release builds need a Developer ID Application certificate and one of
+these notarization credential groups:
+
+- `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
+- `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
+- `APPLE_KEYCHAIN_PROFILE` (optionally `APPLE_KEYCHAIN`)
+
+`verify:mac-release` validates the updater ZIP: `latest-mac.yml` checksum,
+Developer ID team, designated requirement, strict signature, and the stapled
+notarization ticket. Ad-hoc builds (`npm run dist:mac:adhoc`) are for local
+testing only and must never be published as release assets.
+
+## License
+
+ISC © Reuben Chagas Fernandes
