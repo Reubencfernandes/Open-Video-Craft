@@ -4,6 +4,12 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-07-10
+
+### Fixed
+
+- The Speed tool's left-rail button now uses the full-size speedometer artwork like every other tool, instead of a small icon inside a tinted box.
+
 ## [1.1.0] - 2026-07-10
 
 ### Added
