@@ -95,7 +95,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "${productName}-Setup-${version}-${os}-${arch}.${ext}",
+      "artifactName": "Open-Video-Craft-Setup-${version}-${os}-${arch}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
@@ -103,7 +103,7 @@
       "createStartMenuShortcut": true
     },
     "portable": {
-      "artifactName": "${productName}-Portable-${version}-${os}-${arch}.${ext}"
+      "artifactName": "Open-Video-Craft-Portable-${version}-${os}-${arch}.${ext}"
     },
     "publish": {
       "provider": "github",
