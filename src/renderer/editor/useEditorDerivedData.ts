@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import type { ProjectView } from "../../shared/types";
+import { previewBackgrounds } from "./backgrounds";
 import { createProjectMedia } from "./media-utils";
 import { getScreenFrameForAspectRatio } from "./layout-geometry";
 import {
@@ -66,25 +67,6 @@ type UseEditorDerivedDataParams = {
   cameraBorderStyle: CameraBorderStyle;
   videoCornerStyle: VideoCornerStyle;
   activeTool: EditorTool;
-};
-
-const previewBackgrounds: Record<BackgroundStyle, string> = {
-  "real-world-1":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1542051841857-5f90071e7989?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
-  "real-world-2":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1759681770982-313332e7f42c?q=80&w=1075&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
-  "real-world-3":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1567597714138-3bdc30f4f493?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1pYWdlfHx8fGVufDB8fHx8fA%3D%3D")',
-  "gradient-1":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1635776062360-af423602aff3?q=80&w=1332&auto=format&fit=crop")',
-  "gradient-2":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?q=80&w=1332&auto=format&fit=crop")',
-  "gradient-3":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1554034483-04fda0d3507b?q=80&w=1170&auto=format&fit=crop")',
-  "animated-1": "linear-gradient(120deg, #22d3ee, #6d28d9, #db2777)",
-  "animated-2": "linear-gradient(120deg, #f59e0b, #ef4444, #7c3aed)",
-  "animated-3": "linear-gradient(120deg, #0ea5e9, #14b8a6, #1e3a8a)",
-  custom: ""
 };
 
 export function useEditorDerivedData(params: UseEditorDerivedDataParams) {

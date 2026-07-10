@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -21,6 +21,7 @@
     "dist": "npm run build:icons && npm run build && electron-builder",
     "dist:win": "npm run build:icons && npm run build && electron-builder --win",
     "dist:mac": "node scripts/check-mac-signing.mjs && npm run build:icons && npm run build && electron-builder --mac",
+    "verify:mac-release": "node scripts/verify-mac-release.mjs",
     "dist:mac:adhoc": "npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=-",
     "dist:mac:universal": "node scripts/check-mac-signing.mjs && npm run build:icons && npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
@@ -33,8 +34,7 @@
     "copyright": "Copyright (c) 2026 Reuben Chagas Fernandes",
     "asar": true,
     "asarUnpack": [
-      "node_modules/ffmpeg-static/**/*",
-      "node_modules/ffprobe-static/**/*"
+      "node_modules/ffmpeg-static/**/*"
     ],
     "electronUpdaterCompatibility": ">=2.16",
     "directories": {
@@ -44,7 +44,9 @@
     "files": [
       "dist-electron/**/*",
       "dist-renderer/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/sharp/**/*",
+      "!node_modules/@img/**/*"
     ],
     "extraResources": [
       {
@@ -55,6 +57,7 @@
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",
     "mac": {
       "icon": "build/icon.icns",
+      "identity": "Developer ID Application: Reuben Fernandes (3XX79RB95N)",
       "forceCodeSigning": true,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -121,6 +124,7 @@
     "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.16",
+    "sharp": "^0.32.6",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vite": "^8.1.2",
@@ -131,7 +135,6 @@
     "@xenova/transformers": "^2.17.2",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0",
-    "ffprobe-static": "^3.1.0",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.22.0",
     "react": "^19.2.7",

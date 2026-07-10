@@ -5,6 +5,7 @@ import { EditorView } from "./EditorView";
 import { PermissionGuideOverlay } from "./PermissionGuideOverlay";
 import { RecorderController } from "./RecorderController";
 import "tailwindcss/index.css";
+import "./styles.css";
 
 const view = new URLSearchParams(window.location.search).get("view") ?? "main";
 const isTransparentView = view === "controller" || view === "permission-guide";

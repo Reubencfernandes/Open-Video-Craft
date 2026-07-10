@@ -24,8 +24,13 @@ export type ScreenPositionState = {
 
 export type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
 
+export type TrimRange = {
+  start: number;
+  end: number;
+};
+
 export type EditorStateSnapshot = {
-  v: 1;
+  v: 2;
   timelineSegments: TimelineSegment[];
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
@@ -46,6 +51,9 @@ export type EditorStateSnapshot = {
   cameraFrame: CameraFrame;
   masterVolume: number;
   audioLevels: AudioLevelState;
+  backgroundAudioIds: string[];
+  customBackgroundImportId: string | null;
+  trimRange: TrimRange;
 };
 
 type CreateEditorStateSnapshotInput = Omit<EditorStateSnapshot, "v">;
@@ -54,6 +62,7 @@ type RestoreEditorStateActions = {
   addKnownTimelineItemId: (itemId: string) => void;
   setActiveBackgroundCategory: (value: BackgroundCategory) => void;
   setAudioLevels: (value: AudioLevelState) => void;
+  setBackgroundAudioIds: (value: string[]) => void;
   setBackgroundStyle: (value: BackgroundStyle) => void;
   setCameraBorderStyle: (value: CameraBorderStyle) => void;
   setCameraContentTransform: (value: CameraContentTransform) => void;
@@ -61,6 +70,7 @@ type RestoreEditorStateActions = {
   setCameraPosition: (value: CameraPosition) => void;
   setCameraShape: (value: CameraShape) => void;
   setCameraSize: (value: number) => void;
+  setCustomBackgroundImportId: (value: string | null) => void;
   setLayoutMode: (value: LayoutMode) => void;
   setMasterVolume: (value: number) => void;
   setScreenAspectRatio: (value: ScreenAspectRatio) => void;
@@ -72,94 +82,127 @@ type RestoreEditorStateActions = {
   setTimelineSegments: (value: TimelineSegment[]) => void;
   setVideoCornerStyle: (value: VideoCornerStyle) => void;
   setZoomEffects: (value: ZoomEffect[]) => void;
+  setTrimRange: (value: TrimRange) => void;
 };
 
 export function createEditorStateSnapshot(
   input: CreateEditorStateSnapshotInput
 ): EditorStateSnapshot {
   return {
-    v: 1,
+    v: 2,
     ...input
   };
 }
 
 export function restoreEditorStateSnapshot(
-  raw: string,
+  raw: unknown,
   actions: RestoreEditorStateActions
 ): boolean {
   try {
-    const snapshot = JSON.parse(raw) as Record<string, unknown>;
-    if (Array.isArray(snapshot.timelineSegments)) {
-      const segments = snapshot.timelineSegments as TimelineSegment[];
+    const snapshot = (typeof raw === "string" ? JSON.parse(raw) : raw) as unknown;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+      return false;
+    }
+    const state = snapshot as Record<string, unknown>;
+    if (Array.isArray(state.timelineSegments)) {
+      const segments = state.timelineSegments as TimelineSegment[];
       actions.setTimelineSegments(segments);
       for (const segment of segments) {
         actions.addKnownTimelineItemId(segment.itemId);
       }
     }
-    if (Array.isArray(snapshot.zoomEffects)) {
-      actions.setZoomEffects(snapshot.zoomEffects as ZoomEffect[]);
+    if (Array.isArray(state.zoomEffects)) {
+      actions.setZoomEffects(state.zoomEffects as ZoomEffect[]);
     }
-    if (Array.isArray(snapshot.speedEffects)) {
-      actions.setSpeedEffects(snapshot.speedEffects as SpeedEffect[]);
+    if (Array.isArray(state.speedEffects)) {
+      actions.setSpeedEffects(state.speedEffects as SpeedEffect[]);
     }
-    if (Array.isArray(snapshot.subtitles)) {
-      actions.setSubtitles(snapshot.subtitles as SubtitleSegment[]);
+    if (Array.isArray(state.subtitles)) {
+      actions.setSubtitles(state.subtitles as SubtitleSegment[]);
     }
-    if (snapshot.subtitleLanguage === null || typeof snapshot.subtitleLanguage === "string") {
-      actions.setSubtitleLanguage(snapshot.subtitleLanguage);
+    if (state.subtitleLanguage === null || typeof state.subtitleLanguage === "string") {
+      actions.setSubtitleLanguage(state.subtitleLanguage);
     }
-    if (snapshot.subtitleStyle) {
-      actions.setSubtitleStyle(snapshot.subtitleStyle as SubtitleStyle);
+    if (state.subtitleStyle) {
+      actions.setSubtitleStyle(state.subtitleStyle as SubtitleStyle);
     }
-    if (snapshot.layoutMode) {
-      actions.setLayoutMode(snapshot.layoutMode as LayoutMode);
+    if (state.layoutMode) {
+      actions.setLayoutMode(state.layoutMode as LayoutMode);
     }
-    if (snapshot.backgroundStyle) {
-      actions.setBackgroundStyle(snapshot.backgroundStyle as BackgroundStyle);
+    if (state.backgroundStyle) {
+      actions.setBackgroundStyle(state.backgroundStyle as BackgroundStyle);
     }
-    if (snapshot.activeBackgroundCategory) {
+    if (state.activeBackgroundCategory) {
       actions.setActiveBackgroundCategory(
-        snapshot.activeBackgroundCategory as BackgroundCategory
+        state.activeBackgroundCategory as BackgroundCategory
       );
     }
-    if (typeof snapshot.cameraSize === "number") {
-      actions.setCameraSize(snapshot.cameraSize);
+    if (typeof state.cameraSize === "number") {
+      actions.setCameraSize(state.cameraSize);
     }
-    if (snapshot.cameraPosition) {
-      actions.setCameraPosition(snapshot.cameraPosition as CameraPosition);
+    if (state.cameraPosition) {
+      actions.setCameraPosition(state.cameraPosition as CameraPosition);
     }
-    if (snapshot.cameraShape) {
-      actions.setCameraShape(snapshot.cameraShape as CameraShape);
+    if (state.cameraShape) {
+      actions.setCameraShape(state.cameraShape as CameraShape);
     }
-    if (snapshot.cameraBorderStyle) {
-      actions.setCameraBorderStyle(snapshot.cameraBorderStyle as CameraBorderStyle);
+    if (state.cameraBorderStyle) {
+      actions.setCameraBorderStyle(state.cameraBorderStyle as CameraBorderStyle);
     }
-    if (snapshot.cameraContentTransform) {
+    if (state.cameraContentTransform) {
       actions.setCameraContentTransform(
-        snapshot.cameraContentTransform as CameraContentTransform
+        state.cameraContentTransform as CameraContentTransform
       );
     }
-    if (snapshot.videoCornerStyle) {
-      actions.setVideoCornerStyle(snapshot.videoCornerStyle as VideoCornerStyle);
+    if (state.videoCornerStyle) {
+      actions.setVideoCornerStyle(state.videoCornerStyle as VideoCornerStyle);
     }
-    if (snapshot.screenPosition) {
-      actions.setScreenPosition(snapshot.screenPosition as ScreenPositionState);
+    if (state.screenPosition) {
+      actions.setScreenPosition(state.screenPosition as ScreenPositionState);
     }
-    if (snapshot.screenAspectRatio) {
-      actions.setScreenAspectRatio(snapshot.screenAspectRatio as ScreenAspectRatio);
+    if (state.screenAspectRatio) {
+      actions.setScreenAspectRatio(state.screenAspectRatio as ScreenAspectRatio);
     }
-    if (snapshot.cameraFrame) {
-      actions.setCameraFrame(snapshot.cameraFrame as CameraFrame);
+    if (state.cameraFrame) {
+      actions.setCameraFrame(state.cameraFrame as CameraFrame);
     }
-    if (typeof snapshot.masterVolume === "number") {
-      actions.setMasterVolume(snapshot.masterVolume);
+    if (typeof state.masterVolume === "number") {
+      actions.setMasterVolume(state.masterVolume);
     }
-    if (snapshot.audioLevels && typeof snapshot.audioLevels === "object") {
-      actions.setAudioLevels(snapshot.audioLevels as AudioLevelState);
+    if (state.audioLevels && typeof state.audioLevels === "object") {
+      actions.setAudioLevels(state.audioLevels as AudioLevelState);
+    }
+    if (Array.isArray(state.backgroundAudioIds)) {
+      actions.setBackgroundAudioIds(
+        state.backgroundAudioIds.filter((item): item is string => typeof item === "string")
+      );
+    }
+    if (
+      state.customBackgroundImportId === null ||
+      typeof state.customBackgroundImportId === "string"
+    ) {
+      actions.setCustomBackgroundImportId(state.customBackgroundImportId);
+    }
+    if (isTrimRange(state.trimRange)) {
+      actions.setTrimRange(state.trimRange);
     }
 
     return true;
   } catch {
     return false;
   }
+}
+
+function isTrimRange(value: unknown): value is TrimRange {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const range = value as Partial<TrimRange>;
+  return (
+    typeof range.start === "number" &&
+    Number.isFinite(range.start) &&
+    typeof range.end === "number" &&
+    Number.isFinite(range.end)
+  );
 }

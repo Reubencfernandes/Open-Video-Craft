@@ -1,4 +1,4 @@
-import { AudioLines, Captions, Film, Gauge, WandSparkles } from "lucide-react";
+import { AudioLines, Captions, Film, WandSparkles } from "lucide-react";
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
@@ -20,6 +20,7 @@ import {
   TimelineZoomClip
 } from "./TimelineClips";
 import { TimelineTrack } from "./TimelineTrack";
+import { SpeedIcon } from "./SpeedIcon";
 import type {
   EditorTool,
   SpeedEffect,
@@ -122,7 +123,17 @@ export function Timeline(props: {
         onSeekFrame={props.onSeekFrame}
       />
 
-      <TimelineRuler duration={props.renderDuration} />
+      {/* The ruler is a scrub surface too: press or drag on it to move the
+          playhead, same handlers as the timeline body. */}
+      <div
+        className={cx("cursor-pointer touch-none", props.scrubbing && "cursor-ew-resize")}
+        onPointerDown={props.onBodyPointerDown}
+        onPointerMove={props.onBodyPointerMove}
+        onPointerUp={props.onBodyPointerUp}
+        onPointerCancel={props.onBodyPointerUp}
+      >
+        <TimelineRuler duration={props.renderDuration} />
+      </div>
 
       {/* The body owns scrubbing, clip move/trim drags and asset drag & drop.
           touch-none keeps pointer capture stable during drags. */}
@@ -172,7 +183,7 @@ export function Timeline(props: {
         ) : null}
 
         {props.activeTool === "speed" ? (
-          <TimelineTrack label="Speed" accent="cyan" icon={<Gauge size={14} />}>
+          <TimelineTrack label="Speed" accent="cyan" icon={<SpeedIcon size={14} />}>
             {getOrderedZoomTimingItems(props.speedEffects).map((effect) => (
               <TimelineSpeedClip
                 key={effect.id}

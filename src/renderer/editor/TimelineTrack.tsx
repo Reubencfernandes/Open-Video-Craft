@@ -32,16 +32,11 @@ export function TimelineTrack(props: {
         Boolean(props.controls) && "gap-y-2"
       )}
     >
-      <div
-        className={cx(
-          "inline-flex min-h-[2.35rem] min-w-0 items-center gap-2 border-r border-white/[0.07] pl-1 text-[0.68rem] font-bold",
-          accentClassName
-        )}
-      >
-        {props.icon}
+      <div className="inline-flex min-h-[2.35rem] min-w-0 items-center gap-2 rounded-l-[3px] border-r border-white/[0.07] bg-white/[0.03] pl-2 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-slate-400">
+        <span className={cx("flex-none", accentClassName)}>{props.icon}</span>
         <span className="truncate">{props.label}</span>
       </div>
-      <div className="track-lane relative min-h-[2.35rem] overflow-hidden rounded-[3px] border border-white/[0.05] bg-[#1d2026]">
+      <div className="track-lane relative min-h-[2.35rem] overflow-hidden rounded-[3px] border border-white/[0.05] bg-[#191b1f] shadow-[inset_0_1px_3px_rgb(0_0_0_/_0.35)]">
         {props.children}
       </div>
       {props.controls ? <div className="col-start-2 min-w-0">{props.controls}</div> : null}

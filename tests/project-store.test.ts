@@ -131,4 +131,81 @@ describe("ProjectStore", () => {
     expect(stopped.status).toBe("processing");
     expect(stopped.durationMs).toBe(1235);
   });
+
+  it("serializes concurrent media writes and keeps project metadata valid", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Concurrent recording", baseDirectory: tmpDir });
+
+    await store.startRecording({
+      projectId: project.id,
+      source: { id: "screen:1", name: "Entire screen", kind: "screen", displayId: "1" },
+      devices: {
+        microphone: { enabled: true, deviceId: "mic-1", label: "Microphone" },
+        camera: { enabled: true, deviceId: "camera-1", label: "Camera" }
+      },
+      tracks: {
+        screen: { enabled: true, mimeType: "video/webm" },
+        camera: { enabled: true, mimeType: "video/webm" },
+        mic: { enabled: true, mimeType: "audio/webm" }
+      }
+    });
+
+    const tracks = ["screen", "camera", "mic"] as const;
+    await Promise.all(
+      Array.from({ length: 20 }, (_value, index) =>
+        store.appendChunk(project.id, tracks[index % tracks.length], Buffer.from("x"))
+      )
+    );
+
+    const metadata = JSON.parse(
+      await fs.readFile(path.join(project.rootPath, "project.json"), "utf8")
+    );
+    const totalBytes =
+      metadata.tracks.screen.bytesWritten +
+      metadata.tracks.camera.bytesWritten +
+      metadata.tracks.micWebm.bytesWritten;
+    expect(totalBytes).toBe(20);
+  });
+
+  it("stores editor state and imported assets inside the project folder", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Portable edit", baseDirectory: tmpDir });
+    const sourcePath = path.join(tmpDir, "outside-project.mp3");
+    await fs.writeFile(sourcePath, "audio");
+
+    await store.saveEditorState(
+      project.id,
+      {
+        state: { v: 2, timelineSegments: [{ id: "clip", itemId: "music", start: 0 }] },
+        imports: [
+          {
+            id: "music",
+            name: "outside-project.mp3",
+            kind: "audio",
+            extension: "mp3",
+            duration: 12
+          }
+        ]
+      },
+      (id) => (id === "music" ? sourcePath : null)
+    );
+
+    const reloadedStore = new ProjectStore({ appVersion: "1.0.0" });
+    await reloadedStore.loadProject(project.rootPath);
+    const saved = await reloadedStore.readEditorState(project.id);
+
+    expect(saved?.state).toEqual({
+      v: 2,
+      timelineSegments: [{ id: "clip", itemId: "music", start: 0 }]
+    });
+    expect(saved?.imports).toMatchObject([
+      {
+        id: "music",
+        relativePath: "imports/music.mp3"
+      }
+    ]);
+    await expect(
+      fs.readFile(path.join(project.rootPath, "imports", "music.mp3"), "utf8")
+    ).resolves.toBe("audio");
+  });
 });

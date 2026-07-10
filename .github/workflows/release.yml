@@ -32,6 +32,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Validate release tag version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p \"require('./package.json').version\")"
+          test "$tag_version" = "$package_version" || {
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $package_version."
+            exit 1
+          }
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -61,6 +72,12 @@ jobs:
           APPLE_API_ISSUER: ${{ matrix.name == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
         run: npm run ${{ matrix.npm_script }} -- ${{ matrix.builder_args }}
 
+      - name: Verify macOS update archive
+        if: matrix.name == 'macOS'
+        env:
+          OVC_MAC_TEAM_ID: "3XX79RB95N"
+        run: npm run verify:mac-release
+
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
@@ -80,6 +97,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
+
       - name: Download installers
         uses: actions/download-artifact@v4
         with:
@@ -96,7 +116,7 @@ jobs:
           gh release delete "$TAG_NAME" --yes >/dev/null 2>&1 || true
           gh release create "$TAG_NAME" \
             --title "$TAG_NAME" \
-            --notes "Windows and macOS desktop builds for Open Video Craft."
+            --notes-file CHANGELOG.md
 
           while IFS= read -r -d '' file; do
             gh release upload "$TAG_NAME" "$file" --clobber

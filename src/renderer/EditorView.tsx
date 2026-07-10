@@ -100,9 +100,8 @@ import type {
 } from "./editor/types";
 
 export function EditorView() {
-  const projectId = useMemo(
-    () => new URLSearchParams(window.location.search).get("projectId"),
-    []
+  const [projectId, setProjectId] = useState(() =>
+    new URLSearchParams(window.location.search).get("projectId")
   );
   const [project, setProject] = useState<ProjectView | null>(null);
   const [importedMedia, setImportedMedia] = useState<EditorMediaItem[]>([]);
@@ -114,6 +113,7 @@ export function EditorView() {
   const [activeBackgroundCategory, setActiveBackgroundCategory] =
     useState<BackgroundCategory>("image");
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(null);
+  const [customBackgroundImportId, setCustomBackgroundImportId] = useState<string | null>(null);
   const [screenPosition, setScreenPosition] = useState({
     x: 0,
     y: 0,
@@ -194,9 +194,10 @@ export function EditorView() {
   const previousTimelineDurationRef = useRef(0);
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
 
-  const { saveState } = useEditorPersistence({
+  const { isReady: isEditorStateReady, saveState } = useEditorPersistence({
     activeBackgroundCategory,
     audioLevels,
+    backgroundAudioIds,
     backgroundStyle,
     cameraBorderStyle,
     cameraContentTransform,
@@ -204,14 +205,24 @@ export function EditorView() {
     cameraPosition,
     cameraShape,
     cameraSize,
+    customBackgroundImportId,
+    importedMedia,
     knownTimelineItemIdsRef,
     layoutMode,
     masterVolume,
+    onProjectCreated: (nextProjectId) => {
+      setProjectId(nextProjectId);
+      const url = new URL(window.location.href);
+      url.searchParams.set("projectId", nextProjectId);
+      window.history.replaceState(null, "", url);
+    },
+    project,
     projectId,
     screenAspectRatio,
     screenPosition,
     setActiveBackgroundCategory,
     setAudioLevels,
+    setBackgroundAudioIds,
     setBackgroundStyle,
     setCameraBorderStyle,
     setCameraContentTransform,
@@ -219,8 +230,10 @@ export function EditorView() {
     setCameraPosition,
     setCameraShape,
     setCameraSize,
+    setCustomBackgroundImportId,
     setError,
     setExportMessage,
+    setImportedMedia,
     setLayoutMode,
     setMasterVolume,
     setProject,
@@ -231,6 +244,7 @@ export function EditorView() {
     setSubtitleStyle,
     setSubtitles,
     setTimelineSegments,
+    setTrimRange,
     setVideoCornerStyle,
     setZoomEffects,
     speedEffects,
@@ -238,9 +252,17 @@ export function EditorView() {
     subtitleStyle,
     subtitles,
     timelineSegments,
+    trimRange,
     videoCornerStyle,
     zoomEffects
   });
+
+  useEffect(() => {
+    const customBackground = customBackgroundImportId
+      ? importedMedia.find((item) => item.id === customBackgroundImportId)
+      : null;
+    setCustomBackgroundUrl(customBackground?.url ?? null);
+  }, [customBackgroundImportId, importedMedia]);
 
   // Auto-dismiss the "Project saved" toast.
   useEffect(() => {
@@ -392,6 +414,8 @@ export function EditorView() {
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
+    customBackgroundImportId,
+    setCustomBackgroundImportId,
     setCustomBackgroundUrl,
     setDuration,
     setError,
@@ -453,6 +477,10 @@ export function EditorView() {
 
   // Keep timeline segments consistent with the media library.
   useEffect(() => {
+    if (!isEditorStateReady) {
+      return;
+    }
+
     const availableItemIds = new Set(timelineEditableItems.map((item) => item.id));
     const nextKnownItemIds = new Set(
       [...knownTimelineItemIdsRef.current].filter((itemId) => availableItemIds.has(itemId))
@@ -482,7 +510,7 @@ export function EditorView() {
     setSelectedTimelineSegmentId((current) =>
       current && availableItemIds.has(current.split(":segment-")[0]) ? current : null
     );
-  }, [mediaDurationById, timelineEditableItems]);
+  }, [isEditorStateReady, mediaDurationById, timelineEditableItems]);
 
   // Probe durations for media whose length is still unknown (throwaway
   // elements; the real duration lands in the library via updateMediaDuration).
@@ -875,6 +903,9 @@ export function EditorView() {
       originalSegments: timelineSegments
     };
     setSelectedTimelineSegmentId(segmentId);
+    // Clips can cover the whole lane, so a click on a clip must still move the
+    // playhead; a real drag only starts after the move threshold.
+    seek(time);
     timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
@@ -894,7 +925,9 @@ export function EditorView() {
     drag.moved = true;
     const rawStart = Math.max(0, drag.segmentStart + delta);
     setTimelineSegments((current) => {
-      const next = moveTimelineSegment(current, drag.segmentId, rawStart, timelineRenderDuration);
+      const next = moveTimelineSegment(current, drag.segmentId, rawStart, timelineRenderDuration, [
+        currentTimeRef.current
+      ]);
       if (!areTimelineSegmentsEqual(current, next)) {
         scheduleTimelinePlaybackSync(next);
       }
@@ -948,6 +981,9 @@ export function EditorView() {
       moved: false
     };
     setSelectedZoomId(id);
+    if (mode === "move") {
+      seek(time);
+    }
     timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
@@ -1019,6 +1055,9 @@ export function EditorView() {
       moved: false
     };
     setSelectedSpeedId(id);
+    if (mode === "move") {
+      seek(time);
+    }
     timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 

@@ -30,18 +30,21 @@ import {
   chooseExportPath as showExportPathDialog,
   importMediaFiles as showImportMediaDialog
 } from "./file-dialogs";
-import { convertWebmAudioToWav, exportVideo, getFfmpegStatus, remuxWebm } from "./ffmpeg";
+import { convertWebmAudioToWav, exportVideo, remuxWebm } from "./ffmpeg";
 import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
-import { ProjectStore } from "./project-store";
+import { createMediaUrl, ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
   DesktopPermissionStatus,
+  EditorProjectStateFile,
+  EditorProjectStateView,
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
   ImportedMediaFile,
   ProjectView,
+  SaveEditorProjectStateRequest,
   SourceOverlayResult,
   SourceSummary,
   StartRecordingRequest,
@@ -79,6 +82,7 @@ const importedMediaCache = new Map<string, string>();
 let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
+let activeRecordingProjectId: string | null = null;
 let displayOverlayWindows: BrowserWindow[] = [];
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
@@ -156,6 +160,12 @@ async function createRecorderWindow(): Promise<void> {
 
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
   recorderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  recorderWindow.on("close", (event) => {
+    if (activeRecordingProjectId) {
+      event.preventDefault();
+      recorderWindow?.webContents.send("recording:global-stop");
+    }
+  });
   recorderWindow.on("closed", () => {
     recorderWindow = null;
     void closeDisplayOverlay();
@@ -567,6 +577,32 @@ function registerIpc(): void {
   });
 
   ipcMain.handle(
+    "editor:load-project-state",
+    async (_event, projectId: string): Promise<EditorProjectStateView | null> => {
+      const state = await projectStore.readEditorState(projectId);
+      return state ? toEditorProjectStateView(projectId, state) : null;
+    }
+  );
+
+  ipcMain.handle(
+    "editor:save-project-state",
+    async (_event, request: SaveEditorProjectStateRequest): Promise<EditorProjectStateView> => {
+      assertSaveEditorProjectStateRequest(request);
+      const saved = await projectStore.saveEditorState(
+        request.projectId,
+        {
+          state: request.state,
+          imports: request.imports
+        },
+        (importId) => importedMediaCache.get(importId) ?? null
+      );
+      const project = projectStore.getProject(request.projectId);
+      await getProjectLibrary().upsert(project);
+      return toEditorProjectStateView(request.projectId, saved);
+    }
+  );
+
+  ipcMain.handle(
     "editor:export-video",
     async (_event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
       return exportEditorVideo(request);
@@ -643,6 +679,7 @@ function registerIpc(): void {
     "recording:start",
     async (_event, request: StartRecordingRequest) => {
       const project = await projectStore.startRecording(request);
+      activeRecordingProjectId = project.id;
       await getProjectLibrary().upsert(project);
       return project;
     }
@@ -656,6 +693,7 @@ function registerIpc(): void {
     "recording:stop",
     async (_event, request: StopRecordingRequest) => {
       const project = await projectStore.stopRecording(request);
+      activeRecordingProjectId = null;
       await getProjectLibrary().upsert(project);
       return project;
     }
@@ -665,12 +703,13 @@ function registerIpc(): void {
     "recording:fail",
     async (_event, request: FailRecordingRequest) => {
       const project = await projectStore.markFailed(request);
+      if (activeRecordingProjectId === request.projectId) {
+        activeRecordingProjectId = null;
+      }
       await getProjectLibrary().upsert(project);
       return project;
     }
   );
-
-  ipcMain.handle("ffmpeg:status", async () => getFfmpegStatus());
 
   ipcMain.handle("ffmpeg:prepare-audio", async (_event, projectId: string) => {
     // Rewrite the recorded video containers with duration + seek cues so the
@@ -816,6 +855,41 @@ function resolveImportedMediaPath(importId: string): string {
   }
 
   return filePath;
+}
+
+function toEditorProjectStateView(
+  projectId: string,
+  state: EditorProjectStateFile
+): EditorProjectStateView {
+  return {
+    savedAt: state.savedAt,
+    state: state.state,
+    imports: state.imports.map((imported) => {
+      const filePath = projectStore.resolveProjectFile(projectId, imported.relativePath);
+      importedMediaCache.set(imported.id, filePath);
+      return {
+        id: imported.id,
+        name: imported.name,
+        kind: imported.kind,
+        extension: imported.extension,
+        duration: imported.duration,
+        url: createMediaUrl(projectId, imported.relativePath)
+      };
+    })
+  };
+}
+
+function assertSaveEditorProjectStateRequest(
+  value: unknown
+): asserts value is SaveEditorProjectStateRequest {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    typeof (value as Partial<SaveEditorProjectStateRequest>).projectId !== "string" ||
+    !Array.isArray((value as Partial<SaveEditorProjectStateRequest>).imports)
+  ) {
+    throw new Error("Invalid editor save request.");
+  }
 }
 
 function getDialogParentWindow(): BrowserWindow | null {

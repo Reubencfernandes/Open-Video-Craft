@@ -1,9 +1,10 @@
-import { Captions, Film, Gauge, ZoomIn } from "lucide-react";
+import { Captions, Film, ZoomIn } from "lucide-react";
 import WaveSurfer from "wavesurfer.js";
 import { memo, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cx } from "../classNames";
 import { loadWaveSurferBlob } from "./media-utils";
+import { SpeedIcon } from "./SpeedIcon";
 import { createTimelineClipStyle } from "./timeline-utils";
 import type {
   SpeedEffect,
@@ -147,7 +148,7 @@ export function TimelineSpeedClip(props: {
       onClick={props.onSelect}
       onPointerDown={(event) => props.onDragPointerDown(event, props.effect.id, "move")}
     >
-      <Gauge className="relative z-[2] flex-none" size={13} />
+      <SpeedIcon className="relative z-[2]" size={13} />
       <strong className="relative z-[2] min-w-0 truncate">{props.effect.rate}x</strong>
       <ClipTrimEdges
         onTrimPointerDown={(event, edge) => props.onDragPointerDown(event, props.effect.id, edge)}

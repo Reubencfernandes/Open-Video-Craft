@@ -8,6 +8,22 @@ interface MediaProtocolDependencies {
   importedMediaCache: Map<string, string>;
 }
 
+// <video>/<audio> elements load custom-protocol media without CORS, but
+// renderer fetch() calls (e.g. decoding audio for speech-to-text) are
+// CORS-gated and fail with "Failed to fetch" unless the response carries an
+// allow-origin header.
+async function fetchWithCors(fileUrl: string, requestHeaders: Headers): Promise<Response> {
+  const response = await net.fetch(fileUrl, { headers: requestHeaders });
+  const headers = new Headers(response.headers);
+  headers.set("Access-Control-Allow-Origin", "*");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
 export function registerMediaProtocol({
   projectStore,
   importedMediaCache
@@ -28,7 +44,7 @@ export function registerMediaProtocol({
       );
 
       // Keep Range headers intact; HTML media seeking depends on partial reads.
-      return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers });
+      return await fetchWithCors(pathToFileURL(filePath).toString(), request.headers);
     } catch (error) {
       return new Response(error instanceof Error ? error.message : "Not found", {
         status: 404
@@ -46,7 +62,7 @@ export function registerMediaProtocol({
         return new Response("Not found", { status: 404 });
       }
 
-      return net.fetch(pathToFileURL(filePath).toString(), { headers: request.headers });
+      return await fetchWithCors(pathToFileURL(filePath).toString(), request.headers);
     } catch (error) {
       return new Response(error instanceof Error ? error.message : "Not found", {
         status: 404

@@ -90,14 +90,14 @@ export async function checkForAppUpdates(reason = "manual"): Promise<boolean> {
     const result = await autoUpdater.checkForUpdates();
     return Boolean(result?.isUpdateAvailable);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getUpdateErrorMessage(error);
     setUpdateStatus({
       state: "error",
       message,
       checkedAt: new Date().toISOString(),
       downloadProgress: null
     });
-    updateLogger.warn(message);
+    updateLogger.warn(error instanceof Error ? error.message : String(error));
     return false;
   } finally {
     updateCheckRunning = false;
@@ -181,14 +181,24 @@ function registerAutoUpdateEvents(): void {
   });
 
   autoUpdater.on("error", (error) => {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getUpdateErrorMessage(error);
     setUpdateStatus({
       state: "error",
       message,
       checkedAt: new Date().toISOString()
     });
-    updateLogger.error(message);
+    updateLogger.error(error instanceof Error ? error.message : String(error));
   });
+}
+
+function getUpdateErrorMessage(error: unknown): string {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+
+  if (process.platform === "darwin" && /code signature|specified code requirement/i.test(rawMessage)) {
+    return "The downloaded macOS update did not pass signature verification. Install the latest signed release manually, then future updates will work normally.";
+  }
+
+  return rawMessage;
 }
 
 function createInitialUpdateStatus(): UpdateStatus {

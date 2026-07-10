@@ -1,4 +1,5 @@
 import { Upload } from "lucide-react";
+import { previewBackgrounds } from "../backgrounds";
 import type { BackgroundCategory, BackgroundStyle, VideoCornerStyle } from "../types";
 
 const backgroundCategories: Array<{
@@ -21,7 +22,10 @@ const backgroundCategories: Array<{
     options: [
       { id: "real-world-1", label: "Desk" },
       { id: "real-world-2", label: "Studio" },
-      { id: "real-world-3", label: "Nature" }
+      { id: "real-world-3", label: "Nature" },
+      { id: "real-world-4", label: "Violet Haze" },
+      { id: "real-world-5", label: "Teal Wave" },
+      { id: "real-world-6", label: "Ember Glow" }
     ]
   },
   {
@@ -34,19 +38,6 @@ const backgroundCategories: Array<{
     ]
   }
 ];
-
-const swatchClasses: Record<BackgroundStyle, string> = {
-  "animated-1": "bg-[linear-gradient(120deg,#22d3ee,#6d28d9,#db2777)]",
-  "animated-2": "bg-[linear-gradient(120deg,#f59e0b,#ef4444,#7c3aed)]",
-  "animated-3": "bg-[linear-gradient(120deg,#0ea5e9,#14b8a6,#1e3a8a)]",
-  "real-world-1": "bg-[linear-gradient(135deg,#3b82f6,#0f172a)]",
-  "real-world-2": "bg-[linear-gradient(135deg,#64748b,#111827)]",
-  "real-world-3": "bg-[linear-gradient(135deg,#14b8a6,#052e16)]",
-  "gradient-1": "bg-[linear-gradient(135deg,#8b5cf6,#ec4899)]",
-  "gradient-2": "bg-[linear-gradient(135deg,#06b6d4,#14b8a6)]",
-  "gradient-3": "bg-[linear-gradient(135deg,#f59e0b,#7c2d12)]",
-  custom: "bg-[linear-gradient(135deg,#111827,#334155)]"
-};
 
 /**
  * "Style" tool: pick the composition background (built-in swatches or a custom
@@ -93,7 +84,14 @@ export function StylePanel(props: {
               key={option.id}
               onClick={() => props.onBackgroundStyleChange(option.id)}
             >
-              <span className={`block h-14 rounded-md ${swatchClasses[option.id]}`} />
+              <span
+                className="block h-14 rounded-md bg-white/[0.04]"
+                style={{
+                  backgroundImage: previewBackgrounds[option.id],
+                  backgroundSize: "cover",
+                  backgroundPosition: "center"
+                }}
+              />
               <strong>{option.label}</strong>
             </button>
           ))}

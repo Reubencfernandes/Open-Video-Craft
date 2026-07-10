@@ -229,11 +229,6 @@ export interface SubtitlesFile {
   }>;
 }
 
-export interface FfmpegStatus {
-  ffmpegPath: string;
-  ffprobePath: string;
-}
-
 export interface SourceOverlayResult {
   shown: boolean;
   reason: string | null;
@@ -248,6 +243,41 @@ export interface ImportedMediaFile {
   url: string;
   kind: ImportedMediaKind;
   extension: string;
+}
+
+/**
+ * A project-owned import. `relativePath` is deliberately kept inside the
+ * project folder so saved edits remain available after the app restarts or is
+ * moved to another machine.
+ */
+export interface EditorProjectImport {
+  id: string;
+  name: string;
+  kind: ImportedMediaKind;
+  extension: string;
+  duration: number | null;
+  relativePath: string;
+}
+
+export type EditorProjectImportInput = Omit<EditorProjectImport, "relativePath">;
+
+export interface EditorProjectStateFile {
+  schemaVersion: 1;
+  savedAt: string;
+  state: unknown;
+  imports: EditorProjectImport[];
+}
+
+export interface SaveEditorProjectStateRequest {
+  projectId: string;
+  state: unknown;
+  imports: EditorProjectImportInput[];
+}
+
+export interface EditorProjectStateView {
+  savedAt: string;
+  state: unknown;
+  imports: Array<EditorProjectImportInput & { url: string }>;
 }
 
 export type ExportVideoFormat = "mp4" | "webm" | "mov";

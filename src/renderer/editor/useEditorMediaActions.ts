@@ -21,6 +21,8 @@ type UseEditorMediaActionsParams = {
   setAudioLevels: Dispatch<SetStateAction<AudioLevelState>>;
   setBackgroundAudioIds: Dispatch<SetStateAction<string[]>>;
   setBackgroundStyle: Dispatch<SetStateAction<BackgroundStyle>>;
+  customBackgroundImportId: string | null;
+  setCustomBackgroundImportId: Dispatch<SetStateAction<string | null>>;
   setCustomBackgroundUrl: Dispatch<SetStateAction<string | null>>;
   setDuration: Dispatch<SetStateAction<number>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -42,6 +44,8 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
+    customBackgroundImportId,
+    setCustomBackgroundImportId,
     setCustomBackgroundUrl,
     setDuration,
     setError,
@@ -88,8 +92,13 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
       return;
     }
 
+    const backgroundItem = toEditorMediaItem(background);
     setError(null);
-    setCustomBackgroundUrl(background.url);
+    setImportedMedia((current) =>
+      current.some((item) => item.id === backgroundItem.id) ? current : [...current, backgroundItem]
+    );
+    setCustomBackgroundImportId(backgroundItem.id);
+    setCustomBackgroundUrl(backgroundItem.url);
     setBackgroundStyle("custom");
   }
 
@@ -97,6 +106,11 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
     void window.openVideoCraft.editor.removeImportedMedia(itemId);
     setImportedMedia((current) => current.filter((item) => item.id !== itemId));
     setBackgroundAudioIds((current) => current.filter((id) => id !== itemId));
+    if (customBackgroundImportId === itemId) {
+      setCustomBackgroundImportId(null);
+      setCustomBackgroundUrl(null);
+      setBackgroundStyle((current) => (current === "custom" ? "real-world-1" : current));
+    }
     setTimelineSegments((current) => {
       const next = current.filter((segment) => segment.itemId !== itemId);
       if (!areTimelineSegmentsEqual(current, next)) {

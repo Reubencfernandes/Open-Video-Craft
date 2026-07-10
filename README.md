@@ -38,6 +38,7 @@ Packaged builds check the configured GitHub release feed on startup and every fo
 ```sh
 npm run dist:win
 npm run dist:mac
+npm run verify:mac-release
 ```
 
 macOS release builds require a Developer ID Application certificate and notarization credentials. Set one of the notarization credential groups before running `npm run dist:mac`:
@@ -46,15 +47,22 @@ macOS release builds require a Developer ID Application certificate and notariza
 - `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
 - `APPLE_KEYCHAIN_PROFILE`, optionally `APPLE_KEYCHAIN`
 
-Ad-hoc builds are still available for trusted local testing with `npm run dist:mac:adhoc`, but public auto-updating Mac releases should use Developer ID signing and notarization.
+`verify:mac-release` is a required shipping gate: it checks the ZIP used by Squirrel.Mac, its `latest-mac.yml` checksum, the expected Developer ID team, the designated requirement, strict signature validation, and the stapled notarization ticket. The GitHub release workflow runs it before uploading anything.
+
+Ad-hoc builds are still available for trusted local testing with `npm run dist:mac:adhoc`, but they must never be uploaded as GitHub-release assets or referenced by `latest-mac.yml`. Public auto-updating Mac releases must use the configured Developer ID identity and notarization.
+
+If an ad-hoc ZIP was already published, publish a new, higher version with `dist:mac` and `verify:mac-release`. Users on the signed release must install that corrected release manually once; subsequent signed updates will work normally.
 
 ## Project Folder Shape
 
 ```txt
 my-recording-project/
   project.json
+  editor.json
   edits.json
   subtitles.json
+  imports/
+    <asset-id>.ext
   media/
     screen.webm
     camera.webm
@@ -62,7 +70,7 @@ my-recording-project/
     mic.wav
 ```
 
-`project.json`, `edits.json`, and `subtitles.json` use relative media paths so folders remain portable.
+`project.json` and `editor.json` use relative paths. Imported editor assets are copied into `imports/`, so a saved project can be reopened after an app restart or moved to another machine.
 
 ## Cross-Platform Follow-Up Checks
 

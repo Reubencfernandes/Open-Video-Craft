@@ -149,11 +149,12 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
               <Minimize2 size={20} />
             </button>
             <button
-              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
+              className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
               type="button"
               aria-label="Close"
-              title={isRecordingActive ? undefined : "Close"}
+              title={isRecordingActive ? "Stop or cancel recording before closing" : "Close"}
               onClick={props.onClose}
+              disabled={!props.canStart}
             >
               <X size={22} />
             </button>

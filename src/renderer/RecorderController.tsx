@@ -271,9 +271,12 @@ export function RecorderController() {
       const screenStream = await navigator.mediaDevices.getDisplayMedia(
         createDisplayCaptureOptions()
       );
+      screenStreamRef.current = screenStream;
 
       const cameraStream = await getOptionalCameraStream(cameraEnabled, selectedCameraId);
+      cameraStreamRef.current = cameraStream;
       const micStream = await getOptionalMicStream(micEnabled, selectedMicId);
+      micStreamRef.current = micStream;
 
       if (!cameraStream) {
         setCameraEnabled(false);
@@ -291,6 +294,8 @@ export function RecorderController() {
         name: `Floating Recording ${new Date().toLocaleString()}`,
         baseDirectory: folder
       });
+      setProject(createdProject);
+      projectRef.current = createdProject;
       const source: ProjectSource = {
         id: selectedSource.id,
         name: selectedSource.name,
@@ -325,9 +330,6 @@ export function RecorderController() {
         }
       });
 
-      screenStreamRef.current = screenStream;
-      cameraStreamRef.current = cameraStream;
-      micStreamRef.current = micStream;
       setProject(startedProject);
       projectRef.current = startedProject;
 
@@ -344,7 +346,12 @@ export function RecorderController() {
 
       screenStream.getVideoTracks().forEach((track) => {
         track.addEventListener("ended", () => {
-          void stopRecording();
+          if (stateRef.current === "recording" || stateRef.current === "paused") {
+            void stopRecording();
+            return;
+          }
+
+          void failRecording("Screen sharing ended before recording could start.");
         });
       });
 
@@ -361,9 +368,7 @@ export function RecorderController() {
       );
       await refreshDevices();
     } catch (error) {
-      stopAllStreams();
-      setState("failed");
-      setErrorMessage(toErrorMessage(error));
+      await failRecording(toErrorMessage(error));
     }
   }
 
@@ -459,6 +464,7 @@ export function RecorderController() {
   }
 
   async function failRecording(message: string) {
+    stoppingRef.current = true;
     stopAllStreams();
     await window.openVideoCraft.windows.showCurrent();
     await setCompactMode(false);
@@ -486,7 +492,7 @@ export function RecorderController() {
     }
 
     const previous = writeQueuesRef.current[track] ?? Promise.resolve();
-    writeQueuesRef.current[track] = previous.then(async () => {
+    const write = previous.then(async () => {
       const chunk = await blob.arrayBuffer();
       const updatedProject = await window.openVideoCraft.recording.writeChunk({
         projectId,
@@ -501,6 +507,13 @@ export function RecorderController() {
         lastProjectUiSyncAtRef.current = now;
       }
     });
+    // Attach a rejection handler immediately. Waiting until Stop left an
+    // unhandled rejection and made the recorder look healthy after disk/IPC
+    // failures had already stopped a track from being written.
+    void write.catch((error) => {
+      void failRecording(`Could not save ${track} recording data: ${toErrorMessage(error)}`);
+    });
+    writeQueuesRef.current[track] = write;
   }
 
   function stopAllStreams() {

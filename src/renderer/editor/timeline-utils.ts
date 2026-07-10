@@ -202,7 +202,8 @@ export function moveTimelineSegment(
   segments: TimelineSegment[],
   segmentId: string,
   rawStart: number,
-  timelineDuration: number
+  timelineDuration: number,
+  extraSnapTargets: number[] = []
 ): TimelineSegment[] {
   const segment = segments.find((item) => item.id === segmentId);
   if (!segment) {
@@ -211,7 +212,7 @@ export function moveTimelineSegment(
 
   const length = segment.end - segment.start;
   const snapThreshold = Math.max(0.08, timelineDuration * 0.01);
-  const snapTargets = [0];
+  const snapTargets = [0, ...extraSnapTargets];
   for (const other of segments) {
     if (other.id === segmentId || other.track !== segment.track) {
       continue;
@@ -234,6 +235,14 @@ export function moveTimelineSegment(
     }
   }
 
+  if (segment.track === "video") {
+    const clampedStart = clampStartIntoFreeVideoGap(segments, segmentId, start, length);
+    if (clampedStart === null) {
+      return segments;
+    }
+    start = clampedStart;
+  }
+
   const nextStart = Math.max(0, start);
   const nextEnd = nextStart + length;
   const nextLane =
@@ -246,6 +255,48 @@ export function moveTimelineSegment(
       ? { ...item, lane: item.track === "audio" ? nextLane : 0, start: nextStart, end: nextEnd }
       : item
   );
+}
+
+// Video clips live on a single lane, so a drag must never create an overlap:
+// the clip stops against its neighbor and only jumps to the next gap once the
+// pointer is closer to a position inside that gap (audio resolves overlaps by
+// moving to another lane instead).
+function clampStartIntoFreeVideoGap(
+  segments: TimelineSegment[],
+  segmentId: string,
+  start: number,
+  length: number
+): number | null {
+  const others = segments
+    .filter((item) => item.id !== segmentId && item.track === "video")
+    .sort((first, second) => first.start - second.start);
+
+  const gaps: Array<[number, number]> = [];
+  let low = 0;
+  for (const other of others) {
+    if (other.start > low) {
+      gaps.push([low, other.start]);
+    }
+    low = Math.max(low, other.end);
+  }
+  gaps.push([low, Number.POSITIVE_INFINITY]);
+
+  let best: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const [gapStart, gapEnd] of gaps) {
+    if (gapEnd - gapStart < length - 1e-6) {
+      continue;
+    }
+
+    const clamped = Math.min(Math.max(start, gapStart), gapEnd - length);
+    const distance = Math.abs(clamped - start);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = clamped;
+    }
+  }
+
+  return best;
 }
 
 export function createAudioTimelineTracks(

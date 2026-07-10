@@ -2,8 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import ffmpegStatic from "ffmpeg-static";
-import ffprobeStatic = require("ffprobe-static");
-import type { ExportResolution, ExportVideoFormat, FfmpegStatus } from "../shared/types";
+import type { ExportResolution, ExportVideoFormat } from "../shared/types";
 
 interface ExportVideoJob {
   videoPath: string;
@@ -17,9 +16,9 @@ interface ExportVideoJob {
   preserveSourceAudio: boolean;
 }
 
-// ffmpeg-static and ffprobe-static report paths inside app.asar, but asar
-// archives are files, so spawning from them fails with ENOTDIR. The binaries
-// are asarUnpack'ed next to the archive; point at that copy when packaged.
+// ffmpeg-static reports a path inside app.asar, but asar archives are files,
+// so spawning from them fails with ENOTDIR. The binary is asarUnpack'ed next
+// to the archive; point at that copy when packaged.
 export function toUnpackedPath(binaryPath: string): string {
   return binaryPath.replace(/([/\\])app\.asar([/\\])/, "$1app.asar.unpacked$2");
 }
@@ -42,21 +41,6 @@ export function resolveFfmpegPath(): string {
   }
 
   return resolveBundledBinaryPath(ffmpegStatic, "FFmpeg");
-}
-
-export function resolveFfprobePath(): string {
-  if (!ffprobeStatic.path) {
-    throw new Error("No FFprobe binary is available for this platform.");
-  }
-
-  return resolveBundledBinaryPath(ffprobeStatic.path, "FFprobe");
-}
-
-export function getFfmpegStatus(): FfmpegStatus {
-  return {
-    ffmpegPath: resolveFfmpegPath(),
-    ffprobePath: resolveFfprobePath()
-  };
 }
 
 // MediaRecorder writes a headerless chunk stream: no duration, no seek cues.

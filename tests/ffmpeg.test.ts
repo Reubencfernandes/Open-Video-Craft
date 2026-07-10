@@ -1,19 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  getFfmpegStatus,
   resolveFfmpegPath,
-  resolveFfprobePath,
   toUnpackedPath
 } from "../src/main/ffmpeg";
 
 describe("FFmpeg binaries", () => {
-  it("resolves bundled FFmpeg and FFprobe paths", () => {
+  it("resolves the bundled FFmpeg path", () => {
     expect(resolveFfmpegPath()).toMatch(/ffmpeg/i);
-    expect(resolveFfprobePath()).toMatch(/ffprobe/i);
-    expect(getFfmpegStatus()).toEqual({
-      ffmpegPath: resolveFfmpegPath(),
-      ffprobePath: resolveFfprobePath()
-    });
   });
 
   it("rewrites app.asar paths to app.asar.unpacked paths", () => {

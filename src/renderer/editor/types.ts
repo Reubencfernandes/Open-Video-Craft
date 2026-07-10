@@ -22,6 +22,9 @@ export type BackgroundStyle =
   | "real-world-1"
   | "real-world-2"
   | "real-world-3"
+  | "real-world-4"
+  | "real-world-5"
+  | "real-world-6"
   | "gradient-1"
   | "gradient-2"
   | "gradient-3"
@@ -56,6 +59,7 @@ export type EditorMediaItem = {
   track: "screen" | "camera" | "audio" | "imported";
   duration: number | null;
   importId?: string;
+  extension?: string;
 };
 
 export type TimelineMediaClip = {

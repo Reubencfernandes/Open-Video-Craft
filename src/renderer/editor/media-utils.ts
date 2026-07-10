@@ -60,7 +60,8 @@ export function toEditorMediaItem(file: ImportedMediaFile): EditorMediaItem {
     origin: "imported",
     track: "imported",
     duration: null,
-    importId: file.id
+    importId: file.id,
+    extension: file.extension
   };
 }
 

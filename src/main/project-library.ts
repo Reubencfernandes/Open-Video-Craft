@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { readProjectFile } from "./project-store";
 import type {
@@ -96,8 +97,17 @@ export class ProjectLibrary {
   }
 
   private async writeFile(file: ProjectLibraryFile): Promise<void> {
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(this.filePath, `${JSON.stringify(file, null, 2)}\n`);
+    const directory = path.dirname(this.filePath);
+    const tempPath = path.join(directory, `.${path.basename(this.filePath)}.${randomUUID()}.tmp`);
+
+    await fs.mkdir(directory, { recursive: true });
+    try {
+      await fs.writeFile(tempPath, `${JSON.stringify(file, null, 2)}\n`);
+      await fs.rename(tempPath, this.filePath);
+    } catch (error) {
+      await fs.rm(tempPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
   }
 }
 

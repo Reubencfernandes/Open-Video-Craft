@@ -6,11 +6,12 @@ import type {
   DesktopPermissionStatus,
   ExportVideoRequest,
   ExportVideoResult,
+  EditorProjectStateView,
   FailRecordingRequest,
-  FfmpegStatus,
   ImportedMediaFile,
   ProjectLibraryEntry,
   ProjectView,
+  SaveEditorProjectStateRequest,
   SourceOverlayResult,
   SourceSummary,
   StartRecordingRequest,
@@ -79,7 +80,6 @@ const api = {
       ipcRenderer.invoke("recording:fail", request)
   },
   ffmpeg: {
-    status: (): Promise<FfmpegStatus> => ipcRenderer.invoke("ffmpeg:status"),
     prepareAudio: (projectId: string): Promise<ProjectView> =>
       ipcRenderer.invoke("ffmpeg:prepare-audio", projectId)
   },
@@ -100,6 +100,10 @@ const api = {
     importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media"),
     removeImportedMedia: (importId: string): Promise<boolean> =>
       ipcRenderer.invoke("editor:remove-imported-media", importId),
+    loadProjectState: (projectId: string): Promise<EditorProjectStateView | null> =>
+      ipcRenderer.invoke("editor:load-project-state", projectId),
+    saveProjectState: (request: SaveEditorProjectStateRequest): Promise<EditorProjectStateView> =>
+      ipcRenderer.invoke("editor:save-project-state", request),
     exportVideo: (request: ExportVideoRequest): Promise<ExportVideoResult | null> =>
       ipcRenderer.invoke("editor:export-video", request)
   },

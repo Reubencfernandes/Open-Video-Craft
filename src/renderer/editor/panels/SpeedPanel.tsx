@@ -1,5 +1,6 @@
-import { Gauge, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { speedMinDurationSeconds, speedRates } from "../speed-utils";
+import { SpeedIcon } from "../SpeedIcon";
 import type { SpeedEffect } from "../types";
 
 export function SpeedPanel(props: {
@@ -17,7 +18,7 @@ export function SpeedPanel(props: {
         type="button"
         onClick={props.onAddSpeed}
       >
-        <Gauge size={16} />
+        <SpeedIcon size={16} />
         Add speed section
       </button>
 
