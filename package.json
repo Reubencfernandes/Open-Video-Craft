@@ -57,7 +57,6 @@
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",
     "mac": {
       "icon": "build/icon.icns",
-      "identity": "Developer ID Application: Reuben Fernandes (3XX79RB95N)",
       "forceCodeSigning": true,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
