@@ -17,7 +17,7 @@ export function ToolRail(props: {
         <button
           className={`relative grid min-h-[3.95rem] w-full min-w-0 content-center justify-items-center gap-1 rounded-xl border text-[0.65rem] font-medium transition ${
             props.activeTool === tool.id
-              ? "border-white/[0.09] bg-white/[0.04] text-white before:absolute before:bottom-2 before:left-[-0.3rem] before:top-2 before:w-[2px] before:rounded-full before:bg-fuchsia-400 before:content-['']"
+              ? "border-white/[0.09] bg-white/[0.04] text-white before:absolute before:bottom-2 before:left-[-0.3rem] before:top-2 before:w-[2px] before:rounded-full before:bg-amber-400 before:content-['']"
               : "border-transparent bg-transparent text-slate-300 hover:bg-white/[0.035] hover:text-white"
           }`}
           type="button"
@@ -26,7 +26,7 @@ export function ToolRail(props: {
           onClick={() => props.onToolChange(tool.id)}
         >
           <span
-            className={`grid place-items-center ${props.activeTool === tool.id ? "text-violet-300" : "text-slate-300"}`}
+            className={`grid place-items-center ${props.activeTool === tool.id ? "text-amber-300" : "text-slate-300"}`}
             aria-hidden="true"
           >
             {tool.icon}

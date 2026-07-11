@@ -148,6 +148,8 @@ export interface ProjectLibraryEntry {
   updatedAt: string;
   mediaAvailability: ProjectMediaAvailability;
   available: boolean;
+  /** Runtime preview URL for the screen/camera track; not required in older indexes. */
+  thumbnailUrl?: string | null;
 }
 
 export interface CreateProjectRequest {

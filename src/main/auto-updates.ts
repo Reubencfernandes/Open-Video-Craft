@@ -2,8 +2,7 @@
  * electron-updater lifecycle: scheduled checks, download progress, restart
  * prompts, and update-status broadcasts to all windows.
  */
-import { app, BrowserWindow, dialog } from "electron";
-import type { MessageBoxOptions } from "electron";
+import { app, BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
 import { getProductVersion } from "./app-version";
 import type { UpdateStatus } from "../shared/types";
@@ -15,7 +14,6 @@ let updateCheckDelay: NodeJS.Timeout | null = null;
 let updateCheckInterval: NodeJS.Timeout | null = null;
 let updateCheckRunning = false;
 let updateDownloaded = false;
-let restartPromptOpen = false;
 let autoUpdatesStarted = false;
 let updateStatus: UpdateStatus = createInitialUpdateStatus();
 
@@ -181,7 +179,8 @@ function registerAutoUpdateEvents(): void {
       checkedAt: new Date().toISOString(),
       downloadProgress: 100
     });
-    void promptToRestartForUpdate(event.version);
+    // Renderer windows show the shared update card with an explicit Restart
+    // action; avoid stacking a native dialog on top of that notification.
   });
 
   autoUpdater.on("error", (error) => {
@@ -233,44 +232,6 @@ function broadcastUpdateStatus(): void {
       window.webContents.send("updates:status", updateStatus);
     }
   }
-}
-
-async function promptToRestartForUpdate(version: string): Promise<void> {
-  if (restartPromptOpen) {
-    return;
-  }
-
-  restartPromptOpen = true;
-
-  try {
-    const parentWindow = getDialogParentWindow();
-    const options: MessageBoxOptions = {
-      type: "info",
-      buttons: ["Restart now", "Later"],
-      defaultId: 0,
-      cancelId: 1,
-      title: "Update ready",
-      message: `Open Video Craft ${version} is ready to install.`,
-      detail: "Restart now to finish updating. If you choose Later, the update will install when you quit the app."
-    };
-    const { response } = parentWindow
-      ? await dialog.showMessageBox(parentWindow, options)
-      : await dialog.showMessageBox(options);
-
-    if (response === 0) {
-      autoUpdater.quitAndInstall(false, true);
-    }
-  } finally {
-    restartPromptOpen = false;
-  }
-}
-
-function getDialogParentWindow(): BrowserWindow | null {
-  return (
-    BrowserWindow.getFocusedWindow() ??
-    BrowserWindow.getAllWindows().find((window) => !window.isDestroyed() && window.isVisible()) ??
-    null
-  );
 }
 
 function stopAutoUpdates(): void {

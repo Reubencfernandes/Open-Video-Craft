@@ -10,7 +10,7 @@ export function HomeActionCard(props: {
   onAction: () => void;
 }) {
   return (
-    <article className="grid min-h-[12.8rem] grid-cols-[3.9rem_minmax(0,1fr)] gap-5 rounded-xl border border-white/[0.07] bg-[linear-gradient(135deg,rgb(255_255_255_/_0.045),rgb(255_255_255_/_0.015))] p-5 shadow-[inset_0_1px_rgb(255_255_255_/_0.025)]">
+    <article className="grid min-h-[12.8rem] grid-cols-[3.9rem_minmax(0,1fr)] gap-5 rounded-xl bg-[linear-gradient(135deg,rgb(255_255_255_/_0.045),rgb(255_255_255_/_0.015))] p-5 shadow-[inset_0_1px_rgb(255_255_255_/_0.025)]">
       <span className="grid size-14 place-items-center rounded-full bg-white/[0.055]">{props.icon}</span>
       <div className="grid min-w-0 content-start gap-2 pt-1">
         <h2 className="m-0 text-xl font-medium tracking-[-0.02em] text-white">{props.title}</h2>

@@ -6,23 +6,62 @@
  */
 import { useEffect, useState } from "react";
 import type { ImportedMediaKind } from "../../shared/types";
-import { captureVideoPoster, type VideoPoster } from "./media-utils";
+import {
+  captureVideoFilmstrip,
+  captureVideoPoster,
+  type VideoFilmstrip,
+  type VideoPoster
+} from "./media-utils";
 
+const filmstripCache = new Map<string, Promise<VideoFilmstrip>>();
 const posterCache = new Map<string, Promise<VideoPoster>>();
+
+export function loadVideoFilmstrip(url: string): Promise<VideoFilmstrip> {
+  const cached = filmstripCache.get(url);
+  if (cached) return cached;
+  const pending = captureVideoFilmstrip(url, 10);
+  filmstripCache.set(url, pending);
+  void pending.catch(() => filmstripCache.delete(url));
+  return pending;
+}
 
 export function loadVideoPoster(url: string): Promise<VideoPoster> {
   const cached = posterCache.get(url);
-  if (cached) {
-    return cached;
-  }
-
+  if (cached) return cached;
   const pending = captureVideoPoster(url);
   posterCache.set(url, pending);
-  // Evict failures so a later mount (e.g. after a remux finishes writing seek
-  // cues, or once the file is fully flushed) can retry instead of caching the
-  // placeholder forever.
   void pending.catch(() => posterCache.delete(url));
   return pending;
+}
+
+export interface MediaFilmstrip {
+  frames: string[];
+  duration: number | null;
+}
+
+/** Resolves multiple distinct decoded frames for timeline video clips. */
+export function useMediaFilmstrip(item: { url: string; kind: ImportedMediaKind }): MediaFilmstrip {
+  const [filmstrip, setFilmstrip] = useState<MediaFilmstrip>({ frames: [], duration: null });
+
+  useEffect(() => {
+    if (item.kind === "image") {
+      setFilmstrip({ frames: [item.url], duration: null });
+      return;
+    }
+    if (item.kind !== "video") {
+      setFilmstrip({ frames: [], duration: null });
+      return;
+    }
+
+    let cancelled = false;
+    setFilmstrip({ frames: [], duration: null });
+    loadVideoFilmstrip(item.url).then((result) => {
+      if (!cancelled) setFilmstrip(result);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [item.kind, item.url]);
+
+  return filmstrip;
 }
 
 export interface MediaThumbnail {

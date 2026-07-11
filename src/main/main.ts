@@ -55,6 +55,7 @@ import type {
   ExportVideoResult,
   FailRecordingRequest,
   ImportedMediaFile,
+  ProjectLibraryEntry,
   ProjectView,
   SaveEditorProjectStateRequest,
   SourceOverlayResult,
@@ -71,6 +72,10 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
+      // Thumbnail capture opts into CORS before drawing a video frame to a
+      // canvas. Chromium rejects cross-origin custom schemes before our
+      // protocol handler runs unless the scheme itself is CORS-enabled.
+      corsEnabled: true,
       stream: true
     }
   },
@@ -80,6 +85,7 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
+      corsEnabled: true,
       stream: true
     }
   }
@@ -737,7 +743,27 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:list-recent", async () => {
-    return getProjectLibrary().listRecent();
+    const entries = await getProjectLibrary().listRecent();
+
+    // Loading available projects registers their media with ovc-media:// and
+    // gives the launcher a real first-frame source instead of placeholder art.
+    return Promise.all(
+      entries.map(async (entry): Promise<ProjectLibraryEntry> => {
+        if (!entry.available) return { ...entry, thumbnailUrl: null };
+
+        try {
+          const project = projectStore.hasProject(entry.id)
+            ? projectStore.getProject(entry.id)
+            : await projectStore.loadProject(entry.rootPath);
+          return {
+            ...entry,
+            thumbnailUrl: project.mediaUrls.screen ?? project.mediaUrls.camera ?? null
+          };
+        } catch {
+          return { ...entry, thumbnailUrl: null };
+        }
+      })
+    );
   });
 
   ipcMain.handle("projects:get", async (_event, projectId: string) => {

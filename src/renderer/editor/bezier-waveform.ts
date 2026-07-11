@@ -42,16 +42,27 @@ function smoothCurve(points: Point[]) {
   return path;
 }
 
-/** Creates a deterministic, smoothly interpolated cubic-Bézier audio shape. */
-export function createBezierWaveform(seedValue: string, width = 1000, height = 36) {
+/**
+ * Creates a deterministic, smoothly interpolated cubic-Bézier audio shape.
+ * `amplitudeScale` lets the timeline react to the user's gain without changing
+ * the seeded peaks, so moving a dB control never makes the waveform jump.
+ */
+export function createBezierWaveform(
+  seedValue: string,
+  width = 1000,
+  height = 36,
+  amplitudeScale = 1
+) {
   const random = createRandom(hashSeed(seedValue));
   const center = height / 2;
   const segments = 18;
   const upper: Point[] = [];
+  const safeScale = Math.max(0, Math.min(1, amplitudeScale));
 
   for (let index = 0; index <= segments; index += 1) {
     const edgeFade = Math.sin((index / segments) * Math.PI);
-    const amplitude = (3.5 + random() * (center - 5)) * (0.35 + edgeFade * 0.65);
+    const amplitude =
+      (3.5 + random() * (center - 5)) * (0.35 + edgeFade * 0.65) * safeScale;
     upper.push({ x: (index / segments) * width, y: center - amplitude });
   }
 
@@ -62,11 +73,17 @@ export function createBezierWaveform(seedValue: string, width = 1000, height = 3
   return `${smoothCurve(upper)} L ${lower[0].x.toFixed(1)} ${lower[0].y.toFixed(1)} ${smoothCurve(lower).replace(/^M [^C]+/, "")} Z`;
 }
 
-export function createBezierWaveLine(seedValue: string, width = 1000, height = 36) {
+export function createBezierWaveLine(
+  seedValue: string,
+  width = 1000,
+  height = 36,
+  amplitudeScale = 1
+) {
   const random = createRandom(hashSeed(`${seedValue}-line`));
+  const safeScale = Math.max(0, Math.min(1, amplitudeScale));
   const points: Point[] = Array.from({ length: 19 }, (_, index) => ({
     x: (index / 18) * width,
-    y: height / 2 + (random() - 0.5) * height * 0.38
+    y: height / 2 + (random() - 0.5) * height * 0.38 * safeScale
   }));
   return smoothCurve(points);
 }

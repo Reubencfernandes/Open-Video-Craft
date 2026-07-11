@@ -12,7 +12,7 @@ export function HomeHeader(props: {
         <p className="m-0 mt-1.5 text-sm text-slate-400">Create, edit and transform your ideas into amazing videos.</p>
       </div>
       <div className="flex items-center gap-3">
-        <label className="flex h-11 w-[min(30vw,360px)] items-center gap-2 rounded-xl border border-white/[0.055] bg-white/[0.035] px-4 text-slate-500 focus-within:border-violet-400/30">
+        <label className="flex h-11 w-[min(30vw,360px)] items-center gap-2 rounded-xl bg-white/[0.035] px-4 text-slate-500 ring-amber-400/30 focus-within:ring-1">
           <Search size={17} />
           <input className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500" type="search" placeholder="Search projects..." value={props.search} onChange={(event) => props.onSearchChange(event.target.value)} />
         </label>

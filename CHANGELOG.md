@@ -4,6 +4,32 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-07-11
+
+### Added
+
+- Recent-project cards now load real screen or camera thumbnails through the secure project-media protocol.
+- The homepage footer now shows the installed release version, a Discord contact action, and a Changelog action.
+- A centered changelog dialog summarizes the latest homepage and editor changes.
+- App update checks, download progress, failures, and restart actions now use the shared animated notification card.
+- The Media category has a dedicated metadata inspector for the selected asset.
+
+### Changed
+
+- Removed the duplicate Project Library section, Voice Changer placeholder, profile circle, and decorative homepage borders.
+- The editor's right inspector now renders exactly one panel for the selected rail category instead of mixing global Video, Audio, and Zoom tabs with contextual tools.
+- Speed controls now appear only in the Speed category.
+- Success and error notifications use a smaller animated bottom-right card with copyable error details.
+- New projects now start with the warm Ember canvas instead of a blue or purple background.
+
+### Fixed
+
+- Project thumbnails no longer use generic generated artwork when recorded screen or camera media is available.
+- Real project and timeline thumbnails now decode through CORS-enabled custom media protocols in both development and packaged builds.
+- Update download progress no longer competes with a separate native restart dialog.
+- Selecting Media no longer displays unrelated Layout controls in the right inspector.
+- Audio-clip Bézier curves now grow and contract live with each source's dB gain and collapse when muted.
+
 ## [1.2.0] - 2026-07-11
 
 ### Added

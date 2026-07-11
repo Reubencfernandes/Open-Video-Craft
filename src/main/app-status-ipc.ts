@@ -1,7 +1,7 @@
 /**
  * IPC handlers exposing the app version and auto-update status to renderers.
  */
-import { app, ipcMain } from "electron";
+import { app, ipcMain, shell } from "electron";
 import {
   checkForAppUpdates,
   getAutoUpdateStatus,
@@ -19,6 +19,16 @@ export function registerAppStatusIpc(): void {
       isPackaged: app.isPackaged,
       platform: process.platform
     };
+  });
+
+  ipcMain.handle("app:open-external", async (_event, value: unknown): Promise<boolean> => {
+    if (typeof value !== "string") throw new Error("External URL is required.");
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") {
+      throw new Error("Only HTTP and HTTPS links can be opened.");
+    }
+    await shell.openExternal(url.toString());
+    return true;
   });
 
   ipcMain.handle("updates:get-status", (): UpdateStatus => {

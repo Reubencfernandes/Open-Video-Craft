@@ -128,7 +128,9 @@ export function createProjectLibraryEntry(
     durationMs: project.durationMs,
     updatedAt: project.updatedAt,
     mediaAvailability: createMediaAvailability(project.tracks),
-    available
+    available,
+    // The main IPC layer fills this after loading the project into ProjectStore.
+    thumbnailUrl: null
   };
 }
 

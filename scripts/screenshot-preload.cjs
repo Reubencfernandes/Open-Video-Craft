@@ -13,12 +13,12 @@ const iso = (minutesAgo) => new Date(now.getTime() - minutesAgo * 60_000).toISOS
 
 const demoAssetBase = "http://127.0.0.1:5173/demo-assets";
 
-const appInfo = { version: "1.1.1", isPackaged: true, platform: "darwin" };
+const appInfo = { version: "1.2.1", isPackaged: true, platform: "darwin" };
 
 const updateStatus = {
   state: "not-available",
-  currentVersion: "1.1.1",
-  latestVersion: "1.1.1",
+  currentVersion: "1.2.1",
+  latestVersion: "1.2.1",
   message: "You're up to date.",
   checkedAt: iso(4),
   downloadProgress: null,
@@ -51,6 +51,7 @@ const recentProjects = [
     durationMs: 20_000,
     updatedAt: iso(12),
     mediaAvailability: { screen: true, camera: true, audio: true },
+    thumbnailUrl: `${demoAssetBase}/product-demo.mp4`,
     available: true
   },
   {
@@ -61,6 +62,7 @@ const recentProjects = [
     durationMs: 154_000,
     updatedAt: iso(60 * 26),
     mediaAvailability: { screen: true, camera: false, audio: true },
+    thumbnailUrl: `${demoAssetBase}/intro.mp4`,
     available: true
   },
   {
@@ -71,6 +73,7 @@ const recentProjects = [
     durationMs: 47_000,
     updatedAt: iso(60 * 49),
     mediaAvailability: { screen: true, camera: false, audio: false },
+    thumbnailUrl: `${demoAssetBase}/product-demo.mp4`,
     available: true
   }
 ];
@@ -146,7 +149,7 @@ const demoEditorState = {
     subtitleLanguage: "english",
     subtitleStyle: "karaoke",
     layoutMode: "bubble",
-    backgroundStyle: "gradient-1",
+    backgroundStyle: "gradient-3",
     activeBackgroundCategory: "gradient",
     cameraSize: 24,
     cameraPosition: "bottom-right",
@@ -167,7 +170,8 @@ const demoEditorState = {
 
 const api = {
   app: {
-    getInfo: async () => appInfo
+    getInfo: async () => appInfo,
+    openExternal: async () => true
   },
   updates: {
     getStatus: async () => updateStatus,

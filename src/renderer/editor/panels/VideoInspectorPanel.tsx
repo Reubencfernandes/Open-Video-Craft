@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { CameraContentTransform } from "../types";
 
 const fieldClassName =
-  "h-9 min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.045] px-3 text-sm text-white outline-none focus:border-fuchsia-400/50";
+  "h-9 min-w-0 rounded-lg border border-white/[0.05] bg-white/[0.045] px-3 text-sm text-white outline-none focus:border-amber-400/50";
 
 export function VideoInspectorPanel(props: {
   scale: number;
@@ -15,7 +15,6 @@ export function VideoInspectorPanel(props: {
 }) {
   const [rotation, setRotation] = useState(0);
   const [opacity, setOpacity] = useState(100);
-  const [speed, setSpeed] = useState(100);
 
   const resetTransform = () => {
     props.onScaleChange(100);
@@ -36,7 +35,7 @@ export function VideoInspectorPanel(props: {
         <label className="grid gap-2">
           <span>Scale</span>
           <span className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
-            <input className="w-full accent-fuchsia-400" type="range" min="25" max="200" value={props.scale} onChange={(event) => props.onScaleChange(Number(event.target.value))} />
+            <input className="w-full accent-amber-400" type="range" min="25" max="200" value={props.scale} onChange={(event) => props.onScaleChange(Number(event.target.value))} />
             <span className={`${fieldClassName} grid place-items-center tabular-nums`}>{props.scale}%</span>
           </span>
         </label>
@@ -58,14 +57,14 @@ export function VideoInspectorPanel(props: {
         <label className="grid gap-2">
           <span>Rotate</span>
           <span className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
-            <input className="w-full accent-fuchsia-400" type="range" min="-180" max="180" value={rotation} onChange={(event) => setRotation(Number(event.target.value))} />
+            <input className="w-full accent-amber-400" type="range" min="-180" max="180" value={rotation} onChange={(event) => setRotation(Number(event.target.value))} />
             <span className={`${fieldClassName} grid place-items-center tabular-nums`}>{rotation}°</span>
           </span>
         </label>
 
         <div className="flex items-center gap-3">
           <span className="min-w-10">Flip</span>
-          <button className={`grid h-8 w-14 place-items-center rounded-lg border border-white/[0.04] ${props.transform.mirrored ? "bg-fuchsia-500/15 text-fuchsia-300" : "bg-white/[0.04] text-slate-300"}`} type="button" title="Flip horizontally" onClick={() => props.onTransformChange({ mirrored: !props.transform.mirrored })}>
+          <button className={`grid h-8 w-14 place-items-center rounded-lg border border-white/[0.04] ${props.transform.mirrored ? "bg-amber-500/15 text-amber-300" : "bg-white/[0.04] text-slate-300"}`} type="button" title="Flip horizontally" onClick={() => props.onTransformChange({ mirrored: !props.transform.mirrored })}>
             <FlipHorizontal2 size={16} />
           </button>
           <button className="grid h-8 w-14 place-items-center rounded-lg border border-white/[0.04] bg-white/[0.04] text-slate-300" type="button" title="Flip vertically">
@@ -86,18 +85,9 @@ export function VideoInspectorPanel(props: {
         <label className="grid gap-2">
           <span>Opacity</span>
           <span className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
-            <input className="w-full accent-fuchsia-400" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} />
+            <input className="w-full accent-amber-400" type="range" min="0" max="100" value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} />
             <span className={`${fieldClassName} grid place-items-center tabular-nums`}>{opacity}%</span>
           </span>
-        </label>
-      </section>
-
-      <section className="border-t border-white/[0.07] pt-4">
-        <label className="grid grid-cols-[1fr_6rem] items-center gap-3">
-          <span className="text-[0.92rem] font-semibold text-white">Speed</span>
-          <select className={fieldClassName} value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-            <option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="125">125%</option><option value="150">150%</option><option value="200">200%</option>
-          </select>
         </label>
       </section>
     </div>

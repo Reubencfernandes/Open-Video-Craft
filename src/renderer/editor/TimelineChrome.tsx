@@ -127,20 +127,20 @@ export function TimelineRuler(props: { duration: number }) {
 }
 
 /**
- * The playhead: a violet line topped with a rounded timecode pill, CapCut
+ * The playhead: a amber line topped with a rounded timecode pill, CapCut
  * style. The outer div is a widened invisible hit/positioning area centered
  * on the current time; the line is drawn with ::before.
  */
 export function TimelinePlayhead(props: { playheadPercent: number; currentTime: number }) {
   return (
     <div
-      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2 before:rounded-full before:bg-[#a78bfa] before:content-['']"
+      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2 before:rounded-full before:bg-[#f59e0b] before:content-['']"
       aria-hidden="true"
       style={{
         left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${props.playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
       }}
     >
-      <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#a78bfa] bg-[#17131f] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums text-white shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]">
+      <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#f59e0b] bg-[#17131f] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums text-white shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]">
         {formatSeconds(props.currentTime)}
       </span>
     </div>

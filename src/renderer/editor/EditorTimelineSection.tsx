@@ -38,6 +38,7 @@ export function EditorTimelineSection(props: {
   renderDuration: number;
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
+  audioLevels: Record<string, { volume: number; muted: boolean }>;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
@@ -112,6 +113,7 @@ export function EditorTimelineSection(props: {
       renderDuration={props.renderDuration}
       videoClips={props.videoClips}
       audioTracks={props.audioTracks}
+      audioLevels={props.audioLevels}
       zoomEffects={props.zoomEffects}
       speedEffects={props.speedEffects}
       subtitles={props.subtitles}

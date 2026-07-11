@@ -12,12 +12,20 @@ import type {
   ProjectLibraryEntry
 } from "../shared/types";
 import { HomeActionCard } from "./home/HomeActionCard";
+import { ChangelogDialog } from "./home/ChangelogDialog";
 import { HomeHeader } from "./home/HomeHeader";
 import { HomeSidebar } from "./home/HomeSidebar";
 import { RecentProjectsSection } from "./home/RecentProjectsSection";
+import { latestRelease } from "./home/latest-release";
+import { FloatingNotification } from "./notifications/FloatingNotification";
+import { UpdateNotification } from "./notifications/UpdateNotification";
 import { PermissionOnboarding } from "./PermissionOnboarding";
+import { useAppUpdateStatus } from "./useAppUpdateStatus";
 
 type LaunchAction = "record" | "edit" | "open-existing" | "remove-recent";
+
+// Safe public fallback until the owner supplies a profile or community invite.
+const discordContactUrl = "https://discord.com/";
 
 export function App() {
   const [busyAction, setBusyAction] = useState<LaunchAction | null>(null);
@@ -27,6 +35,8 @@ export function App() {
   const [recentProjects, setRecentProjects] = useState<ProjectLibraryEntry[]>([]);
   const [recentProjectsLoading, setRecentProjectsLoading] = useState(true);
   const [projectSearch, setProjectSearch] = useState("");
+  const [changelogOpen, setChangelogOpen] = useState(false);
+  const { appInfo, updateStatus, installUpdate } = useAppUpdateStatus();
 
   useEffect(() => {
     void loadRecentProjects();
@@ -146,6 +156,14 @@ export function App() {
     }
   }
 
+  async function openDiscordContact() {
+    try {
+      await window.openVideoCraft.app.openExternal(discordContactUrl);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   const normalizedSearch = projectSearch.trim().toLocaleLowerCase();
   const visibleProjects = normalizedSearch
     ? recentProjects.filter((project) => project.name.toLocaleLowerCase().includes(normalizedSearch))
@@ -153,18 +171,24 @@ export function App() {
 
   return (
     <main className="grid h-screen min-h-[760px] grid-cols-[280px_minmax(0,1fr)] gap-4 overflow-hidden bg-[radial-gradient(circle_at_92%_8%,rgb(55_65_81_/_0.16),transparent_28%),#050606] p-3 text-white">
-      <HomeSidebar disabled={busyAction !== null} onNewProject={() => void openEditor()} onRecord={() => void openRecorder()} onOpenEditor={() => void openEditor()} />
+      <HomeSidebar
+        disabled={busyAction !== null}
+        version={appInfo?.version ?? latestRelease.version}
+        onNewProject={() => void openEditor()}
+        onRecord={() => void openRecorder()}
+        onOpenEditor={() => void openEditor()}
+        onContact={() => void openDiscordContact()}
+        onOpenChangelog={() => setChangelogOpen(true)}
+      />
 
-      <section className="min-h-0 overflow-auto rounded-2xl border border-white/[0.055] bg-[linear-gradient(145deg,#101112,#090a0b)] px-9 py-8 shadow-[0_24px_80px_rgb(0_0_0_/_0.3)]">
+      <section className="min-h-0 overflow-auto rounded-2xl bg-[linear-gradient(145deg,#101112,#090a0b)] px-9 py-8 shadow-[0_24px_80px_rgb(0_0_0_/_0.3)]">
         <div className="grid gap-8">
           <HomeHeader search={projectSearch} onSearchChange={setProjectSearch} />
 
-          {errorMessage ? <div className="rounded-xl border border-red-400/20 bg-red-500/[0.08] px-4 py-3 text-sm text-red-100">{errorMessage}</div> : null}
-
           <div className="grid grid-cols-3 gap-5">
             <HomeActionCard icon={<CircleDot className="text-rose-400" size={27} />} title="Record" description="Record your screen, webcam, or voice with high quality." actionLabel="Start Recording" disabled={busyAction !== null} onAction={() => void openRecorder()} />
-            <HomeActionCard icon={<Scissors className="text-violet-400" size={27} />} title="Edit a Project" description="Open the editor and start creating your next video." actionLabel="Open Editor" disabled={busyAction !== null} onAction={() => void openEditor()} />
-            <HomeActionCard icon={<FolderOpen className="text-sky-400" size={27} />} title="Open a Project" description="Browse and open any of your saved projects." actionLabel="Browse Projects" disabled={busyAction !== null} onAction={() => void openExistingProject()} />
+            <HomeActionCard icon={<Scissors className="text-amber-400" size={27} />} title="Edit a Project" description="Open the editor and start creating your next video." actionLabel="Open Editor" disabled={busyAction !== null} onAction={() => void openEditor()} />
+            <HomeActionCard icon={<FolderOpen className="text-emerald-400" size={27} />} title="Open a Project" description="Browse and open any of your saved projects." actionLabel="Browse Projects" disabled={busyAction !== null} onAction={() => void openExistingProject()} />
           </div>
 
           <PermissionOnboarding loading={permissionsLoading} status={permissionStatus} onOpenGuide={openPermissionGuide} onOpenSettings={openPermissionSettings} onRefresh={() => void loadPermissionsStatus()} onRequestMedia={requestMediaPermission} />
@@ -172,6 +196,9 @@ export function App() {
           <RecentProjectsSection projects={visibleProjects} loading={recentProjectsLoading} disabled={busyAction !== null} onRefresh={() => void loadRecentProjects()} onOpen={(project) => void openRecentProject(project)} onDelete={(projectId) => void deleteRecentProject(projectId)} />
         </div>
       </section>
+      {errorMessage ? <FloatingNotification kind="error" title="We are so sorry!" message={errorMessage} onDismiss={() => setErrorMessage(null)} /> : null}
+      {!errorMessage ? <UpdateNotification status={updateStatus} onInstall={() => void installUpdate()} /> : null}
+      <ChangelogDialog open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </main>
   );
 }

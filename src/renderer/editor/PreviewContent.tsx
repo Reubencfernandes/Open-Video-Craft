@@ -20,10 +20,10 @@ const mediaFrameClassName =
   "absolute inset-0 size-full border-0 bg-transparent transition-[transform] duration-[45ms] ease-[cubic-bezier(0.2,0,0.2,1)] will-change-transform";
 
 const editOverlayClassName =
-  "absolute z-[3] box-border cursor-grab touch-none border border-cyan-300/90 bg-sky-500/10 shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
+  "absolute z-[3] box-border cursor-grab touch-none border border-amber-300/90 bg-emerald-500/10 shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
 
 const handleBaseClassName =
-  "absolute z-[1] size-3 rounded-full border-2 border-white bg-cyan-300 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)]";
+  "absolute z-[1] size-3 rounded-full border-2 border-white bg-amber-300 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)]";
 
 const handleClassByMode: Record<ScreenLayoutDragMode, string> = {
   move: "",
@@ -291,9 +291,9 @@ function SubtitleOverlay(props: {
           key={`${word.text}-${index}`}
           className={`mx-[0.16em] inline-block rounded transition ${
             index === activeIndex && props.style === "karaoke"
-              ? "bg-violet-500 px-[0.16em] text-white"
+              ? "bg-amber-500 px-[0.16em] text-white"
               : index === activeIndex && props.style === "pop"
-                ? "scale-110 text-sky-400"
+                ? "scale-110 text-emerald-400"
                 : ""
           }`}
         >

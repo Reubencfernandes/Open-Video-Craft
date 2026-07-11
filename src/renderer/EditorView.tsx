@@ -22,6 +22,7 @@ import type {
 } from "../shared/types";
 import { ExportDialog } from "./editor/ExportDialog";
 import { EditorNotifications } from "./editor/EditorNotifications";
+import { UpdateNotification } from "./notifications/UpdateNotification";
 import { EditorPreviewPanel } from "./editor/EditorPreviewPanel";
 import { EditorTimelineSection } from "./editor/EditorTimelineSection";
 import { EditorToolPanel } from "./editor/EditorToolPanel";
@@ -37,6 +38,7 @@ import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
 import { useTimelineController } from "./editor/useTimelineController";
 import { useTimelineViewport } from "./editor/useTimelineViewport";
+import { useAppUpdateStatus } from "./useAppUpdateStatus";
 import {
   formatSubtitleLanguage,
   whisperTranscriptionModelLabel
@@ -65,8 +67,6 @@ import type {
   ZoomEffect
 } from "./editor/types";
 
-const transientEditorMessages = new Set(["Project saved", "Clip copied", "Clip pasted"]);
-
 export function EditorView() {
   const [projectId, setProjectId] = useState(() =>
     new URLSearchParams(window.location.search).get("projectId")
@@ -77,7 +77,9 @@ export function EditorView() {
   const [activePanel, setActivePanel] = useState<MediaPanelTab>("all");
   const [activeTool, setActiveTool] = useState<EditorTool>("media");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("bubble");
-  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("real-world-5");
+  // New compositions start on the warm Ember background so the canvas matches
+  // the editor's neutral/amber palette; saved projects keep their own choice.
+  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("real-world-6");
   const [activeBackgroundCategory, setActiveBackgroundCategory] =
     useState<BackgroundCategory>("image");
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(null);
@@ -128,6 +130,7 @@ export function EditorView() {
   const [duration, setDuration] = useState(0);
   const [timelineViewDuration, setTimelineViewDuration] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const { updateStatus, installUpdate } = useAppUpdateStatus();
 
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
 
@@ -200,16 +203,6 @@ export function EditorView() {
       : null;
     setCustomBackgroundUrl(customBackground?.url ?? null);
   }, [customBackgroundImportId, importedMedia]);
-
-  // Auto-dismiss transient confirmation toasts (save / clipboard).
-  useEffect(() => {
-    if (!exportMessage || !transientEditorMessages.has(exportMessage)) {
-      return undefined;
-    }
-
-    const timeout = window.setTimeout(() => setExportMessage(null), 2200);
-    return () => window.clearTimeout(timeout);
-  }, [exportMessage]);
 
   // ---------------------------------------------------------------------------
   // Derived data: media library, timeline clips, playback geometry.
@@ -394,8 +387,6 @@ export function EditorView() {
     beginCameraLayoutDrag,
     beginScreenLayoutDrag,
     resetCameraContentTransform,
-    selectCameraPosition,
-    selectCameraSize,
     updateCameraContentTransform
   } = usePreviewLayoutControls({
     activeTool,
@@ -528,7 +519,8 @@ export function EditorView() {
             onResolutionChange={setExportResolution}
           />
         ) : null}
-        <EditorNotifications error={error} exportMessage={exportMessage} />
+        <EditorNotifications error={error} exportMessage={exportMessage} onDismissError={() => setError(null)} onDismissMessage={() => setExportMessage(null)} />
+        {!error && !exportMessage ? <UpdateNotification status={updateStatus} onInstall={() => void installUpdate()} /> : null}
 
         <div className="grid min-h-0 grid-cols-[92px_340px_minmax(420px,1fr)_320px] gap-3 px-3 py-2">
           <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
@@ -548,16 +540,8 @@ export function EditorView() {
 
           <EditorToolPanel
             activeTool={activeTool}
-            onToolChange={setActiveTool}
-            layoutMode={layoutMode}
             screenScale={screenPosition.scale}
-            screenAspectRatio={screenAspectRatio}
-            screenAspectEnabled={screenAspectEnabled}
-            cameraShape={cameraShape}
-            cameraBorderStyle={cameraBorderStyle}
             cameraContentTransform={cameraContentTransform}
-            cameraPosition={cameraPosition}
-            cameraSize={cameraSize}
             masterVolume={masterVolume}
             audioSources={audioSources}
             audioLevels={audioLevels}
@@ -577,17 +561,11 @@ export function EditorView() {
             backgroundStyle={backgroundStyle}
             videoCornerStyle={videoCornerStyle}
             onSelectItem={selectTimelineItem}
-            onLayoutModeChange={setLayoutMode}
             onScreenScaleChange={(scale) =>
               setScreenPosition((current) => ({ ...current, scale }))
             }
-            onScreenAspectRatioChange={setScreenAspectRatio}
-            onCameraShapeChange={setCameraShape}
-            onCameraBorderStyleChange={setCameraBorderStyle}
             onCameraContentTransformChange={updateCameraContentTransform}
             onCameraContentTransformReset={resetCameraContentTransform}
-            onCameraPositionChange={selectCameraPosition}
-            onCameraSizeChange={selectCameraSize}
             onMasterVolumeChange={setMasterVolume}
             onAddBackgroundMusic={() =>
               void importMedia({ backgroundAudio: true, selectFirst: false })
@@ -676,6 +654,7 @@ export function EditorView() {
           renderDuration={timelineRenderDuration}
           videoClips={videoTimelineClips}
           audioTracks={audioTimelineTracks}
+          audioLevels={audioLevels}
           zoomEffects={zoomEffects}
           speedEffects={speedEffects}
           subtitles={subtitles}

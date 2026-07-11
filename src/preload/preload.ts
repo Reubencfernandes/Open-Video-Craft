@@ -26,7 +26,8 @@ import type {
 
 const api = {
   app: {
-    getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info")
+    getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
+    openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:open-external", url)
   },
   updates: {
     getStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updates:get-status"),

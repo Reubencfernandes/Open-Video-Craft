@@ -29,7 +29,7 @@ export function AssetCard(props: {
         <div
           className={cx(
             "grid aspect-[1.32] w-full place-items-center overflow-hidden rounded-lg border border-white/[0.08] bg-[#17181c] text-slate-400 [&>img]:h-full [&>img]:w-full [&>img]:object-cover",
-            props.selected && "border-purple-400/85 shadow-[0_0_0_3px_rgb(168_85_247_/_0.18)]"
+            props.selected && "border-amber-400/85 shadow-[0_0_0_3px_rgb(245_158_11_/_0.18)]"
           )}
         >
           {props.item.kind === "video" ? (

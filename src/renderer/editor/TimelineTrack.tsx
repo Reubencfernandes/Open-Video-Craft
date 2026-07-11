@@ -17,14 +17,14 @@ import { cx } from "../classNames";
  */
 export function TimelineTrack(props: {
   label: string;
-  accent: "purple" | "cyan" | "green" | "amber" | "rose";
+  accent: "warm" | "lime" | "green" | "amber" | "rose";
   icon: ReactNode;
   children: ReactNode;
   controls?: ReactNode;
 }) {
   const accentClassName = {
-    purple: "text-violet-300",
-    cyan: "text-cyan-400",
+    warm: "text-amber-300",
+    lime: "text-lime-400",
     green: "text-emerald-400",
     amber: "text-amber-500",
     rose: "text-rose-400"

@@ -6,7 +6,8 @@ import { Film, Music, Type, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
-import { useMediaThumbnail } from "./thumbnail-cache";
+import { useMediaFilmstrip } from "./thumbnail-cache";
+import { VideoFilmstrip } from "./VideoFilmstrip";
 import { SpeedIcon } from "./SpeedIcon";
 import { createTimelineClipStyle } from "./timeline-utils";
 import type {
@@ -18,7 +19,7 @@ import type {
 } from "./types";
 
 /**
- * CapCut-style clip look: rounded violet fills for audio/text, filmstrip
+ * Compact clip look: neutral/warm fills for audio/text, decoded filmstrip
  * thumbnails for video. Every clip shares the same base shape; only the fill
  * differs by lane.
  */
@@ -26,7 +27,7 @@ const clipBaseClassName =
   "group absolute top-[0.2rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-lg border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
 
 /** Inset outline so selection is visible inside lanes with overflow:hidden. */
-const clipSelectedClassName = "outline outline-2 -outline-offset-2 outline-violet-300";
+const clipSelectedClassName = "outline outline-2 -outline-offset-2 outline-amber-300";
 
 /** Widened hit areas on both clip edges used to start a trim drag; a white
  * pill handle fades in on hover, matching the reference design. */
@@ -56,6 +57,7 @@ export function TimelineClip(props: {
   clip: TimelineMediaClip;
   timelineDuration: number;
   selected: boolean;
+  audioLevel?: { volume: number; muted: boolean };
   onSelect: () => void;
   onTrimPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -65,13 +67,13 @@ export function TimelineClip(props: {
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>, segmentId: string) => void;
 }) {
   const item = props.clip.item;
-  const { thumbnailUrl } = useMediaThumbnail(item);
+  const { frames } = useMediaFilmstrip(item);
   const fillClassName =
     item.kind === "audio"
-      ? "bg-[#5b21b6]"
+      ? "bg-[#17543a]"
       : item.kind === "image"
-        ? "bg-[#4c1d95]"
-        : "bg-[#312e81]";
+        ? "bg-[#6b4522]"
+        : "bg-[#242527]";
 
   return (
     <button
@@ -82,25 +84,15 @@ export function TimelineClip(props: {
       onClick={props.onSelect}
       onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
     >
-      {item.kind !== "audio" && thumbnailUrl ? (
-        <>
-          {/* Poster frame repeated as a filmstrip; a soft scrim keeps the
-              label legible without hiding the frames. */}
-          <span
-            className="pointer-events-none absolute inset-0 z-0 opacity-90"
-            style={{
-              backgroundImage: `url(${thumbnailUrl})`,
-              backgroundSize: "auto 100%",
-              backgroundRepeat: "repeat-x"
-            }}
-            aria-hidden="true"
-          />
-          <span className="pointer-events-none absolute inset-0 z-0 bg-black/35" aria-hidden="true" />
-        </>
-      ) : null}
+      {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}
       {item.kind === "audio" ? (
         <>
-          <BezierAudioWaveform id={props.clip.id} name={item.name} />
+          <BezierAudioWaveform
+            id={props.clip.id}
+            name={item.name}
+            volume={props.audioLevel?.volume ?? 100}
+            muted={props.audioLevel?.muted ?? false}
+          />
           <Music className="relative z-[2] flex-none" size={13} />
         </>
       ) : (
@@ -162,7 +154,7 @@ export function TimelineSpeedClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#256f7a]", props.selected && clipSelectedClassName)}
+      className={cx(clipBaseClassName, "bg-[#3f6212]", props.selected && clipSelectedClassName)}
       type="button"
       title={`Speed ${props.effect.rate}x`}
       style={createTimelineClipStyle(
@@ -197,7 +189,7 @@ export function TimelineSubtitleClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#6d28d9]", props.selected && clipSelectedClassName)}
+      className={cx(clipBaseClassName, "bg-[#7c3f16]", props.selected && clipSelectedClassName)}
       type="button"
       title={props.subtitle.text}
       style={createTimelineClipStyle(

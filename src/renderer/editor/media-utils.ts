@@ -92,6 +92,11 @@ export interface VideoPoster {
   duration: number | null;
 }
 
+export interface VideoFilmstrip {
+  frames: string[];
+  duration: number | null;
+}
+
 // Captures a real decoded frame into a small JPEG so the media grid and the
 // timeline clips can show an actual thumbnail, and reports the resolved
 // duration alongside it. Handles chunked recordings that report an Infinity
@@ -99,6 +104,13 @@ export interface VideoPoster {
 // a timeout, so a recording that will not seek still yields whatever frame is
 // already decoded instead of leaving the thumbnail stuck on the placeholder.
 export async function captureVideoPoster(url: string): Promise<VideoPoster> {
+  const filmstrip = await captureVideoFilmstrip(url, 1);
+  if (!filmstrip.frames[0]) throw new Error("Video has no decodable frames.");
+  return { dataUrl: filmstrip.frames[0], duration: filmstrip.duration };
+}
+
+/** Captures distinct frames across the media duration for timeline filmstrips. */
+export async function captureVideoFilmstrip(url: string, frameCount = 10): Promise<VideoFilmstrip> {
   const video = document.createElement("video");
   video.muted = true;
   video.defaultMuted = true;
@@ -115,37 +127,48 @@ export async function captureVideoPoster(url: string): Promise<VideoPoster> {
 
   try {
     const duration = await resolveVideoDuration(video);
-    const seekTo =
-      Number.isFinite(duration) && duration > 0
-        ? clampNumber(duration * 0.1, 0.1, Math.max(0.1, duration - 0.05))
-        : 0.1;
-    await seekVideoTo(video, seekTo);
-    await waitForDecodedFrame(video);
+    const resolvedDuration = Number.isFinite(duration) && duration > 0 ? duration : null;
+    const frames: string[] = [];
+    const count = Math.max(1, Math.min(16, Math.round(frameCount)));
 
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-    if (!width || !height) {
-      throw new Error("Video has no decodable frames.");
+    for (let index = 0; index < count; index += 1) {
+      // Stay away from exact start/end frames, which are frequently black in
+      // recorded WebM and transition-heavy imported videos.
+      const ratio = count === 1 ? 0.22 : 0.06 + (index / (count - 1)) * 0.88;
+      const seekTo = resolvedDuration
+        ? clampNumber(resolvedDuration * ratio, 0.05, Math.max(0.05, resolvedDuration - 0.05))
+        : 0.1 + index * 0.15;
+      await seekVideoTo(video, seekTo);
+      await waitForDecodedFrame(video);
+
+      const frame = captureCurrentVideoFrame(video);
+      if (frame) frames.push(frame);
     }
 
-    const scale = Math.min(1, 320 / width);
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(width * scale));
-    canvas.height = Math.max(1, Math.round(height * scale));
-    const context = canvas.getContext("2d");
-    if (!context) {
-      throw new Error("Canvas 2D context is unavailable.");
-    }
-
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (frames.length === 0) throw new Error("Video has no decodable frames.");
     return {
-      dataUrl: canvas.toDataURL("image/jpeg", 0.82),
-      duration: Number.isFinite(duration) && duration > 0 ? duration : null
+      frames,
+      duration: resolvedDuration
     };
   } finally {
     video.removeAttribute("src");
     video.load();
   }
+}
+
+function captureCurrentVideoFrame(video: HTMLVideoElement): string | null {
+  const width = video.videoWidth;
+  const height = video.videoHeight;
+  if (!width || !height) return null;
+
+  const scale = Math.min(1, 240 / width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width * scale));
+  canvas.height = Math.max(1, Math.round(height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.78);
 }
 
 function resolveVideoDuration(video: HTMLVideoElement): Promise<number> {

@@ -66,6 +66,7 @@ export function Timeline(props: {
   renderDuration: number;
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
+  audioLevels: Record<string, { volume: number; muted: boolean }>;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
@@ -128,7 +129,7 @@ export function Timeline(props: {
         onPointerCancel={props.onResizePointerUp}
         onDoubleClick={props.onResizeDoubleClick}
       >
-        <span className="h-1 w-20 rounded-full bg-white/[0.12] transition group-hover:bg-violet-400/80" />
+        <span className="h-1 w-20 rounded-full bg-white/[0.12] transition group-hover:bg-amber-400/80" />
       </button>
 
       <TimelineToolbar
@@ -185,7 +186,7 @@ export function Timeline(props: {
           >
         <TimelinePlayhead playheadPercent={props.playheadPercent} currentTime={props.currentTime} />
 
-        <TimelineTrack label="Video 1" accent="purple" icon={<Film size={14} />}>
+        <TimelineTrack label="Video 1" accent="warm" icon={<Film size={14} />}>
           {props.videoClips.map((clip) => (
             <TimelineClip
               key={clip.id}
@@ -215,7 +216,7 @@ export function Timeline(props: {
         ) : null}
 
         {props.activeTool === "speed" ? (
-          <TimelineTrack label="Speed" accent="cyan" icon={<SpeedIcon size={14} />}>
+          <TimelineTrack label="Speed" accent="lime" icon={<SpeedIcon size={14} />}>
             {getOrderedZoomTimingItems(props.speedEffects).map((effect) => (
               <TimelineSpeedClip
                 key={effect.id}
@@ -233,13 +234,14 @@ export function Timeline(props: {
               <TimelineTrack
                 key={track.lane}
                 label={`Audio ${track.lane + 1}`}
-                accent="purple"
+                accent="warm"
                 icon={<AudioLines size={14} />}
               >
                 {track.clips.map((clip) => (
                   <TimelineClip
                     key={clip.id}
                     clip={clip}
+                    audioLevel={props.audioLevels[clip.item.id]}
                     timelineDuration={props.renderDuration}
                     selected={props.selectedSegmentId === clip.id}
                     onSelect={() => props.onSelectClip(clip)}
@@ -251,7 +253,7 @@ export function Timeline(props: {
             ))}
 
         {props.subtitles.length > 0 ? (
-          <TimelineTrack label="Text 1" accent="purple" icon={<Type size={14} />}>
+          <TimelineTrack label="Text 1" accent="warm" icon={<Type size={14} />}>
             {props.subtitles.map((subtitle) => (
               <TimelineSubtitleClip
                 key={subtitle.id}

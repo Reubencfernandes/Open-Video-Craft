@@ -1,28 +1,22 @@
 /**
- * The right-hand properties panel: a tab strip (Video / Audio / Effects, plus
- * a contextual tab for the other tools) that routes the active tool to its
- * panel component and forwards the relevant slice of editor state/handlers.
- * The media library lives in its own always-visible panel on the left.
+ * Right-hand inspector router. Exactly one panel is rendered for the selected
+ * rail category so controls from unrelated tools can never appear together.
  */
 import { AudioPanel } from "./panels/AudioPanel";
 import { CutPanel } from "./panels/CutPanel";
+import { MediaInspectorPanel } from "./panels/MediaInspectorPanel";
 import { VideoInspectorPanel } from "./panels/VideoInspectorPanel";
 import { SpeedPanel } from "./panels/SpeedPanel";
 import { StylePanel } from "./panels/StylePanel";
 import { SubtitlesPanel } from "./panels/SubtitlesPanel";
 import { ZoomPanel } from "./panels/ZoomPanel";
-import { EditorPropertyTabs } from "./EditorPropertyTabs";
+import { editorTools } from "./tools";
 import type {
   BackgroundCategory,
   BackgroundStyle,
-  CameraBorderStyle,
   CameraContentTransform,
-  CameraPosition,
-  CameraShape,
   EditorMediaItem,
   EditorTool,
-  LayoutMode,
-  ScreenAspectRatio,
   SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
@@ -33,16 +27,8 @@ import type {
 
 export function EditorToolPanel(props: {
   activeTool: EditorTool;
-  onToolChange: (tool: EditorTool) => void;
-  layoutMode: LayoutMode;
   screenScale: number;
-  screenAspectRatio: ScreenAspectRatio;
-  screenAspectEnabled: boolean;
-  cameraShape: CameraShape;
-  cameraBorderStyle: CameraBorderStyle;
   cameraContentTransform: CameraContentTransform;
-  cameraPosition: CameraPosition;
-  cameraSize: number;
   masterVolume: number;
   audioSources: EditorMediaItem[];
   audioLevels: Record<string, { volume: number; muted: boolean }>;
@@ -62,15 +48,9 @@ export function EditorToolPanel(props: {
   backgroundStyle: BackgroundStyle;
   videoCornerStyle: VideoCornerStyle;
   onSelectItem: (itemId: string) => void;
-  onLayoutModeChange: (mode: LayoutMode) => void;
   onScreenScaleChange: (scale: number) => void;
-  onScreenAspectRatioChange: (aspectRatio: ScreenAspectRatio) => void;
-  onCameraShapeChange: (shape: CameraShape) => void;
-  onCameraBorderStyleChange: (border: CameraBorderStyle) => void;
   onCameraContentTransformChange: (patch: Partial<CameraContentTransform>) => void;
   onCameraContentTransformReset: () => void;
-  onCameraPositionChange: (position: CameraPosition) => void;
-  onCameraSizeChange: (size: number) => void;
   onMasterVolumeChange: (volume: number) => void;
   onAddBackgroundMusic: () => void;
   onSetAudioLevel: (itemId: string, patch: Partial<{ volume: number; muted: boolean }>) => void;
@@ -92,20 +72,20 @@ export function EditorToolPanel(props: {
   onUploadCustomBackground: () => void;
   onCornerStyleChange: (style: VideoCornerStyle) => void;
 }) {
-  // The media library lives on the left; while it is the active rail tool the
-  // properties panel falls back to the Video (layout) tab.
-  const effectiveTool: EditorTool = props.activeTool === "media" ? "layout" : props.activeTool;
+  const activeToolMeta = editorTools.find((tool) => tool.id === props.activeTool);
   return (
     <aside className="order-4 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] shadow-[0_18px_45px_rgb(0_0_0_/_0.24)]">
-      <EditorPropertyTabs effectiveTool={effectiveTool} onToolChange={props.onToolChange} />
+      <header className="flex min-h-12 items-center gap-2 border-b border-white/[0.06] px-4 text-sm font-semibold text-white"><span className="text-amber-300">{activeToolMeta?.icon}</span>{activeToolMeta?.label ?? "Inspector"}</header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
 
-      {effectiveTool === "layout" ? (
+      {props.activeTool === "media" ? <MediaInspectorPanel item={props.previewItem} /> : null}
+
+      {props.activeTool === "layout" ? (
         <VideoInspectorPanel scale={props.screenScale} transform={props.cameraContentTransform} onScaleChange={props.onScreenScaleChange} onTransformChange={props.onCameraContentTransformChange} onReset={props.onCameraContentTransformReset} />
       ) : null}
 
-      {effectiveTool === "audio" ? (
+      {props.activeTool === "audio" ? (
         <AudioPanel
           masterVolume={props.masterVolume}
           audioSources={props.audioSources}
@@ -119,7 +99,7 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
-      {effectiveTool === "zoom" ? (
+      {props.activeTool === "zoom" ? (
         <ZoomPanel
           previewItem={props.previewItem}
           selectedZoomEffect={props.selectedZoomEffect}
@@ -129,7 +109,7 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
-      {effectiveTool === "speed" ? (
+      {props.activeTool === "speed" ? (
         <SpeedPanel
           selectedSpeedEffect={props.selectedSpeedEffect}
           onAddSpeed={props.onAddSpeed}
@@ -138,7 +118,7 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
-      {effectiveTool === "subtitles" ? (
+      {props.activeTool === "subtitles" ? (
         <SubtitlesPanel
           sttStatus={props.sttStatus}
           sttModelLabel={props.sttModelLabel}
@@ -154,7 +134,7 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
-      {effectiveTool === "cut" ? (
+      {props.activeTool === "cut" ? (
         <CutPanel
           selectedClip={props.selectedClip}
           onSplitAtPlayhead={props.onSplitAtPlayhead}
@@ -162,7 +142,7 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
-      {effectiveTool === "style" ? (
+      {props.activeTool === "style" ? (
         <StylePanel
           activeCategory={props.activeBackgroundCategory}
           backgroundStyle={props.backgroundStyle}
