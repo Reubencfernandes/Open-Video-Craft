@@ -1,3 +1,7 @@
+/**
+ * Recorder helpers: mime-type candidates, optional camera/mic streams,
+ * MediaRecorder construction per track, and small formatting utilities.
+ */
 import type { DeviceSelection, ProjectDevices, RecordingTrack } from "../../shared/types";
 import {
   createMediaRecorderOptions,
@@ -26,21 +30,21 @@ export function delay(ms: number): Promise<void> {
 
 export async function getOptionalCameraStream(
   enabled: boolean,
-  deviceId: string | null
+  deviceId: string | null,
+  dimensions?: { width: number; height: number }
 ): Promise<MediaStream | null> {
   if (!enabled || !deviceId) {
     return null;
   }
 
+  const video: MediaTrackConstraints = { deviceId: { exact: deviceId } };
+  if (dimensions) {
+    video.width = { ideal: dimensions.width };
+    video.height = { ideal: dimensions.height };
+  }
+
   try {
-    return await navigator.mediaDevices.getUserMedia({
-      video: {
-        deviceId: {
-          exact: deviceId
-        }
-      },
-      audio: false
-    });
+    return await navigator.mediaDevices.getUserMedia({ video, audio: false });
   } catch {
     return null;
   }
@@ -72,9 +76,12 @@ export function createRecorders(input: {
   screenStream: MediaStream;
   cameraStream: MediaStream | null;
   micStream: MediaStream | null;
+  systemStream: MediaStream | null;
   screenMimeType: string;
   cameraMimeType: string | null;
   micMimeType: string | null;
+  systemMimeType: string | null;
+  screenBitsPerSecond?: number;
   onChunk: (track: RecordingTrack, blob: Blob) => void;
   onError: (error: unknown) => void;
 }): RecorderMap {
@@ -83,7 +90,8 @@ export function createRecorders(input: {
       input.screenStream,
       input.screenMimeType,
       (blob) => input.onChunk("screen", blob),
-      "video"
+      "video",
+      input.screenBitsPerSecond
     )
   };
 
@@ -105,6 +113,15 @@ export function createRecorders(input: {
     );
   }
 
+  if (input.systemStream && input.systemMimeType) {
+    recorders.system = createRecorder(
+      input.systemStream,
+      input.systemMimeType,
+      (blob) => input.onChunk("system", blob),
+      "audio"
+    );
+  }
+
   Object.values(recorders).forEach((recorder) => {
     if (recorder) {
       recorder.onerror = (event) => input.onError(event);
@@ -118,9 +135,13 @@ function createRecorder(
   stream: MediaStream,
   mimeType: string,
   onChunk: (blob: Blob) => void,
-  kind: RecorderKind
+  kind: RecorderKind,
+  videoBitsPerSecond?: number
 ): MediaRecorder {
-  const recorder = new MediaRecorder(stream, createMediaRecorderOptions(kind, mimeType));
+  const recorder = new MediaRecorder(
+    stream,
+    createMediaRecorderOptions(kind, mimeType, videoBitsPerSecond)
+  );
   recorder.ondataavailable = (event) => onChunk(event.data);
   return recorder;
 }

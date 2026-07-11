@@ -1,3 +1,6 @@
+/**
+ * Export dialog state and the renderer side of export requests.
+ */
 import { useState } from "react";
 import type {
   Dispatch,

@@ -1,3 +1,7 @@
+/**
+ * Factory functions for the default JSON files written into a new project
+ * folder (project.json, edits.json, subtitles.json).
+ */
 import type {
   DefaultEditsFile,
   ProjectDevices,

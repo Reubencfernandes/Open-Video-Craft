@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "1.0.10",
+  "version": "1.2.1",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -57,7 +57,6 @@
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",
     "mac": {
       "icon": "build/icon.icns",
-      "identity": "Developer ID Application: Reuben Fernandes (3XX79RB95N)",
       "forceCodeSigning": true,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -96,7 +95,7 @@
       ]
     },
     "nsis": {
-      "artifactName": "${productName}-Setup-${version}-${os}-${arch}.${ext}",
+      "artifactName": "Open-Video-Craft-Setup-${version}-${os}-${arch}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
@@ -104,7 +103,7 @@
       "createStartMenuShortcut": true
     },
     "portable": {
-      "artifactName": "${productName}-Portable-${version}-${os}-${arch}.${ext}"
+      "artifactName": "Open-Video-Craft-Portable-${version}-${os}-${arch}.${ext}"
     },
     "publish": {
       "provider": "github",

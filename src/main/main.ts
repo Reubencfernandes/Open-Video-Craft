@@ -1,12 +1,20 @@
+/**
+ * Main-process bootstrap and orchestrator: creates the app windows (main,
+ * floating recorder, editor, permission guide, recording-border overlay),
+ * registers every IPC handler, and wires the focused modules together.
+ */
 import {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
   protocol,
   screen as electronScreen,
+  shell,
 } from "electron";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
@@ -24,6 +32,10 @@ import {
   startAppBundleDrag
 } from "./desktop-permissions";
 import { createFallbackThumbnail, listDesktopCapturerSources } from "./desktop-sources";
+import {
+  getDisplayOverlayStripBounds,
+  resolveDisplayForOverlay
+} from "./display-overlay";
 import {
   chooseBaseDirectory as showBaseDirectoryDialog,
   chooseExistingProjectFolder as showExistingProjectFolderDialog,
@@ -43,6 +55,7 @@ import type {
   ExportVideoResult,
   FailRecordingRequest,
   ImportedMediaFile,
+  ProjectLibraryEntry,
   ProjectView,
   SaveEditorProjectStateRequest,
   SourceOverlayResult,
@@ -59,6 +72,10 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
+      // Thumbnail capture opts into CORS before drawing a video frame to a
+      // canvas. Chromium rejects cross-origin custom schemes before our
+      // protocol handler runs unless the scheme itself is CORS-enabled.
+      corsEnabled: true,
       stream: true
     }
   },
@@ -68,6 +85,7 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
+      corsEnabled: true,
       stream: true
     }
   }
@@ -84,11 +102,13 @@ let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
 let activeRecordingProjectId: string | null = null;
 let displayOverlayWindows: BrowserWindow[] = [];
+let activeDisplayOverlaySourceId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
 
-const displayOverlayStripThickness = 6;
 const displayOverlayStripColor = "#34d399";
+// Slightly translucent so the Windows border can be seen through.
+const displayOverlayBorderColor = "rgba(52, 211, 153, 0.55)";
 
 const recorderWindowSize = {
   expanded: {
@@ -148,6 +168,9 @@ async function createRecorderWindow(): Promise<void> {
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
+    // Created hidden and revealed on `ready-to-show`, so the transparent window
+    // never flashes empty while the recorder UI paints — it appears fully drawn.
+    show: false,
     title: "Open Video Craft Recorder",
     icon: getAppIconPath(),
     backgroundColor: "#00000000",
@@ -160,6 +183,12 @@ async function createRecorderWindow(): Promise<void> {
 
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
   recorderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  recorderWindow.once("ready-to-show", () => {
+    if (recorderWindow && !recorderWindow.isDestroyed()) {
+      recorderWindow.show();
+      recorderWindow.focus();
+    }
+  });
   recorderWindow.on("close", (event) => {
     if (activeRecordingProjectId) {
       event.preventDefault();
@@ -173,6 +202,13 @@ async function createRecorderWindow(): Promise<void> {
   attachDevToolsShortcuts(recorderWindow);
 
   await loadRendererView(recorderWindow, "controller");
+
+  // Fallback in case ready-to-show has already fired or is skipped, so the
+  // window can never get stuck hidden.
+  if (recorderWindow && !recorderWindow.isDestroyed() && !recorderWindow.isVisible()) {
+    recorderWindow.show();
+    recorderWindow.focus();
+  }
 }
 
 async function loadRendererView(
@@ -339,16 +375,79 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   const display = getDisplayForSource(source);
   await closeDisplayOverlay();
 
-  const { x, y, width, height } = display.bounds;
-  const thickness = displayOverlayStripThickness;
-  const stripBounds = [
-    { x, y, width, height: thickness },
-    { x, y: y + height - thickness, width, height: thickness },
-    { x, y: y + thickness, width: thickness, height: height - thickness * 2 },
-    { x: x + width - thickness, y: y + thickness, width: thickness, height: height - thickness * 2 }
-  ];
+  if (!display) {
+    return {
+      shown: false,
+      reason: "The selected display is no longer connected."
+    };
+  }
 
-  displayOverlayWindows = stripBounds.map((bounds) => {
+  // Electron Screen and BrowserWindow bounds are both DIP coordinates. Keeping
+  // the overlay in that coordinate space prevents Windows DPI scaling from
+  // creating a border larger than the selected display.
+  displayOverlayWindows = await createDisplayOverlayWindows(display);
+  activeDisplayOverlaySourceId = sourceId;
+
+  return {
+    shown: true,
+    reason: null
+  };
+}
+
+// The recording border is drawn differently per platform:
+//
+// - Windows enforces a minimum window size, so the four thin strip windows used
+//   elsewhere balloon into wide opaque bands that cover the screen edges and
+//   obstruct clicks. One transparent, fully click-through window that draws a
+//   thin semi-transparent border in CSS avoids that entirely and lets the user
+//   see through it. On Windows, content protection maps to
+//   WDA_EXCLUDEFROMCAPTURE, which is safe on a transparent window and still
+//   keeps the border out of the recording.
+//
+// - macOS/Linux use opaque, content-protected strips. Protecting an opaque
+//   window is the only combination that keeps the border out of the recording
+//   without triggering the macOS bug where transparent + protected composites
+//   the whole window as solid black on screen.
+async function createDisplayOverlayWindows(
+  display: Electron.Display
+): Promise<BrowserWindow[]> {
+  if (process.platform === "win32") {
+    const overlay = new BrowserWindow({
+      ...display.bounds,
+      show: false,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: false,
+      focusable: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      hasShadow: false,
+      roundedCorners: false,
+      backgroundColor: "#00000000",
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    });
+
+    overlay.setIgnoreMouseEvents(true, { forward: true });
+    overlay.setAlwaysOnTop(true, "screen-saver");
+    overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    overlay.setContentProtection(true);
+    try {
+      await overlay.loadURL(createDisplayOverlayBorderHtml());
+    } catch {
+      // A failed load still leaves a harmless invisible click-through window.
+    }
+    if (!overlay.isDestroyed()) {
+      overlay.showInactive();
+    }
+    return [overlay];
+  }
+
+  const stripBounds = getDisplayOverlayStripBounds(display, process.platform);
+  return stripBounds.map((bounds) => {
     const strip = new BrowserWindow({
       ...bounds,
       show: false,
@@ -371,23 +470,24 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
     strip.setIgnoreMouseEvents(true, { forward: true });
     strip.setAlwaysOnTop(true, "screen-saver");
     strip.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    // Content protection keeps the border out of the recorded video. It is only
-    // safe on opaque windows: protecting a transparent window makes macOS
-    // composite the whole window as solid black on screen.
     strip.setContentProtection(true);
     strip.showInactive();
     return strip;
   });
+}
 
-  return {
-    shown: true,
-    reason: null
-  };
+function createDisplayOverlayBorderHtml(): string {
+  // A thin, semi-transparent green rectangle outline. box-sizing keeps the
+  // border inside the display bounds; pointer-events:none makes doubly sure the
+  // click-through window never intercepts input.
+  const html = `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:transparent;overflow:hidden;cursor:default}#border{position:fixed;inset:0;box-sizing:border-box;border:4px solid ${displayOverlayBorderColor};border-radius:3px;pointer-events:none}</style><div id="border"></div>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
 async function closeDisplayOverlay(): Promise<void> {
   const strips = displayOverlayWindows;
   displayOverlayWindows = [];
+  activeDisplayOverlaySourceId = null;
 
   for (const strip of strips) {
     if (!strip.isDestroyed()) {
@@ -425,29 +525,27 @@ function attachDevToolsShortcuts(window: BrowserWindow): void {
   });
 }
 
-function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.Display {
-  const displays = electronScreen.getAllDisplays();
+function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.Display | null {
+  return resolveDisplayForOverlay(
+    { id: source.id, displayId: source.display_id },
+    electronScreen.getAllDisplays(),
+    electronScreen.getPrimaryDisplay()
+  );
+}
 
-  if (source.display_id) {
-    const display = displays.find((item) => String(item.id) === source.display_id);
-
-    if (display) {
-      return display;
-    }
+function refreshDisplayOverlay(): void {
+  const sourceId = activeDisplayOverlaySourceId;
+  if (!sourceId) {
+    return;
   }
 
-  const idParts = source.id.split(":");
-  const numericId = idParts.find((part) => /^\d+$/.test(part));
+  void enqueueOverlayOp(() => showDisplayOverlay(sourceId));
+}
 
-  if (numericId) {
-    const display = displays.find((item) => String(item.id) === numericId);
-
-    if (display) {
-      return display;
-    }
-  }
-
-  return electronScreen.getPrimaryDisplay();
+function registerDisplayOverlayRefreshHandlers(): void {
+  electronScreen.on("display-added", refreshDisplayOverlay);
+  electronScreen.on("display-removed", refreshDisplayOverlay);
+  electronScreen.on("display-metrics-changed", refreshDisplayOverlay);
 }
 
 function registerIpc(): void {
@@ -521,7 +619,27 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("windows:minimize-current", (event): boolean => {
-    BrowserWindow.fromWebContents(event.sender)?.minimize();
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) {
+      return false;
+    }
+
+    // The recorder floats always-on-top with no taskbar entry; both of those
+    // stop a normal minimize from actually parking in the dock/taskbar. Relax
+    // them while minimized so the window minimizes for real, and restore the
+    // floating behavior when the user brings it back.
+    if (window === recorderWindow) {
+      window.setAlwaysOnTop(false);
+      window.setSkipTaskbar(false);
+      window.once("restore", () => {
+        if (!window.isDestroyed()) {
+          window.setSkipTaskbar(true);
+          window.setAlwaysOnTop(true, "screen-saver");
+        }
+      });
+    }
+
+    window.minimize();
     return true;
   });
 
@@ -625,7 +743,27 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:list-recent", async () => {
-    return getProjectLibrary().listRecent();
+    const entries = await getProjectLibrary().listRecent();
+
+    // Loading available projects registers their media with ovc-media:// and
+    // gives the launcher a real first-frame source instead of placeholder art.
+    return Promise.all(
+      entries.map(async (entry): Promise<ProjectLibraryEntry> => {
+        if (!entry.available) return { ...entry, thumbnailUrl: null };
+
+        try {
+          const project = projectStore.hasProject(entry.id)
+            ? projectStore.getProject(entry.id)
+            : await projectStore.loadProject(entry.rootPath);
+          return {
+            ...entry,
+            thumbnailUrl: project.mediaUrls.screen ?? project.mediaUrls.camera ?? null
+          };
+        } catch {
+          return { ...entry, thumbnailUrl: null };
+        }
+      })
+    );
   });
 
   ipcMain.handle("projects:get", async (_event, projectId: string) => {
@@ -645,6 +783,43 @@ function registerIpc(): void {
 
   ipcMain.handle("projects:remove-from-recent", async (_event, projectId: string): Promise<boolean> => {
     return getProjectLibrary().remove(projectId);
+  });
+
+  ipcMain.handle("projects:delete", async (_event, projectId: string): Promise<boolean> => {
+    const entry = await getProjectLibrary().get(projectId);
+    if (!entry) {
+      return false;
+    }
+
+    const parentWindow = getDialogParentWindow();
+    const confirmOptions = {
+      type: "warning" as const,
+      buttons: ["Delete", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "Delete project",
+      message: `Delete "${entry.name}"?`,
+      detail: `The project folder will be moved to the Trash:\n${entry.rootPath}`
+    };
+    const { response } = parentWindow
+      ? await dialog.showMessageBox(parentWindow, confirmOptions)
+      : await dialog.showMessageBox(confirmOptions);
+
+    if (response !== 0) {
+      return false;
+    }
+
+    // Prefer the OS Trash so an accidental delete stays recoverable; only fall
+    // back to a permanent removal when the folder cannot be trashed.
+    try {
+      await shell.trashItem(entry.rootPath);
+    } catch {
+      await fs.rm(entry.rootPath, { recursive: true, force: true }).catch(() => undefined);
+    }
+
+    projectStore.forgetProject(projectId);
+    await getProjectLibrary().remove(projectId);
+    return true;
   });
 
   ipcMain.handle("projects:discard", async (_event, projectId: string): Promise<boolean> => {
@@ -721,17 +896,20 @@ function registerIpc(): void {
       }
     }
 
-    const inputPath = projectStore.getMicWebmPath(projectId);
+    const micInputPath = projectStore.getMicWebmPath(projectId);
+    const systemInputPath = projectStore.getSystemWebmPath(projectId);
 
-    if (!inputPath) {
-      const project = await projectStore.completeAudio(projectId, 0);
-      await getProjectLibrary().upsert(project);
-      return project;
-    }
+    const micBytes = micInputPath
+      ? await convertWebmAudioToWav(micInputPath, projectStore.getMicWavPath(projectId))
+      : 0;
+    const systemBytes = systemInputPath
+      ? await convertWebmAudioToWav(systemInputPath, projectStore.getSystemWavPath(projectId))
+      : 0;
 
-    const outputPath = projectStore.getMicWavPath(projectId);
-    const bytesWritten = await convertWebmAudioToWav(inputPath, outputPath);
-    const project = await projectStore.completeAudio(projectId, bytesWritten);
+    const project = await projectStore.completeAudio(projectId, {
+      mic: micBytes,
+      system: systemBytes
+    });
     await getProjectLibrary().upsert(project);
     return project;
   });
@@ -912,6 +1090,7 @@ app.whenReady().then(async () => {
   });
   registerCustomMediaProtocol({ projectStore, importedMediaCache });
   registerIpc();
+  registerDisplayOverlayRefreshHandlers();
   globalShortcut.register("CommandOrControl+Shift+S", () => {
     recorderWindow?.webContents.send("recording:global-stop");
   });

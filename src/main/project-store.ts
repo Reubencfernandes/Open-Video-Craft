@@ -1,3 +1,8 @@
+/**
+ * On-disk project store: creates project folders, appends recording chunks
+ * per track, finalizes recordings, persists editor state + imports, and
+ * resolves media paths safely inside the project root.
+ */
 import { promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -37,7 +42,8 @@ const editorStateFileName = "editor.json";
 const recordingTrackToMediaTrack: Record<RecordingTrack, MediaTrackKey> = {
   screen: "screen",
   camera: "camera",
-  mic: "micWebm"
+  mic: "micWebm",
+  system: "systemWebm"
 };
 
 const mediaTrackRelativePaths: Record<MediaTrackKey, string> = {
@@ -46,7 +52,9 @@ const mediaTrackRelativePaths: Record<MediaTrackKey, string> = {
   screen: `${mediaDirectoryName}/screen.webm`,
   camera: `${mediaDirectoryName}/camera.webm`,
   micWebm: `${mediaDirectoryName}/mic.webm`,
-  micWav: `${mediaDirectoryName}/mic.wav`
+  micWav: `${mediaDirectoryName}/mic.wav`,
+  systemWebm: `${mediaDirectoryName}/system.webm`,
+  systemWav: `${mediaDirectoryName}/system.wav`
 };
 
 export function getMediaTrackRelativePath(track: MediaTrackKey): string {
@@ -139,6 +147,13 @@ export class ProjectStore {
     return this.toView(record);
   }
 
+  // Drop any cached in-memory record without touching disk. Used after the
+  // project folder has already been deleted (e.g. moved to the OS Trash) so a
+  // later lookup does not resurrect a stale record.
+  forgetProject(projectId: string): void {
+    this.records.delete(projectId);
+  }
+
   async discardProject(projectId: string): Promise<boolean> {
     return this.runProjectOperation(projectId, async () => {
       const record = this.getRecord(projectId);
@@ -228,10 +243,13 @@ export class ProjectStore {
       }
 
       const now = this.clock().toISOString();
+      const hasRecordedAudio = Boolean(
+        record.file.tracks.micWebm || record.file.tracks.systemWebm
+      );
       record.file = {
         ...record.file,
         updatedAt: now,
-        status: record.file.tracks.micWebm ? "processing" : "complete",
+        status: hasRecordedAudio ? "processing" : "complete",
         durationMs: Math.max(0, Math.round(request.durationMs)),
         stoppedAt: now
       };
@@ -241,16 +259,29 @@ export class ProjectStore {
     });
   }
 
-  async completeAudio(projectId: string, micWavBytes: number): Promise<ProjectView> {
+  async completeAudio(
+    projectId: string,
+    wavBytes: { mic: number; system: number }
+  ): Promise<ProjectView> {
     return this.runProjectOperation(projectId, async () => {
       const record = this.getRecord(projectId);
       const now = this.clock().toISOString();
 
-      if (micWavBytes > 0) {
+      if (wavBytes.mic > 0) {
         record.file.tracks.micWav = {
           path: getMediaTrackRelativePath("micWav"),
           mimeType: "audio/wav",
-          bytesWritten: micWavBytes,
+          bytesWritten: wavBytes.mic,
+          createdAt: now,
+          updatedAt: now
+        };
+      }
+
+      if (wavBytes.system > 0) {
+        record.file.tracks.systemWav = {
+          path: getMediaTrackRelativePath("systemWav"),
+          mimeType: "audio/wav",
+          bytesWritten: wavBytes.system,
           createdAt: now,
           updatedAt: now
         };
@@ -361,6 +392,15 @@ export class ProjectStore {
     return this.resolveProjectFile(projectId, getMediaTrackRelativePath("micWav"));
   }
 
+  getSystemWebmPath(projectId: string): string | null {
+    const track = this.getRecord(projectId).file.tracks.systemWebm;
+    return track ? this.resolveProjectFile(projectId, track.path) : null;
+  }
+
+  getSystemWavPath(projectId: string): string {
+    return this.resolveProjectFile(projectId, getMediaTrackRelativePath("systemWav"));
+  }
+
   getMediaPath(projectId: string, track: MediaTrackKey): string | null {
     const projectTrack = this.getRecord(projectId).file.tracks[track];
     return projectTrack ? this.resolveProjectFile(projectId, projectTrack.path) : null;
@@ -380,6 +420,10 @@ export class ProjectStore {
 
     if (request.tracks.mic.enabled && request.tracks.mic.mimeType) {
       tracks.micWebm = this.createTrack("micWebm", request.tracks.mic.mimeType, now);
+    }
+
+    if (request.tracks.system?.enabled && request.tracks.system.mimeType) {
+      tracks.systemWebm = this.createTrack("systemWebm", request.tracks.system.mimeType, now);
     }
 
     return tracks;

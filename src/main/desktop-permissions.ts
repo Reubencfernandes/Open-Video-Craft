@@ -1,3 +1,8 @@
+/**
+ * Browser permission-request handlers (only app windows may capture media),
+ * the display-media handler that selects the capture source and offers
+ * loopback system audio, and macOS permission status/settings helpers.
+ */
 import {
   app,
   nativeImage,
@@ -46,23 +51,46 @@ export function registerPermissionRequestHandlers(
     callback(false);
   });
 
-  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    const selectedDisplaySource = dependencies.getSelectedDisplaySource();
-    if (!selectedDisplaySource) {
-      callback({});
-      return;
-    }
-
-    callback({
-      video: {
-        id: selectedDisplaySource.id,
-        name: selectedDisplaySource.name
+  // `audio: "loopback"` offers the system/desktop audio. It only produces a
+  // track when the renderer's getDisplayMedia call also asks for audio, so the
+  // renderer's "record system audio" toggle stays in full control. Loopback is
+  // supported on Windows and on macOS 13+ (ScreenCaptureKit); where it is not,
+  // the renderer falls back to a video-only capture.
+  session.defaultSession.setDisplayMediaRequestHandler(
+    (_request, callback) => {
+      const selectedDisplaySource = dependencies.getSelectedDisplaySource();
+      if (!selectedDisplaySource) {
+        callback({});
+        return;
       }
-    });
-  });
+
+      callback({
+        video: {
+          id: selectedDisplaySource.id,
+          name: selectedDisplaySource.name
+        },
+        audio: "loopback"
+      });
+    },
+    { useSystemPicker: false }
+  );
 }
 
 export function getDesktopPermissionStatus(): DesktopPermissionStatus {
+  if (process.platform === "win32") {
+    // Windows grants desktop capture through the selected capture source, not a
+    // macOS-style per-app Screen Recording permission. Camera and microphone
+    // access are requested by Chromium at use time and can be restricted by OS
+    // privacy policy, so Electron cannot reliably report a preflight state.
+    return {
+      platform: "win32",
+      canDragAppBundle: false,
+      screen: "unavailable",
+      camera: "unavailable",
+      microphone: "unavailable"
+    };
+  }
+
   if (process.platform !== "darwin") {
     return {
       platform: getPermissionPlatform(),

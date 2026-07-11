@@ -3,6 +3,8 @@
 This folder is split by runtime first, then by feature. Keep new code close to
 the system it belongs to instead of growing one large file.
 
+A complete per-file reference lives in [`docs/FILES.md`](../docs/FILES.md).
+
 ## Runtime Folders
 
 - `main/` contains Electron main-process code: windows, IPC handlers, OS
@@ -39,8 +41,9 @@ registration call instead of adding more logic directly to `main.ts`.
 - `App.tsx` is the launcher screen.
 - `RecorderController.tsx` owns recording state and delegates rendering to
   `recorder/RecorderControllerView.tsx`.
-- `EditorView.tsx` is still the editor orchestrator. It owns shared editor
-  state and passes focused props to smaller components under `renderer/editor/`.
+- `EditorView.tsx` is the editor's composition root: it owns shared editor
+  state, wires the hooks under `renderer/editor/` together, and renders the
+  layout. Editing logic lives in the hooks, not here.
 - `AppVersionStatus.tsx` renders the bottom-left version/update pill.
 - `useAppUpdateStatus.ts` loads app/update status and listens for update events.
 
@@ -56,6 +59,12 @@ registration call instead of adding more logic directly to `main.ts`.
 - `editor/useEditorExport.ts` owns the renderer side of export requests.
 - `editor/useEditorMediaActions.ts` owns import/remove media behavior.
 - `editor/usePreviewLayoutControls.ts` owns mouse dragging/resizing in preview.
+- `editor/useTimelineController.ts` is a facade that assembles the timeline
+  feature from focused hooks: `useTimelineEditing` (commit/undo/split/delete +
+  library sync), `useTimelineDragInteractions` (pointer drags),
+  `useTimelineClipboard` (copy/cut/paste), `useEditorEffects` (zoom/speed/
+  subtitle CRUD), `useSubtitleGeneration` (Whisper), and `useEditorShortcuts`
+  (keyboard).
 - `editor/*-utils.ts` files contain pure helpers that are easier to test.
 
 ## Commenting Rule

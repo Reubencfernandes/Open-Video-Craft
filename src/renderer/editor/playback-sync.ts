@@ -1,3 +1,7 @@
+/**
+ * Pure decision helpers for playback sync: when the primary video or a
+ * secondary media element should hard-seek, and timeline<->media time maps.
+ */
 export type PlaybackSyncReason = "tick" | "seek" | "play-start" | "clip-change" | "media-ready" | "pause";
 
 export type ClipPlaybackTiming = {

@@ -1,3 +1,6 @@
+/**
+ * Speed effect constants and the active-rate lookup used by playback.
+ */
 import type { SpeedEffect, SpeedRate } from "./types";
 
 export const speedRates = [1, 2, 3, 4, 5] as const satisfies SpeedRate[];

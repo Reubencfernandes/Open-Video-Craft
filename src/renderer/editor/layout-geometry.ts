@@ -1,3 +1,6 @@
+/**
+ * Geometry for preview layout: camera frame presets and drag/resize math.
+ */
 import type {
   CameraFrame,
   CameraPosition,

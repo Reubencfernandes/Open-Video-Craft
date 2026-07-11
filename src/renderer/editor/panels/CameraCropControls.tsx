@@ -1,3 +1,6 @@
+/**
+ * Camera content pan/zoom/mirror controls used inside the Layout panel.
+ */
 import { FlipHorizontal, RotateCcw } from "lucide-react";
 import { RangeControl } from "../controls";
 import type { CameraContentTransform } from "../types";
@@ -15,7 +18,7 @@ export function CameraCropControls(props: {
           <button
             className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-extrabold ${
               props.transform.mirrored
-                ? "bg-cyan-300 text-[#111827]"
+                ? "bg-amber-300 text-[#111827]"
                 : "bg-white/[0.06] text-slate-200 hover:bg-white/10 hover:text-white"
             }`}
             type="button"

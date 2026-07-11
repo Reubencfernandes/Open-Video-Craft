@@ -1,3 +1,7 @@
+/**
+ * Zoom tool: add zoom regions and edit the selected zoom's timing/scale/
+ * target.
+ */
 import { Trash2, WandSparkles } from "lucide-react";
 import { ZoomTargetPanel } from "../ZoomTargetPanel";
 import type { EditorMediaItem, ZoomEffect, ZoomSpeed } from "../types";

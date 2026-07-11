@@ -1,7 +1,17 @@
-import { Plus, Upload } from "lucide-react";
+/**
+ * Setup tool: import button, kind filter tabs, and the draggable asset grid.
+ */
+import { FolderArchive, Plus, Upload } from "lucide-react";
 import { AssetCard } from "../AssetCard";
 import { mediaDragType } from "../types";
 import type { EditorMediaItem, MediaPanel as MediaPanelTab } from "../types";
+
+const mediaTabs: Array<{ id: MediaPanelTab; label: string }> = [
+  { id: "all", label: "All Media" },
+  { id: "video", label: "Video" },
+  { id: "image", label: "Image" },
+  { id: "audio", label: "Sound" }
+];
 
 /**
  * "Setup" tool: import button, kind filter tabs and the asset grid. Assets are
@@ -20,26 +30,31 @@ export function MediaPanel(props: {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
       <button
-        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.06] text-sm font-extrabold text-white hover:bg-white/10"
+        className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] text-sm font-semibold text-white transition hover:border-white/[0.14] hover:bg-white/[0.08]"
         type="button"
         onClick={props.onImport}
       >
-        <Upload size={15} />
-        Import media
+        <span className="grid size-8 place-items-center rounded-lg bg-white/[0.07] text-slate-200">
+          <FolderArchive size={15} />
+        </span>
+        <span className="grid size-8 place-items-center rounded-lg bg-white/[0.07] text-slate-200">
+          <Upload size={15} />
+        </span>
+        Import Media
       </button>
-      <div className="flex gap-2">
-        {(["all", "video", "audio", "image"] as MediaPanelTab[]).map((tab) => (
+      <div className="flex gap-1.5">
+        {mediaTabs.map((tab) => (
           <button
-            className={`min-w-0 flex-1 rounded-full px-3 py-2 text-sm font-bold ${
-              props.activeTab === tab
-                ? "bg-white/[0.08] text-white"
+            className={`min-w-0 flex-1 truncate rounded-lg px-2 py-2 text-xs font-semibold transition ${
+              props.activeTab === tab.id
+                ? "bg-amber-500/[0.08] text-white shadow-[inset_0_-2px_#f59e0b]"
                 : "text-slate-400 hover:bg-white/[0.05] hover:text-white"
             }`}
             type="button"
-            key={tab}
-            onClick={() => props.onTabChange(tab)}
+            key={tab.id}
+            onClick={() => props.onTabChange(tab.id)}
           >
-            {tab === "all" ? "All" : tab}
+            {tab.label}
           </button>
         ))}
       </div>

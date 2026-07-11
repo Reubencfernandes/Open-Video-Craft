@@ -1,3 +1,7 @@
+/**
+ * Pure placement and drag constraints for timeline effect regions (zoom and
+ * speed share these rules): non-overlap, minimum duration, gap placement.
+ */
 export type ZoomTimingItem = {
   id: string;
   start: number;

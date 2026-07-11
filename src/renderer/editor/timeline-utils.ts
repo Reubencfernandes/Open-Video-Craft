@@ -1,3 +1,8 @@
+/**
+ * Pure timeline math: syncing segments with the media library, move/trim with
+ * snapping and non-overlap, split checks, audio lane assignment, clip style
+ * and duration calculations.
+ */
 import type { CSSProperties } from "react";
 import type {
   EditorMediaItem,

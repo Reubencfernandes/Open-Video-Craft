@@ -1,3 +1,6 @@
+/**
+ * Visibility wrapper that mounts the Timeline and forwards its props.
+ */
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
@@ -21,6 +24,10 @@ export function EditorTimelineSection(props: {
   onResizePointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onResizePointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   onResizeDoubleClick: () => void;
+  timelineZoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
   activeTool: EditorTool;
   playing: boolean;
   scrubbing: boolean;
@@ -31,6 +38,7 @@ export function EditorTimelineSection(props: {
   renderDuration: number;
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
+  audioLevels: Record<string, { volume: number; muted: boolean }>;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
@@ -42,6 +50,10 @@ export function EditorTimelineSection(props: {
   canSplitAtContextMenu: boolean;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onSplitAtPlayhead: () => void;
+  onDeleteSelected: () => void;
   onSelectClip: (clip: TimelineMediaClip) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
@@ -58,6 +70,11 @@ export function EditorTimelineSection(props: {
     mode: "move" | "start" | "end"
   ) => void;
   onSpeedDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
+  onSubtitleDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     id: string,
     mode: "move" | "start" | "end"
@@ -82,6 +99,10 @@ export function EditorTimelineSection(props: {
       onResizePointerMove={props.onResizePointerMove}
       onResizePointerUp={props.onResizePointerUp}
       onResizeDoubleClick={props.onResizeDoubleClick}
+      timelineZoom={props.timelineZoom}
+      onZoomIn={props.onZoomIn}
+      onZoomOut={props.onZoomOut}
+      onZoomReset={props.onZoomReset}
       activeTool={props.activeTool}
       playing={props.playing}
       scrubbing={props.scrubbing}
@@ -92,6 +113,7 @@ export function EditorTimelineSection(props: {
       renderDuration={props.renderDuration}
       videoClips={props.videoClips}
       audioTracks={props.audioTracks}
+      audioLevels={props.audioLevels}
       zoomEffects={props.zoomEffects}
       speedEffects={props.speedEffects}
       subtitles={props.subtitles}
@@ -103,6 +125,10 @@ export function EditorTimelineSection(props: {
       canSplitAtContextMenu={props.canSplitAtContextMenu}
       onTogglePlayback={props.onTogglePlayback}
       onSeekFrame={props.onSeekFrame}
+      onUndo={props.onUndo}
+      onRedo={props.onRedo}
+      onSplitAtPlayhead={props.onSplitAtPlayhead}
+      onDeleteSelected={props.onDeleteSelected}
       onSelectClip={props.onSelectClip}
       onSelectZoom={props.onSelectZoom}
       onSelectSpeed={props.onSelectSpeed}
@@ -111,6 +137,7 @@ export function EditorTimelineSection(props: {
       onMovePointerDown={props.onMovePointerDown}
       onZoomDragPointerDown={props.onZoomDragPointerDown}
       onSpeedDragPointerDown={props.onSpeedDragPointerDown}
+      onSubtitleDragPointerDown={props.onSubtitleDragPointerDown}
       onBodyPointerDown={props.onBodyPointerDown}
       onBodyPointerMove={props.onBodyPointerMove}
       onBodyPointerUp={props.onBodyPointerUp}

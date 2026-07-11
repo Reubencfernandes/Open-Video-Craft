@@ -1,3 +1,7 @@
+/**
+ * Preload script: exposes the typed `window.openVideoCraft` IPC bridge that is
+ * the renderer's only path into the main process.
+ */
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppInfo,
@@ -22,7 +26,8 @@ import type {
 
 const api = {
   app: {
-    getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info")
+    getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
+    openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:open-external", url)
   },
   updates: {
     getStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updates:get-status"),
@@ -64,6 +69,8 @@ const api = {
       ipcRenderer.invoke("projects:open-existing-project-folder"),
     removeFromRecent: (projectId: string): Promise<boolean> =>
       ipcRenderer.invoke("projects:remove-from-recent", projectId),
+    delete: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("projects:delete", projectId),
     discard: (projectId: string): Promise<boolean> =>
       ipcRenderer.invoke("projects:discard", projectId),
     create: (request: CreateProjectRequest): Promise<ProjectView> =>

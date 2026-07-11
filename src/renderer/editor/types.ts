@@ -1,3 +1,7 @@
+/**
+ * Editor-only types (tools, layout modes, timeline segments/clips, effects,
+ * subtitles) and shared constants (frame rate, drag mime type).
+ */
 import type { ImportedMediaKind } from "../../shared/types";
 
 export type MediaPanel = "all" | "video" | "audio" | "image";

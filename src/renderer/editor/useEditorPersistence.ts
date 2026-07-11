@@ -1,3 +1,7 @@
+/**
+ * Save/restore of editor state: loads the project and editor.json on mount,
+ * restores state, and saves snapshots + imported files back to the project.
+ */
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {

@@ -1,3 +1,8 @@
+/**
+ * Custom `ovc-media://` (project files) and `ovc-import://` (imported files)
+ * protocols. Adds CORS headers so renderer fetch()/canvas reads work, and
+ * forwards Range headers so media elements can seek.
+ */
 import { net, protocol } from "electron";
 import path from "node:path";
 import { pathToFileURL } from "node:url";

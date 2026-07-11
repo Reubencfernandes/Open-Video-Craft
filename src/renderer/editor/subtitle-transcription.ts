@@ -1,3 +1,7 @@
+/**
+ * Whisper transcription glue: model id, word-chunk language patching, and
+ * converting Whisper output into subtitle segments.
+ */
 import type { SubtitleSegment, SubtitleWord } from "./types";
 import { createId } from "./utils";
 

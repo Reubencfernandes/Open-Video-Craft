@@ -1,3 +1,6 @@
+/**
+ * Cut tool: split at playhead and delete the selected clip.
+ */
 import { Scissors, Trash2 } from "lucide-react";
 import { formatSeconds } from "../utils";
 import type { TimelineMediaClip } from "../types";

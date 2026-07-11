@@ -1,3 +1,7 @@
+/**
+ * Small pure helpers: clamping, id generation, timecode/byte formatting, and
+ * ruler tick generation.
+ */
 import { frameRate } from "./types";
 
 let idCounter = 0;

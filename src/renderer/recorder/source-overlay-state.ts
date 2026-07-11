@@ -1,3 +1,6 @@
+/**
+ * Pure rule for when the screen-border overlay should be visible.
+ */
 import type { FloatingState } from "./types";
 
 const statesWithVisibleBorder: ReadonlySet<FloatingState> = new Set([

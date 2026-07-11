@@ -1,3 +1,7 @@
+/**
+ * Keyboard helpers: detecting when the user is typing in a text control and
+ * blurring focused controls before global shortcuts run.
+ */
 export function isKeyboardTextTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;

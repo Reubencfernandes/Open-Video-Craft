@@ -1,3 +1,7 @@
+/**
+ * Derives memoized view data from raw editor state: media library, timeline
+ * clips/tracks, playback geometry, preview styles, and selection lookups.
+ */
 import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import type { ProjectView } from "../../shared/types";

@@ -1,6 +1,10 @@
+/**
+ * Media library actions: import (incl. background music onto the timeline),
+ * remove, select-with-seek, duration updates, and per-source audio levels.
+ */
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { toEditorMediaItem } from "./media-utils";
-import { areTimelineSegmentsEqual } from "./timeline-utils";
+import { areTimelineSegmentsEqual, resolveAudioLane } from "./timeline-utils";
 import type {
   BackgroundStyle,
   EditorMediaItem,
@@ -69,10 +73,48 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
     setImportedMedia((current) => [...current, ...nextItems]);
 
     if (options.backgroundAudio) {
-      const audioIds = nextItems
-        .filter((item) => item.kind === "audio")
-        .map((item) => item.id);
+      const audioItems = nextItems.filter((item) => item.kind === "audio");
+      const audioIds = audioItems.map((item) => item.id);
       setBackgroundAudioIds((current) => [...new Set([...current, ...audioIds])]);
+      // Background music must land on the timeline (as its own audio lane) so it
+      // actually plays and can be trimmed/moved. Unknown-length clips start as a
+      // short placeholder and expand once their real duration resolves.
+      for (const item of audioItems) {
+        knownTimelineItemIdsRef.current.add(item.id);
+      }
+      setTimelineSegments((current) => {
+        const additions: TimelineSegment[] = [];
+        for (const item of audioItems) {
+          if (
+            current.some((segment) => segment.itemId === item.id) ||
+            additions.some((segment) => segment.itemId === item.id)
+          ) {
+            continue;
+          }
+
+          const start = 0;
+          const end = start + (item.duration && item.duration > 0 ? item.duration : 1);
+          const segmentId = `${item.id}:segment-bg`;
+          const lane = resolveAudioLane([...current, ...additions], segmentId, start, end, 0);
+          additions.push({
+            id: segmentId,
+            itemId: item.id,
+            track: "audio",
+            lane,
+            start,
+            end,
+            sourceStart: 0
+          });
+        }
+
+        if (additions.length === 0) {
+          return current;
+        }
+
+        const next = [...current, ...additions];
+        scheduleTimelinePlaybackSync(next);
+        return next;
+      });
       setActiveTool("audio");
     }
 

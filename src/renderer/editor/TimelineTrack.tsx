@@ -1,3 +1,8 @@
+/**
+ * One timeline row: label column + clip lane (the `track-lane` class is used
+ * to map pointer X to time).
+ */
+import { Eye, LockKeyhole } from "lucide-react";
 import type { ReactNode } from "react";
 import { cx } from "../classNames";
 
@@ -12,14 +17,14 @@ import { cx } from "../classNames";
  */
 export function TimelineTrack(props: {
   label: string;
-  accent: "purple" | "cyan" | "green" | "amber" | "rose";
+  accent: "warm" | "lime" | "green" | "amber" | "rose";
   icon: ReactNode;
   children: ReactNode;
   controls?: ReactNode;
 }) {
   const accentClassName = {
-    purple: "text-purple-300",
-    cyan: "text-cyan-400",
+    warm: "text-amber-300",
+    lime: "text-lime-400",
     green: "text-emerald-400",
     amber: "text-amber-500",
     rose: "text-rose-400"
@@ -32,11 +37,22 @@ export function TimelineTrack(props: {
         Boolean(props.controls) && "gap-y-2"
       )}
     >
-      <div className="inline-flex min-h-[2.35rem] min-w-0 items-center gap-2 rounded-l-[3px] border-r border-white/[0.07] bg-white/[0.03] pl-2 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-slate-400">
-        <span className={cx("flex-none", accentClassName)}>{props.icon}</span>
-        <span className="truncate">{props.label}</span>
+      <div className="inline-flex min-h-[2.6rem] min-w-0 items-center gap-2 rounded-lg border border-white/[0.06] bg-[#18181d] px-2 text-[0.72rem] font-bold text-slate-200">
+        <span
+          className={cx(
+            "grid size-6 flex-none place-items-center rounded-md bg-white/[0.07]",
+            accentClassName
+          )}
+        >
+          {props.icon}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{props.label}</span>
+        <span className="inline-flex flex-none items-center gap-1.5 pr-0.5 text-slate-500" aria-hidden="true">
+          <LockKeyhole size={12} />
+          <Eye size={12} />
+        </span>
       </div>
-      <div className="track-lane relative min-h-[2.35rem] overflow-hidden rounded-[3px] border border-white/[0.05] bg-[#191b1f] shadow-[inset_0_1px_3px_rgb(0_0_0_/_0.35)]">
+      <div className="track-lane relative min-h-[2.6rem] overflow-hidden rounded-lg border border-white/[0.04] bg-[#101013] shadow-[inset_0_1px_3px_rgb(0_0_0_/_0.35)]">
         {props.children}
       </div>
       {props.controls ? <div className="col-start-2 min-w-0">{props.controls}</div> : null}

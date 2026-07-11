@@ -1,3 +1,6 @@
+/**
+ * Speed tool: add speed regions and edit the selected region's rate/timing.
+ */
 import { Trash2 } from "lucide-react";
 import { speedMinDurationSeconds, speedRates } from "../speed-utils";
 import { SpeedIcon } from "../SpeedIcon";

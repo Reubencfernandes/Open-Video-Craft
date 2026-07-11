@@ -1,3 +1,7 @@
+/**
+ * Renderer entry point: picks which view to mount (launcher, floating
+ * recorder, editor, or permission guide) from the ?view= query param.
+ */
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";

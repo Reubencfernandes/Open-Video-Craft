@@ -1,3 +1,7 @@
+/**
+ * Subtitles tool: Whisper transcription, style selection, and per-subtitle
+ * text/timing editing.
+ */
 import { Captions, WandSparkles } from "lucide-react";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 
@@ -89,7 +93,7 @@ export function SubtitlesPanel(props: {
       {selected ? (
         <div className="grid gap-3">
           <textarea
-            className="min-h-24 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-cyan-300"
+            className="min-h-24 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-amber-300"
             value={selected.text}
             onChange={(event) => props.onUpdateSubtitle(selected.id, { text: event.target.value })}
           />
@@ -132,7 +136,7 @@ export function SubtitlesPanel(props: {
           <button
             className={`inline-flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold ${
               selected?.id === subtitle.id
-                ? "border-cyan-300 bg-cyan-400/10 text-white"
+                ? "border-amber-300 bg-amber-400/10 text-white"
                 : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
             }`}
             type="button"
