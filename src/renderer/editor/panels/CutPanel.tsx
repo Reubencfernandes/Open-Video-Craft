@@ -41,7 +41,7 @@ export function CutPanel(props: {
             </span>
           </div>
           <button
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-300/25 bg-red-500/15 px-3 text-sm font-extrabold text-red-100 hover:bg-red-500/25"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-white px-3 text-sm font-extrabold text-black transition hover:bg-slate-200"
             type="button"
             onClick={props.onDeleteSelected}
           >

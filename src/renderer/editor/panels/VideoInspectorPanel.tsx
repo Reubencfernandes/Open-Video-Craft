@@ -80,7 +80,7 @@ export function VideoInspectorPanel(props: {
         </div>
         <label className="grid grid-cols-[5.25rem_minmax(0,1fr)] items-center gap-3">
           <span>Blend Mode</span>
-          <select className={fieldClassName} defaultValue="normal"><option value="normal">Normal</option></select>
+          <select className="themed-select h-9" defaultValue="normal"><option value="normal">Normal</option></select>
         </label>
         <label className="grid gap-2">
           <span>Opacity</span>

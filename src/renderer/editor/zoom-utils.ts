@@ -1,7 +1,7 @@
 /**
  * Zoom effect math: active-zoom lookup and the preview transform it drives.
  */
-import type { ZoomEffect, ZoomSpeed } from "./types";
+import type { ZoomEasing, ZoomEffect, ZoomSpeed } from "./types";
 import { clampNumber } from "./utils";
 
 const zoomChainGapSeconds = 0.45;
@@ -39,7 +39,7 @@ export function getActiveZoom(effects: ZoomEffect[], time: number): ZoomTransfor
       const effect = orderedEffects[bridgeIndex];
       const nextEffect = orderedEffects[bridgeIndex + 1];
       const gapDuration = Math.max(0.001, nextEffect.start - effect.end);
-      const progress = smootherStep((time - effect.end) / gapDuration);
+      const progress = applyZoomEasing((time - effect.end) / gapDuration, nextEffect);
       return interpolateZoomTransform(
         getZoomFullTransform(effect),
         getZoomFullTransform(nextEffect),
@@ -70,14 +70,14 @@ export function getActiveZoom(effects: ZoomEffect[], time: number): ZoomTransfor
         : previousIsChained
           ? fullZoom
           : { scale: 1, originX: 50, originY: 50 };
-    return interpolateZoomTransform(entryTransform, fullZoom, smootherStep(elapsed / ramp));
+    return interpolateZoomTransform(entryTransform, fullZoom, applyZoomEasing(elapsed / ramp, effect));
   }
 
   if (!nextIsChained && elapsed > duration - ramp) {
     return interpolateZoomTransform(
       fullZoom,
       { scale: 1, originX: 50, originY: 50 },
-      smootherStep((elapsed - (duration - ramp)) / ramp)
+      applyZoomEasing((elapsed - (duration - ramp)) / ramp, effect)
     );
   }
 
@@ -134,7 +134,47 @@ function interpolateZoomTransform(
   };
 }
 
-function smootherStep(value: number): number {
-  const t = clampNumber(value, 0, 1);
-  return t * t * t * (t * (t * 6 - 15) + 10);
+const easingBezier: Record<Exclude<ZoomEasing, "custom">, [number, number, number, number]> = {
+  linear: [0, 0, 1, 1],
+  "ease-in": [0.42, 0, 1, 1],
+  "ease-out": [0, 0, 0.58, 1],
+  "ease-in-out": [0.42, 0, 0.58, 1]
+};
+
+export function applyZoomEasing(value: number, effect: Pick<ZoomEffect, "easing" | "bezier">): number {
+  const progress = clampNumber(value, 0, 1);
+  const easing = effect.easing ?? "ease-in-out";
+  const bezier = easing === "custom" ? effect.bezier ?? easingBezier["ease-in-out"] : easingBezier[easing];
+  return cubicBezierAtTime(progress, bezier);
+}
+
+function cubicBezierAtTime(time: number, curve: [number, number, number, number]): number {
+  if (time <= 0) {
+    return 0;
+  }
+  if (time >= 1) {
+    return 1;
+  }
+
+  const [x1, y1, x2, y2] = curve.map((point) => clampNumber(point, 0, 1)) as [number, number, number, number];
+  let low = 0;
+  let high = 1;
+  let parameter = time;
+
+  for (let iteration = 0; iteration < 14; iteration += 1) {
+    parameter = (low + high) / 2;
+    const x = cubicBezierCoordinate(parameter, x1, x2);
+    if (x < time) {
+      low = parameter;
+    } else {
+      high = parameter;
+    }
+  }
+
+  return cubicBezierCoordinate(parameter, y1, y2);
+}
+
+function cubicBezierCoordinate(parameter: number, first: number, second: number): number {
+  const inverse = 1 - parameter;
+  return 3 * inverse * inverse * parameter * first + 3 * inverse * parameter * parameter * second + parameter * parameter * parameter;
 }

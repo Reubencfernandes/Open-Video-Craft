@@ -182,7 +182,9 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     zoomEffects
   } = params;
   const [isReady, setIsReady] = useState(!projectId);
+  const [saving, setSaving] = useState(false);
   const saveStateRef = useRef<() => Promise<void>>(async () => undefined);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -309,51 +311,64 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   ]);
 
   const saveState = async () => {
-    try {
-      let activeProject = project;
-      if (!activeProject) {
-        const name = importedMedia.find((item) => item.kind === "video")?.name ?? "Untitled Edit";
-        activeProject = await window.openVideoCraft.projects.create({ name });
-        setProject(activeProject);
-        onProjectCreated(activeProject.id);
-      }
-
-      const result = await window.openVideoCraft.editor.saveProjectState({
-        projectId: activeProject.id,
-        state: createEditorStateSnapshot({
-          activeBackgroundCategory,
-          audioLevels,
-          backgroundAudioIds,
-          backgroundStyle,
-          cameraBorderStyle,
-          cameraContentTransform,
-          cameraFrame,
-          cameraPosition,
-          cameraShape,
-          cameraSize,
-          customBackgroundImportId,
-          layoutMode,
-          masterVolume,
-          screenAspectRatio,
-          screenPosition,
-          speedEffects,
-          subtitleLanguage,
-          subtitleStyle,
-          subtitles,
-          timelineSegments,
-          trimRange,
-          videoCornerStyle,
-          zoomEffects
-        }),
-        imports: toEditorProjectImports(importedMedia)
-      });
-
-      setImportedMedia(result.imports.map(toEditorMediaItem));
-      setError(null);
-      setExportMessage("Project saved");
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Could not save the project state.");
+    if (saveInFlightRef.current) {
+      return saveInFlightRef.current;
     }
+
+    setSaving(true);
+    const operation = (async () => {
+      try {
+        let activeProject = project;
+        if (!activeProject) {
+          const name =
+            importedMedia.find((item) => item.kind === "video")?.name ?? "Untitled Edit";
+          activeProject = await window.openVideoCraft.projects.create({ name });
+          setProject(activeProject);
+          onProjectCreated(activeProject.id);
+        }
+
+        const result = await window.openVideoCraft.editor.saveProjectState({
+          projectId: activeProject.id,
+          state: createEditorStateSnapshot({
+            activeBackgroundCategory,
+            audioLevels,
+            backgroundAudioIds,
+            backgroundStyle,
+            cameraBorderStyle,
+            cameraContentTransform,
+            cameraFrame,
+            cameraPosition,
+            cameraShape,
+            cameraSize,
+            customBackgroundImportId,
+            layoutMode,
+            masterVolume,
+            screenAspectRatio,
+            screenPosition,
+            speedEffects,
+            subtitleLanguage,
+            subtitleStyle,
+            subtitles,
+            timelineSegments,
+            trimRange,
+            videoCornerStyle,
+            zoomEffects
+          }),
+          imports: toEditorProjectImports(importedMedia)
+        });
+
+        setImportedMedia(result.imports.map(toEditorMediaItem));
+        setError(null);
+        setExportMessage("Project saved");
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : "Could not save the project state.");
+      } finally {
+        setSaving(false);
+        saveInFlightRef.current = null;
+      }
+    })();
+    saveInFlightRef.current = operation;
+    return operation;
   };
   saveStateRef.current = saveState;
 
@@ -371,6 +386,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
 
   return {
     isReady,
+    saving,
     saveState
   };
 }

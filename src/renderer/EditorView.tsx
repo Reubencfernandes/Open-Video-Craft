@@ -134,7 +134,7 @@ export function EditorView() {
 
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
 
-  const { isReady: isEditorStateReady, saveState } = useEditorPersistence({
+  const { isReady: isEditorStateReady, saving, saveState } = useEditorPersistence({
     activeBackgroundCategory,
     audioLevels,
     backgroundAudioIds,
@@ -387,6 +387,8 @@ export function EditorView() {
     beginCameraLayoutDrag,
     beginScreenLayoutDrag,
     resetCameraContentTransform,
+    selectCameraPosition,
+    selectCameraSize,
     updateCameraContentTransform
   } = usePreviewLayoutControls({
     activeTool,
@@ -503,6 +505,7 @@ export function EditorView() {
           projectName={projectName}
           exporting={exporting}
           canExport={canExport}
+          saving={saving}
           onBackHome={() => void window.openVideoCraft.windows.openMain()}
           onSave={saveState}
           onOpenExport={openExportDialog}
@@ -522,25 +525,34 @@ export function EditorView() {
         <EditorNotifications error={error} exportMessage={exportMessage} onDismissError={() => setError(null)} onDismissMessage={() => setExportMessage(null)} />
         {!error && !exportMessage ? <UpdateNotification status={updateStatus} onInstall={() => void installUpdate()} /> : null}
 
-        <div className="grid min-h-0 grid-cols-[92px_340px_minmax(420px,1fr)_320px] gap-3 px-3 py-2">
-          <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
+        <div className="grid min-h-0 grid-cols-[432px_minmax(420px,1fr)_320px] gap-3 px-3 py-2">
+          <div className="grid min-h-0 min-w-0 grid-cols-[92px_minmax(0,1fr)] overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] shadow-[0_18px_45px_rgb(0_0_0_/_0.24)]">
+            <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
 
-          <aside className="order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] p-4 shadow-[0_18px_45px_rgb(0_0_0_/_0.24)]">
-            <MediaPanel
-              activeTab={activePanel}
-              visibleMedia={visibleMedia}
-              selectedItemId={selectedItem?.id ?? null}
-              onImport={() => void importMedia()}
-              onTabChange={setActivePanel}
-              onSelectItem={selectTimelineItem}
-              onItemDuration={updateMediaDuration}
-              onRemoveItem={removeImportedMedia}
-            />
-          </aside>
+            <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4">
+              <MediaPanel
+                activeTab={activePanel}
+                visibleMedia={visibleMedia}
+                selectedItemId={selectedItem?.id ?? null}
+                onImport={() => void importMedia()}
+                onTabChange={setActivePanel}
+                onSelectItem={selectTimelineItem}
+                onItemDuration={updateMediaDuration}
+                onRemoveItem={removeImportedMedia}
+              />
+            </aside>
+          </div>
 
           <EditorToolPanel
             activeTool={activeTool}
+            layoutMode={layoutMode}
             screenScale={screenPosition.scale}
+            screenAspectRatio={screenAspectRatio}
+            screenAspectEnabled={screenAspectEnabled}
+            cameraShape={cameraShape}
+            cameraBorderStyle={cameraBorderStyle}
+            cameraPosition={cameraPosition}
+            cameraSize={cameraSize}
             cameraContentTransform={cameraContentTransform}
             masterVolume={masterVolume}
             audioSources={audioSources}
@@ -561,9 +573,15 @@ export function EditorView() {
             backgroundStyle={backgroundStyle}
             videoCornerStyle={videoCornerStyle}
             onSelectItem={selectTimelineItem}
+            onLayoutModeChange={setLayoutMode}
             onScreenScaleChange={(scale) =>
               setScreenPosition((current) => ({ ...current, scale }))
             }
+            onScreenAspectRatioChange={setScreenAspectRatio}
+            onCameraShapeChange={setCameraShape}
+            onCameraBorderStyleChange={setCameraBorderStyle}
+            onCameraPositionChange={selectCameraPosition}
+            onCameraSizeChange={selectCameraSize}
             onCameraContentTransformChange={updateCameraContentTransform}
             onCameraContentTransformReset={resetCameraContentTransform}
             onMasterVolumeChange={setMasterVolume}

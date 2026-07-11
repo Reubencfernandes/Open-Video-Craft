@@ -1,15 +1,16 @@
 /**
  * Editor top bar: back to launcher, project name, save, and export.
  */
-import { Camera, Home, Plus, Settings, Upload } from "lucide-react";
+import { Home, Plus, Save, Upload } from "lucide-react";
 import appLogo from "../assets/app.png";
 
 export function EditorTopbar(props: {
   projectName: string;
   exporting: boolean;
   canExport: boolean;
+  saving: boolean;
   onBackHome: () => void;
-  onSave: () => void;
+  onSave: () => Promise<void>;
   onOpenExport: () => void;
 }) {
   return (
@@ -46,14 +47,15 @@ export function EditorTopbar(props: {
           <Home size={17} />
         </button>
         <button
-          className="inline-flex size-[3rem] items-center justify-center rounded-xl border border-white/[0.1] bg-white/[0.035] text-white hover:bg-white/10"
+          className="inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-xl bg-white/[0.08] px-5 text-sm font-bold text-white transition hover:bg-white/[0.13] disabled:cursor-wait disabled:opacity-55"
           type="button"
           title="Save project (Ctrl+S)"
-          onClick={props.onSave}
+          disabled={props.saving}
+          onClick={() => void props.onSave()}
         >
-          <Camera size={18} />
+          <Save size={17} />
+          {props.saving ? "Saving" : "Save"}
         </button>
-        <button className="inline-flex size-[3rem] items-center justify-center rounded-xl border border-white/[0.1] bg-white/[0.035] text-white hover:bg-white/10" type="button" title="Settings"><Settings size={18} /></button>
         <button
           className="inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-xl bg-white px-7 text-sm font-extrabold text-black shadow-[0_8px_24px_rgb(255_255_255_/_0.08)] hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-55"
           type="button"

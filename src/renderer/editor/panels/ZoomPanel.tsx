@@ -1,16 +1,9 @@
-/**
- * Zoom tool: add zoom regions and edit the selected zoom's timing/scale/
- * target.
- */
+/** Zoom tool: create a region, choose its focus, speed, curve, or remove it. */
 import { Trash2, WandSparkles } from "lucide-react";
 import { ZoomTargetPanel } from "../ZoomTargetPanel";
 import type { EditorMediaItem, ZoomEffect, ZoomSpeed } from "../types";
+import { ZoomCurveEditor } from "./ZoomCurveEditor";
 
-/**
- * "Zoom" tool: add a smooth zoom at the playhead, aim it with the target
- * preview, and adjust the selected zoom's speed or delete it. The zoom's time
- * range is edited by dragging its box on the timeline.
- */
 export function ZoomPanel(props: {
   previewItem: EditorMediaItem | null;
   selectedZoomEffect: ZoomEffect | null;
@@ -30,20 +23,14 @@ export function ZoomPanel(props: {
         <WandSparkles size={16} />
         Add smooth zoom
       </button>
+
       <ZoomTargetPanel
         item={props.previewItem}
         selectedZoomEffect={selected}
-        onScaleChange={(scale) => {
-          if (selected) {
-            props.onUpdateZoom(selected.id, { scale });
-          }
-        }}
-        onRegionChange={(region) => {
-          if (selected) {
-            props.onUpdateZoom(selected.id, region);
-          }
-        }}
+        onScaleChange={(scale) => selected && props.onUpdateZoom(selected.id, { scale })}
+        onRegionChange={(region) => selected && props.onUpdateZoom(selected.id, region)}
       />
+
       {selected ? (
         <>
           <div className="grid gap-2">
@@ -65,8 +52,14 @@ export function ZoomPanel(props: {
               ))}
             </div>
           </div>
+
+          <ZoomCurveEditor
+            effect={selected}
+            onChange={(updates) => props.onUpdateZoom(selected.id, updates)}
+          />
+
           <button
-            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-300/25 bg-red-500/15 px-3 text-sm font-extrabold text-red-100 hover:bg-red-500/25"
+            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-white px-3 text-sm font-extrabold text-black transition hover:bg-slate-200"
             type="button"
             onClick={() => props.onRemoveZoom(selected.id)}
           >

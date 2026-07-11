@@ -253,7 +253,7 @@ export function Timeline(props: {
             ))}
 
         {props.subtitles.length > 0 ? (
-          <TimelineTrack label="Text 1" accent="warm" icon={<Type size={14} />}>
+          <TimelineTrack label="Subtitles" accent="warm" icon={<Type size={14} />}>
             {props.subtitles.map((subtitle) => (
               <TimelineSubtitleClip
                 key={subtitle.id}

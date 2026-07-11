@@ -137,12 +137,15 @@ export type TimelineTrimDrag = {
 };
 
 export type ZoomSpeed = "slow" | "medium" | "fast";
+export type ZoomEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "custom";
 
 export type ZoomEffect = {
   id: string;
   start: number;
   end: number;
   speed: ZoomSpeed;
+  easing?: ZoomEasing;
+  bezier?: [number, number, number, number];
   scale: number;
   targetX: number;
   targetY: number;

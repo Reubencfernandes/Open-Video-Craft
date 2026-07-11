@@ -82,6 +82,8 @@ export function useEditorEffects(params: UseEditorEffectsParams) {
       start: placement.start,
       end: placement.end,
       speed: "medium",
+      easing: "ease-in-out",
+      bezier: [0.42, 0, 0.58, 1],
       scale: 1.5,
       targetX: 50,
       targetY: 50

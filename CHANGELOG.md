@@ -4,6 +4,29 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-11
+
+### Added
+
+- Customizable zoom easing with Linear, Ease In, Ease Out, Smooth, and editable cubic Bezier curves that persist with project saves.
+- A persistent launcher update card showing available versions, download progress, and a Restart action when an update is ready.
+- The official Discord community action linked to `https://discord.gg/ZeDvfMvWwf`.
+
+### Changed
+
+- Layout now appears directly after Media and once again exposes screen-only, camera-only, camera-bubble, side-by-side, overlap, and presenter presets.
+- The tool rail and media library now share one continuous bordered surface, while selected tools use a clean color state without an extra border or side marker.
+- Editor terminology now uses Subtitles and Style consistently, with the dedicated speedometer artwork retained for Speed.
+- Select controls, the export dialog, destructive selection actions, and typography now follow the neutral black, white, and amber editor theme.
+- The editor top bar now uses a clear Save action with an in-progress state instead of an icon-only camera button, and the unused Settings action has been removed.
+- Zoom curve controls were extracted into a focused component to keep the main Zoom panel compact.
+
+### Fixed
+
+- Reconnected the existing full Layout panel after the redesigned inspector had accidentally replaced it with transform-only controls.
+- Save actions now share a single in-flight operation, preventing duplicate project writes from repeated clicks or shortcuts.
+- Older saved projects without easing metadata receive a smooth backward-compatible zoom curve.
+
 ## [1.2.1] - 2026-07-11
 
 ### Added

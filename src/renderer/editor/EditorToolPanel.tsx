@@ -4,8 +4,8 @@
  */
 import { AudioPanel } from "./panels/AudioPanel";
 import { CutPanel } from "./panels/CutPanel";
+import { LayoutPanel } from "./panels/LayoutPanel";
 import { MediaInspectorPanel } from "./panels/MediaInspectorPanel";
-import { VideoInspectorPanel } from "./panels/VideoInspectorPanel";
 import { SpeedPanel } from "./panels/SpeedPanel";
 import { StylePanel } from "./panels/StylePanel";
 import { SubtitlesPanel } from "./panels/SubtitlesPanel";
@@ -15,8 +15,13 @@ import type {
   BackgroundCategory,
   BackgroundStyle,
   CameraContentTransform,
+  CameraBorderStyle,
+  CameraPosition,
+  CameraShape,
   EditorMediaItem,
   EditorTool,
+  LayoutMode,
+  ScreenAspectRatio,
   SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
@@ -27,7 +32,14 @@ import type {
 
 export function EditorToolPanel(props: {
   activeTool: EditorTool;
+  layoutMode: LayoutMode;
   screenScale: number;
+  screenAspectRatio: ScreenAspectRatio;
+  screenAspectEnabled: boolean;
+  cameraShape: CameraShape;
+  cameraBorderStyle: CameraBorderStyle;
+  cameraPosition: CameraPosition;
+  cameraSize: number;
   cameraContentTransform: CameraContentTransform;
   masterVolume: number;
   audioSources: EditorMediaItem[];
@@ -48,7 +60,13 @@ export function EditorToolPanel(props: {
   backgroundStyle: BackgroundStyle;
   videoCornerStyle: VideoCornerStyle;
   onSelectItem: (itemId: string) => void;
+  onLayoutModeChange: (mode: LayoutMode) => void;
   onScreenScaleChange: (scale: number) => void;
+  onScreenAspectRatioChange: (aspectRatio: ScreenAspectRatio) => void;
+  onCameraShapeChange: (shape: CameraShape) => void;
+  onCameraBorderStyleChange: (border: CameraBorderStyle) => void;
+  onCameraPositionChange: (position: CameraPosition) => void;
+  onCameraSizeChange: (size: number) => void;
   onCameraContentTransformChange: (patch: Partial<CameraContentTransform>) => void;
   onCameraContentTransformReset: () => void;
   onMasterVolumeChange: (volume: number) => void;
@@ -82,7 +100,26 @@ export function EditorToolPanel(props: {
       {props.activeTool === "media" ? <MediaInspectorPanel item={props.previewItem} /> : null}
 
       {props.activeTool === "layout" ? (
-        <VideoInspectorPanel scale={props.screenScale} transform={props.cameraContentTransform} onScaleChange={props.onScreenScaleChange} onTransformChange={props.onCameraContentTransformChange} onReset={props.onCameraContentTransformReset} />
+        <LayoutPanel
+          layoutMode={props.layoutMode}
+          screenScale={props.screenScale}
+          screenAspectRatio={props.screenAspectRatio}
+          screenAspectEnabled={props.screenAspectEnabled}
+          cameraShape={props.cameraShape}
+          cameraBorderStyle={props.cameraBorderStyle}
+          cameraContentTransform={props.cameraContentTransform}
+          cameraPosition={props.cameraPosition}
+          cameraSize={props.cameraSize}
+          onLayoutModeChange={props.onLayoutModeChange}
+          onScreenScaleChange={props.onScreenScaleChange}
+          onScreenAspectRatioChange={props.onScreenAspectRatioChange}
+          onCameraShapeChange={props.onCameraShapeChange}
+          onCameraBorderStyleChange={props.onCameraBorderStyleChange}
+          onCameraContentTransformChange={props.onCameraContentTransformChange}
+          onCameraContentTransformReset={props.onCameraContentTransformReset}
+          onCameraPositionChange={props.onCameraPositionChange}
+          onCameraSizeChange={props.onCameraSizeChange}
+        />
       ) : null}
 
       {props.activeTool === "audio" ? (

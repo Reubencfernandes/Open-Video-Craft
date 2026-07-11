@@ -23,11 +23,11 @@ export const editorTools: Array<{
   icon: ReactNode;
 }> = [
   { id: "media", label: "Media", icon: <FolderOpen size={19} /> },
+  { id: "layout", label: "Layout", icon: <LayoutTemplate size={22} /> },
   { id: "cut", label: "Cut", icon: <Scissors size={22} /> },
-  { id: "subtitles", label: "Text", icon: <Type size={22} /> },
+  { id: "subtitles", label: "Subtitles", icon: <Type size={22} /> },
   { id: "zoom", label: "Zoom", icon: <ZoomIn size={22} /> },
   { id: "speed", label: "Speed", icon: <SpeedIcon size={22} /> },
-  { id: "layout", label: "Layout", icon: <LayoutTemplate size={22} /> },
-  { id: "style", label: "Overlays", icon: <Layers3 size={22} /> },
+  { id: "style", label: "Style", icon: <Layers3 size={22} /> },
   { id: "audio", label: "Audio", icon: <Music2 size={22} /> }
 ];

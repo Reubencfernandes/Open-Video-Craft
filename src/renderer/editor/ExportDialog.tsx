@@ -23,7 +23,7 @@ export function ExportDialog(props: {
       role="presentation"
     >
       <section
-        className="grid w-[min(92vw,360px)] gap-4 rounded-lg border border-white/10 bg-[#121720] p-4 text-white shadow-[0_24px_80px_rgb(0_0_0_/_0.52)]"
+        className="grid w-[min(92vw,380px)] gap-5 rounded-2xl border border-amber-300/20 bg-[radial-gradient(circle_at_top_right,rgb(245_158_11_/_0.12),transparent_42%),#12110f] p-5 text-white shadow-[0_28px_90px_rgb(0_0_0_/_0.62)]"
         role="dialog"
         aria-modal="true"
         aria-label="Export video"
@@ -42,7 +42,7 @@ export function ExportDialog(props: {
         <label className="grid gap-1 text-xs font-extrabold text-slate-400">
           <span>Resolution</span>
           <select
-            className="h-10 rounded-lg border border-white/10 bg-black/20 px-3 text-white"
+            className="themed-select h-11"
             value={props.exportResolution}
             onChange={(event) =>
               props.onResolutionChange(event.target.value as ExportResolution)
@@ -59,7 +59,7 @@ export function ExportDialog(props: {
         <label className="grid gap-1 text-xs font-extrabold text-slate-400">
           <span>Format</span>
           <select
-            className="h-10 rounded-lg border border-white/10 bg-black/20 px-3 text-white"
+            className="themed-select h-11"
             value={props.exportFormat}
             onChange={(event) => props.onFormatChange(event.target.value as ExportVideoFormat)}
             disabled={props.exporting}

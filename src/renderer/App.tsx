@@ -18,14 +18,12 @@ import { HomeSidebar } from "./home/HomeSidebar";
 import { RecentProjectsSection } from "./home/RecentProjectsSection";
 import { latestRelease } from "./home/latest-release";
 import { FloatingNotification } from "./notifications/FloatingNotification";
-import { UpdateNotification } from "./notifications/UpdateNotification";
 import { PermissionOnboarding } from "./PermissionOnboarding";
 import { useAppUpdateStatus } from "./useAppUpdateStatus";
 
 type LaunchAction = "record" | "edit" | "open-existing" | "remove-recent";
 
-// Safe public fallback until the owner supplies a profile or community invite.
-const discordContactUrl = "https://discord.com/";
+const discordContactUrl = "https://discord.gg/ZeDvfMvWwf";
 
 export function App() {
   const [busyAction, setBusyAction] = useState<LaunchAction | null>(null);
@@ -174,6 +172,8 @@ export function App() {
       <HomeSidebar
         disabled={busyAction !== null}
         version={appInfo?.version ?? latestRelease.version}
+        updateStatus={updateStatus}
+        onInstallUpdate={() => void installUpdate()}
         onNewProject={() => void openEditor()}
         onRecord={() => void openRecorder()}
         onOpenEditor={() => void openEditor()}
@@ -197,7 +197,6 @@ export function App() {
         </div>
       </section>
       {errorMessage ? <FloatingNotification kind="error" title="We are so sorry!" message={errorMessage} onDismiss={() => setErrorMessage(null)} /> : null}
-      {!errorMessage ? <UpdateNotification status={updateStatus} onInstall={() => void installUpdate()} /> : null}
       <ChangelogDialog open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </main>
   );
