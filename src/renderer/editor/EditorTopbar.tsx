@@ -1,7 +1,7 @@
 /**
  * Editor top bar: back to launcher, project name, save, and export.
  */
-import { Download, Home, Save } from "lucide-react";
+import { Camera, Home, Plus, Settings, Upload } from "lucide-react";
 import appLogo from "../assets/app.png";
 
 export function EditorTopbar(props: {
@@ -13,31 +13,32 @@ export function EditorTopbar(props: {
   onOpenExport: () => void;
 }) {
   return (
-    <header className="grid grid-cols-[minmax(230px,1fr)_minmax(160px,auto)_minmax(220px,1fr)] items-center gap-4 border-b border-white/[0.07] bg-[#0d1016]/98 px-[1.1rem] py-3">
+    <header className="grid grid-cols-[minmax(230px,1fr)_minmax(160px,auto)_minmax(260px,1fr)] items-center gap-4 border-b border-white/[0.06] bg-[#08090b]/95 px-6 py-4">
       <div className="inline-flex min-w-0 items-center gap-3">
-        <div className="relative size-10">
+        <div className="relative size-12 overflow-hidden rounded-2xl shadow-[0_8px_25px_rgb(31_91_255_/_0.3)]">
           <img className="block size-full object-contain" src={appLogo} alt="" />
         </div>
         <div>
-          <strong className="block text-[0.9rem] font-extrabold text-white">
+          <strong className="block text-[1.15rem] font-extrabold tracking-[-0.02em] text-white">
             Open Video Craft
           </strong>
-          <small className="block text-[0.68rem] font-bold text-slate-400">
+          <small className="mt-0.5 block text-[0.72rem] font-medium text-slate-400">
             Video Editor
           </small>
         </div>
       </div>
 
       <button
-        className="inline-flex min-h-[2.15rem] min-w-0 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.04] px-3 text-sm font-bold text-slate-200"
+        className="inline-flex min-h-[3rem] min-w-[10.5rem] items-center justify-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.025] px-5 text-sm font-semibold text-slate-100 shadow-[inset_0_1px_rgb(255_255_255_/_0.03)]"
         type="button"
       >
-        <span className="max-w-[28rem] truncate">{props.projectName}</span>
+        <span className="max-w-[28rem] truncate">{props.projectName || "New Edit"}</span>
+        <Plus size={17} />
       </button>
 
       <div className="inline-flex justify-end gap-3">
         <button
-          className="inline-flex size-[2.7rem] items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.06] text-white hover:bg-white/10"
+          className="inline-flex size-[3rem] items-center justify-center rounded-xl border border-white/[0.1] bg-white/[0.035] text-white hover:bg-white/10"
           type="button"
           title="Back to main menu"
           onClick={props.onBackHome}
@@ -45,20 +46,21 @@ export function EditorTopbar(props: {
           <Home size={17} />
         </button>
         <button
-          className="inline-flex size-[2.7rem] items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.06] text-white hover:bg-white/10"
+          className="inline-flex size-[3rem] items-center justify-center rounded-xl border border-white/[0.1] bg-white/[0.035] text-white hover:bg-white/10"
           type="button"
           title="Save project (Ctrl+S)"
           onClick={props.onSave}
         >
-          <Save size={17} />
+          <Camera size={18} />
         </button>
+        <button className="inline-flex size-[3rem] items-center justify-center rounded-xl border border-white/[0.1] bg-white/[0.035] text-white hover:bg-white/10" type="button" title="Settings"><Settings size={18} /></button>
         <button
-          className="inline-flex min-h-[2.7rem] items-center justify-center gap-2 rounded-lg border border-white/[0.08] bg-[#e7f7ff] px-6 text-sm font-extrabold text-[#071018] disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-xl bg-white px-7 text-sm font-extrabold text-black shadow-[0_8px_24px_rgb(255_255_255_/_0.08)] hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-55"
           type="button"
           disabled={props.exporting || !props.canExport}
           onClick={props.onOpenExport}
         >
-          <Download size={16} />
+          <Upload size={17} />
           Export
         </button>
       </div>

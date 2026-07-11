@@ -1,77 +1,106 @@
 /**
- * Timeline chrome: transport toolbar, time ruler, playhead, and the
- * right-click context menu.
+ * Timeline chrome: editing toolbar, time ruler, playhead, and the right-click
+ * context menu.
  */
-import { CircleStop, Play, Scissors, SkipBack, SkipForward, SlidersHorizontal, Trash2 } from "lucide-react";
-import type { CSSProperties } from "react";
-import { createTimelineTicks, formatTimecode } from "./utils";
+import {
+  Maximize2,
+  Minus,
+  Plus,
+  Redo2,
+  Scissors,
+  Trash2,
+  Undo2
+} from "lucide-react";
+import { createTimelineTicks, formatSeconds, formatTimecode } from "./utils";
 
-const transportButtonClassName =
-  "grid size-7 cursor-pointer place-items-center rounded border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white";
+const toolbarButtonClassName =
+  "grid size-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-slate-300 transition hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-35";
 
 /**
- * Transport controls (frame step / play), the frame scrubber and the frame
- * counter. The scrubber is a native range input styled flat via Tailwind
- * arbitrary variants; its fill follows the --scrubber-progress CSS variable.
+ * The timeline's editing toolbar: current / total timecode on the left,
+ * undo / redo / split / delete in the middle, and the horizontal time-axis
+ * zoom cluster on the right. Playback transport lives in the preview panel.
  */
 export function TimelineToolbar(props: {
-  playing: boolean;
   currentFrame: number;
   totalFrames: number;
   currentTime: number;
-  playheadPercent: number;
-  onTogglePlayback: () => void;
-  onSeekFrame: (frame: number) => void;
+  renderDuration: number;
+  timelineZoom: number;
+  canSplit: boolean;
+  canDelete: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+  onSplit: () => void;
+  onDelete: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onZoomReset: () => void;
 }) {
   return (
-    <div className="grid grid-cols-[238px_minmax(0,1fr)_142px] items-center gap-3">
-      <div className="inline-flex h-9 min-w-0 items-center gap-1.5 px-1.5">
-        <button
-          className={transportButtonClassName}
-          type="button"
-          onClick={() => props.onSeekFrame(props.currentFrame - 1)}
-          title="Previous frame"
-        >
-          <SkipBack size={14} />
-        </button>
-        <button
-          className={transportButtonClassName}
-          type="button"
-          onClick={props.onTogglePlayback}
-          title={props.playing ? "Stop" : "Play"}
-        >
-          {props.playing ? <CircleStop size={15} /> : <Play size={15} />}
-        </button>
-        <button
-          className={transportButtonClassName}
-          type="button"
-          onClick={() => props.onSeekFrame(props.currentFrame + 1)}
-          title="Next frame"
-        >
-          <SkipForward size={14} />
-        </button>
-        <span className="text-xs font-bold tabular-nums text-slate-200">
+    <div className="grid grid-cols-[minmax(220px,auto)_minmax(0,1fr)_auto] items-center gap-3">
+      <div className="inline-flex h-9 min-w-0 items-center gap-1.5 px-1.5 text-[0.82rem] font-bold tabular-nums">
+        <span className="text-white">
           {formatTimecode(props.currentTime, props.currentFrame)}
+        </span>
+        <span className="text-slate-500">
+          / {formatTimecode(props.renderDuration, props.totalFrames)}
         </span>
       </div>
 
-      <input
-        className="h-9 w-full cursor-pointer appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-[3px] [&::-webkit-slider-runnable-track]:rounded-[2px] [&::-webkit-slider-runnable-track]:bg-[linear-gradient(90deg,#e8493a_0_var(--scrubber-progress,0%),rgb(255_255_255_/_0.14)_var(--scrubber-progress,0%)_100%)] [&::-webkit-slider-thumb]:-mt-[5px] [&::-webkit-slider-thumb]:h-[13px] [&::-webkit-slider-thumb]:w-[7px] [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-[2px] [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-black/60 [&::-webkit-slider-thumb]:bg-[#e8493a]"
-        type="range"
-        min={0}
-        max={props.totalFrames}
-        step={1}
-        value={props.currentFrame}
-        aria-label="Timeline scrubber"
-        style={{ "--scrubber-progress": `${props.playheadPercent}%` } as CSSProperties}
-        onChange={(event) => props.onSeekFrame(Number(event.target.value))}
-      />
+      <div className="inline-flex h-9 items-center gap-1">
+        <button className={toolbarButtonClassName} type="button" title="Undo (Ctrl+Z)" onClick={props.onUndo}>
+          <Undo2 size={15} />
+        </button>
+        <button className={toolbarButtonClassName} type="button" title="Redo (Ctrl+Shift+Z)" onClick={props.onRedo}>
+          <Redo2 size={15} />
+        </button>
+        <span className="mx-1 h-4 w-px bg-white/[0.08]" aria-hidden="true" />
+        <button
+          className={toolbarButtonClassName}
+          type="button"
+          title="Delete selected clip"
+          disabled={!props.canDelete}
+          onClick={props.onDelete}
+        >
+          <Trash2 size={15} />
+        </button>
+        <button
+          className={toolbarButtonClassName}
+          type="button"
+          title="Split at playhead"
+          disabled={!props.canSplit}
+          onClick={props.onSplit}
+        >
+          <Scissors size={15} />
+        </button>
+      </div>
 
-      <div className="inline-flex h-9 min-w-0 items-center justify-end gap-1.5 text-[0.72rem] tabular-nums text-slate-400">
-        <SlidersHorizontal size={14} />
-        <span>
-          {props.currentFrame} / {props.totalFrames}
+      <div className="inline-flex h-9 items-center gap-0.5 rounded-lg text-slate-300">
+        <button
+          className={toolbarButtonClassName}
+          type="button"
+          title="Zoom out timeline"
+          onClick={props.onZoomOut}
+          disabled={props.timelineZoom <= 1.0001}
+        >
+          <Minus size={14} />
+        </button>
+        <span className="min-w-[2.9rem] text-center text-[0.66rem] font-bold tabular-nums">
+          {Math.round(props.timelineZoom * 100)}%
         </span>
+        <button className={toolbarButtonClassName} type="button" title="Zoom in timeline" onClick={props.onZoomIn}>
+          <Plus size={14} />
+        </button>
+        <button
+          className={toolbarButtonClassName}
+          type="button"
+          title="Fit timeline"
+          onClick={props.onZoomReset}
+          disabled={props.timelineZoom <= 1.0001}
+        >
+          <Maximize2 size={13} />
+        </button>
       </div>
     </div>
   );
@@ -98,20 +127,22 @@ export function TimelineRuler(props: { duration: number }) {
 }
 
 /**
- * The red playhead line. The outer div is a widened invisible hit/positioning
- * area centered on the current time; the line is drawn with ::before and the
- * triangular head sits at the top, Premiere/Resolve style.
+ * The playhead: a violet line topped with a rounded timecode pill, CapCut
+ * style. The outer div is a widened invisible hit/positioning area centered
+ * on the current time; the line is drawn with ::before.
  */
-export function TimelinePlayhead(props: { playheadPercent: number }) {
+export function TimelinePlayhead(props: { playheadPercent: number; currentTime: number }) {
   return (
     <div
-      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-[#e8493a] before:content-['']"
+      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2 before:rounded-full before:bg-[#a78bfa] before:content-['']"
       aria-hidden="true"
       style={{
         left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${props.playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
       }}
     >
-      <span className="absolute left-1/2 top-0 h-0 w-0 -translate-x-1/2 border-x-[5px] border-t-[7px] border-x-transparent border-t-[#e8493a]" />
+      <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#a78bfa] bg-[#17131f] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums text-white shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]">
+        {formatSeconds(props.currentTime)}
+      </span>
     </div>
   );
 }

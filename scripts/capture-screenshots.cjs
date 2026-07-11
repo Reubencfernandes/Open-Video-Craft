@@ -114,7 +114,7 @@ app.whenReady().then(async () => {
       script: `
         new Promise((resolve) => {
           setTimeout(() => {
-            document.querySelector('button[title="Subs"]')?.click();
+            document.querySelector('button[title="Text"]')?.click();
             setTimeout(() => {
               window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
               resolve(true);

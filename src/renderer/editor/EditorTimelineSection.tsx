@@ -49,6 +49,10 @@ export function EditorTimelineSection(props: {
   canSplitAtContextMenu: boolean;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onSplitAtPlayhead: () => void;
+  onDeleteSelected: () => void;
   onSelectClip: (clip: TimelineMediaClip) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
@@ -119,6 +123,10 @@ export function EditorTimelineSection(props: {
       canSplitAtContextMenu={props.canSplitAtContextMenu}
       onTogglePlayback={props.onTogglePlayback}
       onSeekFrame={props.onSeekFrame}
+      onUndo={props.onUndo}
+      onRedo={props.onRedo}
+      onSplitAtPlayhead={props.onSplitAtPlayhead}
+      onDeleteSelected={props.onDeleteSelected}
       onSelectClip={props.onSelectClip}
       onSelectZoom={props.onSelectZoom}
       onSelectSpeed={props.onSelectSpeed}

@@ -20,7 +20,6 @@ import { useEffect, useRef, useState } from "react";
 import type {
   ProjectView
 } from "../shared/types";
-import { AppVersionStatus } from "./AppVersionStatus";
 import { ExportDialog } from "./editor/ExportDialog";
 import { EditorNotifications } from "./editor/EditorNotifications";
 import { EditorPreviewPanel } from "./editor/EditorPreviewPanel";
@@ -29,6 +28,7 @@ import { EditorToolPanel } from "./editor/EditorToolPanel";
 import { EditorTopbar } from "./editor/EditorTopbar";
 import { ToolRail } from "./editor/ToolRail";
 import { getCameraFrameFromPreset } from "./editor/layout-geometry";
+import { MediaPanel } from "./editor/panels/MediaPanel";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
 import { useEditorExport } from "./editor/useEditorExport";
 import { useEditorMediaActions } from "./editor/useEditorMediaActions";
@@ -75,7 +75,7 @@ export function EditorView() {
   const [importedMedia, setImportedMedia] = useState<EditorMediaItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<MediaPanelTab>("all");
-  const [activeTool, setActiveTool] = useState<EditorTool>("layout");
+  const [activeTool, setActiveTool] = useState<EditorTool>("media");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("bubble");
   const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("real-world-5");
   const [activeBackgroundCategory, setActiveBackgroundCategory] =
@@ -432,10 +432,12 @@ export function EditorView() {
     handleTimelineDrop,
     moveTimelineScrub,
     openTimelineContextMenu,
+    redoTimelineEdit,
     removeSpeedEffect,
     removeZoomEffect,
     splitTimelineSegment,
     sttStatus,
+    undoTimelineEdit,
     updateSpeedEffect,
     updateSubtitle,
     updateZoomEffect
@@ -497,9 +499,9 @@ export function EditorView() {
   // ---------------------------------------------------------------------------
 
   return (
-    <main className="grid h-screen min-h-screen overflow-hidden bg-[#121317] p-0 text-[#f7f7f8]">
+    <main className="editor-app grid h-screen min-h-screen overflow-hidden bg-[#0a0a0c] p-0 text-[#f7f7f8]">
       <section
-        className="grid h-screen w-screen min-h-0 overflow-hidden bg-[#121317]"
+        className="grid h-screen w-screen min-h-0 overflow-hidden bg-[#0a0a0c]"
         style={{
           gridTemplateRows: timelineVisible
             ? `auto minmax(0, 1fr) ${timelinePanelHeight}px`
@@ -526,17 +528,27 @@ export function EditorView() {
             onResolutionChange={setExportResolution}
           />
         ) : null}
-        <AppVersionStatus />
         <EditorNotifications error={error} exportMessage={exportMessage} />
 
-        <div className="grid min-h-0 grid-cols-[86px_324px_minmax(0,1fr)] gap-[0.9rem] px-[1.1rem] py-[0.9rem]">
+        <div className="grid min-h-0 grid-cols-[92px_340px_minmax(420px,1fr)_320px] gap-3 px-3 py-2">
           <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
+
+          <aside className="order-2 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] p-4 shadow-[0_18px_45px_rgb(0_0_0_/_0.24)]">
+            <MediaPanel
+              activeTab={activePanel}
+              visibleMedia={visibleMedia}
+              selectedItemId={selectedItem?.id ?? null}
+              onImport={() => void importMedia()}
+              onTabChange={setActivePanel}
+              onSelectItem={selectTimelineItem}
+              onItemDuration={updateMediaDuration}
+              onRemoveItem={removeImportedMedia}
+            />
+          </aside>
 
           <EditorToolPanel
             activeTool={activeTool}
-            activePanel={activePanel}
-            visibleMedia={visibleMedia}
-            selectedItemId={selectedItem?.id ?? null}
+            onToolChange={setActiveTool}
             layoutMode={layoutMode}
             screenScale={screenPosition.scale}
             screenAspectRatio={screenAspectRatio}
@@ -564,11 +576,7 @@ export function EditorView() {
             activeBackgroundCategory={activeBackgroundCategory}
             backgroundStyle={backgroundStyle}
             videoCornerStyle={videoCornerStyle}
-            onImportMedia={() => void importMedia()}
-            onTabChange={setActivePanel}
             onSelectItem={selectTimelineItem}
-            onItemDuration={updateMediaDuration}
-            onRemoveItem={removeImportedMedia}
             onLayoutModeChange={setLayoutMode}
             onScreenScaleChange={(scale) =>
               setScreenPosition((current) => ({ ...current, scale }))
@@ -624,6 +632,11 @@ export function EditorView() {
             activeSubtitle={activeSubtitle}
             subtitleStyle={subtitleStyle}
             currentTime={currentTime}
+            playing={playing}
+            currentFrame={currentFrame}
+            totalFrames={totalFrames}
+            onTogglePlayback={() => void togglePlayback()}
+            onSeekFrame={seekFrame}
             mainVideoRef={mainVideoRef}
             cameraRef={cameraRef}
             audioElsRef={audioElsRef}
@@ -678,6 +691,12 @@ export function EditorView() {
           }
           onTogglePlayback={() => void togglePlayback()}
           onSeekFrame={seekFrame}
+          onUndo={undoTimelineEdit}
+          onRedo={redoTimelineEdit}
+          onSplitAtPlayhead={() =>
+            splitTimelineSegment(selectedTimelineSegmentId, currentTime)
+          }
+          onDeleteSelected={deleteSelectedTimelineSegment}
           onSelectClip={(clip) => {
             setSelectedItemId(clip.item.id);
             setSelectedTimelineSegmentId(clip.id);

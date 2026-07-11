@@ -4,6 +4,26 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-11
+
+### Added
+
+- A fully redesigned dashboard launcher with persistent navigation, primary workflow cards, project search, generated project artwork, and a responsive recent-project library.
+- A four-pane editor workspace with a persistent media browser, central preview transport, right-side Video/Audio/Zoom inspector, and full-width multi-track timeline.
+- Layered cubic Bézier curves for audio clips on the timeline, generated deterministically and tested independently.
+- Dedicated video transform, position, rotation, flip, compositing, opacity, and speed controls in the editor inspector.
+
+### Changed
+
+- Launcher and editor presentation code is divided into focused, documented components so state orchestration remains separate from visual controls.
+- Editor tool names now match their actual behavior: Zoom, Speed, Layout, Overlays, Audio, Text, Cut, and Media are all directly accessible.
+- Timeline, media cards, preview controls, and project cards use a consistent dark surface and violet-accent design system.
+
+### Fixed
+
+- Restored direct access to the Speed tool after the editor redesign.
+- Removed misleading Effects and Transitions labels from tools that actually controlled Zoom and Layout.
+
 ## [1.1.3] - 2026-07-11
 
 ### Added

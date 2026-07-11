@@ -8,8 +8,8 @@ import type { ReactNode } from "react";
 export function ToolPanelHeader(props: { icon: ReactNode; title: string }) {
   return (
     <div className="flex min-h-[2.7rem] items-center gap-3 text-slate-100">
-      <span className="inline-flex text-cyan-300">{props.icon}</span>
-      <strong className="min-w-0 flex-1 truncate text-xl font-extrabold">{props.title}</strong>
+      <span className="inline-flex text-fuchsia-300">{props.icon}</span>
+      <strong className="min-w-0 flex-1 truncate text-lg font-bold">{props.title}</strong>
       <button
         className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-400 hover:bg-white/10 hover:text-white"
         type="button"
@@ -41,7 +41,7 @@ export function RangeControl(props: {
         </output>
       </span>
       <input
-        className="w-full accent-amber-500"
+        className="w-full accent-fuchsia-400"
         type="range"
         min={props.min}
         max={props.max}

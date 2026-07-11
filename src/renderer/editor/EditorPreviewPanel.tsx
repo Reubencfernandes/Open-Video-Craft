@@ -1,6 +1,6 @@
 /**
- * Preview shell: the framed preview area, preview zoom controls, and the
- * hidden audio elements that play timeline audio clips.
+ * Preview shell: the framed preview area, the transport bar (skip / step /
+ * play), and the hidden audio elements that play timeline audio clips.
  */
 import type {
   CSSProperties,
@@ -8,8 +8,9 @@ import type {
   PointerEvent as ReactPointerEvent,
   RefObject
 } from "react";
-import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { PreviewContent } from "./PreviewContent";
+import { PreviewTransportBar } from "./PreviewTransportBar";
+import { TimelineAudioElements } from "./TimelineAudioElements";
 import type {
   EditorMediaItem,
   LayoutMode,
@@ -37,6 +38,11 @@ export function EditorPreviewPanel(props: {
   activeSubtitle: SubtitleSegment | null;
   subtitleStyle: SubtitleStyle;
   currentTime: number;
+  playing: boolean;
+  currentFrame: number;
+  totalFrames: number;
+  onTogglePlayback: () => void;
+  onSeekFrame: (frame: number) => void;
   mainVideoRef: RefObject<HTMLVideoElement | null>;
   cameraRef: RefObject<HTMLVideoElement | null>;
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
@@ -61,8 +67,8 @@ export function EditorPreviewPanel(props: {
   } as CSSProperties;
 
   return (
-    <section className="relative min-h-0 min-w-0 overflow-hidden bg-transparent">
-      <div className="flex size-full items-center justify-center overflow-auto px-3 pb-12 pt-3">
+    <section className="order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] shadow-[0_18px_45px_rgb(0_0_0_/_0.2)]">
+      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto p-5">
         <div className={props.previewClassName} style={previewFrameStyle}>
           {previewItem ? (
             <PreviewContent
@@ -97,61 +103,8 @@ export function EditorPreviewPanel(props: {
         </div>
       </div>
 
-      <div
-        className="absolute bottom-4 right-5 z-[8] inline-flex items-center gap-1 rounded-full border border-white/10 bg-[#080a0e]/80 p-1 shadow-[0_14px_34px_rgb(0_0_0_/_0.34)] backdrop-blur"
-        aria-label="Preview zoom controls"
-      >
-        <button
-          className="grid size-8 place-items-center rounded-full text-slate-200 hover:bg-white/10 hover:text-white"
-          type="button"
-          title="Zoom preview out"
-          aria-label="Zoom preview out"
-          onClick={() => props.onPreviewZoomChange(props.previewZoom - 0.1)}
-        >
-          <ZoomOut size={16} />
-        </button>
-        <span className="min-w-12 text-center text-xs font-extrabold text-slate-200 tabular-nums">
-          {Math.round(props.previewZoom * 100)}%
-        </span>
-        <button
-          className="grid size-8 place-items-center rounded-full text-slate-200 hover:bg-white/10 hover:text-white"
-          type="button"
-          title="Zoom preview in"
-          aria-label="Zoom preview in"
-          onClick={() => props.onPreviewZoomChange(props.previewZoom + 0.1)}
-        >
-          <ZoomIn size={16} />
-        </button>
-        <button
-          className="grid size-8 place-items-center rounded-full text-slate-200 hover:bg-white/10 hover:text-white"
-          type="button"
-          title="Reset preview zoom"
-          aria-label="Reset preview zoom"
-          onClick={() => props.onPreviewZoomChange(1)}
-        >
-          <RotateCcw size={16} />
-        </button>
-      </div>
-
-      <div className="hidden" aria-hidden="true">
-        {props.audioTimelineClips.map((clip) => (
-          <audio
-            key={clip.id}
-            src={clip.item.url}
-            preload="metadata"
-            onLoadedMetadata={(event) =>
-              props.onMediaDuration(clip.item.id, event.currentTarget.duration)
-            }
-            ref={(element) => {
-              if (element) {
-                props.audioElsRef.current.set(clip.id, element);
-              } else {
-                props.audioElsRef.current.delete(clip.id);
-              }
-            }}
-          />
-        ))}
-      </div>
+      <PreviewTransportBar playing={props.playing} currentFrame={props.currentFrame} totalFrames={props.totalFrames} onTogglePlayback={props.onTogglePlayback} onSeekFrame={props.onSeekFrame} />
+      <TimelineAudioElements clips={props.audioTimelineClips} elementsRef={props.audioElsRef} onMediaDuration={props.onMediaDuration} />
     </section>
   );
 }

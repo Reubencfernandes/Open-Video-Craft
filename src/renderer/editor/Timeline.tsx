@@ -3,7 +3,7 @@
  * playhead, and the track lanes. Purely presentational; all interaction state
  * lives in EditorView's hooks.
  */
-import { AudioLines, Captions, Film, Maximize2, Minus, Plus, WandSparkles } from "lucide-react";
+import { AudioLines, Film, Type, WandSparkles } from "lucide-react";
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
@@ -45,9 +45,6 @@ import type {
  * variables declared here size the label column for every child (tracks,
  * ruler offset and the playhead position math all read them).
  */
-const zoomButtonClassName =
-  "grid size-6 cursor-pointer place-items-center rounded border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-35";
-
 export function Timeline(props: {
   bodyRef: RefObject<HTMLDivElement | null>;
   onResizePointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -80,6 +77,10 @@ export function Timeline(props: {
   canSplitAtContextMenu: boolean;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  onSplitAtPlayhead: () => void;
+  onDeleteSelected: () => void;
   onSelectClip: (clip: TimelineMediaClip) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
@@ -115,9 +116,9 @@ export function Timeline(props: {
   onContextMenuDelete: () => void;
 }) {
   return (
-    <section className="relative grid h-full min-h-0 min-w-0 content-start gap-[0.45rem] overflow-auto border-t border-white/[0.08] bg-[#141518] px-[1.1rem] pb-4 pt-4 [--timeline-body-pad:0.7rem] [--timeline-label-width:132px] [--timeline-track-gap:0.85rem]">
+    <section className="relative mx-3 mb-3 grid h-[calc(100%-0.75rem)] min-h-0 min-w-0 content-start gap-[0.45rem] overflow-auto rounded-xl border border-white/[0.07] bg-[#101113] px-[1.1rem] pb-4 pt-4 shadow-[0_18px_45px_rgb(0_0_0_/_0.3)] [--timeline-body-pad:0.7rem] [--timeline-label-width:148px] [--timeline-track-gap:0.85rem]">
       <button
-        className="group absolute left-0 right-0 top-0 z-30 grid h-7 cursor-row-resize place-items-center border-0 bg-transparent p-0"
+        className="group absolute left-0 right-0 top-0 z-30 grid h-4 cursor-row-resize place-items-center border-0 bg-transparent p-0"
         type="button"
         aria-label="Resize timeline"
         title="Drag to resize timeline"
@@ -127,51 +128,24 @@ export function Timeline(props: {
         onPointerCancel={props.onResizePointerUp}
         onDoubleClick={props.onResizeDoubleClick}
       >
-        <span className="h-1.5 w-20 rounded-full bg-cyan-300/80 shadow-[0_0_18px_rgb(34_211_238_/_0.35)] transition group-hover:bg-cyan-200" />
+        <span className="h-1 w-20 rounded-full bg-white/[0.12] transition group-hover:bg-violet-400/80" />
       </button>
 
-      {/* Horizontal (time-axis) zoom. Stacked above the resize handle so its
-          buttons stay clickable. */}
-      <div className="absolute right-3 top-1 z-40 inline-flex items-center gap-0.5 rounded-md border border-white/10 bg-[#1b1d23]/95 px-1 py-0.5 text-slate-300 shadow-[0_6px_18px_rgb(0_0_0_/_0.4)]">
-        <button
-          className={zoomButtonClassName}
-          type="button"
-          title="Zoom out timeline"
-          onClick={props.onZoomOut}
-          disabled={props.timelineZoom <= 1.0001}
-        >
-          <Minus size={13} />
-        </button>
-        <span className="min-w-[2.7rem] text-center text-[0.62rem] font-bold tabular-nums">
-          {Math.round(props.timelineZoom * 100)}%
-        </span>
-        <button
-          className={zoomButtonClassName}
-          type="button"
-          title="Zoom in timeline"
-          onClick={props.onZoomIn}
-        >
-          <Plus size={13} />
-        </button>
-        <button
-          className={zoomButtonClassName}
-          type="button"
-          title="Fit timeline"
-          onClick={props.onZoomReset}
-          disabled={props.timelineZoom <= 1.0001}
-        >
-          <Maximize2 size={12} />
-        </button>
-      </div>
-
       <TimelineToolbar
-        playing={props.playing}
         currentFrame={props.currentFrame}
         totalFrames={props.totalFrames}
         currentTime={props.currentTime}
-        playheadPercent={props.playheadPercent}
-        onTogglePlayback={props.onTogglePlayback}
-        onSeekFrame={props.onSeekFrame}
+        renderDuration={props.renderDuration}
+        timelineZoom={props.timelineZoom}
+        canSplit={props.selectedSegmentId !== null}
+        canDelete={props.selectedSegmentId !== null}
+        onUndo={props.onUndo}
+        onRedo={props.onRedo}
+        onSplit={props.onSplitAtPlayhead}
+        onDelete={props.onDeleteSelected}
+        onZoomIn={props.onZoomIn}
+        onZoomOut={props.onZoomOut}
+        onZoomReset={props.onZoomReset}
       />
 
       {/* Horizontal-zoom viewport: the ruler and track body grow past 100% and
@@ -209,7 +183,7 @@ export function Timeline(props: {
             onDragOver={props.onBodyDragOver}
             onDrop={props.onBodyDrop}
           >
-        <TimelinePlayhead playheadPercent={props.playheadPercent} />
+        <TimelinePlayhead playheadPercent={props.playheadPercent} currentTime={props.currentTime} />
 
         <TimelineTrack label="Video 1" accent="purple" icon={<Film size={14} />}>
           {props.videoClips.map((clip) => (
@@ -226,7 +200,7 @@ export function Timeline(props: {
         </TimelineTrack>
 
         {props.activeTool === "zoom" ? (
-          <TimelineTrack label="Zoom" accent="amber" icon={<WandSparkles size={14} />}>
+          <TimelineTrack label="Effects" accent="amber" icon={<WandSparkles size={14} />}>
             {getOrderedZoomTimingItems(props.zoomEffects).map((effect) => (
               <TimelineZoomClip
                 key={effect.id}
@@ -255,12 +229,11 @@ export function Timeline(props: {
           </TimelineTrack>
         ) : null}
 
-        {props.activeTool === "audio"
-          ? props.audioTracks.map((track) => (
+        {props.audioTracks.map((track) => (
               <TimelineTrack
                 key={track.lane}
                 label={`Audio ${track.lane + 1}`}
-                accent="green"
+                accent="purple"
                 icon={<AudioLines size={14} />}
               >
                 {track.clips.map((clip) => (
@@ -275,11 +248,10 @@ export function Timeline(props: {
                   />
                 ))}
               </TimelineTrack>
-            ))
-          : null}
+            ))}
 
-        {props.activeTool === "subtitles" ? (
-          <TimelineTrack label="Subtitles" accent="cyan" icon={<Captions size={14} />}>
+        {props.subtitles.length > 0 ? (
+          <TimelineTrack label="Text 1" accent="purple" icon={<Type size={14} />}>
             {props.subtitles.map((subtitle) => (
               <TimelineSubtitleClip
                 key={subtitle.id}
