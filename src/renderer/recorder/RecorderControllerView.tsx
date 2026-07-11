@@ -19,6 +19,7 @@ import {
   VolumeX,
   X
 } from "lucide-react";
+import { useEffect, useRef } from "react";
 import appLogo from "../assets/app.png";
 import { cx } from "../classNames";
 import { FloatingDeviceControl } from "./FloatingDeviceControl";
@@ -43,6 +44,7 @@ export function RecorderControllerView(props: {
   selectedCameraLabel: string;
   micEnabled: boolean;
   cameraEnabled: boolean;
+  cameraPreviewStream: MediaStream | null;
   canStart: boolean;
   onSetCompactMode: (compact: boolean) => void;
   onDismissError: () => void;
@@ -142,20 +144,6 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
           </div>
           <div className="inline-flex items-center gap-1 [-webkit-app-region:no-drag]">
             <button
-              className={cx(
-                "grid size-8 place-items-center rounded-md border-0 bg-transparent hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40",
-                props.systemAudioEnabled ? "text-emerald-300" : "text-slate-300"
-              )}
-              type="button"
-              aria-label={systemAudioLabel}
-              aria-pressed={props.systemAudioEnabled}
-              title={systemAudioLabel}
-              onClick={props.onToggleSystemAudio}
-              disabled={!props.canStart}
-            >
-              {props.systemAudioEnabled ? <Volume2 size={19} /> : <VolumeX size={19} />}
-            </button>
-            <button
               className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
               aria-label={borderOverlayLabel}
@@ -203,7 +191,7 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
 
         <RecorderBody {...props} />
 
-        <footer className="grid grid-cols-3 gap-2 border-t border-white/[0.07] p-3">
+        <footer className="grid grid-cols-4 gap-2 border-t border-white/[0.07] p-3">
           <FloatingDeviceControl
             enabled={props.micEnabled}
             enabledIcon={<Mic size={25} />}
@@ -216,6 +204,21 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             onToggle={props.onToggleMic}
             onValueChange={props.onMicChange}
           />
+
+          <button
+            className={cx(
+              "grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45",
+              props.systemAudioEnabled && "border-emerald-300/40 bg-emerald-500/15 text-emerald-200"
+            )}
+            type="button"
+            onClick={props.onToggleSystemAudio}
+            disabled={!props.canStart}
+            aria-pressed={props.systemAudioEnabled}
+            title={systemAudioLabel}
+          >
+            {props.systemAudioEnabled ? <Volume2 size={25} /> : <VolumeX size={25} />}
+            <span>{props.systemAudioEnabled ? "System on" : "System off"}</span>
+          </button>
 
           <button
             className="grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45"
@@ -246,9 +249,38 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
   );
 }
 
+function CameraPreview(props: { stream: MediaStream }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    video.srcObject = props.stream;
+    void video.play().catch(() => undefined);
+
+    return () => {
+      video.srcObject = null;
+    };
+  }, [props.stream]);
+
+  return (
+    <video
+      ref={videoRef}
+      className="aspect-video w-[200px] flex-none rounded-xl border border-white/10 bg-black object-cover shadow-lg"
+      autoPlay
+      muted
+      playsInline
+    />
+  );
+}
+
 function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
   const isRecordingActive = props.state === "recording" || props.state === "paused";
   const primaryActionLabel = isRecordingActive ? "Stop recording" : "Start recording";
+  const showCameraPreview = isRecordingActive && props.cameraPreviewStream !== null;
 
   return (
     <div className="relative grid min-h-0 flex-1 place-items-center px-4 pb-6 pt-4">
@@ -265,35 +297,39 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
         </div>
       ) : null}
 
-      <button
-        className={cx(
-          "grid size-[76px] place-items-center rounded-full border-0 bg-rose-600 text-3xl font-extrabold text-white transition hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70",
-          (props.state === "recording" || props.state === "paused") &&
-            "bg-red-700 hover:bg-red-800"
-        )}
-        type="button"
-        disabled={
-          props.state === "preparing" ||
-          props.state === "countdown" ||
-          props.state === "processing" ||
-          props.state === "stopping"
-        }
-        onClick={() => {
-          if (isRecordingActive) {
-            props.onStopRecording();
-          } else {
-            props.onStartRecording();
+      <div className="flex flex-col items-center gap-4">
+        {showCameraPreview ? <CameraPreview stream={props.cameraPreviewStream!} /> : null}
+
+        <button
+          className={cx(
+            "grid size-[76px] place-items-center rounded-full border-0 bg-rose-600 text-3xl font-extrabold text-white transition hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70",
+            (props.state === "recording" || props.state === "paused") &&
+              "bg-red-700 hover:bg-red-800"
+          )}
+          type="button"
+          disabled={
+            props.state === "preparing" ||
+            props.state === "countdown" ||
+            props.state === "processing" ||
+            props.state === "stopping"
           }
-        }}
-        aria-label={primaryActionLabel}
-        title={isRecordingActive ? undefined : primaryActionLabel}
-      >
-        {props.state === "countdown" ? (
-          props.countdown
-        ) : isRecordingActive ? (
-          <CircleStop size={34} />
-        ) : null}
-      </button>
+          onClick={() => {
+            if (isRecordingActive) {
+              props.onStopRecording();
+            } else {
+              props.onStartRecording();
+            }
+          }}
+          aria-label={primaryActionLabel}
+          title={isRecordingActive ? undefined : primaryActionLabel}
+        >
+          {props.state === "countdown" ? (
+            props.countdown
+          ) : isRecordingActive ? (
+            <CircleStop size={34} />
+          ) : null}
+        </button>
+      </div>
 
       {isRecordingActive ? (
         <div className="absolute bottom-14 inline-flex items-center gap-2">

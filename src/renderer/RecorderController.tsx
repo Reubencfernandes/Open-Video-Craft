@@ -47,6 +47,7 @@ export function RecorderController() {
   const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
   const [micEnabled, setMicEnabled] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [cameraPreviewStream, setCameraPreviewStream] = useState<MediaStream | null>(null);
   const [state, setState] = useState<FloatingState>("ready");
   const [countdown, setCountdown] = useState(3);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -309,6 +310,7 @@ export function RecorderController() {
 
       const cameraStream = await getOptionalCameraStream(cameraEnabled, selectedCameraId);
       cameraStreamRef.current = cameraStream;
+      setCameraPreviewStream(cameraStream);
       const micStream = await getOptionalMicStream(micEnabled, selectedMicId);
       micStreamRef.current = micStream;
 
@@ -578,6 +580,7 @@ export function RecorderController() {
     cameraStreamRef.current = null;
     micStreamRef.current = null;
     systemStreamRef.current = null;
+    setCameraPreviewStream(null);
   }
 
   function getCurrentRecordedDurationMs(): number {
@@ -609,6 +612,7 @@ export function RecorderController() {
       selectedCameraLabel={selectedCameraLabel}
       micEnabled={micEnabled}
       cameraEnabled={cameraEnabled}
+      cameraPreviewStream={cameraPreviewStream}
       canStart={canStart}
       onSetCompactMode={(nextCompact) => void setCompactMode(nextCompact)}
       onDismissError={() => setErrorMessage(null)}

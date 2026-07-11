@@ -4,6 +4,13 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-07-11
+
+### Added
+
+- The floating recorder now shows a live camera preview above the record button while recording, so you can see your framing without switching windows.
+- Record system audio is now a dedicated control in the recorder's device row, alongside Mic, Project, and Camera, making it easy to toggle before you start.
+
 ## [1.1.1] - 2026-07-10
 
 ### Fixed
