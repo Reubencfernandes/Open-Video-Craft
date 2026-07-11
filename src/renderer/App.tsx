@@ -64,9 +64,9 @@ export function App() {
     await runLaunchAction("edit", () => window.openVideoCraft.windows.openEditor(project.id));
   }
 
-  async function removeRecentProject(projectId: string) {
+  async function deleteRecentProject(projectId: string) {
     await runLaunchAction("remove-recent", async () => {
-      await window.openVideoCraft.projects.removeFromRecent(projectId);
+      await window.openVideoCraft.projects.delete(projectId);
       await loadRecentProjects();
       return true;
     });
@@ -278,8 +278,8 @@ export function App() {
                     <button
                       className="grid size-8 place-items-center rounded-md border border-white/10 bg-white/[0.05] text-slate-300 hover:bg-red-400/15 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-45"
                       type="button"
-                      title="Remove from recent projects"
-                      onClick={() => void removeRecentProject(project.id)}
+                      title="Delete project (moves the folder to the Trash)"
+                      onClick={() => void deleteRecentProject(project.id)}
                       disabled={busyAction !== null}
                     >
                       <Trash2 size={14} />

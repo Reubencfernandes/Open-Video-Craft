@@ -77,7 +77,7 @@ export function EditorView() {
   const [activePanel, setActivePanel] = useState<MediaPanelTab>("all");
   const [activeTool, setActiveTool] = useState<EditorTool>("layout");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("bubble");
-  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("real-world-1");
+  const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>("real-world-5");
   const [activeBackgroundCategory, setActiveBackgroundCategory] =
     useState<BackgroundCategory>("image");
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(null);

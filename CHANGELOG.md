@@ -4,6 +4,24 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-07-11
+
+### Added
+
+- The floating recorder now shows a **live camera preview as soon as you enable the camera**, so you can frame yourself before recording (not just once recording starts).
+- **Screen and camera quality pickers** in the recorder: screen captures at Native (full display) by default with 1440p/1080p/720p downscale options, and the camera records real HD (1080p / 720p / 480p) instead of the low browser default.
+
+### Changed
+
+- The recorder's minimize button now performs a **real OS minimize** to the dock/taskbar instead of collapsing into the compact pill.
+- Deleting a project from the launcher now **moves its folder to the Trash** (after a confirmation) and removes it from the recent list, instead of only forgetting it while leaving the files on disk.
+- The default editor background is now **Teal Wave**.
+
+### Fixed
+
+- **Video thumbnails now appear reliably** on both the timeline clips and the Setup/media grid. Thumbnail capture no longer hangs forever on chunked recordings (every step is time-bounded and waits for a real decoded frame), and the result is shared between the timeline and media panel.
+- System-audio tracks that captured no real samples no longer register an empty, unplayable WAV that produced a "no supported sources" error in the editor.
+
 ## [1.1.2] - 2026-07-11
 
 ### Added

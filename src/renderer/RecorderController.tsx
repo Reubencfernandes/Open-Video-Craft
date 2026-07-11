@@ -29,6 +29,12 @@ import {
   toErrorMessage,
   videoMimeCandidates
 } from "./recorder/recorder-utils";
+import {
+  cameraQualityPresets,
+  screenQualityPresets,
+  type CameraQuality,
+  type ScreenQuality
+} from "./recorder/quality";
 import { shouldShowSourceSelectionOverlay } from "./recorder/source-overlay-state";
 import type {
   DeviceOption,
@@ -48,6 +54,8 @@ export function RecorderController() {
   const [micEnabled, setMicEnabled] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [cameraPreviewStream, setCameraPreviewStream] = useState<MediaStream | null>(null);
+  const [screenQuality, setScreenQuality] = useState<ScreenQuality>("source");
+  const [cameraQuality, setCameraQuality] = useState<CameraQuality>("720p");
   const [state, setState] = useState<FloatingState>("ready");
   const [countdown, setCountdown] = useState(3);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -210,6 +218,49 @@ export function RecorderController() {
     return () => window.clearInterval(timer);
   }, [state]);
 
+  // Live camera preview while idle: whenever the camera is enabled and a device
+  // is chosen (and we are not mid-capture), open the camera so the user can see
+  // and frame their face before recording. During capture the recording stream
+  // drives the preview instead, so this effect only owns and releases the idle
+  // preview stream.
+  useEffect(() => {
+    if (!cameraEnabled || !selectedCameraId || state !== "ready") {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let previewStream: MediaStream | null = null;
+
+    void (async () => {
+      const acquired = await getOptionalCameraStream(
+        true,
+        selectedCameraId,
+        cameraQualityPresets[cameraQuality]
+      );
+      if (cancelled) {
+        acquired?.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      if (!acquired) {
+        setCameraEnabled(false);
+        return;
+      }
+
+      previewStream = acquired;
+      cameraStreamRef.current = acquired;
+      setCameraPreviewStream(acquired);
+    })();
+
+    return () => {
+      cancelled = true;
+      previewStream?.getTracks().forEach((track) => track.stop());
+      if (cameraStreamRef.current === previewStream) {
+        cameraStreamRef.current = null;
+      }
+      setCameraPreviewStream((current) => (current === previewStream ? null : current));
+    };
+  }, [cameraEnabled, selectedCameraId, cameraQuality, state]);
+
   async function chooseFolder() {
     const folder = await window.openVideoCraft.projects.chooseBaseDirectory();
 
@@ -278,10 +329,11 @@ export function RecorderController() {
       await window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
 
       const wantsSystemAudio = systemAudioEnabled;
+      const screenMaxHeight = screenQualityPresets[screenQuality].maxHeight;
       let screenStream: MediaStream;
       try {
         screenStream = await navigator.mediaDevices.getDisplayMedia(
-          createDisplayCaptureOptions(wantsSystemAudio)
+          createDisplayCaptureOptions(wantsSystemAudio, screenMaxHeight)
         );
       } catch (captureError) {
         if (!wantsSystemAudio) {
@@ -290,7 +342,7 @@ export function RecorderController() {
         // Some platforms/OS versions reject a display capture that also asks for
         // audio. Retry video-only so recording still works without system audio.
         screenStream = await navigator.mediaDevices.getDisplayMedia(
-          createDisplayCaptureOptions(false)
+          createDisplayCaptureOptions(false, screenMaxHeight)
         );
       }
       screenStreamRef.current = screenStream;
@@ -308,7 +360,11 @@ export function RecorderController() {
         setSystemAudioEnabled(false);
       }
 
-      const cameraStream = await getOptionalCameraStream(cameraEnabled, selectedCameraId);
+      const cameraStream = await getOptionalCameraStream(
+        cameraEnabled,
+        selectedCameraId,
+        cameraQualityPresets[cameraQuality]
+      );
       cameraStreamRef.current = cameraStream;
       setCameraPreviewStream(cameraStream);
       const micStream = await getOptionalMicStream(micEnabled, selectedMicId);
@@ -383,6 +439,7 @@ export function RecorderController() {
         cameraMimeType,
         micMimeType,
         systemMimeType,
+        screenBitsPerSecond: screenQualityPresets[screenQuality].videoBitsPerSecond,
         onChunk: (track, blob) => queueChunkWrite(startedProject.id, track, blob),
         onError: (error) => void failRecording(toErrorMessage(error))
       });
@@ -613,8 +670,11 @@ export function RecorderController() {
       micEnabled={micEnabled}
       cameraEnabled={cameraEnabled}
       cameraPreviewStream={cameraPreviewStream}
+      screenQuality={screenQuality}
+      cameraQuality={cameraQuality}
       canStart={canStart}
       onSetCompactMode={(nextCompact) => void setCompactMode(nextCompact)}
+      onMinimizeWindow={() => void window.openVideoCraft.windows.minimizeCurrent()}
       onDismissError={() => setErrorMessage(null)}
       onToggleBorderOverlay={() => setBorderOverlayEnabled((value) => !value)}
       onToggleSystemAudio={() => setSystemAudioEnabled((value) => !value)}
@@ -633,6 +693,8 @@ export function RecorderController() {
       }
       onMicChange={setSelectedMicId}
       onCameraChange={setSelectedCameraId}
+      onScreenQualityChange={setScreenQuality}
+      onCameraQualityChange={setCameraQuality}
     />
   );
 }

@@ -8,6 +8,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cx } from "../classNames";
 import { loadWaveSurferBlob } from "./media-utils";
+import { useMediaThumbnail } from "./thumbnail-cache";
 import { SpeedIcon } from "./SpeedIcon";
 import { createTimelineClipStyle } from "./timeline-utils";
 import type {
@@ -64,6 +65,7 @@ export function TimelineClip(props: {
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>, segmentId: string) => void;
 }) {
   const item = props.clip.item;
+  const { thumbnailUrl } = useMediaThumbnail(item);
   const fillClassName =
     item.kind === "audio"
       ? "bg-[#2b7a5b]"
@@ -80,6 +82,18 @@ export function TimelineClip(props: {
       onClick={props.onSelect}
       onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
     >
+      {item.kind !== "audio" && thumbnailUrl ? (
+        <>
+          {/* Poster frame fills the clip; a dark scrim keeps the label legible. */}
+          <img
+            className="pointer-events-none absolute inset-0 z-0 size-full object-cover opacity-80"
+            src={thumbnailUrl}
+            alt=""
+            aria-hidden="true"
+          />
+          <span className="pointer-events-none absolute inset-0 z-0 bg-black/45" aria-hidden="true" />
+        </>
+      ) : null}
       {item.kind === "audio" ? (
         <AudioWaveform id={props.clip.id} name={item.name} url={item.url} />
       ) : (

@@ -147,6 +147,13 @@ export class ProjectStore {
     return this.toView(record);
   }
 
+  // Drop any cached in-memory record without touching disk. Used after the
+  // project folder has already been deleted (e.g. moved to the OS Trash) so a
+  // later lookup does not resurrect a stale record.
+  forgetProject(projectId: string): void {
+    this.records.delete(projectId);
+  }
+
   async discardProject(projectId: string): Promise<boolean> {
     return this.runProjectOperation(projectId, async () => {
       const record = this.getRecord(projectId);

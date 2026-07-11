@@ -6,12 +6,15 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
   protocol,
   screen as electronScreen,
+  shell,
 } from "electron";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
@@ -610,7 +613,27 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("windows:minimize-current", (event): boolean => {
-    BrowserWindow.fromWebContents(event.sender)?.minimize();
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window || window.isDestroyed()) {
+      return false;
+    }
+
+    // The recorder floats always-on-top with no taskbar entry; both of those
+    // stop a normal minimize from actually parking in the dock/taskbar. Relax
+    // them while minimized so the window minimizes for real, and restore the
+    // floating behavior when the user brings it back.
+    if (window === recorderWindow) {
+      window.setAlwaysOnTop(false);
+      window.setSkipTaskbar(false);
+      window.once("restore", () => {
+        if (!window.isDestroyed()) {
+          window.setSkipTaskbar(true);
+          window.setAlwaysOnTop(true, "screen-saver");
+        }
+      });
+    }
+
+    window.minimize();
     return true;
   });
 
@@ -734,6 +757,43 @@ function registerIpc(): void {
 
   ipcMain.handle("projects:remove-from-recent", async (_event, projectId: string): Promise<boolean> => {
     return getProjectLibrary().remove(projectId);
+  });
+
+  ipcMain.handle("projects:delete", async (_event, projectId: string): Promise<boolean> => {
+    const entry = await getProjectLibrary().get(projectId);
+    if (!entry) {
+      return false;
+    }
+
+    const parentWindow = getDialogParentWindow();
+    const confirmOptions = {
+      type: "warning" as const,
+      buttons: ["Delete", "Cancel"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "Delete project",
+      message: `Delete "${entry.name}"?`,
+      detail: `The project folder will be moved to the Trash:\n${entry.rootPath}`
+    };
+    const { response } = parentWindow
+      ? await dialog.showMessageBox(parentWindow, confirmOptions)
+      : await dialog.showMessageBox(confirmOptions);
+
+    if (response !== 0) {
+      return false;
+    }
+
+    // Prefer the OS Trash so an accidental delete stays recoverable; only fall
+    // back to a permanent removal when the folder cannot be trashed.
+    try {
+      await shell.trashItem(entry.rootPath);
+    } catch {
+      await fs.rm(entry.rootPath, { recursive: true, force: true }).catch(() => undefined);
+    }
+
+    projectStore.forgetProject(projectId);
+    await getProjectLibrary().remove(projectId);
+    return true;
   });
 
   ipcMain.handle("projects:discard", async (_event, projectId: string): Promise<boolean> => {

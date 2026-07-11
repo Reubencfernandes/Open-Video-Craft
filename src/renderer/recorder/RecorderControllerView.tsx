@@ -23,6 +23,14 @@ import { useEffect, useRef } from "react";
 import appLogo from "../assets/app.png";
 import { cx } from "../classNames";
 import { FloatingDeviceControl } from "./FloatingDeviceControl";
+import {
+  cameraQualities,
+  cameraQualityPresets,
+  screenQualities,
+  screenQualityPresets,
+  type CameraQuality,
+  type ScreenQuality
+} from "./quality";
 import { truncateLabel } from "./recorder-utils";
 import type { DeviceOption, FloatingState } from "./types";
 
@@ -45,8 +53,11 @@ export function RecorderControllerView(props: {
   micEnabled: boolean;
   cameraEnabled: boolean;
   cameraPreviewStream: MediaStream | null;
+  screenQuality: ScreenQuality;
+  cameraQuality: CameraQuality;
   canStart: boolean;
   onSetCompactMode: (compact: boolean) => void;
+  onMinimizeWindow: () => void;
   onDismissError: () => void;
   onToggleBorderOverlay: () => void;
   onToggleSystemAudio: () => void;
@@ -61,6 +72,8 @@ export function RecorderControllerView(props: {
   onToggleCamera: () => void;
   onMicChange: (deviceId: string | null) => void;
   onCameraChange: (deviceId: string | null) => void;
+  onScreenQualityChange: (quality: ScreenQuality) => void;
+  onCameraQualityChange: (quality: CameraQuality) => void;
 }) {
   if (props.compact) {
     return <CompactRecorderView {...props} />;
@@ -155,9 +168,9 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             <button
               className="grid size-8 place-items-center rounded-md border-0 bg-transparent text-slate-300 hover:bg-white/10 hover:text-white"
               type="button"
-              aria-label="Collapse"
-              title={isRecordingActive ? undefined : "Collapse"}
-              onClick={() => props.onSetCompactMode(true)}
+              aria-label="Minimize"
+              title={isRecordingActive ? undefined : "Minimize to dock/taskbar"}
+              onClick={props.onMinimizeWindow}
             >
               <Minimize2 size={20} />
             </button>
@@ -190,6 +203,29 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
         ) : null}
 
         <RecorderBody {...props} />
+
+        <div className="grid grid-cols-2 gap-2 border-t border-white/[0.07] px-3 pt-3">
+          <QualitySelect
+            label="Screen quality"
+            value={props.screenQuality}
+            options={screenQualities.map((quality) => ({
+              value: quality,
+              label: screenQualityPresets[quality].label
+            }))}
+            disabled={!props.canStart}
+            onChange={props.onScreenQualityChange}
+          />
+          <QualitySelect
+            label="Camera quality"
+            value={props.cameraQuality}
+            options={cameraQualities.map((quality) => ({
+              value: quality,
+              label: cameraQualityPresets[quality].label
+            }))}
+            disabled={!props.canStart}
+            onChange={props.onCameraQualityChange}
+          />
+        </div>
 
         <footer className="grid grid-cols-4 gap-2 border-t border-white/[0.07] p-3">
           <FloatingDeviceControl
@@ -277,10 +313,37 @@ function CameraPreview(props: { stream: MediaStream }) {
   );
 }
 
+// Compact labeled dropdown used for the screen/camera capture-quality pickers.
+function QualitySelect<T extends string>(props: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  disabled: boolean;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <label className="grid gap-1 text-[0.6rem] font-bold uppercase tracking-wide text-slate-400 [-webkit-app-region:no-drag]">
+      {props.label}
+      <select
+        className="w-full cursor-pointer rounded-md border border-white/10 bg-white/[0.05] px-2 py-1.5 text-xs font-bold text-white outline-none hover:bg-white/10 focus:border-white/25 disabled:cursor-not-allowed disabled:opacity-45"
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.target.value as T)}
+      >
+        {props.options.map((option) => (
+          <option key={option.value} value={option.value} className="bg-slate-900 text-white">
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
   const isRecordingActive = props.state === "recording" || props.state === "paused";
   const primaryActionLabel = isRecordingActive ? "Stop recording" : "Start recording";
-  const showCameraPreview = isRecordingActive && props.cameraPreviewStream !== null;
+  const showCameraPreview = props.cameraPreviewStream !== null;
 
   return (
     <div className="relative grid min-h-0 flex-1 place-items-center px-4 pb-6 pt-4">

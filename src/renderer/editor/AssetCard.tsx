@@ -2,10 +2,10 @@
  * Asset grid card with drag support and a decoded video thumbnail.
  */
 import { AudioLines, Film, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { DragEvent as ReactDragEvent } from "react";
 import { cx } from "../classNames";
-import { captureVideoThumbnail } from "./media-utils";
+import { useMediaThumbnail } from "./thumbnail-cache";
 import type { EditorMediaItem } from "./types";
 
 export function AssetCard(props: {
@@ -59,14 +59,14 @@ export function AssetCard(props: {
   );
 }
 
-// Captures a real decoded frame into a small JPEG so the asset grid shows an
-// actual thumbnail. Handles chunked recordings that report Infinity duration
-// and reports the resolved duration back to the media library.
+// Shows a decoded poster frame for the asset grid (via the shared thumbnail
+// cache, so it matches the timeline) and reports the resolved duration back to
+// the media library.
 function VideoThumbnail(props: {
   url: string;
   onDuration?: (duration: number | null) => void;
 }) {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const { thumbnailUrl, duration } = useMediaThumbnail({ url: props.url, kind: "video" });
   const onDurationRef = useRef(props.onDuration);
 
   useEffect(() => {
@@ -74,25 +74,10 @@ function VideoThumbnail(props: {
   }, [props.onDuration]);
 
   useEffect(() => {
-    let cancelled = false;
-    setThumbnailUrl(null);
-
-    void captureVideoThumbnail(props.url, (duration) => {
-      if (!cancelled) {
-        onDurationRef.current?.(duration);
-      }
-    })
-      .then((dataUrl) => {
-        if (!cancelled) {
-          setThumbnailUrl(dataUrl);
-        }
-      })
-      .catch(() => undefined);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [props.url]);
+    if (duration !== null) {
+      onDurationRef.current?.(duration);
+    }
+  }, [duration]);
 
   return thumbnailUrl ? <img src={thumbnailUrl} alt="" /> : <Film size={18} />;
 }

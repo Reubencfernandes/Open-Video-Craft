@@ -75,6 +75,13 @@ export async function remuxWebm(filePath: string): Promise<void> {
   }
 }
 
+// A PCM WAV header is ~44 bytes; a track carrying any real audio is far larger
+// (48 kHz stereo 16-bit is ~192 KB/s). When a captured stream produced no
+// samples (e.g. a system-audio loopback track the OS opened but never fed),
+// ffmpeg still writes a header-only WAV. Registering that as a playable track
+// makes the editor fail with "no supported sources", so treat it as no audio.
+const minimumMeaningfulWavBytes = 1024;
+
 export async function convertWebmAudioToWav(inputPath: string, outputPath: string): Promise<number> {
   const inputStats = await fs.stat(inputPath).catch(() => null);
 
@@ -96,8 +103,15 @@ export async function convertWebmAudioToWav(inputPath: string, outputPath: strin
     outputPath
   ]);
 
-  const outputStats = await fs.stat(outputPath);
-  return outputStats.size;
+  const outputStats = await fs.stat(outputPath).catch(() => null);
+  const bytes = outputStats?.size ?? 0;
+
+  if (bytes < minimumMeaningfulWavBytes) {
+    await fs.rm(outputPath, { force: true }).catch(() => undefined);
+    return 0;
+  }
+
+  return bytes;
 }
 
 export async function exportVideo(job: ExportVideoJob): Promise<number> {

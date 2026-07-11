@@ -68,6 +68,8 @@ const api = {
       ipcRenderer.invoke("projects:open-existing-project-folder"),
     removeFromRecent: (projectId: string): Promise<boolean> =>
       ipcRenderer.invoke("projects:remove-from-recent", projectId),
+    delete: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("projects:delete", projectId),
     discard: (projectId: string): Promise<boolean> =>
       ipcRenderer.invoke("projects:discard", projectId),
     create: (request: CreateProjectRequest): Promise<ProjectView> =>
