@@ -53,6 +53,7 @@ type UseEditorDerivedDataParams = {
   timelineViewDuration: number;
   currentTime: number;
   zoomEffects: ZoomEffect[];
+  zoomPreviewTime: number | null;
   selectedZoomId: string | null;
   speedEffects: SpeedEffect[];
   selectedSpeedId: string | null;
@@ -85,6 +86,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     timelineViewDuration,
     currentTime,
     zoomEffects,
+    zoomPreviewTime,
     selectedZoomId,
     speedEffects,
     selectedSpeedId,
@@ -193,7 +195,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     timelineRenderDuration > 0
       ? Math.min(100, Math.max(0, (currentTime / timelineRenderDuration) * 100))
       : 0;
-  const activeZoom = getActiveZoom(zoomEffects, currentTime);
+  const activeZoom = getActiveZoom(zoomEffects, zoomPreviewTime ?? currentTime);
   const activeSubtitle =
     subtitles.find((subtitle) => currentTime >= subtitle.start && currentTime <= subtitle.end) ??
     null;

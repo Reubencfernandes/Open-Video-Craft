@@ -75,6 +75,7 @@ export function EditorToolPanel(props: {
   onAddZoom: () => void;
   onUpdateZoom: (id: string, updates: Partial<ZoomEffect>) => void;
   onRemoveZoom: (id: string) => void;
+  onPreviewZoomCurve: (effect: ZoomEffect, progress: number | null) => void;
   onAddSpeed: () => void;
   onUpdateSpeed: (id: string, updates: Partial<SpeedEffect>) => void;
   onRemoveSpeed: (id: string) => void;
@@ -143,6 +144,7 @@ export function EditorToolPanel(props: {
           onAddZoom={props.onAddZoom}
           onUpdateZoom={props.onUpdateZoom}
           onRemoveZoom={props.onRemoveZoom}
+          onPreviewCurve={props.onPreviewZoomCurve}
         />
       ) : null}
 

@@ -20,12 +20,17 @@ All notable changes to Open Video Craft are documented here.
 - Select controls, the export dialog, destructive selection actions, and typography now follow the neutral black, white, and amber editor theme.
 - The editor top bar now uses a clear Save action with an in-progress state instead of an icon-only camera button, and the unused Settings action has been removed.
 - Zoom curve controls were extracted into a focused component to keep the main Zoom panel compact.
+- Recent-project cards now stay compact when only one or two projects exist, and use sharper poster captures.
+- Audio preview now routes every source through per-source and master Web Audio gain nodes so positive dB boosts are audible.
 
 ### Fixed
 
 - Reconnected the existing full Layout panel after the redesigned inspector had accidentally replaced it with transform-only controls.
 - Save actions now share a single in-flight operation, preventing duplicate project writes from repeated clicks or shortcuts.
 - Older saved projects without easing metadata receive a smooth backward-compatible zoom curve.
+- Editing a zoom curve now animates the selected entry ramp in realtime and shows a moving progress marker.
+- The audio meter now measures the actual mixed PCM output in dBFS, preserves clipping, and displays persistent green, amber, and red zones.
+- Preview and export now share per-source gain/mute behavior; system audio is included and background music no longer uses a hardcoded export level.
 
 ## [1.2.1] - 2026-07-11
 

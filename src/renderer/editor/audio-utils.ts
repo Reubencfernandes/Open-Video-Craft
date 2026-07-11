@@ -37,3 +37,28 @@ export function formatDb(percent: number): string {
   const sign = rounded > 0 ? "+" : "";
   return `${sign}${rounded.toFixed(1)} dB`;
 }
+
+export const meterFloorDb = -60;
+export const meterAmberDb = -12;
+export const meterRedDb = -3;
+
+export function peakToDbfs(peak: number): number {
+  return peak > 0 ? 20 * Math.log10(peak) : Number.NEGATIVE_INFINITY;
+}
+
+export function peakToMeterPercent(peak: number): number {
+  const db = peakToDbfs(peak);
+  if (!Number.isFinite(db)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, ((db - meterFloorDb) / -meterFloorDb) * 100));
+}
+
+export function formatPeakDbfs(peak: number): string {
+  const db = peakToDbfs(peak);
+  if (!Number.isFinite(db)) {
+    return "-inf dBFS";
+  }
+  const sign = db > 0 ? "+" : "";
+  return `${sign}${db.toFixed(1)} dBFS`;
+}

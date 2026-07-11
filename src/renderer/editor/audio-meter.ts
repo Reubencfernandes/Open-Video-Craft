@@ -1,54 +1,92 @@
-// Drives the Audio tool's live output meter.
-//
-// Instead of tapping the live media elements through Web Audio (which is
-// fragile: it depends on CORS, one-shot MediaElementSource nodes, and an
-// AudioContext that must be resumed on a gesture), each audio clip is decoded
-// once into a small peak envelope. The meter then samples that envelope at the
-// current playback position and scales it by the clip's effective gain, so it
-// reflects both the real audio content and the user's dB settings.
+/** Live preview audio graph and peak meter. */
+type ElementAudioNodes = {
+  source: MediaElementAudioSourceNode;
+  gain: GainNode;
+};
 
 export class AudioMeter {
   private context: AudioContext | null = null;
-  private readonly envelopes = new Map<string, Float32Array>();
-  private readonly pending = new Set<string>();
-  private readonly bucketsPerSecond = 50;
+  private masterGain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private samples: Float32Array<ArrayBuffer> | null = null;
+  private readonly elements = new Map<HTMLMediaElement, ElementAudioNodes>();
+  private masterVolume = 1;
 
-  /** Kick off decoding an audio URL's envelope if it isn't ready or in flight. */
-  ensureEnvelope(url: string): void {
-    if (!url || this.envelopes.has(url) || this.pending.has(url)) {
-      return;
+  connectElement(element: HTMLMediaElement, volume: number): boolean {
+    const existing = this.elements.get(element);
+    if (existing) {
+      existing.gain.gain.value = sanitizeGain(volume);
+      return true;
     }
 
-    this.pending.add(url);
-    void this.decodeEnvelope(url)
-      .catch(() => undefined)
-      .finally(() => this.pending.delete(url));
+    const context = this.ensureContext();
+    if (!context || !this.masterGain) {
+      return false;
+    }
+
+    try {
+      const source = context.createMediaElementSource(element);
+      const gain = context.createGain();
+      gain.gain.value = sanitizeGain(volume);
+      source.connect(gain);
+      gain.connect(this.masterGain);
+      this.elements.set(element, { source, gain });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  /** Peak magnitude (0..1) of the source audio at `sourceTime` seconds. */
-  sample(url: string, sourceTime: number): number {
-    const envelope = this.envelopes.get(url);
-    if (!envelope) {
+  setElementGain(element: HTMLMediaElement, volume: number): boolean {
+    return this.connectElement(element, volume);
+  }
+
+  setMasterGain(volume: number): void {
+    this.masterVolume = sanitizeGain(volume);
+    if (this.masterGain) {
+      this.masterGain.gain.value = this.masterVolume;
+    }
+  }
+
+  async resume(): Promise<void> {
+    const context = this.ensureContext();
+    if (context?.state === "suspended") {
+      await context.resume();
+    }
+  }
+
+  /** Current mixed sample peak. Values above 1 indicate clipping. */
+  sample(): number {
+    if (!this.analyser || !this.samples) {
       return 0;
     }
 
-    const index = Math.floor(sourceTime * this.bucketsPerSecond);
-    if (index < 0 || index >= envelope.length) {
-      return 0;
+    this.analyser.getFloatTimeDomainData(this.samples);
+    let peak = 0;
+    for (const sample of this.samples) {
+      peak = Math.max(peak, Math.abs(sample));
     }
-    return envelope[index];
+    return peak;
   }
 
   dispose(): void {
+    for (const { source, gain } of this.elements.values()) {
+      source.disconnect();
+      gain.disconnect();
+    }
+    this.elements.clear();
+    this.masterGain?.disconnect();
+    this.analyser?.disconnect();
     if (this.context) {
       void this.context.close().catch(() => undefined);
     }
     this.context = null;
-    this.envelopes.clear();
-    this.pending.clear();
+    this.masterGain = null;
+    this.analyser = null;
+    this.samples = null;
   }
 
-  private getContext(): AudioContext | null {
+  private ensureContext(): AudioContext | null {
     if (this.context) {
       return this.context;
     }
@@ -60,41 +98,26 @@ export class AudioMeter {
       if (!AudioContextCtor) {
         return null;
       }
-      // decodeAudioData works on a suspended context, so it never needs to run.
-      this.context = new AudioContextCtor();
-      return this.context;
+
+      const context = new AudioContextCtor();
+      const masterGain = context.createGain();
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 2048;
+      masterGain.gain.value = this.masterVolume;
+      masterGain.connect(analyser);
+      analyser.connect(context.destination);
+
+      this.context = context;
+      this.masterGain = masterGain;
+      this.analyser = analyser;
+      this.samples = new Float32Array(analyser.fftSize);
+      return context;
     } catch {
       return null;
     }
   }
+}
 
-  private async decodeEnvelope(url: string): Promise<void> {
-    const context = this.getContext();
-    if (!context) {
-      return;
-    }
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      return;
-    }
-
-    const decoded = await context.decodeAudioData(await response.arrayBuffer());
-    const bucketCount = Math.max(1, Math.ceil(decoded.duration * this.bucketsPerSecond));
-    const envelope = new Float32Array(bucketCount);
-    const samplesPerBucket = Math.max(1, Math.floor(decoded.sampleRate / this.bucketsPerSecond));
-
-    for (let channel = 0; channel < decoded.numberOfChannels; channel += 1) {
-      const data = decoded.getChannelData(channel);
-      for (let index = 0; index < data.length; index += 1) {
-        const bucket = Math.min(bucketCount - 1, Math.floor(index / samplesPerBucket));
-        const magnitude = Math.abs(data[index]);
-        if (magnitude > envelope[bucket]) {
-          envelope[bucket] = magnitude;
-        }
-      }
-    }
-
-    this.envelopes.set(url, envelope);
-  }
+function sanitizeGain(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.min(4, value)) : 1;
 }

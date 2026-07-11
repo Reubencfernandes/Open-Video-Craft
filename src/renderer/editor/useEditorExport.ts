@@ -16,6 +16,7 @@ import type { EditorMediaItem } from "./types";
 import { formatBytes } from "./utils";
 
 type UseEditorExportParams = {
+  audioLevels: Record<string, { volume: number; muted: boolean }>;
   backgroundAudioIds: string[];
   masterVolume: number;
   project: ProjectView | null;
@@ -28,6 +29,7 @@ type UseEditorExportParams = {
 
 export function useEditorExport(params: UseEditorExportParams) {
   const {
+    audioLevels,
     backgroundAudioIds,
     masterVolume,
     project,
@@ -86,6 +88,7 @@ export function useEditorExport(params: UseEditorExportParams) {
         trimStart: trimRange.start,
         trimEnd: trimRange.end > trimRange.start ? trimRange.end : null,
         volume: masterVolume / 100,
+        audioLevels,
         backgroundAudioImportIds: backgroundAudioIds
       });
 

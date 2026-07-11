@@ -22,7 +22,7 @@ export function RecentProjectsSection(props: {
       {props.loading ? <ProjectSkeletons /> : props.projects.length === 0 ? (
         <div className="grid min-h-40 place-items-center rounded-xl bg-white/[0.02] text-sm text-slate-500">No saved projects yet.</div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(185px,1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,280px))] justify-start gap-3">
           {props.projects.slice(0, 5).map((project, index) => (
             <article className="grid min-w-0 gap-3 rounded-xl bg-white/[0.025] p-3" key={`${project.id}-${project.rootPath}`}>
               <ProjectArtwork name={project.name} index={index} duration={formatProjectDuration(project.durationMs)} thumbnailUrl={project.thumbnailUrl} />

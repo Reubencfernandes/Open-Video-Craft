@@ -103,7 +103,7 @@ runtime: `src/main` (Node/Electron main process), `src/preload` (IPC bridge),
 | `camera-content-transform.ts` | CSS transform for camera pan/zoom/mirror. |
 | `media-utils.ts` | Project media items, video thumbnail capture (CORS-clean), waveform blob loading, 16 kHz mono decode for Whisper. |
 | `audio-utils.ts` | dB ↔ linear-percent conversion (UI is dB; storage stays percent). |
-| `audio-meter.ts` | Decoded peak envelopes per audio URL; the meter samples them at the playhead scaled by effective gain (no fragile Web Audio element taps). |
+| `audio-meter.ts` | Web Audio preview graph: per-element gain, master gain, mixed PCM analyser, and clipping-aware peak sampling. |
 | `subtitle-transcription.ts` | Whisper model id, word-chunk language patch, output → segments. |
 | `editor-state-storage.ts` | Versioned (de)serialization of saved editor state. |
 | `keyboard-utils.ts` | Typing-target detection + control blurring for shortcuts. |
@@ -140,9 +140,11 @@ runtime: `src/main` (Node/Electron main process), `src/preload` (IPC bridge),
 | `LayoutPanel.tsx` | Layout mode, screen scale/aspect, camera controls. |
 | `CameraCropControls.tsx` | Camera pan/zoom/mirror sliders. |
 | `AudioPanel.tsx` | Output meter, master dB gain, background music, per-source rows. |
-| `AudioLevelMeter.tsx` | Live green/amber/red output meter. |
+| `AudioLevelMeter.tsx` | Live mixed-output dBFS meter with persistent green/amber/red zones. |
 | `DbSlider.tsx` | dB-labeled gain slider (reports linear percent). |
 | `ZoomPanel.tsx` / `SpeedPanel.tsx` | Add/edit zoom and speed regions. |
+| `ZoomCurveEditor.tsx` | Zoom easing presets, custom cubic Bezier controls, and realtime ramp preview. |
+| `ZoomCurvePreview.tsx` | Reusable SVG curve thumbnail and animated progress marker. |
 | `SubtitlesPanel.tsx` | Transcription, style, per-subtitle editing. |
 | `CutPanel.tsx` | Split at playhead / delete selected. |
 | `StylePanel.tsx` | Backgrounds + corner styling. |

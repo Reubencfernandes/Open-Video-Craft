@@ -312,6 +312,7 @@ export interface ExportVideoRequest {
   trimStart: number;
   trimEnd: number | null;
   volume: number;
+  audioLevels: Record<string, { volume: number; muted: boolean }>;
   backgroundAudioImportIds: string[];
 }
 

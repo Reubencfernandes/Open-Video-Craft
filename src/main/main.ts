@@ -971,9 +971,15 @@ async function exportEditorVideo(
 
   const bytesWritten = await exportVideo({
     videoPath: source.videoPath,
-    audioPaths: [
-      ...source.audioPaths,
-      ...request.backgroundAudioImportIds.map(resolveImportedMediaPath)
+    audioTracks: [
+      ...source.audioTracks.map((track) => ({
+        path: track.path,
+        volume: request.volume * getRequestedAudioGain(request, track.id)
+      })),
+      ...request.backgroundAudioImportIds.map((id) => ({
+        path: resolveImportedMediaPath(id),
+        volume: request.volume * getRequestedAudioGain(request, id)
+      }))
     ],
     outputPath,
     format: request.format,
@@ -981,7 +987,7 @@ async function exportEditorVideo(
     trimStart: Math.max(0, request.trimStart),
     trimEnd:
       request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
-    volume: request.volume,
+    sourceAudioVolume: request.volume,
     preserveSourceAudio: source.preserveSourceAudio
   });
 
@@ -994,14 +1000,14 @@ async function exportEditorVideo(
 function resolveExportSource(request: ExportVideoRequest): {
   name: string;
   videoPath: string;
-  audioPaths: string[];
+  audioTracks: Array<{ id: string; path: string }>;
   preserveSourceAudio: boolean;
 } {
   if (request.source.kind === "import") {
     return {
       name: path.basename(resolveImportedMediaPath(request.source.importId)),
       videoPath: resolveImportedMediaPath(request.source.importId),
-      audioPaths: [],
+      audioTracks: [],
       preserveSourceAudio: true
     };
   }
@@ -1016,13 +1022,27 @@ function resolveExportSource(request: ExportVideoRequest): {
   const micPath =
     projectStore.getMediaPath(request.source.projectId, "micWav") ??
     projectStore.getMediaPath(request.source.projectId, "micWebm");
+  const systemPath =
+    projectStore.getMediaPath(request.source.projectId, "systemWav") ??
+    projectStore.getMediaPath(request.source.projectId, "systemWebm");
 
   return {
     name: project.name,
     videoPath: screenPath,
-    audioPaths: micPath ? [micPath] : [],
+    audioTracks: [
+      ...(micPath ? [{ id: `${project.id}:audio`, path: micPath }] : []),
+      ...(systemPath ? [{ id: `${project.id}:system-audio`, path: systemPath }] : [])
+    ],
     preserveSourceAudio: false
   };
+}
+
+function getRequestedAudioGain(request: ExportVideoRequest, itemId: string): number {
+  const level = request.audioLevels[itemId];
+  if (level?.muted) {
+    return 0;
+  }
+  return Math.max(0, (level?.volume ?? 100) / 100);
 }
 
 function resolveImportedMediaPath(importId: string): string {

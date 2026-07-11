@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyZoomEasing } from "../src/renderer/editor/zoom-utils";
+import { applyZoomEasing, getZoomPreviewTime } from "../src/renderer/editor/zoom-utils";
 
 describe("zoom easing", () => {
   it("keeps linear zoom progress linear", () => {
@@ -24,5 +24,20 @@ describe("zoom easing", () => {
   it("gives older saved zooms a smooth default curve", () => {
     expect(applyZoomEasing(0.25, {})).toBeLessThan(0.25);
     expect(applyZoomEasing(0.75, {})).toBeGreaterThan(0.75);
+  });
+
+  it("maps realtime preview progress across the selected entry ramp", () => {
+    const effect = {
+      id: "zoom-preview",
+      start: 2,
+      end: 6,
+      speed: "medium" as const,
+      scale: 1.5,
+      targetX: 50,
+      targetY: 50
+    };
+    expect(getZoomPreviewTime(effect, 0)).toBe(2);
+    expect(getZoomPreviewTime(effect, 0.5)).toBeCloseTo(2.55, 5);
+    expect(getZoomPreviewTime(effect, 1)).toBeCloseTo(3.1, 5);
   });
 });

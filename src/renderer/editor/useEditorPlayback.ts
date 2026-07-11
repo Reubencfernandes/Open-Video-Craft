@@ -130,10 +130,11 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     return audioMeterRef.current;
   }
 
-  // A media element's own `volume` maxes at 1, so preview applies attenuation
-  // only; any dB boost above unity is applied on export and shown on the meter.
-  function applyAudioGain(element: HTMLMediaElement, linear: number) {
-    element.volume = Math.min(1, Math.max(0, linear));
+  function applyAudioGain(element: HTMLMediaElement, sourceGain: number) {
+    const connected = getAudioMeter().setElementGain(element, sourceGain);
+    element.volume = connected
+      ? 1
+      : Math.min(1, Math.max(0, (masterVolumeRef.current / 100) * sourceGain));
   }
 
   useEffect(() => {
@@ -142,16 +143,6 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       audioMeterRef.current?.dispose();
     };
   }, []);
-
-  // Decode a small peak envelope for each audio clip so the meter has content to
-  // sample. Decoding is cached per URL inside the meter.
-  useEffect(() => {
-    const meter = getAudioMeter();
-    for (const clip of audioTimelineClips) {
-      meter.ensureEnvelope(clip.item.url);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioTimelineClips]);
 
   useEffect(() => {
     syncTimelinePlaybackRefs(timelineSegments);
@@ -245,13 +236,14 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing]);
 
-  // Apply volume changes immediately to the live media elements. The primary
-  // video keeps plain element.volume (attenuation only); the dedicated audio
-  // elements route through the engine so they can boost and feed the meter.
+  // Apply the same source and master gains to playback and the live meter.
   useEffect(() => {
     const master = Math.max(0, masterVolume / 100);
+    const meter = getAudioMeter();
+    meter.setMasterGain(master);
     if (mainVideoRef.current) {
-      mainVideoRef.current.volume = Math.min(1, master);
+      const connected = !mainVideoRef.current.muted && meter.setElementGain(mainVideoRef.current, 1);
+      mainVideoRef.current.volume = connected ? 1 : Math.min(1, master);
     }
     for (const clip of audioTimelineClips) {
       const element = audioElsRef.current.get(clip.id);
@@ -259,50 +251,22 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
         continue;
       }
       const level = audioLevels[clip.item.id] ?? { volume: 100, muted: false };
-      applyAudioGain(element, level.muted ? 0 : master * (level.volume / 100));
+      applyAudioGain(element, level.muted ? 0 : level.volume / 100);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterVolume, audioLevels, audioTimelineClips]);
 
-  function effectiveClipVolume(itemId: string): number {
-    const master = Math.max(0, masterVolumeRef.current / 100);
+  function getClipVolume(itemId: string): number {
     const level = audioLevelsRef.current[itemId] ?? { volume: 100, muted: false };
     if (level.muted) {
       return 0;
     }
-    // Full linear gain (can exceed 1 for a dB boost); the meter uses it directly
-    // and applyAudioGain clamps it to the element's 0..1 range for preview.
-    return master * (level.volume / 100);
+    return level.volume / 100;
   }
 
-  // Peak output level (0..1) at the playhead across every active audio clip,
-  // sampled from decoded envelopes and scaled by each clip's effective gain.
+  // Actual mixed output peak. Values above 1 remain visible as clipping.
   function getAudioMeterLevel(): number {
-    const meter = audioMeterRef.current;
-    if (!meter) {
-      return 0;
-    }
-
-    const time = currentTimeRef.current;
-    let peak = 0;
-    for (const clip of audioClipsRef.current) {
-      if (time < clip.start || time >= clip.start + clip.duration) {
-        continue;
-      }
-
-      const gain = effectiveClipVolume(clip.item.id);
-      if (gain <= 0) {
-        continue;
-      }
-
-      const sourceTime = clip.sourceStart + (time - clip.start);
-      const level = meter.sample(clip.item.url, sourceTime) * gain;
-      if (level > peak) {
-        peak = level;
-      }
-    }
-
-    return Math.min(1, peak);
+    return audioMeterRef.current?.sample() ?? 0;
   }
 
   function findVideoClipAtTime(time: number): TimelineMediaClip | null {
@@ -496,7 +460,13 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     }
 
     input.element.muted = input.muted;
-    input.element.volume = input.volume;
+    if (input.muted) {
+      audioMeterRef.current?.setElementGain(input.element, 0);
+      input.element.volume = 0;
+    } else {
+      const connected = getAudioMeter().setElementGain(input.element, 1);
+      input.element.volume = connected ? 1 : input.volume;
+    }
     input.element.playbackRate = getPlaybackRate(input.timelineTime);
     if (input.isPlaying && input.element.paused) {
       playMediaElement(input.element, input.label);
@@ -557,6 +527,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     reason: PlaybackSyncReason = "tick"
   ) {
     const master = Math.min(1, Math.max(0, masterVolumeRef.current / 100));
+    getAudioMeter().setMasterGain(masterVolumeRef.current / 100);
     const videoClip = findVideoClipAtTime(time);
 
     const videoEl = mainVideoRef.current;
@@ -638,7 +609,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
           reason,
           syncKey: clip.id,
           clipChanged: false,
-          volume: effectiveClipVolume(clip.item.id),
+          volume: getClipVolume(clip.item.id),
           label: "audio",
           useEngine: true
         });
@@ -672,6 +643,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       setCurrentTime(0);
     }
 
+    void getAudioMeter().resume().catch(() => undefined);
     playbackAttemptTokenRef.current += 1;
     playingRef.current = true;
     setPlaying(true);

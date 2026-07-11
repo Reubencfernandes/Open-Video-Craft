@@ -45,6 +45,7 @@ import {
 } from "./editor/subtitle-transcription";
 import { canSplitTimelineSegmentAt } from "./editor/timeline-utils";
 import { clampNumber } from "./editor/utils";
+import { getZoomPreviewTime } from "./editor/zoom-utils";
 import type {
   BackgroundCategory,
   BackgroundStyle,
@@ -112,6 +113,7 @@ export function EditorView() {
   const [backgroundAudioIds, setBackgroundAudioIds] = useState<string[]>([]);
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
+  const [zoomPreviewTime, setZoomPreviewTime] = useState<number | null>(null);
   const [speedEffects, setSpeedEffects] = useState<SpeedEffect[]>([]);
   const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
@@ -275,7 +277,8 @@ export function EditorView() {
     timelineSegments,
     timelineViewDuration,
     videoCornerStyle,
-    zoomEffects
+    zoomEffects,
+    zoomPreviewTime
   });
 
   const {
@@ -373,6 +376,7 @@ export function EditorView() {
     setExportFormat,
     setExportResolution
   } = useEditorExport({
+    audioLevels,
     backgroundAudioIds,
     masterVolume,
     project,
@@ -592,6 +596,11 @@ export function EditorView() {
             onAddZoom={addZoomEffect}
             onUpdateZoom={updateZoomEffect}
             onRemoveZoom={removeZoomEffect}
+            onPreviewZoomCurve={(effect, progress) =>
+              setZoomPreviewTime(
+                progress === null ? null : getZoomPreviewTime(effect, progress)
+              )
+            }
             onAddSpeed={addSpeedEffect}
             onUpdateSpeed={updateSpeedEffect}
             onRemoveSpeed={removeSpeedEffect}

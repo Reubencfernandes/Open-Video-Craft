@@ -10,6 +10,7 @@ export function ZoomPanel(props: {
   onAddZoom: () => void;
   onUpdateZoom: (id: string, updates: Partial<ZoomEffect>) => void;
   onRemoveZoom: (id: string) => void;
+  onPreviewCurve: (effect: ZoomEffect, progress: number | null) => void;
 }) {
   const selected = props.selectedZoomEffect;
 
@@ -56,6 +57,7 @@ export function ZoomPanel(props: {
           <ZoomCurveEditor
             effect={selected}
             onChange={(updates) => props.onUpdateZoom(selected.id, updates)}
+            onPreviewProgress={(progress) => props.onPreviewCurve(selected, progress)}
           />
 
           <button

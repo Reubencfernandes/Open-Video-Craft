@@ -11,13 +11,13 @@ import type { ExportResolution, ExportVideoFormat } from "../shared/types";
 
 interface ExportVideoJob {
   videoPath: string;
-  audioPaths: string[];
+  audioTracks: Array<{ path: string; volume: number }>;
   outputPath: string;
   format: ExportVideoFormat;
   resolution: ExportResolution;
   trimStart: number;
   trimEnd: number | null;
-  volume: number;
+  sourceAudioVolume: number;
   preserveSourceAudio: boolean;
 }
 
@@ -121,8 +121,8 @@ export async function exportVideo(job: ExportVideoJob): Promise<number> {
 
   addInput(args, job.videoPath, job.trimStart);
 
-  for (const audioPath of job.audioPaths) {
-    addInput(args, audioPath, job.trimStart);
+  for (const track of job.audioTracks) {
+    addInput(args, track.path, job.trimStart);
   }
 
   if (outputDuration) {
@@ -130,41 +130,41 @@ export async function exportVideo(job: ExportVideoJob): Promise<number> {
   }
 
   const videoFilter = createVideoFilter(job.resolution);
-  const audioInputCount = job.audioPaths.length;
+  const audioInputs = [
+    ...(job.preserveSourceAudio
+      ? [{ inputIndex: 0, volume: job.sourceAudioVolume }]
+      : []),
+    ...job.audioTracks.map((track, index) => ({ inputIndex: index + 1, volume: track.volume }))
+  ];
 
-  if (audioInputCount > 1) {
-    const audioFilters = job.audioPaths
-      .map((_audioPath, index) => {
-        const volume = index === 0 ? clampVolume(job.volume) : 0.55;
-        return `[${index + 1}:a]volume=${formatFfmpegNumber(volume)}[a${index}]`;
-      })
+  if (audioInputs.length > 1) {
+    const audioFilters = audioInputs
+      .map((input, index) =>
+        `[${input.inputIndex}:a]volume=${formatFfmpegNumber(clampVolume(input.volume))}[a${index}]`
+      )
       .join(";");
-    const mixInputs = job.audioPaths.map((_audioPath, index) => `[a${index}]`).join("");
+    const mixInputs = audioInputs.map((_input, index) => `[a${index}]`).join("");
     args.push(
       "-filter_complex",
-      `${audioFilters};${mixInputs}amix=inputs=${audioInputCount}:duration=longest:dropout_transition=0[aout]`,
+      `${audioFilters};${mixInputs}amix=inputs=${audioInputs.length}:duration=longest:dropout_transition=0:normalize=0[aout]`,
       "-map",
       "0:v:0",
       "-map",
       "[aout]"
     );
-  } else if (audioInputCount === 1) {
+  } else if (audioInputs.length === 1) {
+    const input = audioInputs[0];
     args.push(
       "-map",
       "0:v:0",
       "-map",
-      "1:a:0",
+      `${input.inputIndex}:a${input.inputIndex === 0 ? "?" : ":0"}`,
       "-af",
-      `volume=${formatFfmpegNumber(clampVolume(job.volume))}`
+      `volume=${formatFfmpegNumber(clampVolume(input.volume))}`
     );
   } else {
     args.push("-map", "0:v:0");
-
-    if (job.preserveSourceAudio) {
-      args.push("-map", "0:a?");
-    } else {
-      args.push("-an");
-    }
+    args.push("-an");
   }
 
   if (videoFilter) {

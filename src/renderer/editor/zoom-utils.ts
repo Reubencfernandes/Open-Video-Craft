@@ -109,8 +109,13 @@ function areZoomEffectsChained(effect: ZoomEffect, nextEffect: ZoomEffect): bool
   return nextEffect.start - effect.end <= zoomChainGapSeconds;
 }
 
-function getZoomRampDuration(effect: ZoomEffect, duration: number): number {
+export function getZoomRampDuration(effect: ZoomEffect, duration: number): number {
   return Math.min(zoomRampBySpeed[effect.speed] ?? zoomRampBySpeed.medium, duration / 2);
+}
+
+export function getZoomPreviewTime(effect: ZoomEffect, progress: number): number {
+  const duration = Math.max(0.1, effect.end - effect.start);
+  return effect.start + getZoomRampDuration(effect, duration) * clampNumber(progress, 0, 1);
 }
 
 function getZoomFullTransform(effect: ZoomEffect): ZoomTransform {

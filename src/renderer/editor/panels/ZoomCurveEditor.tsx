@@ -1,5 +1,7 @@
 /** Preset and custom cubic Bezier controls for a selected zoom effect. */
+import { useEffect, useRef, useState } from "react";
 import type { ZoomEasing, ZoomEffect } from "../types";
+import { ZoomCurvePreview } from "./ZoomCurvePreview";
 
 type Bezier = [number, number, number, number];
 
@@ -19,9 +21,53 @@ const defaultBezier: Bezier = [0.42, 0, 0.58, 1];
 export function ZoomCurveEditor(props: {
   effect: ZoomEffect;
   onChange: (updates: Partial<ZoomEffect>) => void;
+  onPreviewProgress: (progress: number | null) => void;
 }) {
   const easing = props.effect.easing ?? "ease-in-out";
   const bezier = props.effect.bezier ?? defaultBezier;
+  const [previewProgress, setPreviewProgress] = useState(0);
+  const previewRafRef = useRef<number | null>(null);
+  const previewEndRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (previewRafRef.current !== null) {
+        window.cancelAnimationFrame(previewRafRef.current);
+      }
+      if (previewEndRef.current !== null) {
+        window.clearTimeout(previewEndRef.current);
+      }
+    },
+    []
+  );
+
+  function changeAndPreview(updates: Partial<ZoomEffect>) {
+    props.onChange(updates);
+    if (previewRafRef.current !== null) {
+      return;
+    }
+    if (previewEndRef.current !== null) {
+      window.clearTimeout(previewEndRef.current);
+      previewEndRef.current = null;
+    }
+
+    const startedAt = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / 900);
+      setPreviewProgress(progress);
+      props.onPreviewProgress(progress);
+      if (progress < 1) {
+        previewRafRef.current = window.requestAnimationFrame(tick);
+      } else {
+        previewRafRef.current = null;
+        previewEndRef.current = window.setTimeout(() => {
+          props.onPreviewProgress(null);
+          previewEndRef.current = null;
+        }, 250);
+      }
+    };
+    previewRafRef.current = window.requestAnimationFrame(tick);
+  }
 
   return (
     <div className="grid gap-3">
@@ -39,7 +85,7 @@ export function ZoomCurveEditor(props: {
             active={easing === preset.id}
             label={preset.label}
             bezier={preset.bezier}
-            onClick={() => props.onChange({ easing: preset.id, bezier: preset.bezier })}
+            onClick={() => changeAndPreview({ easing: preset.id, bezier: preset.bezier })}
           />
         ))}
         <CurveButton
@@ -47,13 +93,13 @@ export function ZoomCurveEditor(props: {
           className="col-span-2"
           label="Custom curve"
           bezier={bezier}
-          onClick={() => props.onChange({ easing: "custom", bezier })}
+          onClick={() => changeAndPreview({ easing: "custom", bezier })}
         />
       </div>
 
       {easing === "custom" ? (
         <div className="grid gap-3 rounded-xl bg-white/[0.04] p-3">
-          <CurvePreview bezier={bezier} large />
+          <ZoomCurvePreview bezier={bezier} progress={previewProgress} large />
           {bezier.map((value, index) => (
             <label
               className="grid grid-cols-[1.5rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-[0.7rem] font-bold text-slate-400"
@@ -70,7 +116,7 @@ export function ZoomCurveEditor(props: {
                 onChange={(event) => {
                   const next = [...bezier] as Bezier;
                   next[index] = Number(event.target.value);
-                  props.onChange({ easing: "custom", bezier: next });
+                  changeAndPreview({ easing: "custom", bezier: next });
                 }}
               />
               <output className="text-right text-white tabular-nums">{value.toFixed(2)}</output>
@@ -99,24 +145,9 @@ function CurveButton(props: {
       type="button"
       onClick={props.onClick}
     >
-      <CurvePreview bezier={props.bezier} />
+      <ZoomCurvePreview bezier={props.bezier} />
       {props.label}
     </button>
-  );
-}
-
-function CurvePreview(props: { bezier: Bezier; large?: boolean }) {
-  const [x1, y1, x2, y2] = props.bezier;
-  return (
-    <svg
-      className={props.large ? "h-24 w-full rounded-lg bg-black/30 p-2 text-amber-300" : "h-7 w-10 text-current"}
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <path d="M0 100 L100 0" fill="none" stroke="currentColor" strokeOpacity="0.16" strokeWidth="3" strokeDasharray="5 6" />
-      <path d={`M0 100 C${x1 * 100} ${(1 - y1) * 100}, ${x2 * 100} ${(1 - y2) * 100}, 100 0`} fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
-    </svg>
   );
 }
 

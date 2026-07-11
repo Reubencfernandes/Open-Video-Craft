@@ -104,13 +104,17 @@ export interface VideoFilmstrip {
 // a timeout, so a recording that will not seek still yields whatever frame is
 // already decoded instead of leaving the thumbnail stuck on the placeholder.
 export async function captureVideoPoster(url: string): Promise<VideoPoster> {
-  const filmstrip = await captureVideoFilmstrip(url, 1);
+  const filmstrip = await captureVideoFilmstrip(url, 1, 480);
   if (!filmstrip.frames[0]) throw new Error("Video has no decodable frames.");
   return { dataUrl: filmstrip.frames[0], duration: filmstrip.duration };
 }
 
 /** Captures distinct frames across the media duration for timeline filmstrips. */
-export async function captureVideoFilmstrip(url: string, frameCount = 10): Promise<VideoFilmstrip> {
+export async function captureVideoFilmstrip(
+  url: string,
+  frameCount = 10,
+  maxFrameWidth = 240
+): Promise<VideoFilmstrip> {
   const video = document.createElement("video");
   video.muted = true;
   video.defaultMuted = true;
@@ -141,7 +145,7 @@ export async function captureVideoFilmstrip(url: string, frameCount = 10): Promi
       await seekVideoTo(video, seekTo);
       await waitForDecodedFrame(video);
 
-      const frame = captureCurrentVideoFrame(video);
+      const frame = captureCurrentVideoFrame(video, maxFrameWidth);
       if (frame) frames.push(frame);
     }
 
@@ -156,12 +160,12 @@ export async function captureVideoFilmstrip(url: string, frameCount = 10): Promi
   }
 }
 
-function captureCurrentVideoFrame(video: HTMLVideoElement): string | null {
+function captureCurrentVideoFrame(video: HTMLVideoElement, maxWidth: number): string | null {
   const width = video.videoWidth;
   const height = video.videoHeight;
   if (!width || !height) return null;
 
-  const scale = Math.min(1, 240 / width);
+  const scale = Math.min(1, Math.max(1, maxWidth) / width);
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(width * scale));
   canvas.height = Math.max(1, Math.round(height * scale));
