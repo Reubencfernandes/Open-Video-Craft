@@ -72,6 +72,9 @@ export function EditorView() {
     new URLSearchParams(window.location.search).get("projectId")
   );
   const [project, setProject] = useState<ProjectView | null>(null);
+  // Name the user typed for a not-yet-created edit; applied when the project is
+  // first saved to disk. Once a project exists, renames persist immediately.
+  const [pendingProjectName, setPendingProjectName] = useState("");
   const [importedMedia, setImportedMedia] = useState<EditorMediaItem[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<MediaPanelTab>("all");
@@ -135,7 +138,13 @@ export function EditorView() {
 
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
 
-  const { isReady: isEditorStateReady, saving, saveState } = useEditorPersistence({
+  const {
+    allowUnload,
+    hasUnsavedChanges,
+    isReady: isEditorStateReady,
+    saving,
+    saveState
+  } = useEditorPersistence({
     activeBackgroundCategory,
     audioLevels,
     backgroundAudioIds,
@@ -157,6 +166,7 @@ export function EditorView() {
       url.searchParams.set("projectId", nextProjectId);
       window.history.replaceState(null, "", url);
     },
+    pendingProjectName,
     project,
     projectId,
     screenAspectRatio,
@@ -230,7 +240,6 @@ export function EditorView() {
     previewItem,
     projectCamera,
     projectMedia,
-    projectName,
     projectScreen,
     screenAspectEnabled,
     screenEditEnabled,
@@ -336,6 +345,7 @@ export function EditorView() {
   const {
     importCustomBackground,
     importMedia,
+    importMediaFromPaths,
     removeImportedMedia,
     selectTimelineItem,
     setAudioLevel,
@@ -497,6 +507,42 @@ export function EditorView() {
   // Render.
   // ---------------------------------------------------------------------------
 
+  const leaveToHome = async () => {
+    // Flush any pending edits for an existing project (a brand-new edit has no
+    // folder yet, so it can't be saved without prompting — just leave). Then
+    // disable the beforeunload guard so the navigation actually happens.
+    try {
+      if (project && hasUnsavedChanges()) {
+        await saveState(true);
+      }
+    } catch {
+      // Even if the final save fails, still let the user leave the editor.
+    }
+    allowUnload();
+    await window.openVideoCraft.windows.openMain();
+  };
+
+  const displayProjectName = project?.name ?? pendingProjectName;
+  const renameProject = async (nextName: string) => {
+    const trimmed = nextName.trim();
+    if (!project) {
+      setPendingProjectName(trimmed);
+      return;
+    }
+    if (trimmed === project.name) {
+      return;
+    }
+    try {
+      const updated = await window.openVideoCraft.projects.rename({
+        projectId: project.id,
+        name: trimmed
+      });
+      setProject(updated);
+    } catch (renameError) {
+      setError(renameError instanceof Error ? renameError.message : "Could not rename the project.");
+    }
+  };
+
   return (
     <main className="editor-app grid h-screen min-h-screen overflow-hidden bg-[#0a0a0c] p-0 text-[#f7f7f8]">
       <section
@@ -508,11 +554,12 @@ export function EditorView() {
         }}
       >
         <EditorTopbar
-          projectName={projectName}
+          projectName={displayProjectName}
           exporting={exporting}
           canExport={canExport}
           saving={saving}
-          onBackHome={() => void window.openVideoCraft.windows.openMain()}
+          onBackHome={() => void leaveToHome()}
+          onRename={renameProject}
           onSave={saveState}
           onOpenExport={openExportDialog}
         />
@@ -542,6 +589,7 @@ export function EditorView() {
                 visibleMedia={visibleMedia}
                 selectedItemId={selectedItem?.id ?? null}
                 onImport={() => void importMedia()}
+                onImportPaths={(filePaths) => void importMediaFromPaths(filePaths)}
                 onTabChange={setActivePanel}
                 onSelectItem={selectTimelineItem}
                 onItemDuration={updateMediaDuration}

@@ -10,7 +10,7 @@ export function ToolRail(props: {
 }) {
   return (
     <aside
-      className="grid content-start justify-items-stretch gap-1 overflow-auto border-r border-white/[0.07] bg-[#101113] p-1"
+      className="grid content-start justify-items-stretch gap-1 overflow-auto bg-[#101113] p-1"
       aria-label="Editor tools"
     >
       {editorTools.map((tool) => (

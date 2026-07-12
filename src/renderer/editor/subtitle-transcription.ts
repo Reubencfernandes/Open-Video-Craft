@@ -5,7 +5,9 @@
 import type { SubtitleSegment, SubtitleWord } from "./types";
 import { createId } from "./utils";
 
-export const whisperTranscriptionModel = "Xenova/whisper-base";
+// `onnx-community/whisper-base` is the openai/whisper-base weights converted to
+// ONNX for Transformers.js (the base `openai/` repo ships no ONNX files).
+export const whisperTranscriptionModel = "onnx-community/whisper-base";
 export const whisperTranscriptionModelLabel = "Whisper base (multilingual)";
 
 type WhisperTimestamp = [number | null, number | null];

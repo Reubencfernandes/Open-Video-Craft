@@ -2,7 +2,7 @@
  * Clip components for every lane (media, zoom, speed, subtitle) and the
  * cubic-Bézier audio waveform.
  */
-import { Film, Music, Type, ZoomIn } from "lucide-react";
+import { Type, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
@@ -27,7 +27,7 @@ const clipBaseClassName =
   "group absolute top-[0.2rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-lg border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
 
 /** Inset outline so selection is visible inside lanes with overflow:hidden. */
-const clipSelectedClassName = "outline outline-2 -outline-offset-2 outline-amber-300";
+const clipSelectedClassName = "outline outline-2 -outline-offset-2 outline-purple-400";
 
 /** Widened hit areas on both clip edges used to start a trim drag; a white
  * pill handle fades in on hover, matching the reference design. */
@@ -86,18 +86,13 @@ export function TimelineClip(props: {
     >
       {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}
       {item.kind === "audio" ? (
-        <>
-          <BezierAudioWaveform
-            id={props.clip.id}
-            name={item.name}
-            volume={props.audioLevel?.volume ?? 100}
-            muted={props.audioLevel?.muted ?? false}
-          />
-          <Music className="relative z-[2] flex-none" size={13} />
-        </>
-      ) : (
-        <Film className="relative z-[2] flex-none" size={13} />
-      )}
+        <BezierAudioWaveform
+          id={props.clip.id}
+          name={item.name}
+          volume={props.audioLevel?.volume ?? 100}
+          muted={props.audioLevel?.muted ?? false}
+        />
+      ) : null}
       <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
       <ClipTrimEdges
         onTrimPointerDown={(event, edge) => props.onTrimPointerDown(event, props.clip.id, edge)}

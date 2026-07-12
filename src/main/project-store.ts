@@ -11,6 +11,26 @@ import {
   createDefaultProjectFile,
   createDefaultSubtitles
 } from "../shared/defaults";
+import {
+  createProjectFolderName,
+  editorStateFileName,
+  getMediaTrackRelativePath,
+  importsDirectoryName,
+  mediaDirectoryName,
+  mediaTrackRelativePaths,
+  recordingTrackToMediaTrack,
+  slugify
+} from "./project-paths";
+import {
+  cloneJsonValue,
+  exists,
+  isEditorProjectStateFile,
+  isEditorProjectImportInput,
+  isMissingFileError,
+  readProjectFile,
+  sanitizeDurationMs,
+  writeJsonFileAtomic
+} from "./project-file";
 import type {
   EditorProjectImport,
   EditorProjectImportInput,
@@ -35,46 +55,9 @@ export interface ProjectStoreOptions {
   clock?: () => Date;
 }
 
-const mediaDirectoryName = "media";
-const importsDirectoryName = "imports";
-const editorStateFileName = "editor.json";
-
-const recordingTrackToMediaTrack: Record<RecordingTrack, MediaTrackKey> = {
-  screen: "screen",
-  camera: "camera",
-  mic: "micWebm",
-  system: "systemWebm"
-};
-
-const mediaTrackRelativePaths: Record<MediaTrackKey, string> = {
-  // Keep persisted paths slash-normalized: projects can move between macOS,
-  // Windows, and Linux even though each host resolves the path natively.
-  screen: `${mediaDirectoryName}/screen.webm`,
-  camera: `${mediaDirectoryName}/camera.webm`,
-  micWebm: `${mediaDirectoryName}/mic.webm`,
-  micWav: `${mediaDirectoryName}/mic.wav`,
-  systemWebm: `${mediaDirectoryName}/system.webm`,
-  systemWav: `${mediaDirectoryName}/system.wav`
-};
-
-export function getMediaTrackRelativePath(track: MediaTrackKey): string {
-  return mediaTrackRelativePaths[track];
-}
-
-export function createProjectFolderName(name: string, date: Date): string {
-  const slug = slugify(name) || "untitled-recording";
-  const timestamp = date.toISOString().replace(/[:.]/g, "-");
-  return `${slug}-${timestamp}`;
-}
-
-export function slugify(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64);
-}
+// Re-exported so existing importers (and tests) can keep sourcing these from
+// the project store; they now live in ./project-paths.
+export { createProjectFolderName, getMediaTrackRelativePath, slugify };
 
 export class ProjectStore {
   private readonly appVersion: string;
@@ -122,6 +105,20 @@ export class ProjectStore {
 
   getProject(projectId: string): ProjectView {
     return this.toView(this.getRecord(projectId));
+  }
+
+  async renameProject(projectId: string, name: string): Promise<ProjectView> {
+    return this.runProjectOperation(projectId, async () => {
+      const record = this.getRecord(projectId);
+      const safeName = name.trim() || "Untitled Recording";
+      record.file = {
+        ...record.file,
+        name: safeName,
+        updatedAt: this.clock().toISOString()
+      };
+      await this.writeProjectFiles(record);
+      return this.toView(record);
+    });
   }
 
   hasProject(projectId: string): boolean {
@@ -552,172 +549,3 @@ export function createMediaUrl(projectId: string, relativePath: string): string 
   return `ovc-media://project/${encodeURIComponent(projectId)}/${encodedPath}`;
 }
 
-export async function readProjectFile(rootPath: string): Promise<ProjectFile> {
-  const filePath = path.join(path.resolve(rootPath), "project.json");
-  const raw = await fs.readFile(filePath, "utf8");
-  const parsed = JSON.parse(raw) as Partial<ProjectFile>;
-
-  if (
-    parsed.schemaVersion !== 1 ||
-    !isNonEmptyString(parsed.id) ||
-    !isNonEmptyString(parsed.name) ||
-    !isNonEmptyString(parsed.updatedAt) ||
-    !isValidProjectTracks(parsed.tracks)
-  ) {
-    throw new Error(`"${filePath}" is not a valid Open Video Craft project.`);
-  }
-
-  return parsed as ProjectFile;
-}
-
-async function writeJsonFileAtomic(filePath: string, value: unknown): Promise<void> {
-  const directory = path.dirname(filePath);
-  const tempPath = path.join(directory, `.${path.basename(filePath)}.${randomUUID()}.tmp`);
-  const content = `${JSON.stringify(value, null, 2)}\n`;
-
-  await fs.mkdir(directory, { recursive: true });
-  try {
-    await fs.writeFile(tempPath, content);
-    await renameWithRetry(tempPath, filePath);
-  } catch (error) {
-    await fs.rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
-}
-
-// OneDrive/Dropbox sync agents and Windows AV scanners briefly lock the
-// destination file, making an otherwise-atomic rename fail with
-// EPERM/EBUSY/EACCES even though nothing is wrong. A few short backoff retries
-// clear those transient locks without masking a genuine failure.
-async function renameWithRetry(from: string, to: string, attempts = 3): Promise<void> {
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      await fs.rename(from, to);
-      return;
-    } catch (error) {
-      const code = (error as { code?: string }).code;
-      const transient = code === "EPERM" || code === "EBUSY" || code === "EACCES";
-      if (!transient || attempt >= attempts) {
-        throw error;
-      }
-      await sleep(attempt * 120);
-    }
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function sanitizeDurationMs(value: number): number {
-  return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
-}
-
-function cloneJsonValue(value: unknown): unknown {
-  const serialized = JSON.stringify(value);
-  if (typeof serialized !== "string" || Buffer.byteLength(serialized) > 10 * 1024 * 1024) {
-    throw new Error("Editor state must be valid JSON smaller than 10 MB.");
-  }
-
-  return JSON.parse(serialized) as unknown;
-}
-
-function isValidProjectTracks(value: unknown): value is ProjectFile["tracks"] {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  for (const [key, track] of Object.entries(value)) {
-    if (!(key in mediaTrackRelativePaths) || !isValidProjectTrack(key as MediaTrackKey, track)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function isValidProjectTrack(key: MediaTrackKey, value: unknown): value is ProjectTrack {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const track = value as Partial<ProjectTrack>;
-  return (
-    normalizeRelativePath(track.path) === mediaTrackRelativePaths[key] &&
-    isNonEmptyString(track.mimeType) &&
-    typeof track.bytesWritten === "number" &&
-    Number.isFinite(track.bytesWritten) &&
-    track.bytesWritten >= 0 &&
-    isNonEmptyString(track.createdAt) &&
-    isNonEmptyString(track.updatedAt)
-  );
-}
-
-function isEditorProjectStateFile(value: unknown): value is EditorProjectStateFile {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const state = value as Partial<EditorProjectStateFile>;
-  return (
-    state.schemaVersion === 1 &&
-    isNonEmptyString(state.savedAt) &&
-    Array.isArray(state.imports) &&
-    state.imports.every(isEditorProjectImport)
-  );
-}
-
-function isEditorProjectImport(value: unknown): value is EditorProjectImport {
-  return (
-    isEditorProjectImportInput(value) &&
-    typeof (value as Partial<EditorProjectImport>).relativePath === "string" &&
-    normalizeRelativePath((value as Partial<EditorProjectImport>).relativePath) ===
-      `${importsDirectoryName}/${(value as EditorProjectImport).id}.${(value as EditorProjectImport).extension}`
-  );
-}
-
-function isEditorProjectImportInput(value: unknown): value is EditorProjectImportInput {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const imported = value as Partial<EditorProjectImportInput>;
-  return (
-    typeof imported.id === "string" &&
-    /^[a-zA-Z0-9_-]{1,128}$/.test(imported.id) &&
-    isNonEmptyString(imported.name) &&
-    (imported.kind === "video" || imported.kind === "audio" || imported.kind === "image") &&
-    typeof imported.extension === "string" &&
-    /^[a-zA-Z0-9]{1,12}$/.test(imported.extension) &&
-    (imported.duration === null ||
-      (typeof imported.duration === "number" &&
-        Number.isFinite(imported.duration) &&
-        imported.duration >= 0))
-  );
-}
-
-function normalizeRelativePath(value: unknown): string {
-  return typeof value === "string" ? value.replace(/\\/g, "/") : "";
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function isMissingFileError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: unknown }).code === "ENOENT"
-  );
-}
-
-async function exists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}

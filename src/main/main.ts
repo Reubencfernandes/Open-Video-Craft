@@ -39,27 +39,31 @@ import {
 import {
   chooseBaseDirectory as showBaseDirectoryDialog,
   chooseExistingProjectFolder as showExistingProjectFolderDialog,
-  chooseExportPath as showExportPathDialog,
-  importMediaFiles as showImportMediaDialog
+  importMediaFiles as showImportMediaDialog,
+  importMediaFromPaths
 } from "./file-dialogs";
-import { convertWebmAudioToWav, exportVideo, killActiveFfmpegProcesses, remuxWebm } from "./ffmpeg";
+import { convertWebmAudioToWav, killActiveFfmpegProcesses, remuxWebm } from "./ffmpeg";
+import { exportEditorVideo } from "./editor-export";
+import {
+  assertExportVideoRequest,
+  assertSaveEditorProjectStateRequest,
+  assertStartRecordingRequest
+} from "./request-validation";
 import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
 import { createMediaUrl, ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
   DesktopPermissionStatus,
-  DeviceSelection,
   EditorProjectStateFile,
   EditorProjectStateView,
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
   ImportedMediaFile,
-  ProjectDevices,
   ProjectLibraryEntry,
-  ProjectSource,
   ProjectView,
+  RenameProjectRequest,
   SaveEditorProjectStateRequest,
   SourceOverlayResult,
   SourceSummary,
@@ -166,9 +170,36 @@ async function createWindow(): Promise<void> {
     void closeDisplayOverlay();
     closePermissionGuideWindow();
   });
+  // The editor renderer guards navigation with `beforeunload` when it has
+  // unsaved changes. Without this handler Electron silently aborts the
+  // navigation (e.g. "Back to main menu" appears to do nothing); here we turn
+  // it into a real confirmation so the user can choose to leave.
+  attachUnsavedChangesGuard(mainWindow);
   attachDevToolsShortcuts(mainWindow);
 
   await loadRendererView(mainWindow, "main");
+}
+
+function attachUnsavedChangesGuard(window: BrowserWindow): void {
+  window.webContents.on("will-prevent-unload", (event) => {
+    if (window.isDestroyed()) {
+      return;
+    }
+    const choice = dialog.showMessageBoxSync(window, {
+      type: "warning",
+      buttons: ["Leave", "Stay"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "Leave the editor?",
+      message: "You have unsaved changes.",
+      detail: "If you leave now, your most recent edits won't be saved."
+    });
+    // Calling preventDefault() here overrides the renderer's beforeunload and
+    // lets the navigation/close proceed.
+    if (choice === 0) {
+      event.preventDefault();
+    }
+  });
 }
 
 async function createRecorderWindow(): Promise<void> {
@@ -397,6 +428,7 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
       void closeDisplayOverlay();
       closePermissionGuideWindow();
     });
+    attachUnsavedChangesGuard(mainWindow);
     attachDevToolsShortcuts(mainWindow);
   }
 
@@ -763,6 +795,19 @@ function registerIpc(): void {
     });
   });
 
+  ipcMain.handle(
+    "editor:import-media-paths",
+    async (_event, filePaths: unknown): Promise<ImportedMediaFile[]> => {
+      if (!Array.isArray(filePaths)) {
+        return [];
+      }
+      const paths = filePaths.filter((value): value is string => typeof value === "string");
+      return importMediaFromPaths(paths, (id, filePath) => {
+        importedMediaCache.set(id, filePath);
+      });
+    }
+  );
+
   ipcMain.handle("editor:remove-imported-media", (_event, importId: string): boolean => {
     return importedMediaCache.delete(importId);
   });
@@ -797,7 +842,11 @@ function registerIpc(): void {
     "editor:export-video",
     async (_event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
       assertExportVideoRequest(request);
-      return exportEditorVideo(request);
+      return exportEditorVideo(request, {
+        projectStore,
+        importedMediaCache,
+        getDialogParentWindow
+      });
     }
   );
 
@@ -927,7 +976,7 @@ function registerIpc(): void {
         baseDirectory = await showBaseDirectoryDialog(getDialogParentWindow());
 
         if (!baseDirectory) {
-          throw new Error("A project folder is required before recording.");
+          throw new Error("A project folder is required to save this project.");
         }
         grantedBaseDirectories.add(path.resolve(baseDirectory));
       }
@@ -936,6 +985,18 @@ function registerIpc(): void {
         name: typeof request.name === "string" ? request.name : "",
         baseDirectory
       });
+      await getProjectLibrary().upsert(project);
+      return project;
+    }
+  );
+
+  ipcMain.handle(
+    "projects:rename",
+    async (_event, request: RenameProjectRequest): Promise<ProjectView> => {
+      if (!request || typeof request.projectId !== "string" || typeof request.name !== "string") {
+        throw new Error("A project id and name are required to rename a project.");
+      }
+      const project = await projectStore.renameProject(request.projectId, request.name);
       await getProjectLibrary().upsert(project);
       return project;
     }
@@ -1057,161 +1118,6 @@ function setRecorderWindowCompact(compact: boolean): void {
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
 }
 
-async function exportEditorVideo(
-  request: ExportVideoRequest
-): Promise<ExportVideoResult | null> {
-  const source = resolveExportSource(request);
-  const outputPath = await showExportPathDialog(getDialogParentWindow(), {
-    format: request.format,
-    name: source.name
-  });
-
-  if (!outputPath) {
-    return null;
-  }
-
-  const bytesWritten = await exportVideo({
-    videoPath: source.videoPath,
-    audioTracks: [
-      ...source.audioTracks.map((track) => ({
-        path: track.path,
-        volume: request.volume * getRequestedAudioGain(request, track.id)
-      })),
-      ...request.backgroundAudioImportIds.map((id) => ({
-        path: resolveImportedMediaPath(id),
-        volume: request.volume * getRequestedAudioGain(request, id)
-      }))
-    ],
-    outputPath,
-    format: request.format,
-    resolution: request.resolution,
-    trimStart: Math.max(0, request.trimStart),
-    trimEnd:
-      request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
-    sourceAudioVolume: request.volume,
-    preserveSourceAudio: source.preserveSourceAudio
-  });
-  const subtitlePath = await writeSubtitleSidecar(outputPath, request);
-
-  return {
-    path: outputPath,
-    bytesWritten,
-    subtitlePath
-  };
-}
-
-async function writeSubtitleSidecar(
-  outputPath: string,
-  request: ExportVideoRequest
-): Promise<string | null> {
-  const trimEnd = request.trimEnd ?? Number.POSITIVE_INFINITY;
-  const cues = request.subtitles
-    .filter((subtitle) => subtitle.end > request.trimStart && subtitle.start < trimEnd)
-    .map((subtitle) => ({
-      start: Math.max(0, subtitle.start - request.trimStart),
-      end: Math.max(0, Math.min(subtitle.end, trimEnd) - request.trimStart),
-      text: sanitizeSrtText(subtitle.text)
-    }))
-    .filter((subtitle) => subtitle.end > subtitle.start && subtitle.text.length > 0);
-  if (cues.length === 0) return null;
-
-  const subtitlePath = outputPath.replace(/\.[^.]+$/, "") + ".srt";
-  // SRT delimits cues with a blank line, so any blank line inside cue text ends
-  // the cue early. Build each block with CRLF (widest player support) and
-  // separate blocks with a blank CRLF line.
-  const srt =
-    cues
-      .map((cue, index) =>
-        [
-          `${index + 1}`,
-          `${formatSrtTime(cue.start)} --> ${formatSrtTime(cue.end)}`,
-          cue.text
-        ].join("\r\n")
-      )
-      .join("\r\n\r\n") + "\r\n";
-  await fs.writeFile(subtitlePath, srt, "utf8");
-  return subtitlePath;
-}
-
-// Keep cue text from corrupting the SRT structure: normalize to CRLF, drop
-// blank lines (they would end the cue early), and neutralize any "-->" that
-// could be misread as a timing line.
-function sanitizeSrtText(text: string): string {
-  return text
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((line) => line.trim().replace(/-->/g, "->"))
-    .filter((line) => line.length > 0)
-    .join("\r\n");
-}
-
-function formatSrtTime(seconds: number): string {
-  const milliseconds = Math.max(0, Math.round(seconds * 1000));
-  const hours = Math.floor(milliseconds / 3_600_000);
-  const minutes = Math.floor((milliseconds % 3_600_000) / 60_000);
-  const secs = Math.floor((milliseconds % 60_000) / 1000);
-  const millis = milliseconds % 1000;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")},${String(millis).padStart(3, "0")}`;
-}
-
-function resolveExportSource(request: ExportVideoRequest): {
-  name: string;
-  videoPath: string;
-  audioTracks: Array<{ id: string; path: string }>;
-  preserveSourceAudio: boolean;
-} {
-  if (request.source.kind === "import") {
-    return {
-      name: path.basename(resolveImportedMediaPath(request.source.importId)),
-      videoPath: resolveImportedMediaPath(request.source.importId),
-      audioTracks: [],
-      preserveSourceAudio: true
-    };
-  }
-
-  const project = projectStore.getProject(request.source.projectId);
-  const screenPath = projectStore.getMediaPath(request.source.projectId, "screen");
-
-  if (!screenPath) {
-    throw new Error("This project does not have a screen recording to export.");
-  }
-
-  const micPath =
-    projectStore.getMediaPath(request.source.projectId, "micWav") ??
-    projectStore.getMediaPath(request.source.projectId, "micWebm");
-  const systemPath =
-    projectStore.getMediaPath(request.source.projectId, "systemWav") ??
-    projectStore.getMediaPath(request.source.projectId, "systemWebm");
-
-  return {
-    name: project.name,
-    videoPath: screenPath,
-    audioTracks: [
-      ...(micPath ? [{ id: `${project.id}:audio`, path: micPath }] : []),
-      ...(systemPath ? [{ id: `${project.id}:system-audio`, path: systemPath }] : [])
-    ],
-    preserveSourceAudio: false
-  };
-}
-
-function getRequestedAudioGain(request: ExportVideoRequest, itemId: string): number {
-  const level = request.audioLevels[itemId];
-  if (level?.muted) {
-    return 0;
-  }
-  return Math.max(0, (level?.volume ?? 100) / 100);
-}
-
-function resolveImportedMediaPath(importId: string): string {
-  const filePath = importedMediaCache.get(importId);
-
-  if (!filePath) {
-    throw new Error("Imported media is no longer available in this editing session.");
-  }
-
-  return filePath;
-}
-
 function toEditorProjectStateView(
   projectId: string,
   state: EditorProjectStateFile
@@ -1232,147 +1138,6 @@ function toEditorProjectStateView(
       };
     })
   };
-}
-
-function assertStartRecordingRequest(value: unknown): asserts value is StartRecordingRequest {
-  const request = value as Partial<StartRecordingRequest> | null;
-  if (
-    !request ||
-    typeof request !== "object" ||
-    !isNonEmptyBoundedString(request.projectId, 128) ||
-    !isValidProjectSource(request.source) ||
-    !isValidProjectDevices(request.devices) ||
-    !isValidRecordingTracks(request.tracks)
-  ) {
-    throw new Error("Invalid recording start request.");
-  }
-}
-
-function isNonEmptyBoundedString(value: unknown, maxLength: number): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= maxLength;
-}
-
-function isNullableBoundedString(value: unknown, maxLength: number): value is string | null {
-  return value === null || (typeof value === "string" && value.length <= maxLength);
-}
-
-function isValidProjectSource(value: unknown): value is ProjectSource {
-  const source = value as Partial<ProjectSource> | null;
-  return Boolean(
-    source &&
-      typeof source === "object" &&
-      isNonEmptyBoundedString(source.id, 512) &&
-      isNullableBoundedString(source.name, 512) &&
-      (source.kind === "screen" || source.kind === "window") &&
-      isNullableBoundedString(source.displayId, 128)
-  );
-}
-
-function isValidDeviceSelection(value: unknown): value is DeviceSelection {
-  const selection = value as Partial<DeviceSelection> | null;
-  return Boolean(
-    selection &&
-      typeof selection === "object" &&
-      typeof selection.enabled === "boolean" &&
-      isNullableBoundedString(selection.deviceId, 512) &&
-      isNullableBoundedString(selection.label, 512)
-  );
-}
-
-function isValidProjectDevices(value: unknown): value is ProjectDevices {
-  const devices = value as Partial<ProjectDevices> | null;
-  return Boolean(
-    devices &&
-      typeof devices === "object" &&
-      isValidDeviceSelection(devices.microphone) &&
-      isValidDeviceSelection(devices.camera)
-  );
-}
-
-function isValidTrackMime(value: unknown, required: boolean): boolean {
-  if (value === null || value === undefined) {
-    return !required;
-  }
-  return typeof value === "string" && value.length > 0 && value.length <= 255;
-}
-
-function isValidRecordingTracks(value: unknown): value is StartRecordingRequest["tracks"] {
-  const tracks = value as Partial<StartRecordingRequest["tracks"]> | null;
-  if (!tracks || typeof tracks !== "object") {
-    return false;
-  }
-
-  const optionalTrackValid = (track: unknown): boolean => {
-    const entry = track as { enabled?: unknown; mimeType?: unknown } | null;
-    return Boolean(
-      entry &&
-        typeof entry === "object" &&
-        typeof entry.enabled === "boolean" &&
-        isValidTrackMime(entry.mimeType, false)
-    );
-  };
-
-  const screen = tracks.screen as { enabled?: unknown; mimeType?: unknown } | undefined;
-  return Boolean(
-    screen &&
-      typeof screen === "object" &&
-      screen.enabled === true &&
-      isValidTrackMime(screen.mimeType, true) &&
-      optionalTrackValid(tracks.camera) &&
-      optionalTrackValid(tracks.mic) &&
-      optionalTrackValid(tracks.system)
-  );
-}
-
-function assertSaveEditorProjectStateRequest(
-  value: unknown
-): asserts value is SaveEditorProjectStateRequest {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    typeof (value as Partial<SaveEditorProjectStateRequest>).projectId !== "string" ||
-    !Array.isArray((value as Partial<SaveEditorProjectStateRequest>).imports)
-  ) {
-    throw new Error("Invalid editor save request.");
-  }
-}
-
-function assertExportVideoRequest(value: unknown): asserts value is ExportVideoRequest {
-  const request = value as Partial<ExportVideoRequest> | null;
-  const sourceIdValid = request?.source?.kind === "project"
-    ? typeof request.source.projectId === "string" && request.source.projectId.length > 0
-    : request?.source?.kind === "import"
-      ? typeof request.source.importId === "string" && request.source.importId.length > 0
-      : false;
-  const audioLevelsValid = request?.audioLevels && typeof request.audioLevels === "object"
-    ? Object.values(request.audioLevels).every((level) =>
-        Boolean(level) && Number.isFinite(level.volume) && typeof level.muted === "boolean"
-      )
-    : false;
-  if (
-    !request ||
-    typeof request !== "object" ||
-    !request.source ||
-    !sourceIdValid ||
-    !["mp4", "webm", "mov"].includes(request.format ?? "") ||
-    !["source", "720p", "1080p", "1440p"].includes(request.resolution ?? "") ||
-    typeof request.trimStart !== "number" || !Number.isFinite(request.trimStart) || request.trimStart < 0 ||
-    (request.trimEnd !== null && (typeof request.trimEnd !== "number" || !Number.isFinite(request.trimEnd) || request.trimEnd < 0)) ||
-    typeof request.volume !== "number" || !Number.isFinite(request.volume) || request.volume < 0 || request.volume > 4 ||
-    !audioLevelsValid ||
-    !Array.isArray(request.backgroundAudioImportIds) ||
-    !request.backgroundAudioImportIds.every((id) => typeof id === "string" && id.length > 0) ||
-    !Array.isArray(request.subtitles) ||
-    !request.subtitles.every((subtitle) =>
-      Boolean(subtitle) &&
-      typeof subtitle.text === "string" &&
-      Number.isFinite(subtitle.start) &&
-      Number.isFinite(subtitle.end) &&
-      subtitle.end >= subtitle.start
-    )
-  ) {
-    throw new Error("Invalid video export request.");
-  }
 }
 
 function registerRecordingShortcut(): void {

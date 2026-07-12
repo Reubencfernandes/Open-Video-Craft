@@ -17,7 +17,7 @@ import { cx } from "../classNames";
  */
 export function TimelineTrack(props: {
   label: string;
-  accent: "warm" | "lime" | "green" | "amber" | "rose";
+  accent: "warm" | "lime" | "green" | "amber" | "purple" | "rose";
   icon: ReactNode;
   children: ReactNode;
   controls?: ReactNode;
@@ -27,6 +27,7 @@ export function TimelineTrack(props: {
     lime: "text-lime-400",
     green: "text-emerald-400",
     amber: "text-amber-500",
+    purple: "text-purple-400",
     rose: "text-rose-400"
   }[props.accent];
 

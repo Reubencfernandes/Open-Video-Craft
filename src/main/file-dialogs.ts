@@ -79,20 +79,54 @@ export async function importMediaFiles(
     return [];
   }
 
-  return result.filePaths.map((filePath) => {
-    const id = randomUUID();
-    registerImport(id, filePath);
-    const extension = path.extname(filePath).replace(/^\./, "").toLowerCase();
+  return result.filePaths.map((filePath) => describeImportedFile(filePath, registerImport));
+}
 
-    return {
-      id,
-      name: path.basename(filePath),
-      path: filePath,
-      url: `ovc-import://file/${encodeURIComponent(id)}`,
-      kind: getImportedMediaKind(extension),
-      extension
-    };
-  });
+/**
+ * Import media from an explicit set of file paths (e.g. an OS drag-and-drop
+ * onto the media panel) rather than the open dialog. Directories and paths that
+ * can't be stat'd as regular files are skipped so a stray drop can't register a
+ * bogus source; unsupported file types still flow through and are rejected by
+ * the renderer's own partitioning, matching the "All Files" dialog behaviour.
+ */
+export async function importMediaFromPaths(
+  filePaths: string[],
+  registerImport: (id: string, filePath: string) => void
+): Promise<ImportedMediaFile[]> {
+  const imported: ImportedMediaFile[] = [];
+
+  for (const filePath of filePaths) {
+    try {
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile()) {
+        continue;
+      }
+    } catch {
+      continue;
+    }
+
+    imported.push(describeImportedFile(filePath, registerImport));
+  }
+
+  return imported;
+}
+
+function describeImportedFile(
+  filePath: string,
+  registerImport: (id: string, filePath: string) => void
+): ImportedMediaFile {
+  const id = randomUUID();
+  registerImport(id, filePath);
+  const extension = path.extname(filePath).replace(/^\./, "").toLowerCase();
+
+  return {
+    id,
+    name: path.basename(filePath),
+    path: filePath,
+    url: `ovc-import://file/${encodeURIComponent(id)}`,
+    kind: getImportedMediaKind(extension),
+    extension
+  };
 }
 
 export async function chooseExportPath(

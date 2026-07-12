@@ -1,7 +1,8 @@
 /**
  * Editor top bar: back to launcher, project name, save, and export.
  */
-import { Home, Plus, Save, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Home, Pencil, Save, Upload } from "lucide-react";
 import appLogo from "../assets/app.png";
 
 export function EditorTopbar(props: {
@@ -10,9 +11,32 @@ export function EditorTopbar(props: {
   canExport: boolean;
   saving: boolean;
   onBackHome: () => void;
+  onRename: (name: string) => void;
   onSave: () => Promise<void>;
   onOpenExport: () => void;
 }) {
+  const [draftName, setDraftName] = useState(props.projectName);
+  const [editingName, setEditingName] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep the field in sync with the loaded/renamed project unless the user is
+  // mid-edit (so remote updates never clobber their keystrokes).
+  useEffect(() => {
+    if (!editingName) {
+      setDraftName(props.projectName);
+    }
+  }, [props.projectName, editingName]);
+
+  const commitName = () => {
+    setEditingName(false);
+    const next = draftName.trim();
+    if (next && next !== props.projectName) {
+      props.onRename(next);
+    } else {
+      setDraftName(props.projectName);
+    }
+  };
+
   return (
     <header className="grid grid-cols-[minmax(230px,1fr)_minmax(160px,auto)_minmax(260px,1fr)] items-center gap-4 border-b border-white/[0.06] bg-[#08090b]/95 px-6 py-4">
       <div className="inline-flex min-w-0 items-center gap-3">
@@ -29,13 +53,32 @@ export function EditorTopbar(props: {
         </div>
       </div>
 
-      <button
-        className="inline-flex min-h-[3rem] min-w-[10.5rem] items-center justify-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.025] px-5 text-sm font-semibold text-slate-100 shadow-[inset_0_1px_rgb(255_255_255_/_0.03)]"
-        type="button"
+      <div
+        className="inline-flex min-h-[3rem] min-w-[10.5rem] items-center justify-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.025] px-5 text-sm font-semibold text-slate-100 shadow-[inset_0_1px_rgb(255_255_255_/_0.03)] focus-within:border-white/[0.24]"
+        onClick={() => inputRef.current?.focus()}
       >
-        <span className="max-w-[28rem] truncate">{props.projectName || "New Edit"}</span>
-        <Plus size={17} />
-      </button>
+        <input
+          ref={inputRef}
+          className="min-w-0 flex-1 truncate bg-transparent text-center text-slate-100 outline-none placeholder:text-slate-500"
+          value={draftName}
+          placeholder="New Edit"
+          aria-label="Project name"
+          spellCheck={false}
+          onChange={(event) => setDraftName(event.target.value)}
+          onFocus={() => setEditingName(true)}
+          onBlur={commitName}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            } else if (event.key === "Escape") {
+              setDraftName(props.projectName);
+              setEditingName(false);
+              event.currentTarget.blur();
+            }
+          }}
+        />
+        <Pencil size={15} className="flex-none text-slate-400" />
+      </div>
 
       <div className="inline-flex justify-end gap-3">
         <button

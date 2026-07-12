@@ -157,6 +157,11 @@ export interface CreateProjectRequest {
   baseDirectory?: string | null;
 }
 
+export interface RenameProjectRequest {
+  projectId: string;
+  name: string;
+}
+
 export interface StartRecordingRequest {
   projectId: string;
   source: ProjectSource;

@@ -129,7 +129,7 @@ export function Timeline(props: {
         onPointerCancel={props.onResizePointerUp}
         onDoubleClick={props.onResizeDoubleClick}
       >
-        <span className="h-1 w-20 rounded-full bg-white/[0.12] transition group-hover:bg-amber-400/80" />
+        <span className="h-1 w-20 rounded-full bg-white/[0.12] transition group-hover:bg-purple-400/80" />
       </button>
 
       <TimelineToolbar
@@ -201,7 +201,7 @@ export function Timeline(props: {
         </TimelineTrack>
 
         {props.activeTool === "zoom" ? (
-          <TimelineTrack label="Effects" accent="amber" icon={<WandSparkles size={14} />}>
+          <TimelineTrack label="Effects" accent="purple" icon={<WandSparkles size={14} />}>
             {getOrderedZoomTimingItems(props.zoomEffects).map((effect) => (
               <TimelineZoomClip
                 key={effect.id}

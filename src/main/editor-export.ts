@@ -1,0 +1,129 @@
+/**
+ * Editor "Export video" flow: pick a destination, resolve the source media and
+ * per-track gains, run the ffmpeg export, and drop an optional `.srt` sidecar.
+ *
+ * All app state the flow needs (the project store, the imported-media path
+ * cache, and the dialog parent window) is passed in as an explicit context so
+ * this module stays decoupled from the main-process globals.
+ */
+import path from "node:path";
+import type { BrowserWindow } from "electron";
+import { chooseExportPath as showExportPathDialog } from "./file-dialogs";
+import { exportVideo } from "./ffmpeg";
+import type { ProjectStore } from "./project-store";
+import { writeSubtitleSidecar } from "./subtitle-export";
+import type { ExportVideoRequest, ExportVideoResult } from "../shared/types";
+
+export interface EditorExportContext {
+  projectStore: ProjectStore;
+  importedMediaCache: Map<string, string>;
+  getDialogParentWindow: () => BrowserWindow | null;
+}
+
+type ExportSource = {
+  name: string;
+  videoPath: string;
+  audioTracks: Array<{ id: string; path: string }>;
+  preserveSourceAudio: boolean;
+};
+
+export async function exportEditorVideo(
+  request: ExportVideoRequest,
+  context: EditorExportContext
+): Promise<ExportVideoResult | null> {
+  const source = resolveExportSource(request, context);
+  const outputPath = await showExportPathDialog(context.getDialogParentWindow(), {
+    format: request.format,
+    name: source.name
+  });
+
+  if (!outputPath) {
+    return null;
+  }
+
+  const bytesWritten = await exportVideo({
+    videoPath: source.videoPath,
+    audioTracks: [
+      ...source.audioTracks.map((track) => ({
+        path: track.path,
+        volume: request.volume * getRequestedAudioGain(request, track.id)
+      })),
+      ...request.backgroundAudioImportIds.map((id) => ({
+        path: resolveImportedMediaPath(id, context),
+        volume: request.volume * getRequestedAudioGain(request, id)
+      }))
+    ],
+    outputPath,
+    format: request.format,
+    resolution: request.resolution,
+    trimStart: Math.max(0, request.trimStart),
+    trimEnd:
+      request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
+    sourceAudioVolume: request.volume,
+    preserveSourceAudio: source.preserveSourceAudio
+  });
+  const subtitlePath = await writeSubtitleSidecar(outputPath, request);
+
+  return {
+    path: outputPath,
+    bytesWritten,
+    subtitlePath
+  };
+}
+
+function resolveExportSource(
+  request: ExportVideoRequest,
+  context: EditorExportContext
+): ExportSource {
+  if (request.source.kind === "import") {
+    return {
+      name: path.basename(resolveImportedMediaPath(request.source.importId, context)),
+      videoPath: resolveImportedMediaPath(request.source.importId, context),
+      audioTracks: [],
+      preserveSourceAudio: true
+    };
+  }
+
+  const { projectStore } = context;
+  const project = projectStore.getProject(request.source.projectId);
+  const screenPath = projectStore.getMediaPath(request.source.projectId, "screen");
+
+  if (!screenPath) {
+    throw new Error("This project does not have a screen recording to export.");
+  }
+
+  const micPath =
+    projectStore.getMediaPath(request.source.projectId, "micWav") ??
+    projectStore.getMediaPath(request.source.projectId, "micWebm");
+  const systemPath =
+    projectStore.getMediaPath(request.source.projectId, "systemWav") ??
+    projectStore.getMediaPath(request.source.projectId, "systemWebm");
+
+  return {
+    name: project.name,
+    videoPath: screenPath,
+    audioTracks: [
+      ...(micPath ? [{ id: `${project.id}:audio`, path: micPath }] : []),
+      ...(systemPath ? [{ id: `${project.id}:system-audio`, path: systemPath }] : [])
+    ],
+    preserveSourceAudio: false
+  };
+}
+
+function getRequestedAudioGain(request: ExportVideoRequest, itemId: string): number {
+  const level = request.audioLevels[itemId];
+  if (level?.muted) {
+    return 0;
+  }
+  return Math.max(0, (level?.volume ?? 100) / 100);
+}
+
+function resolveImportedMediaPath(importId: string, context: EditorExportContext): string {
+  const filePath = context.importedMediaCache.get(importId);
+
+  if (!filePath) {
+    throw new Error("Imported media is no longer available in this editing session.");
+  }
+
+  return filePath;
+}

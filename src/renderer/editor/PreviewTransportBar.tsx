@@ -5,10 +5,8 @@
  * component from mixing playback chrome with layout rendering concerns.
  */
 import {
-  Camera,
   ChevronsLeft,
   ChevronsRight,
-  Maximize2,
   Pause,
   Play,
   SkipBack,
@@ -40,10 +38,8 @@ export function PreviewTransportBar(props: {
         <button className={transportButtonClassName} type="button" title="Jump to end" onClick={() => props.onSeekFrame(props.totalFrames)}><SkipForward size={16} /></button>
       </div>
 
-      <div className="inline-flex items-center justify-end gap-2 justify-self-end" aria-label="Preview actions">
-        <button className="grid size-9 place-items-center rounded-lg text-slate-200 hover:bg-white/[0.06] hover:text-white" type="button" title="Capture frame"><Camera size={18} /></button>
-        <button className="grid size-9 place-items-center rounded-lg text-slate-200 hover:bg-white/[0.06] hover:text-white" type="button" title="Enter fullscreen" onClick={() => void document.documentElement.requestFullscreen?.()}><Maximize2 size={18} /></button>
-      </div>
+      {/* Empty third column keeps playback controls optically centered. */}
+      <span aria-hidden="true" />
     </div>
   );
 }

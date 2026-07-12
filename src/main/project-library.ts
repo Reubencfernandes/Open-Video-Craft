@@ -5,7 +5,7 @@
 import { promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { readProjectFile } from "./project-store";
+import { readProjectFile } from "./project-file";
 import type {
   MediaTrackKey,
   ProjectFile,

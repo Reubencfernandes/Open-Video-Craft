@@ -4,6 +4,31 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-12
+
+Editor workflow improvements — drag-and-drop media import, in-place project renaming, and a refreshed timeline look — plus a more reliable return to the launcher and an internal refactor of the main process and project store.
+
+### Added
+
+- Drag and drop video, image, or audio files directly onto the media panel to import them, in addition to the Import Media button.
+- The project name in the editor top bar is now editable: rename an existing project (persisted to disk) or set the name for a brand-new edit before it is first saved.
+
+### Changed
+
+- Speech-to-text now runs the `onnx-community/whisper-base` ONNX build of Whisper base (full precision), the maintained Transformers.js-compatible conversion.
+- Timeline accent recolored from amber to purple (playhead, timecode pill, clip selection, and the effects track), and the media filter tabs and their selected state were restyled.
+- The Import Media button now shows a single icon, timeline media clips no longer show a per-clip type icon next to the file name, and the divider between the tool rail and media panel was removed.
+- Refactored the Electron main process and on-disk project store into smaller, cohesive modules (IPC request validation, subtitle/SRT export, the video export flow, and project path/file-IO helpers) with no behavior change.
+
+### Fixed
+
+- "Back to main menu" now reliably returns to the launcher; the unsaved-changes guard could previously abort the navigation silently, making the button appear dead.
+- Editing imported media before the project is saved no longer opens a native folder-picker dialog on every autosave (and no longer loops on a misleading "A project folder is required" error); the save folder is requested only on an explicit save.
+
+### Removed
+
+- The preview "capture frame" and "enter fullscreen" buttons (non-functional placeholders) and the audio meter's "Mixed peak" readout row.
+
 ## [1.3.2] - 2026-07-12
 
 Full-codebase audit hardening pass: correctness, performance, and security fixes across the recorder, editor, and main process.

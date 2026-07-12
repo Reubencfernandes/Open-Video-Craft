@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  formatPeakDbfs,
   meterAmberDb,
   meterFloorDb,
   meterRedDb,
@@ -36,16 +35,9 @@ export function AudioLevelMeter(props: { getLevel: () => number; active: boolean
   }, [props.active]);
 
   const percent = peakToMeterPercent(peak);
-  const clipping = peak >= 1;
 
   return (
     <div className="grid gap-1.5">
-      <div className="flex items-center justify-between text-[0.62rem] font-bold uppercase tracking-[0.08em] text-slate-500">
-        <span>Mixed peak</span>
-        <span className={clipping ? "tabular-nums text-red-300" : "tabular-nums"}>
-          {props.active ? formatPeakDbfs(peak) : "idle"}
-        </span>
-      </div>
       <div className="relative h-3 w-full overflow-hidden rounded-full bg-white/[0.06]">
         <div className="absolute inset-0 opacity-25" style={{ background: meterGradient }} />
         <div

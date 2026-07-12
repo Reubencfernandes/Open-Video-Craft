@@ -109,6 +109,26 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
     selectFirst?: boolean;
   } = {}) {
     const files = await window.openVideoCraft.editor.importMedia();
+    await ingestImportedFiles(files, options);
+  }
+
+  // Import OS drag-and-dropped files. The paths are resolved from the drop event
+  // in the media panel; everything after that mirrors the dialog import path.
+  async function importMediaFromPaths(
+    filePaths: string[],
+    options: { backgroundAudio?: boolean; selectFirst?: boolean } = {}
+  ) {
+    if (filePaths.length === 0) {
+      return;
+    }
+    const files = await window.openVideoCraft.editor.importMediaPaths(filePaths);
+    await ingestImportedFiles(files, options);
+  }
+
+  async function ingestImportedFiles(
+    files: Awaited<ReturnType<typeof window.openVideoCraft.editor.importMedia>>,
+    options: { backgroundAudio?: boolean; selectFirst?: boolean } = {}
+  ) {
     if (files.length === 0) {
       return;
     }
@@ -264,6 +284,7 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
   return {
     importCustomBackground,
     importMedia,
+    importMediaFromPaths,
     removeImportedMedia,
     selectTimelineItem,
     setAudioLevel,

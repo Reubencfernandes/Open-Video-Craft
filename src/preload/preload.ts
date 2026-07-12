@@ -2,7 +2,7 @@
  * Preload script: exposes the typed `window.openVideoCraft` IPC bridge that is
  * the renderer's only path into the main process.
  */
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
   AppInfo,
   CreateProjectRequest,
@@ -15,6 +15,7 @@ import type {
   ImportedMediaFile,
   ProjectLibraryEntry,
   ProjectView,
+  RenameProjectRequest,
   SaveEditorProjectStateRequest,
   SourceOverlayResult,
   SourceSummary,
@@ -74,7 +75,9 @@ const api = {
     discard: (projectId: string): Promise<boolean> =>
       ipcRenderer.invoke("projects:discard", projectId),
     create: (request: CreateProjectRequest): Promise<ProjectView> =>
-      ipcRenderer.invoke("projects:create", request)
+      ipcRenderer.invoke("projects:create", request),
+    rename: (request: RenameProjectRequest): Promise<ProjectView> =>
+      ipcRenderer.invoke("projects:rename", request)
   },
   recording: {
     start: (request: StartRecordingRequest): Promise<ProjectView> =>
@@ -105,6 +108,11 @@ const api = {
   },
   editor: {
     importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media"),
+    importMediaPaths: (filePaths: string[]): Promise<ImportedMediaFile[]> =>
+      ipcRenderer.invoke("editor:import-media-paths", filePaths),
+    // Resolve an OS drag-and-dropped File to its absolute path (File.path was
+    // removed in modern Electron, so the renderer must ask the preload bridge).
+    getPathForFile: (file: File): string => webUtils.getPathForFile(file),
     removeImportedMedia: (importId: string): Promise<boolean> =>
       ipcRenderer.invoke("editor:remove-imported-media", importId),
     loadProjectState: (projectId: string): Promise<EditorProjectStateView | null> =>

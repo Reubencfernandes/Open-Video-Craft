@@ -55,6 +55,7 @@ type UseEditorPersistenceParams = {
   layoutMode: LayoutMode;
   masterVolume: number;
   onProjectCreated: (projectId: string) => void;
+  pendingProjectName: string;
   project: ProjectView | null;
   projectId: string | null;
   screenAspectRatio: ScreenAspectRatio;
@@ -141,6 +142,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     layoutMode,
     masterVolume,
     onProjectCreated,
+    pendingProjectName,
     project,
     projectId,
     screenAspectRatio,
@@ -188,6 +190,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   const savedSignatureRef = useRef<string | null>(null);
   const latestSignatureRef = useRef<string | null>(null);
   const dirtyRef = useRef(false);
+  // Set right before an intentional in-app navigation (e.g. "Back to main
+  // menu") so the beforeunload guard doesn't cancel it. Electron silently
+  // aborts a main-process loadURL when beforeunload prevents the unload, which
+  // is why blocking here would make the Home button appear to do nothing.
+  const allowUnloadRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -399,8 +406,17 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       try {
         let activeProject = project;
         if (!activeProject) {
+          // Creating the first project prompts for a save folder via a native
+          // dialog. Never interrupt a background autosave with that dialog:
+          // leave the edit dirty and let it persist on the next explicit save
+          // (the Save button or Ctrl/Cmd+S) once the user chooses a folder.
+          if (silent) {
+            return;
+          }
           const name =
-            importedMedia.find((item) => item.kind === "video")?.name ?? "Untitled Edit";
+            pendingProjectName.trim() ||
+            importedMedia.find((item) => item.kind === "video")?.name ||
+            "Untitled Edit";
           activeProject = await window.openVideoCraft.projects.create({ name });
           setProject(activeProject);
           onProjectCreated(activeProject.id);
@@ -454,7 +470,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
 
   useEffect(() => {
     function guardUnsavedChanges(event: BeforeUnloadEvent) {
-      if (!dirtyRef.current) return;
+      if (allowUnloadRef.current || !dirtyRef.current) return;
       event.preventDefault();
       event.returnValue = "";
     }
@@ -475,6 +491,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   }, []);
 
   return {
+    allowUnload: () => {
+      allowUnloadRef.current = true;
+    },
+    hasUnsavedChanges: () => dirtyRef.current,
     isReady,
     saving,
     saveState
