@@ -372,6 +372,7 @@ export function EditorView() {
     exportFormat,
     exporting,
     exportResolution,
+    hasSubtitles,
     openExportDialog,
     setExportFormat,
     setExportResolution
@@ -384,6 +385,7 @@ export function EditorView() {
     selectedItem,
     setError,
     setExportMessage,
+    subtitles,
     trimRange
   });
 
@@ -433,6 +435,7 @@ export function EditorView() {
     removeSpeedEffect,
     removeZoomEffect,
     splitTimelineSegment,
+    sttDownloadProgress,
     sttStatus,
     undoTimelineEdit,
     updateSpeedEffect,
@@ -520,6 +523,7 @@ export function EditorView() {
             exportFormat={exportFormat}
             exportResolution={exportResolution}
             exporting={exporting}
+            hasSubtitles={hasSubtitles}
             onClose={closeExportDialog}
             onExport={() => void exportCurrentVideo()}
             onFormatChange={setExportFormat}
@@ -566,6 +570,7 @@ export function EditorView() {
             previewItem={previewItem}
             selectedZoomEffect={selectedZoomEffect}
             selectedSpeedEffect={selectedSpeedEffect}
+            sttDownloadProgress={sttDownloadProgress}
             sttStatus={sttStatus}
             sttModelLabel={whisperTranscriptionModelLabel}
             subtitleLanguage={formatSubtitleLanguage(subtitleLanguage)}

@@ -105,6 +105,14 @@ let displayOverlayWindows: BrowserWindow[] = [];
 let activeDisplayOverlaySourceId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
+let recorderCloseTimeout: NodeJS.Timeout | null = null;
+let recorderCloseRequested = false;
+const recorderRestoreHandlers = new WeakMap<BrowserWindow, () => void>();
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
 
 const displayOverlayStripColor = "#34d399";
 // Slightly translucent so the Windows border can be seen through.
@@ -192,10 +200,42 @@ async function createRecorderWindow(): Promise<void> {
   recorderWindow.on("close", (event) => {
     if (activeRecordingProjectId) {
       event.preventDefault();
+      recorderCloseRequested = true;
       recorderWindow?.webContents.send("recording:global-stop");
+      if (!recorderCloseTimeout) {
+        recorderCloseTimeout = setTimeout(() => {
+          activeRecordingProjectId = null;
+          unregisterRecordingShortcut();
+          recorderCloseTimeout = null;
+          recorderCloseRequested = false;
+          recorderWindow?.destroy();
+        }, 5000);
+      }
+    }
+  });
+  recorderWindow.webContents.on("render-process-gone", () => {
+    const crashedProjectId = activeRecordingProjectId;
+    activeRecordingProjectId = null;
+    recorderCloseRequested = false;
+    unregisterRecordingShortcut();
+    if (recorderCloseTimeout) {
+      clearTimeout(recorderCloseTimeout);
+      recorderCloseTimeout = null;
+    }
+    recorderWindow?.destroy();
+    if (crashedProjectId) {
+      void projectStore.markFailed({
+        projectId: crashedProjectId,
+        error: "The recorder process stopped unexpectedly."
+      }).then((project) => getProjectLibrary().upsert(project)).catch(() => undefined);
     }
   });
   recorderWindow.on("closed", () => {
+    recorderCloseRequested = false;
+    if (recorderCloseTimeout) {
+      clearTimeout(recorderCloseTimeout);
+      recorderCloseTimeout = null;
+    }
     recorderWindow = null;
     void closeDisplayOverlay();
   });
@@ -505,6 +545,9 @@ function closePermissionGuideWindow(): void {
 }
 
 function attachDevToolsShortcuts(window: BrowserWindow): void {
+  if (app.isPackaged && process.env.OVC_ENABLE_DEVTOOLS !== "1") {
+    return;
+  }
   window.webContents.on("before-input-event", (event, input) => {
     const opensDevTools =
       input.key === "F12" ||
@@ -631,12 +674,17 @@ function registerIpc(): void {
     if (window === recorderWindow) {
       window.setAlwaysOnTop(false);
       window.setSkipTaskbar(false);
-      window.once("restore", () => {
+      const previousRestoreHandler = recorderRestoreHandlers.get(window);
+      if (previousRestoreHandler) window.removeListener("restore", previousRestoreHandler);
+      const restoreFloatingRecorder = () => {
+        recorderRestoreHandlers.delete(window);
         if (!window.isDestroyed()) {
           window.setSkipTaskbar(true);
           window.setAlwaysOnTop(true, "screen-saver");
         }
-      });
+      };
+      recorderRestoreHandlers.set(window, restoreFloatingRecorder);
+      window.once("restore", restoreFloatingRecorder);
     }
 
     window.minimize();
@@ -667,6 +715,7 @@ function registerIpc(): void {
 
   ipcMain.handle("windows:open-editor", async (_event, projectId?: string | null): Promise<boolean> => {
     await openEditorWindow(projectId);
+    finishRequestedRecorderClose();
     return true;
   });
 
@@ -723,6 +772,7 @@ function registerIpc(): void {
   ipcMain.handle(
     "editor:export-video",
     async (_event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
+      assertExportVideoRequest(request);
       return exportEditorVideo(request);
     }
   );
@@ -824,6 +874,11 @@ function registerIpc(): void {
 
   ipcMain.handle("projects:discard", async (_event, projectId: string): Promise<boolean> => {
     const discarded = await projectStore.discardProject(projectId);
+    if (activeRecordingProjectId === projectId) {
+      activeRecordingProjectId = null;
+      unregisterRecordingShortcut();
+      finishRequestedRecorderClose();
+    }
     await getProjectLibrary().remove(projectId);
     return discarded;
   });
@@ -855,6 +910,7 @@ function registerIpc(): void {
     async (_event, request: StartRecordingRequest) => {
       const project = await projectStore.startRecording(request);
       activeRecordingProjectId = project.id;
+      registerRecordingShortcut();
       await getProjectLibrary().upsert(project);
       return project;
     }
@@ -869,6 +925,8 @@ function registerIpc(): void {
     async (_event, request: StopRecordingRequest) => {
       const project = await projectStore.stopRecording(request);
       activeRecordingProjectId = null;
+      unregisterRecordingShortcut();
+      clearRecorderCloseTimeout();
       await getProjectLibrary().upsert(project);
       return project;
     }
@@ -880,7 +938,9 @@ function registerIpc(): void {
       const project = await projectStore.markFailed(request);
       if (activeRecordingProjectId === request.projectId) {
         activeRecordingProjectId = null;
+        unregisterRecordingShortcut();
       }
+      finishRequestedRecorderClose();
       await getProjectLibrary().upsert(project);
       return project;
     }
@@ -990,11 +1050,43 @@ async function exportEditorVideo(
     sourceAudioVolume: request.volume,
     preserveSourceAudio: source.preserveSourceAudio
   });
+  const subtitlePath = await writeSubtitleSidecar(outputPath, request);
 
   return {
     path: outputPath,
-    bytesWritten
+    bytesWritten,
+    subtitlePath
   };
+}
+
+async function writeSubtitleSidecar(
+  outputPath: string,
+  request: ExportVideoRequest
+): Promise<string | null> {
+  const trimEnd = request.trimEnd ?? Number.POSITIVE_INFINITY;
+  const cues = request.subtitles
+    .filter((subtitle) => subtitle.end > request.trimStart && subtitle.start < trimEnd && subtitle.text.trim())
+    .map((subtitle) => ({
+      start: Math.max(0, subtitle.start - request.trimStart),
+      end: Math.max(0, Math.min(subtitle.end, trimEnd) - request.trimStart),
+      text: subtitle.text.trim()
+    }))
+    .filter((subtitle) => subtitle.end > subtitle.start);
+  if (cues.length === 0) return null;
+
+  const subtitlePath = outputPath.replace(/\.[^.]+$/, "") + ".srt";
+  const srt = cues.map((cue, index) => `${index + 1}\n${formatSrtTime(cue.start)} --> ${formatSrtTime(cue.end)}\n${cue.text}\n`).join("\n");
+  await fs.writeFile(subtitlePath, srt, "utf8");
+  return subtitlePath;
+}
+
+function formatSrtTime(seconds: number): string {
+  const milliseconds = Math.max(0, Math.round(seconds * 1000));
+  const hours = Math.floor(milliseconds / 3_600_000);
+  const minutes = Math.floor((milliseconds % 3_600_000) / 60_000);
+  const secs = Math.floor((milliseconds % 60_000) / 1000);
+  const millis = milliseconds % 1000;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")},${String(millis).padStart(3, "0")}`;
 }
 
 function resolveExportSource(request: ExportVideoRequest): {
@@ -1090,6 +1182,91 @@ function assertSaveEditorProjectStateRequest(
   }
 }
 
+function assertExportVideoRequest(value: unknown): asserts value is ExportVideoRequest {
+  const request = value as Partial<ExportVideoRequest> | null;
+  const sourceIdValid = request?.source?.kind === "project"
+    ? typeof request.source.projectId === "string" && request.source.projectId.length > 0
+    : request?.source?.kind === "import"
+      ? typeof request.source.importId === "string" && request.source.importId.length > 0
+      : false;
+  const audioLevelsValid = request?.audioLevels && typeof request.audioLevels === "object"
+    ? Object.values(request.audioLevels).every((level) =>
+        Boolean(level) && Number.isFinite(level.volume) && typeof level.muted === "boolean"
+      )
+    : false;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !request.source ||
+    !sourceIdValid ||
+    !["mp4", "webm", "mov"].includes(request.format ?? "") ||
+    !["source", "720p", "1080p", "1440p"].includes(request.resolution ?? "") ||
+    typeof request.trimStart !== "number" || !Number.isFinite(request.trimStart) || request.trimStart < 0 ||
+    (request.trimEnd !== null && (typeof request.trimEnd !== "number" || !Number.isFinite(request.trimEnd) || request.trimEnd < 0)) ||
+    typeof request.volume !== "number" || !Number.isFinite(request.volume) || request.volume < 0 || request.volume > 4 ||
+    !audioLevelsValid ||
+    !Array.isArray(request.backgroundAudioImportIds) ||
+    !request.backgroundAudioImportIds.every((id) => typeof id === "string" && id.length > 0) ||
+    !Array.isArray(request.subtitles) ||
+    !request.subtitles.every((subtitle) =>
+      Boolean(subtitle) &&
+      typeof subtitle.text === "string" &&
+      Number.isFinite(subtitle.start) &&
+      Number.isFinite(subtitle.end) &&
+      subtitle.end >= subtitle.start
+    )
+  ) {
+    throw new Error("Invalid video export request.");
+  }
+}
+
+function registerRecordingShortcut(): void {
+  if (!globalShortcut.isRegistered("CommandOrControl+Shift+S")) {
+    globalShortcut.register("CommandOrControl+Shift+S", () => {
+      recorderWindow?.webContents.send("recording:global-stop");
+    });
+  }
+}
+
+function unregisterRecordingShortcut(): void {
+  globalShortcut.unregister("CommandOrControl+Shift+S");
+}
+
+function finishRequestedRecorderClose(): void {
+  clearRecorderCloseTimeout();
+  if (recorderCloseRequested) {
+    recorderCloseRequested = false;
+    recorderWindow?.close();
+  }
+}
+
+function clearRecorderCloseTimeout(): void {
+  if (recorderCloseTimeout) {
+    clearTimeout(recorderCloseTimeout);
+    recorderCloseTimeout = null;
+  }
+}
+
+function registerNavigationHardening(): void {
+  app.on("web-contents-created", (_event, contents) => {
+    contents.setWindowOpenHandler(() => ({ action: "deny" }));
+    contents.on("will-navigate", (event, targetUrl) => {
+      const currentUrl = contents.getURL();
+      if (!currentUrl) {
+        return;
+      }
+      try {
+        if (new URL(targetUrl).origin === new URL(currentUrl).origin) {
+          return;
+        }
+      } catch {
+        // Invalid navigation targets are always blocked.
+      }
+      event.preventDefault();
+    });
+  });
+}
+
 function getDialogParentWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
 }
@@ -1100,9 +1277,10 @@ function delay(ms: number): Promise<void> {
   });
 }
 
-app.whenReady().then(async () => {
+if (hasSingleInstanceLock) app.whenReady().then(async () => {
   configureAppIdentity();
   Menu.setApplicationMenu(null);
+  registerNavigationHardening();
   registerPermissionRequestHandlers({
     getMainWindow: () => mainWindow,
     getRecorderWindow: () => recorderWindow,
@@ -1111,9 +1289,6 @@ app.whenReady().then(async () => {
   registerCustomMediaProtocol({ projectStore, importedMediaCache });
   registerIpc();
   registerDisplayOverlayRefreshHandlers();
-  globalShortcut.register("CommandOrControl+Shift+S", () => {
-    recorderWindow?.webContents.send("recording:global-stop");
-  });
   await createWindow();
   startAutoUpdates();
 
@@ -1122,6 +1297,16 @@ app.whenReady().then(async () => {
       void createWindow();
     }
   });
+});
+
+app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
 });
 
 app.on("before-quit", () => {

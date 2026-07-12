@@ -4,6 +4,30 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-12
+
+### Added
+
+- Debounced editor autosave with dirty-state tracking and an unsaved-changes close guard.
+- Subtitle sidecar export: projects with subtitles now produce a synchronized `.srt` file beside the exported video.
+- CI verification for every push and pull request, plus the repository's ISC license file.
+- Download progress for the on-device Whisper model, whose pipeline is cached for repeat transcriptions.
+
+### Changed
+
+- Migrated speech-to-text from the abandoned `@xenova/transformers` package to `@huggingface/transformers` and removed unused/heavy renderer dependencies.
+- The export dialog now states exactly which editor features are included and which composition effects are not yet rendered.
+- The global stop shortcut is registered only while recording, and production DevTools are disabled unless explicitly enabled.
+- GitHub releases are assembled as drafts and published only after all updater metadata and installers upload successfully.
+
+### Fixed
+
+- Added a single-instance lock and serialized recent-project index writes to prevent concurrent metadata loss.
+- Hardened recorder shutdown against renderer crashes, stuck close requests, repeated failure handling, and misleading device/MediaRecorder errors.
+- Validated all numeric export IPC fields and versioned editor snapshots before applying untrusted persisted state.
+- Added a strict Content Security Policy, removed runtime font loading, and blocked unexpected renderer navigation and popup windows.
+- System and background audio retain their per-track volume and mute settings during export, while subtitle timing respects the selected trim range.
+
 ## [1.3.0] - 2026-07-11
 
 ### Added

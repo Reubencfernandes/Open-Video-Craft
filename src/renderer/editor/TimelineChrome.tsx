@@ -49,10 +49,10 @@ export function TimelineToolbar(props: {
       </div>
 
       <div className="inline-flex h-9 items-center gap-1">
-        <button className={toolbarButtonClassName} type="button" title="Undo (Ctrl+Z)" onClick={props.onUndo}>
+        <button className={toolbarButtonClassName} type="button" title="Undo timeline clip edit (Ctrl+Z)" onClick={props.onUndo}>
           <Undo2 size={15} />
         </button>
-        <button className={toolbarButtonClassName} type="button" title="Redo (Ctrl+Shift+Z)" onClick={props.onRedo}>
+        <button className={toolbarButtonClassName} type="button" title="Redo timeline clip edit (Ctrl+Shift+Z)" onClick={props.onRedo}>
           <Redo2 size={15} />
         </button>
         <span className="mx-1 h-4 w-px bg-white/[0.08]" aria-hidden="true" />

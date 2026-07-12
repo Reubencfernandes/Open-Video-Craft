@@ -12,6 +12,7 @@ export function ExportDialog(props: {
   exportFormat: ExportVideoFormat;
   exportResolution: ExportResolution;
   exporting: boolean;
+  hasSubtitles: boolean;
   onClose: () => void;
   onExport: () => void;
   onFormatChange: (format: ExportVideoFormat) => void;
@@ -71,6 +72,12 @@ export function ExportDialog(props: {
             ))}
           </select>
         </label>
+        <div className="grid gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-xs leading-5 text-slate-300">
+          <strong className="text-white">What this export includes</strong>
+          <span>Video trim, resolution, master/per-track audio levels, microphone, system audio, and background audio.</span>
+          <span>{props.hasSubtitles ? "Subtitles are exported beside the video as an .srt file." : "No subtitles are currently present."}</span>
+          <span className="text-amber-200">Visual layout/backgrounds, camera compositing, zoom/speed effects, and split/reordered clips are not yet rendered into the video.</span>
+        </div>
         <div className="flex items-center justify-between gap-3">
           <button
             className="inline-flex min-h-[2.15rem] items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] px-3 text-white disabled:cursor-not-allowed disabled:opacity-55"
