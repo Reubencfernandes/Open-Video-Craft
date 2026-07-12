@@ -119,7 +119,7 @@ jobs:
             gh release create "$TAG_NAME" \
               --draft \
               --title "$TAG_NAME" \
-              --notes-file CHANGELOG.md
+              --generate-notes
           fi
 
           while IFS= read -r -d '' file; do

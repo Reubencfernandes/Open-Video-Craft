@@ -2,7 +2,7 @@
  * Save/restore of editor state: loads the project and editor.json on mount,
  * restores state, and saves snapshots + imported files back to the project.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type {
   EditorProjectImportInput,
@@ -318,35 +318,71 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setZoomEffects
   ]);
 
-  const snapshot = createEditorStateSnapshot({
-    activeBackgroundCategory,
-    audioLevels,
-    backgroundAudioIds,
-    backgroundStyle,
-    cameraBorderStyle,
-    cameraContentTransform,
-    cameraFrame,
-    cameraPosition,
-    cameraShape,
-    cameraSize,
-    customBackgroundImportId,
-    layoutMode,
-    masterVolume,
-    screenAspectRatio,
-    screenPosition,
-    speedEffects,
-    subtitleLanguage,
-    subtitleStyle,
-    subtitles,
-    timelineSegments,
-    trimRange,
-    videoCornerStyle,
-    zoomEffects
-  });
-  const persistenceSignature = JSON.stringify({
-    snapshot,
-    imports: toEditorProjectImports(importedMedia)
-  });
+  // Playback ticks `currentTime` at 30–60 Hz, re-rendering this hook each time.
+  // None of the snapshot inputs change during playback, so memoize the snapshot
+  // and its JSON signature on the actual state values — otherwise every tick
+  // rebuilt and stringified the whole project (tens of KB) for nothing.
+  const snapshot = useMemo(
+    () =>
+      createEditorStateSnapshot({
+        activeBackgroundCategory,
+        audioLevels,
+        backgroundAudioIds,
+        backgroundStyle,
+        cameraBorderStyle,
+        cameraContentTransform,
+        cameraFrame,
+        cameraPosition,
+        cameraShape,
+        cameraSize,
+        customBackgroundImportId,
+        layoutMode,
+        masterVolume,
+        screenAspectRatio,
+        screenPosition,
+        speedEffects,
+        subtitleLanguage,
+        subtitleStyle,
+        subtitles,
+        timelineSegments,
+        trimRange,
+        videoCornerStyle,
+        zoomEffects
+      }),
+    [
+      activeBackgroundCategory,
+      audioLevels,
+      backgroundAudioIds,
+      backgroundStyle,
+      cameraBorderStyle,
+      cameraContentTransform,
+      cameraFrame,
+      cameraPosition,
+      cameraShape,
+      cameraSize,
+      customBackgroundImportId,
+      layoutMode,
+      masterVolume,
+      screenAspectRatio,
+      screenPosition,
+      speedEffects,
+      subtitleLanguage,
+      subtitleStyle,
+      subtitles,
+      timelineSegments,
+      trimRange,
+      videoCornerStyle,
+      zoomEffects
+    ]
+  );
+  const persistenceSignature = useMemo(
+    () =>
+      JSON.stringify({
+        snapshot,
+        imports: toEditorProjectImports(importedMedia)
+      }),
+    [snapshot, importedMedia]
+  );
   latestSignatureRef.current = persistenceSignature;
 
   const saveState = async (silent = false) => {

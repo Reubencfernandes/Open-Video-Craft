@@ -1,5 +1,5 @@
 /** Persistent launcher navigation and shortcuts to the existing app workflows. */
-import { CircleDot, Film, History, Home, Plus } from "lucide-react";
+import { Clapperboard, History, Home, Plus, Video } from "lucide-react";
 import type { UpdateStatus } from "../../shared/types";
 import appLogo from "../assets/app.png";
 import { HomeUpdateStatus } from "./HomeUpdateStatus";
@@ -34,8 +34,8 @@ export function HomeSidebar(props: {
 
       <div className="mt-7 px-2 text-sm text-slate-500">Tools</div>
       <nav className="mt-3 grid gap-1" aria-label="Creation tools">
-        <button className={toolLinkClassName} type="button" disabled={props.disabled} onClick={props.onRecord}><CircleDot className="text-rose-400" size={18} /> Record</button>
-        <button className={toolLinkClassName} type="button" disabled={props.disabled} onClick={props.onOpenEditor}><Film className="text-amber-400" size={18} /> Video Editor</button>
+        <button className={toolLinkClassName} type="button" disabled={props.disabled} onClick={props.onRecord}><Video className="text-rose-400" size={18} /> Record</button>
+        <button className={toolLinkClassName} type="button" disabled={props.disabled} onClick={props.onOpenEditor}><Clapperboard className="text-amber-400" size={18} /> Video Editor</button>
       </nav>
 
       <div className="mt-auto pt-6">

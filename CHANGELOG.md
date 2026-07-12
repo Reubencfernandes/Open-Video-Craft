@@ -4,6 +4,34 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-12
+
+Full-codebase audit hardening pass: correctness, performance, and security fixes across the recorder, editor, and main process.
+
+### Fixed
+
+- Preview and timeline media are now loaded with anonymous CORS, so the Web Audio meter graph is no longer fed CORS-tainted sources — microphone, system, background, and imported-video audio play (and meter) instead of going silently muted.
+- Restored a minimal macOS application menu (app/edit/window roles) so clipboard and window shortcuts (Cmd+C/V/X/A, Cmd+Q/W/H) work again in editor text fields; Windows keeps its menu-less chrome.
+- Stopping during the recording countdown — via the global shortcut or a recorder window close — now discards the pending project instead of leaving it stuck in "recording"; a forced recorder close also marks the recording failed so it can never linger.
+- A camera, microphone, or system-audio device unplugged mid-recording now raises a warning instead of ending its track silently.
+- Files imported with an unsupported or missing extension are rejected at import time with a clear message, instead of wedging the 1.5s autosave in a permanent error-retry loop.
+- Exported subtitle sidecars are sanitized (internal blank lines and stray `-->` no longer corrupt cues) and written with CRLF for broader player compatibility.
+- Exporting to a filename without an extension no longer silently overwrites an existing file once the format extension is appended.
+- Recordings longer than an hour now display as `H:MM:SS`, and non-finite recorded durations are coerced to a safe value.
+
+### Changed
+
+- The editor no longer rebuilds and `JSON.stringify`s the entire project on every playback frame; the autosave snapshot and its signature are memoized on the actual edited state, removing a large per-frame allocation/serialization cost during playback.
+- Playback audio now resumes on its own after the window regains focus or the machine wakes from sleep, instead of staying silent until the next manual play toggle.
+- FFmpeg jobs run with reduced logging and a bounded error buffer, and any in-flight FFmpeg child is terminated when the app quits so an export or remux can't outlive the app.
+- Project metadata writes retry briefly when a sync agent or antivirus scanner transiently locks the file (OneDrive/Dropbox/Windows AV).
+- Launcher and Speed-tool iconography moved to inline Lucide icons, dropping the bundled speedometer image; documentation and screenshots refreshed.
+
+### Security
+
+- The recording-start IPC payload is validated, oversized recording chunks are rejected, and new project folders can only be created under a directory the user granted through the folder picker.
+- The Content Security Policy now explicitly allows the app's custom `ovc-media:`/`ovc-import:` schemes for renderer `fetch()` (waveforms, transcription, thumbnails), so a future Chromium tightening can't break them.
+
 ## [1.3.1] - 2026-07-12
 
 ### Added

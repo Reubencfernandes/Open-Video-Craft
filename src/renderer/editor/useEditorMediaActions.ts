@@ -3,6 +3,7 @@
  * remove, select-with-seek, duration updates, and per-source audio levels.
  */
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import type { ImportedMediaFile } from "../../shared/types";
 import { toEditorMediaItem } from "./media-utils";
 import { areTimelineSegmentsEqual, resolveAudioLane } from "./timeline-utils";
 import type {
@@ -14,6 +15,49 @@ import type {
 } from "./types";
 
 type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
+
+// Extensions the app can actually decode and play. Files outside this set
+// (including extensionless files, which are common on macOS) are rejected at
+// import time: the project store refuses to persist an unknown extension, which
+// otherwise wedged the 1.5s autosave in a permanent error-retry loop with no
+// way out but removing the import. Keep in sync with the dialog filter in
+// main/file-dialogs.ts.
+const supportedImportExtensions = new Set([
+  "mp4", "mov", "mkv", "webm", "avi",
+  "mp3", "wav", "m4a", "aac", "ogg",
+  "png", "jpg", "jpeg", "webp", "gif"
+]);
+
+function partitionImports(files: ImportedMediaFile[]): {
+  supported: ImportedMediaFile[];
+  rejected: ImportedMediaFile[];
+} {
+  const supported: ImportedMediaFile[] = [];
+  const rejected: ImportedMediaFile[] = [];
+  for (const file of files) {
+    if (supportedImportExtensions.has(file.extension.toLowerCase())) {
+      supported.push(file);
+    } else {
+      rejected.push(file);
+    }
+  }
+  return { supported, rejected };
+}
+
+// Drop rejected imports from the main-process cache so they don't linger, and
+// build a user-facing message naming them.
+function forgetRejectedImports(rejected: ImportedMediaFile[]): void {
+  for (const file of rejected) {
+    void window.openVideoCraft.editor.removeImportedMedia(file.id);
+  }
+}
+
+function describeRejectedImports(rejected: ImportedMediaFile[]): string {
+  const names = rejected.map((file) => file.name).join(", ");
+  return `Skipped ${rejected.length} unsupported file${
+    rejected.length === 1 ? "" : "s"
+  }: ${names}. Import video, audio, or image files.`;
+}
 
 type UseEditorMediaActionsParams = {
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
@@ -69,7 +113,16 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
       return;
     }
 
-    const nextItems = files.map(toEditorMediaItem);
+    const { supported, rejected } = partitionImports(files);
+    forgetRejectedImports(rejected);
+    if (rejected.length > 0) {
+      setError(describeRejectedImports(rejected));
+    }
+    if (supported.length === 0) {
+      return;
+    }
+
+    const nextItems = supported.map(toEditorMediaItem);
     setImportedMedia((current) => [...current, ...nextItems]);
 
     if (options.backgroundAudio) {
@@ -127,10 +180,16 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
 
   async function importCustomBackground() {
     const files = await window.openVideoCraft.editor.importMedia();
-    const background = files.find((file) => file.kind === "image");
+    const { supported, rejected } = partitionImports(files);
+    forgetRejectedImports(rejected);
+    const background = supported.find((file) => file.kind === "image");
 
     if (!background) {
-      setError("Choose an image file for the custom background.");
+      setError(
+        rejected.length > 0
+          ? describeRejectedImports(rejected)
+          : "Choose an image file for the custom background."
+      );
       return;
     }
 

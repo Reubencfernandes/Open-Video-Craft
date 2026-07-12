@@ -78,6 +78,7 @@ export function RecorderController() {
   const lastProjectUiSyncAtRef = useRef(0);
   const stoppingRef = useRef(false);
   const failingRef = useRef(false);
+  const abortStartupRef = useRef(false);
 
   const selectedSource = useMemo(
     () => sources.find((source) => source.id === selectedSourceId) ?? null,
@@ -174,8 +175,15 @@ export function RecorderController() {
 
   useEffect(() => {
     const dispose = window.openVideoCraft.events.onGlobalStop(() => {
-      if (stateRef.current === "recording" || stateRef.current === "paused") {
+      const current = stateRef.current;
+      if (current === "recording" || current === "paused") {
         void stopRecording();
+      } else if (current === "preparing" || current === "countdown") {
+        // Stop arrived (global shortcut, or the main process racing a window
+        // close) before MediaRecorder began. Flag it so startRecording discards
+        // the just-created project at its next checkpoint instead of leaving it
+        // stuck in status "recording" forever.
+        abortStartupRef.current = true;
       }
     });
 
@@ -318,6 +326,7 @@ export function RecorderController() {
     setErrorMessage(null);
     stoppingRef.current = false;
     failingRef.current = false;
+    abortStartupRef.current = false;
     writeQueuesRef.current = {};
 
     try {
@@ -459,8 +468,38 @@ export function RecorderController() {
         });
       });
 
+      // A camera/mic/system device unplugged mid-recording ends its track
+      // silently — only the screen track was watched before. Warn without
+      // failing the whole recording. Our own stopAllStreams uses track.stop(),
+      // which does not fire "ended", so this only triggers on real device loss.
+      const warnDeviceLost = (label: string) => () => {
+        const current = stateRef.current;
+        if (current === "recording" || current === "paused" || current === "countdown") {
+          setErrorMessage(
+            `${label} disconnected during recording. That track stopped capturing; the rest of the recording continues.`
+          );
+        }
+      };
+      cameraStream?.getVideoTracks().forEach((track) =>
+        track.addEventListener("ended", warnDeviceLost("Camera"), { once: true })
+      );
+      micStream?.getAudioTracks().forEach((track) =>
+        track.addEventListener("ended", warnDeviceLost("Microphone"), { once: true })
+      );
+      systemStream?.getAudioTracks().forEach((track) =>
+        track.addEventListener("ended", warnDeviceLost("System audio"), { once: true })
+      );
+
       setState("countdown");
       await runCountdown(setCountdown);
+
+      // Global-stop during preparing/countdown flags an abort here — before any
+      // recorder starts — so the pending project is discarded rather than left
+      // recording. Discarding also releases the main-process window-close wait.
+      if (abortStartupRef.current) {
+        await discardStartup();
+        return;
+      }
 
       activeRecordedMsRef.current = 0;
       activeSegmentStartedAtRef.current = Date.now();
@@ -565,6 +604,29 @@ export function RecorderController() {
     } catch (error) {
       await failRecording(toErrorMessage(error));
     }
+  }
+
+  async function discardStartup() {
+    // Teardown for a startup aborted during preparing/countdown: stop the
+    // acquired streams and discard the just-created project so it never lingers
+    // in status "recording". Discarding also lets the main process complete any
+    // window close it was waiting on.
+    stoppingRef.current = true;
+    stopAllStreams();
+
+    const currentProject = projectRef.current;
+    if (currentProject) {
+      await window.openVideoCraft.projects.discard(currentProject.id).catch(() => undefined);
+    }
+
+    projectRef.current = null;
+    setProject(null);
+    activeRecordedMsRef.current = 0;
+    activeSegmentStartedAtRef.current = null;
+    setElapsedMs(0);
+    abortStartupRef.current = false;
+    stoppingRef.current = false;
+    setState("ready");
   }
 
   async function failRecording(message: string) {

@@ -16,6 +16,9 @@ export function TimelineAudioElements(props: {
         <audio
           key={clip.id}
           src={clip.item.url}
+          // Cross-origin ovc-* media must be CORS-anonymous or the WebAudio meter
+          // graph (audio-meter.ts) is tainted and plays silence. See PreviewContent.
+          crossOrigin="anonymous"
           preload="metadata"
           onLoadedMetadata={(event) => props.onMediaDuration(clip.item.id, event.currentTarget.duration)}
           ref={(element) => {

@@ -144,6 +144,26 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     };
   }, []);
 
+  // After the OS sleeps/locks or the window loses focus, the AudioContext can be
+  // left suspended/interrupted; playback then continues visually while audio
+  // goes silent until the next explicit play toggle (the only other resume
+  // point). Resume it on focus/visibility regain while playing so sound returns
+  // on its own.
+  useEffect(() => {
+    function resumeIfPlaying() {
+      if (playingRef.current) {
+        void audioMeterRef.current?.resume().catch(() => undefined);
+      }
+    }
+
+    document.addEventListener("visibilitychange", resumeIfPlaying);
+    window.addEventListener("focus", resumeIfPlaying);
+    return () => {
+      document.removeEventListener("visibilitychange", resumeIfPlaying);
+      window.removeEventListener("focus", resumeIfPlaying);
+    };
+  }, []);
+
   useEffect(() => {
     syncTimelinePlaybackRefs(timelineSegments);
     // eslint-disable-next-line react-hooks/exhaustive-deps

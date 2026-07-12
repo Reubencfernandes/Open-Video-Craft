@@ -101,6 +101,10 @@ export function PreviewContent(props: {
               className={mediaFrameClassName}
               style={props.screenStyle}
               src={props.item.url}
+              // ovc-media:// / ovc-import:// are cross-origin to the page; without
+              // this the WebAudio meter graph (audio-meter.ts) is CORS-tainted and
+              // outputs silence. The protocol handlers send Access-Control-Allow-Origin: *.
+              crossOrigin="anonymous"
               playsInline
               muted
               onCanPlay={props.onMediaReady}
@@ -124,6 +128,7 @@ export function PreviewContent(props: {
                 className="absolute inset-0 size-full border-0 bg-transparent"
                 style={props.cameraVideoStyle}
                 src={props.projectCamera.url}
+                crossOrigin="anonymous"
                 playsInline
                 muted
                 onCanPlay={props.onMediaReady}
@@ -158,6 +163,7 @@ export function PreviewContent(props: {
         className={mediaFrameClassName}
         style={props.screenStyle}
         src={props.item.url}
+        crossOrigin="anonymous"
         playsInline
         onCanPlay={props.onMediaReady}
         onLoadedMetadata={(event) => {

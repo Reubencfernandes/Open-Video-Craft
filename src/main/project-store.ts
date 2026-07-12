@@ -250,7 +250,7 @@ export class ProjectStore {
         ...record.file,
         updatedAt: now,
         status: hasRecordedAudio ? "processing" : "complete",
-        durationMs: Math.max(0, Math.round(request.durationMs)),
+        durationMs: sanitizeDurationMs(request.durationMs),
         stoppedAt: now
       };
 
@@ -578,11 +578,39 @@ async function writeJsonFileAtomic(filePath: string, value: unknown): Promise<vo
   await fs.mkdir(directory, { recursive: true });
   try {
     await fs.writeFile(tempPath, content);
-    await fs.rename(tempPath, filePath);
+    await renameWithRetry(tempPath, filePath);
   } catch (error) {
     await fs.rm(tempPath, { force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+// OneDrive/Dropbox sync agents and Windows AV scanners briefly lock the
+// destination file, making an otherwise-atomic rename fail with
+// EPERM/EBUSY/EACCES even though nothing is wrong. A few short backoff retries
+// clear those transient locks without masking a genuine failure.
+async function renameWithRetry(from: string, to: string, attempts = 3): Promise<void> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await fs.rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      const transient = code === "EPERM" || code === "EBUSY" || code === "EACCES";
+      if (!transient || attempt >= attempts) {
+        throw error;
+      }
+      await sleep(attempt * 120);
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function sanitizeDurationMs(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
 }
 
 function cloneJsonValue(value: unknown): unknown {

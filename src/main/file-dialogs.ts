@@ -4,6 +4,7 @@
  */
 import { dialog } from "electron";
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
   ExportVideoRequest,
@@ -110,9 +111,51 @@ export async function chooseExportPath(
     return null;
   }
 
-  return path.extname(result.filePath).toLowerCase() === `.${extension}`
-    ? result.filePath
-    : `${result.filePath}.${extension}`;
+  if (path.extname(result.filePath).toLowerCase() === `.${extension}`) {
+    return result.filePath;
+  }
+
+  // The OS save dialog only ran its overwrite check against the exact name the
+  // user typed. Appending the format extension can land on an existing file that
+  // the dialog never warned about — confirm before clobbering it.
+  const finalPath = `${result.filePath}.${extension}`;
+  if (await pathExists(finalPath)) {
+    const confirmed = await confirmOverwrite(parentWindow, finalPath);
+    if (!confirmed) {
+      return null;
+    }
+  }
+
+  return finalPath;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function confirmOverwrite(
+  parentWindow: Electron.BrowserWindow | null,
+  filePath: string
+): Promise<boolean> {
+  const options: Electron.MessageBoxOptions = {
+    type: "warning",
+    buttons: ["Replace", "Cancel"],
+    defaultId: 0,
+    cancelId: 1,
+    title: "Replace file?",
+    message: `"${path.basename(filePath)}" already exists.`,
+    detail: `A file with that name already exists at:\n${filePath}\nReplacing it overwrites its current contents.`
+  };
+  const { response } = parentWindow
+    ? await dialog.showMessageBox(parentWindow, options)
+    : await dialog.showMessageBox(options);
+
+  return response === 0;
 }
 
 function createExportDialogOptions(

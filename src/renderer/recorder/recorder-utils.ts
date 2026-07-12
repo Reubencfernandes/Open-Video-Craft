@@ -221,9 +221,14 @@ export function getDeviceLabel(
 
 export function formatDuration(ms: number): string {
   const seconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = seconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(remainingSeconds).padStart(2, "0");
+  // Recordings over an hour are supported; only widen to H:MM:SS when needed so
+  // short clips stay MM:SS.
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 export function truncateLabel(value: string): string {

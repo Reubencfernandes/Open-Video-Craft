@@ -4,7 +4,7 @@
  * This file owns data loading and desktop actions; visual sections live in
  * ./home so launcher behavior can evolve independently from its presentation.
  */
-import { CircleDot, FolderOpen, Scissors } from "lucide-react";
+import { Clapperboard, FolderOpen, Video } from "lucide-react";
 import { useEffect, useState } from "react";
 import type {
   DesktopPermissionKind,
@@ -186,8 +186,8 @@ export function App() {
           <HomeHeader search={projectSearch} onSearchChange={setProjectSearch} />
 
           <div className="grid grid-cols-3 gap-5">
-            <HomeActionCard icon={<CircleDot className="text-rose-400" size={27} />} title="Record" description="Record your screen, webcam, or voice with high quality." actionLabel="Start Recording" disabled={busyAction !== null} onAction={() => void openRecorder()} />
-            <HomeActionCard icon={<Scissors className="text-amber-400" size={27} />} title="Edit a Project" description="Open the editor and start creating your next video." actionLabel="Open Editor" disabled={busyAction !== null} onAction={() => void openEditor()} />
+            <HomeActionCard icon={<Video className="text-rose-400" size={27} />} title="Record" description="Record your screen, webcam, or voice with high quality." actionLabel="Start Recording" disabled={busyAction !== null} onAction={() => void openRecorder()} />
+            <HomeActionCard icon={<Clapperboard className="text-amber-400" size={27} />} title="Edit a Project" description="Open the editor and start creating your next video." actionLabel="Open Editor" disabled={busyAction !== null} onAction={() => void openEditor()} />
             <HomeActionCard icon={<FolderOpen className="text-emerald-400" size={27} />} title="Open a Project" description="Browse and open any of your saved projects." actionLabel="Browse Projects" disabled={busyAction !== null} onAction={() => void openExistingProject()} />
           </div>
 

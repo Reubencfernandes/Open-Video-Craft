@@ -261,23 +261,36 @@ function formatFfmpegNumber(value: number): string {
   return value.toFixed(3).replace(/\.?0+$/, "");
 }
 
+// In-flight FFmpeg children, so the app can kill them on quit instead of
+// letting an export/remux outlive the app (burning CPU, writing a half file).
+const activeProcesses = new Set<ReturnType<typeof spawn>>();
+
+// FFmpeg streams continuous progress/stats lines to stderr; keep only the tail
+// so a long or corrupt job cannot grow an unbounded string in memory.
+const maxStderrChars = 16_384;
+
 function runProcess(command: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    // -hide_banner + -loglevel error keep stderr to genuine failures instead of
+    // the per-frame stats spam that otherwise floods the captured buffer.
+    const child = spawn(command, ["-hide_banner", "-loglevel", "error", ...args], {
       windowsHide: true
     });
+    activeProcesses.add(child);
 
     let stderr = "";
 
     child.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString();
+      stderr = (stderr + chunk.toString()).slice(-maxStderrChars);
     });
 
     child.on("error", (error: Error & { code?: string }) => {
+      activeProcesses.delete(child);
       const reason = error.code ? `${error.code}: ${error.message}` : error.message;
       reject(new Error(`Failed to start FFmpeg at "${command}". ${reason}`));
     });
     child.on("close", (code) => {
+      activeProcesses.delete(child);
       if (code === 0) {
         resolve();
         return;
@@ -286,4 +299,13 @@ function runProcess(command: string, args: string[]): Promise<void> {
       reject(new Error(`FFmpeg exited with code ${code ?? "unknown"}: ${stderr}`));
     });
   });
+}
+
+// Called on app quit: SIGKILL any in-flight FFmpeg child so it cannot outlive
+// the app and keep encoding into a partial output file.
+export function killActiveFfmpegProcesses(): void {
+  for (const child of activeProcesses) {
+    child.kill("SIGKILL");
+  }
+  activeProcesses.clear();
 }

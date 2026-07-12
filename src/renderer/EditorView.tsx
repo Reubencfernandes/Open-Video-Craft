@@ -14,7 +14,6 @@
  *      (ToolRail, EditorToolPanel, EditorPreviewPanel, EditorTimelineSection,
  *      ExportDialog, notifications).
  *
- * See docs/FILES.md for the full map of which file owns which behavior.
  */
 import { useEffect, useRef, useState } from "react";
 import type {

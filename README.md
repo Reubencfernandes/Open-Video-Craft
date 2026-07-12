@@ -4,7 +4,7 @@
 
 # Open Video Craft
 
-**Record your screen, camera, and audio — then polish everything on a real timeline and export a finished video. All local, no account, no upload.**
+**Record your screen, camera, and audio — then cut, mix, subtitle, and export locally. No account and no upload.**
 
 [![Latest release](https://img.shields.io/github/v/release/Reubencfernandes/Open-Video-Craft?label=download&color=34d399)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-6366f1)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
@@ -21,15 +21,16 @@ Open Video Craft is a desktop screen studio in two parts:
 1. **A floating recorder** captures your selected display with optional camera,
    microphone, and **system audio** tracks — each saved as its own file inside a
    plain project folder you can open, move, or back up like any other folder.
-2. **A timeline editor** opens the recording (or any imported media) for real
+2. **A timeline editor** opens the recording (or any imported media) for
    editing: cut, move, trim, copy/paste, zoom-in effects, speed ramps,
    AI-generated subtitles, camera layouts, backgrounds, and dB-based audio
-   mixing — then exports to MP4, WebM, or MOV with FFmpeg.
+   mixing. FFmpeg exports MP4, WebM, or MOV, and subtitles can be written as a
+   synchronized `.srt` sidecar.
 
 Everything runs locally. Even the speech-to-text subtitles use an on-device
 Whisper model — your recordings never leave your machine.
 
-## Screenshots
+## Screenshots — v1.3.1
 
 | Launcher | Floating recorder |
 | :---: | :---: |
@@ -48,6 +49,7 @@ Whisper model — your recordings never leave your machine.
 - A subtle, click-through border marks the recorded display (and is excluded
   from the capture itself).
 - Crash-safe: media is written to disk in chunks while you record.
+- Recorder crashes and failed device acquisition recover without wedging the app.
 
 ### Editing
 
@@ -61,7 +63,16 @@ Whisper model — your recordings never leave your machine.
   manual subtitle editing and draggable subtitle clips.
 - Audio mixing in **decibels** with a live output level meter; background
   music drops straight onto the timeline.
-- Export to MP4 / WebM / MOV at source, 720p, 1080p, or 1440p.
+- Debounced autosave, dirty-state close protection, and safe recovery from an
+  invalid or unsupported `editor.json`.
+- Export to MP4 / WebM / MOV at source, 720p, 1080p, or 1440p, with microphone,
+  system audio, background audio, per-track levels, and optional `.srt` subtitles.
+
+> **Current export scope:** trim, resolution, source/system/microphone/background
+> audio, gain/mute settings, and subtitle sidecars are exported. Camera
+> compositing, visual layouts/backgrounds, zoom/speed effects, and split or
+> reordered timeline clips are preview/editor features that are not yet rendered
+> into the exported video. The export dialog shows this before every export.
 
 ### Keyboard shortcuts
 
@@ -125,10 +136,8 @@ npm run build      # production build
 Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. FFmpeg is
 bundled (`ffmpeg-static`) for remuxing, audio conversion, and export.
 
-- Code layout and conventions: [`src/README.md`](src/README.md)
-- What every file does + editor architecture: [`docs/FILES.md`](docs/FILES.md)
-
-The README screenshots are generated, not hand-captured: with the dev server
+The screenshots above are generated from the current renderer, not mocked-up
+artwork: with the dev server
 running, `npx electron scripts/capture-screenshots.cjs` loads each app view
 with a mocked IPC bridge and demo data and saves PNGs to `docs/screenshots/`.
 

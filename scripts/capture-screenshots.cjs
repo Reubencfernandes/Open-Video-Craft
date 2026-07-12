@@ -66,6 +66,10 @@ async function capture(name, view, options) {
     });
   }
   await delay(settleMs);
+  // Hidden BrowserWindows can retain an incomplete damage region after a tool
+  // switch. Force one complete repaint before capture so every pane is present.
+  win.webContents.invalidate();
+  await delay(500);
 
   const image = await win.webContents.capturePage();
   const png = image.toPNG();

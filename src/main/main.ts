@@ -42,20 +42,23 @@ import {
   chooseExportPath as showExportPathDialog,
   importMediaFiles as showImportMediaDialog
 } from "./file-dialogs";
-import { convertWebmAudioToWav, exportVideo, remuxWebm } from "./ffmpeg";
+import { convertWebmAudioToWav, exportVideo, killActiveFfmpegProcesses, remuxWebm } from "./ffmpeg";
 import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
 import { createMediaUrl, ProjectStore } from "./project-store";
 import type {
   CreateProjectRequest,
   DesktopPermissionStatus,
+  DeviceSelection,
   EditorProjectStateFile,
   EditorProjectStateView,
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
   ImportedMediaFile,
+  ProjectDevices,
   ProjectLibraryEntry,
+  ProjectSource,
   ProjectView,
   SaveEditorProjectStateRequest,
   SourceOverlayResult,
@@ -97,6 +100,13 @@ const projectStore = new ProjectStore({
 
 const sourceCache = new Map<string, Electron.DesktopCapturerSource>();
 const importedMediaCache = new Map<string, string>();
+// Base directories the user explicitly granted through the folder picker. A
+// project can only be created under one of these, so a compromised renderer
+// can't smuggle an arbitrary write path into projects:create.
+const grantedBaseDirectories = new Set<string>();
+// A recording chunk should be a few MB at most; cap it so a renderer bug can't
+// balloon main-process memory with one oversized message.
+const maxRecordingChunkBytes = 256 * 1024 * 1024;
 let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
@@ -204,12 +214,26 @@ async function createRecorderWindow(): Promise<void> {
       recorderWindow?.webContents.send("recording:global-stop");
       if (!recorderCloseTimeout) {
         recorderCloseTimeout = setTimeout(() => {
+          // The renderer didn't finish stopping in time (hung stop, slow
+          // final-chunk flush/remux, or a stop swallowed during countdown).
+          // Force the window closed, but mark the project failed like the crash
+          // path so it can never get stuck in status "recording" forever.
+          const abandonedProjectId = activeRecordingProjectId;
           activeRecordingProjectId = null;
           unregisterRecordingShortcut();
           recorderCloseTimeout = null;
           recorderCloseRequested = false;
           recorderWindow?.destroy();
-        }, 5000);
+          if (abandonedProjectId) {
+            void projectStore
+              .markFailed({
+                projectId: abandonedProjectId,
+                error: "The recorder was closed before the recording finished saving."
+              })
+              .then((project) => getProjectLibrary().upsert(project))
+              .catch(() => undefined);
+          }
+        }, 8000);
       }
     }
   });
@@ -789,7 +813,11 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:choose-base-directory", async (): Promise<string | null> => {
-    return showBaseDirectoryDialog(getDialogParentWindow());
+    const directory = await showBaseDirectoryDialog(getDialogParentWindow());
+    if (directory) {
+      grantedBaseDirectories.add(path.resolve(directory));
+    }
+    return directory;
   });
 
   ipcMain.handle("projects:list-recent", async () => {
@@ -888,16 +916,24 @@ function registerIpc(): void {
     async (_event, request: CreateProjectRequest) => {
       let baseDirectory = request.baseDirectory;
 
-      if (!baseDirectory) {
+      if (baseDirectory) {
+        // Only honor a renderer-supplied path if it was granted through the
+        // folder picker; otherwise the renderer could write project folders
+        // anywhere the user can.
+        if (!grantedBaseDirectories.has(path.resolve(baseDirectory))) {
+          throw new Error("The chosen project folder was not granted through the folder picker.");
+        }
+      } else {
         baseDirectory = await showBaseDirectoryDialog(getDialogParentWindow());
 
         if (!baseDirectory) {
           throw new Error("A project folder is required before recording.");
         }
+        grantedBaseDirectories.add(path.resolve(baseDirectory));
       }
 
       const project = await projectStore.createProject({
-        name: request.name,
+        name: typeof request.name === "string" ? request.name : "",
         baseDirectory
       });
       await getProjectLibrary().upsert(project);
@@ -908,6 +944,7 @@ function registerIpc(): void {
   ipcMain.handle(
     "recording:start",
     async (_event, request: StartRecordingRequest) => {
+      assertStartRecordingRequest(request);
       const project = await projectStore.startRecording(request);
       activeRecordingProjectId = project.id;
       registerRecordingShortcut();
@@ -917,7 +954,11 @@ function registerIpc(): void {
   );
 
   ipcMain.handle("recording:write-chunk", async (_event, request: WriteChunkRequest) => {
-    return projectStore.appendChunk(request.projectId, request.track, request.chunk);
+    const chunk = request?.chunk;
+    if (!(chunk instanceof ArrayBuffer) || chunk.byteLength > maxRecordingChunkBytes) {
+      throw new Error("Invalid recording chunk.");
+    }
+    return projectStore.appendChunk(request.projectId, request.track, chunk);
   });
 
   ipcMain.handle(
@@ -1065,19 +1106,43 @@ async function writeSubtitleSidecar(
 ): Promise<string | null> {
   const trimEnd = request.trimEnd ?? Number.POSITIVE_INFINITY;
   const cues = request.subtitles
-    .filter((subtitle) => subtitle.end > request.trimStart && subtitle.start < trimEnd && subtitle.text.trim())
+    .filter((subtitle) => subtitle.end > request.trimStart && subtitle.start < trimEnd)
     .map((subtitle) => ({
       start: Math.max(0, subtitle.start - request.trimStart),
       end: Math.max(0, Math.min(subtitle.end, trimEnd) - request.trimStart),
-      text: subtitle.text.trim()
+      text: sanitizeSrtText(subtitle.text)
     }))
-    .filter((subtitle) => subtitle.end > subtitle.start);
+    .filter((subtitle) => subtitle.end > subtitle.start && subtitle.text.length > 0);
   if (cues.length === 0) return null;
 
   const subtitlePath = outputPath.replace(/\.[^.]+$/, "") + ".srt";
-  const srt = cues.map((cue, index) => `${index + 1}\n${formatSrtTime(cue.start)} --> ${formatSrtTime(cue.end)}\n${cue.text}\n`).join("\n");
+  // SRT delimits cues with a blank line, so any blank line inside cue text ends
+  // the cue early. Build each block with CRLF (widest player support) and
+  // separate blocks with a blank CRLF line.
+  const srt =
+    cues
+      .map((cue, index) =>
+        [
+          `${index + 1}`,
+          `${formatSrtTime(cue.start)} --> ${formatSrtTime(cue.end)}`,
+          cue.text
+        ].join("\r\n")
+      )
+      .join("\r\n\r\n") + "\r\n";
   await fs.writeFile(subtitlePath, srt, "utf8");
   return subtitlePath;
+}
+
+// Keep cue text from corrupting the SRT structure: normalize to CRLF, drop
+// blank lines (they would end the cue early), and neutralize any "-->" that
+// could be misread as a timing line.
+function sanitizeSrtText(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trim().replace(/-->/g, "->"))
+    .filter((line) => line.length > 0)
+    .join("\r\n");
 }
 
 function formatSrtTime(seconds: number): string {
@@ -1167,6 +1232,96 @@ function toEditorProjectStateView(
       };
     })
   };
+}
+
+function assertStartRecordingRequest(value: unknown): asserts value is StartRecordingRequest {
+  const request = value as Partial<StartRecordingRequest> | null;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    !isValidProjectSource(request.source) ||
+    !isValidProjectDevices(request.devices) ||
+    !isValidRecordingTracks(request.tracks)
+  ) {
+    throw new Error("Invalid recording start request.");
+  }
+}
+
+function isNonEmptyBoundedString(value: unknown, maxLength: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= maxLength;
+}
+
+function isNullableBoundedString(value: unknown, maxLength: number): value is string | null {
+  return value === null || (typeof value === "string" && value.length <= maxLength);
+}
+
+function isValidProjectSource(value: unknown): value is ProjectSource {
+  const source = value as Partial<ProjectSource> | null;
+  return Boolean(
+    source &&
+      typeof source === "object" &&
+      isNonEmptyBoundedString(source.id, 512) &&
+      isNullableBoundedString(source.name, 512) &&
+      (source.kind === "screen" || source.kind === "window") &&
+      isNullableBoundedString(source.displayId, 128)
+  );
+}
+
+function isValidDeviceSelection(value: unknown): value is DeviceSelection {
+  const selection = value as Partial<DeviceSelection> | null;
+  return Boolean(
+    selection &&
+      typeof selection === "object" &&
+      typeof selection.enabled === "boolean" &&
+      isNullableBoundedString(selection.deviceId, 512) &&
+      isNullableBoundedString(selection.label, 512)
+  );
+}
+
+function isValidProjectDevices(value: unknown): value is ProjectDevices {
+  const devices = value as Partial<ProjectDevices> | null;
+  return Boolean(
+    devices &&
+      typeof devices === "object" &&
+      isValidDeviceSelection(devices.microphone) &&
+      isValidDeviceSelection(devices.camera)
+  );
+}
+
+function isValidTrackMime(value: unknown, required: boolean): boolean {
+  if (value === null || value === undefined) {
+    return !required;
+  }
+  return typeof value === "string" && value.length > 0 && value.length <= 255;
+}
+
+function isValidRecordingTracks(value: unknown): value is StartRecordingRequest["tracks"] {
+  const tracks = value as Partial<StartRecordingRequest["tracks"]> | null;
+  if (!tracks || typeof tracks !== "object") {
+    return false;
+  }
+
+  const optionalTrackValid = (track: unknown): boolean => {
+    const entry = track as { enabled?: unknown; mimeType?: unknown } | null;
+    return Boolean(
+      entry &&
+        typeof entry === "object" &&
+        typeof entry.enabled === "boolean" &&
+        isValidTrackMime(entry.mimeType, false)
+    );
+  };
+
+  const screen = tracks.screen as { enabled?: unknown; mimeType?: unknown } | undefined;
+  return Boolean(
+    screen &&
+      typeof screen === "object" &&
+      screen.enabled === true &&
+      isValidTrackMime(screen.mimeType, true) &&
+      optionalTrackValid(tracks.camera) &&
+      optionalTrackValid(tracks.mic) &&
+      optionalTrackValid(tracks.system)
+  );
 }
 
 function assertSaveEditorProjectStateRequest(
@@ -1271,6 +1426,26 @@ function getDialogParentWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
 }
 
+// On macOS the clipboard/window key-equivalents (Cmd+C/V/X/A/Z, Cmd+Q/W/H/M)
+// are routed through the application menu. Setting the menu to null there
+// silently disables copy/paste/select-all in every text input (subtitle
+// editing, project search). A minimal role-based menu restores those without
+// adding any custom app chrome. Windows/Linux need no app menu — clipboard
+// shortcuts work without one and autoHideMenuBar keeps the bar hidden.
+function applyApplicationMenu(): void {
+  if (process.platform !== "darwin") {
+    Menu.setApplicationMenu(null);
+    return;
+  }
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { role: "appMenu" },
+    { role: "editMenu" },
+    { role: "windowMenu" }
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -1279,7 +1454,7 @@ function delay(ms: number): Promise<void> {
 
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   configureAppIdentity();
-  Menu.setApplicationMenu(null);
+  applyApplicationMenu();
   registerNavigationHardening();
   registerPermissionRequestHandlers({
     getMainWindow: () => mainWindow,
@@ -1317,6 +1492,7 @@ app.on("before-quit", () => {
 app.on("will-quit", () => {
   void closeDisplayOverlay();
   closePermissionGuideWindow();
+  killActiveFfmpegProcesses();
   globalShortcut.unregisterAll();
 });
 
