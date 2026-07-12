@@ -183,11 +183,16 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   } = params;
   const [isReady, setIsReady] = useState(!projectId);
   const [saving, setSaving] = useState(false);
-  const saveStateRef = useRef<() => Promise<void>>(async () => undefined);
+  const saveStateRef = useRef<(silent?: boolean) => Promise<void>>(async () => undefined);
   const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const savedSignatureRef = useRef<string | null>(null);
+  const latestSignatureRef = useRef<string | null>(null);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    savedSignatureRef.current = null;
+    dirtyRef.current = false;
 
     if (!projectId) {
       setIsReady(true);
@@ -205,7 +210,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
 
         setProject(loadedProject);
         if (savedState) {
-          applySavedState(savedState, {
+          const restored = applySavedState(savedState, {
             knownTimelineItemIdsRef,
             setActiveBackgroundCategory,
             setAudioLevels,
@@ -232,6 +237,9 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             setVideoCornerStyle,
             setZoomEffects
           });
+          if (!restored) {
+            setError("This project's editor state is invalid or from an unsupported version. Safe defaults were loaded instead.");
+          }
         } else {
           // Preserve edits made by pre-1.0.10 builds once, then save them into
           // the project folder the next time the user presses Save.
@@ -310,13 +318,48 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setZoomEffects
   ]);
 
-  const saveState = async () => {
+  const snapshot = createEditorStateSnapshot({
+    activeBackgroundCategory,
+    audioLevels,
+    backgroundAudioIds,
+    backgroundStyle,
+    cameraBorderStyle,
+    cameraContentTransform,
+    cameraFrame,
+    cameraPosition,
+    cameraShape,
+    cameraSize,
+    customBackgroundImportId,
+    layoutMode,
+    masterVolume,
+    screenAspectRatio,
+    screenPosition,
+    speedEffects,
+    subtitleLanguage,
+    subtitleStyle,
+    subtitles,
+    timelineSegments,
+    trimRange,
+    videoCornerStyle,
+    zoomEffects
+  });
+  const persistenceSignature = JSON.stringify({
+    snapshot,
+    imports: toEditorProjectImports(importedMedia)
+  });
+  latestSignatureRef.current = persistenceSignature;
+
+  const saveState = async (silent = false) => {
     if (saveInFlightRef.current) {
       return saveInFlightRef.current;
     }
 
+    const signatureBeingSaved = persistenceSignature;
+    const snapshotBeingSaved = snapshot;
+    const importsBeingSaved = toEditorProjectImports(importedMedia);
     setSaving(true);
     const operation = (async () => {
+      let saved = false;
       try {
         let activeProject = project;
         if (!activeProject) {
@@ -329,48 +372,59 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
 
         const result = await window.openVideoCraft.editor.saveProjectState({
           projectId: activeProject.id,
-          state: createEditorStateSnapshot({
-            activeBackgroundCategory,
-            audioLevels,
-            backgroundAudioIds,
-            backgroundStyle,
-            cameraBorderStyle,
-            cameraContentTransform,
-            cameraFrame,
-            cameraPosition,
-            cameraShape,
-            cameraSize,
-            customBackgroundImportId,
-            layoutMode,
-            masterVolume,
-            screenAspectRatio,
-            screenPosition,
-            speedEffects,
-            subtitleLanguage,
-            subtitleStyle,
-            subtitles,
-            timelineSegments,
-            trimRange,
-            videoCornerStyle,
-            zoomEffects
-          }),
-          imports: toEditorProjectImports(importedMedia)
+          state: snapshotBeingSaved,
+          imports: importsBeingSaved
         });
 
         setImportedMedia(result.imports.map(toEditorMediaItem));
+        savedSignatureRef.current = signatureBeingSaved;
+        dirtyRef.current = latestSignatureRef.current !== signatureBeingSaved;
+        saved = true;
         setError(null);
-        setExportMessage("Project saved");
+        if (!silent) {
+          setExportMessage("Project saved");
+        }
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : "Could not save the project state.");
       } finally {
         setSaving(false);
         saveInFlightRef.current = null;
+        if (saved && dirtyRef.current) {
+          window.setTimeout(() => void saveStateRef.current(true), 100);
+        }
       }
     })();
     saveInFlightRef.current = operation;
     return operation;
   };
   saveStateRef.current = saveState;
+
+  useEffect(() => {
+    if (!isReady) return undefined;
+    if (savedSignatureRef.current === null) {
+      savedSignatureRef.current = persistenceSignature;
+      dirtyRef.current = false;
+      return undefined;
+    }
+
+    dirtyRef.current = savedSignatureRef.current !== persistenceSignature;
+    if (!dirtyRef.current) return undefined;
+
+    const timer = window.setTimeout(() => {
+      void saveStateRef.current(true);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [isReady, persistenceSignature]);
+
+  useEffect(() => {
+    function guardUnsavedChanges(event: BeforeUnloadEvent) {
+      if (!dirtyRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", guardUnsavedChanges);
+    return () => window.removeEventListener("beforeunload", guardUnsavedChanges);
+  }, []);
 
   useEffect(() => {
     function handleSaveShortcut(event: KeyboardEvent) {
@@ -396,9 +450,9 @@ function applySavedState(
   actions: RestoreActionParams & {
     setImportedMedia: Dispatch<SetStateAction<EditorMediaItem[]>>;
   }
-): void {
+): boolean {
   actions.setImportedMedia(savedState.imports.map(toEditorMediaItem));
-  restoreEditorStateSnapshot(savedState.state, createRestoreActions(actions));
+  return restoreEditorStateSnapshot(savedState.state, createRestoreActions(actions));
 }
 
 function createRestoreActions(actions: RestoreActionParams) {

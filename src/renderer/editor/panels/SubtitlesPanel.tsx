@@ -22,6 +22,7 @@ const subtitleStyleOptions: Array<{ id: SubtitleStyle; label: string }> = [
  */
 export function SubtitlesPanel(props: {
   sttStatus: SttStatus;
+  sttDownloadProgress: number | null;
   sttModelLabel: string;
   subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
@@ -53,7 +54,7 @@ export function SubtitlesPanel(props: {
       >
         <WandSparkles size={16} />
         {props.sttStatus === "loading"
-          ? `Loading ${props.sttModelLabel}…`
+          ? `Loading ${props.sttModelLabel}${props.sttDownloadProgress === null ? "" : ` ${Math.round(props.sttDownloadProgress)}%`}…`
           : props.sttStatus === "transcribing"
             ? "Transcribing…"
           : "Auto-generate (speech-to-text)"}

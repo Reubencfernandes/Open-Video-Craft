@@ -50,6 +50,7 @@ export function EditorToolPanel(props: {
   selectedZoomEffect: ZoomEffect | null;
   selectedSpeedEffect: SpeedEffect | null;
   sttStatus: "idle" | "loading" | "transcribing" | "done" | "error";
+  sttDownloadProgress: number | null;
   sttModelLabel: string;
   subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
@@ -159,6 +160,7 @@ export function EditorToolPanel(props: {
 
       {props.activeTool === "subtitles" ? (
         <SubtitlesPanel
+          sttDownloadProgress={props.sttDownloadProgress}
           sttStatus={props.sttStatus}
           sttModelLabel={props.sttModelLabel}
           subtitleLanguage={props.subtitleLanguage}

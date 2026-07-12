@@ -31,7 +31,8 @@ export function delay(ms: number): Promise<void> {
 export async function getOptionalCameraStream(
   enabled: boolean,
   deviceId: string | null,
-  dimensions?: { width: number; height: number }
+  dimensions?: { width: number; height: number },
+  onError?: (message: string) => void
 ): Promise<MediaStream | null> {
   if (!enabled || !deviceId) {
     return null;
@@ -45,14 +46,16 @@ export async function getOptionalCameraStream(
 
   try {
     return await navigator.mediaDevices.getUserMedia({ video, audio: false });
-  } catch {
+  } catch (error) {
+    onError?.(`Could not access the camera: ${toErrorMessage(error)}`);
     return null;
   }
 }
 
 export async function getOptionalMicStream(
   enabled: boolean,
-  deviceId: string | null
+  deviceId: string | null,
+  onError?: (message: string) => void
 ): Promise<MediaStream | null> {
   if (!enabled || !deviceId) {
     return null;
@@ -67,7 +70,8 @@ export async function getOptionalMicStream(
         }
       }
     });
-  } catch {
+  } catch (error) {
+    onError?.(`Could not access the microphone: ${toErrorMessage(error)}`);
     return null;
   }
 }
@@ -155,7 +159,10 @@ export function stopRecorder(recorder: MediaRecorder): Promise<void> {
     recorder.addEventListener("stop", () => resolve(), { once: true });
     recorder.addEventListener(
       "error",
-      (event) => reject(new Error(`Recorder failed: ${event.type}`)),
+      (event) => {
+        const recorderError = (event as Event & { error?: DOMException }).error;
+        reject(new Error(`Recorder failed: ${recorderError?.message ?? event.type}`));
+      },
       { once: true }
     );
     recorder.stop();

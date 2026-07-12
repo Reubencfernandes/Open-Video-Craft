@@ -13,6 +13,7 @@ import type {
   ProjectView
 } from "../../shared/types";
 import type { EditorMediaItem } from "./types";
+import type { SubtitleSegment } from "./types";
 import { formatBytes } from "./utils";
 
 type UseEditorExportParams = {
@@ -24,6 +25,7 @@ type UseEditorExportParams = {
   selectedItem: EditorMediaItem | null;
   setError: Dispatch<SetStateAction<string | null>>;
   setExportMessage: Dispatch<SetStateAction<string | null>>;
+  subtitles: SubtitleSegment[];
   trimRange: { start: number; end: number };
 };
 
@@ -37,6 +39,7 @@ export function useEditorExport(params: UseEditorExportParams) {
     selectedItem,
     setError,
     setExportMessage,
+    subtitles,
     trimRange
   } = params;
   const [exportFormat, setExportFormat] = useState<ExportVideoFormat>("mp4");
@@ -89,11 +92,12 @@ export function useEditorExport(params: UseEditorExportParams) {
         trimEnd: trimRange.end > trimRange.start ? trimRange.end : null,
         volume: masterVolume / 100,
         audioLevels,
-        backgroundAudioImportIds: backgroundAudioIds
+        backgroundAudioImportIds: backgroundAudioIds,
+        subtitles: subtitles.map(({ start, end, text }) => ({ start, end, text }))
       });
 
       if (result) {
-        setExportMessage(`Exported ${formatBytes(result.bytesWritten)} to ${result.path}`);
+        setExportMessage(`Exported ${formatBytes(result.bytesWritten)} to ${result.path}${result.subtitlePath ? ` with subtitles at ${result.subtitlePath}` : ""}`);
         setExportDialogOpen(false);
       }
     } catch (exportError) {
@@ -111,6 +115,7 @@ export function useEditorExport(params: UseEditorExportParams) {
     exportFormat,
     exporting,
     exportResolution,
+    hasSubtitles: subtitles.length > 0,
     openExportDialog: () => setExportDialogOpen(true),
     setExportFormat,
     setExportResolution

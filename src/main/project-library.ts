@@ -21,9 +21,15 @@ interface ProjectLibraryFile {
 }
 
 export class ProjectLibrary {
+  private operationQueue: Promise<unknown> = Promise.resolve();
+
   constructor(private readonly filePath: string) {}
 
   async listRecent(): Promise<ProjectLibraryEntry[]> {
+    return this.enqueue(() => this.listRecentUnlocked());
+  }
+
+  private async listRecentUnlocked(): Promise<ProjectLibraryEntry[]> {
     const file = await this.readFile();
     const refreshedProjects = await Promise.all(
       file.projects.map((entry) => this.refreshEntry(entry))
@@ -38,34 +44,46 @@ export class ProjectLibrary {
   }
 
   async get(projectId: string): Promise<ProjectLibraryEntry | null> {
-    const projects = await this.listRecent();
-    return projects.find((entry) => entry.id === projectId) ?? null;
+    return this.enqueue(async () => {
+      const projects = await this.listRecentUnlocked();
+      return projects.find((entry) => entry.id === projectId) ?? null;
+    });
   }
 
   async upsert(project: ProjectView): Promise<ProjectLibraryEntry> {
-    const file = await this.readFile();
-    const entry = createProjectLibraryEntry(project.rootPath, project, true);
-    const projects = sortEntries([
-      entry,
-      ...file.projects.filter(
-        (item) => item.id !== entry.id && path.resolve(item.rootPath) !== path.resolve(entry.rootPath)
-      )
-    ]);
+    return this.enqueue(async () => {
+      const file = await this.readFile();
+      const entry = createProjectLibraryEntry(project.rootPath, project, true);
+      const projects = sortEntries([
+        entry,
+        ...file.projects.filter(
+          (item) => item.id !== entry.id && path.resolve(item.rootPath) !== path.resolve(entry.rootPath)
+        )
+      ]);
 
-    await this.writeFile({ schemaVersion: 1, projects });
-    return entry;
+      await this.writeFile({ schemaVersion: 1, projects });
+      return entry;
+    });
   }
 
   async remove(projectId: string): Promise<boolean> {
-    const file = await this.readFile();
-    const projects = file.projects.filter((entry) => entry.id !== projectId);
+    return this.enqueue(async () => {
+      const file = await this.readFile();
+      const projects = file.projects.filter((entry) => entry.id !== projectId);
 
-    if (projects.length === file.projects.length) {
-      return false;
-    }
+      if (projects.length === file.projects.length) {
+        return false;
+      }
 
-    await this.writeFile({ schemaVersion: 1, projects });
-    return true;
+      await this.writeFile({ schemaVersion: 1, projects });
+      return true;
+    });
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.operationQueue.then(operation, operation);
+    this.operationQueue = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   private async refreshEntry(entry: ProjectLibraryEntry): Promise<ProjectLibraryEntry> {

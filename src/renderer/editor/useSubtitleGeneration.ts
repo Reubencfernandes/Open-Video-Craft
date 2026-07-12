@@ -20,6 +20,9 @@ import type { EditorMediaItem, SubtitleSegment } from "./types";
 
 export type SttStatus = "idle" | "loading" | "transcribing" | "done" | "error";
 
+type Transcriber = (input: Float32Array, options: Record<string, unknown>) => Promise<WhisperTranscriptionOutput>;
+let cachedTranscriber: Promise<Transcriber> | null = null;
+
 type UseSubtitleGenerationParams = {
   allMedia: EditorMediaItem[];
   audioSources: EditorMediaItem[];
@@ -40,6 +43,7 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
   } = params;
 
   const [sttStatus, setSttStatus] = useState<SttStatus>("idle");
+  const [sttDownloadProgress, setSttDownloadProgress] = useState<number | null>(null);
 
   async function generateSubtitles() {
     // Prefer a dedicated audio source (mic/music); fall back to a video's own
@@ -55,20 +59,34 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
     setSttStatus("loading");
 
     try {
-      const transformers = await import("@xenova/transformers");
+      const transformers = await import("@huggingface/transformers");
       transformers.env.allowLocalModels = false;
 
       const audio = await decodeAudioTo16kMono(source.url);
-      setSttStatus("transcribing");
-
-      const transcriber = (await transformers.pipeline(
+      cachedTranscriber ??= transformers.pipeline(
         "automatic-speech-recognition",
-        whisperTranscriptionModel
-      )) as unknown as (
-        input: Float32Array,
-        options: Record<string, unknown>
-      ) => Promise<WhisperTranscriptionOutput>;
-      addLanguageToWhisperWordChunks(transcriber);
+        whisperTranscriptionModel,
+        {
+          progress_callback: (progress: unknown) => {
+            const percentage = progress && typeof progress === "object"
+              ? (progress as { progress?: unknown }).progress
+              : null;
+            if (typeof percentage === "number") {
+              setSttDownloadProgress(Math.max(0, Math.min(100, percentage)));
+            }
+          }
+        }
+      ).then((pipeline) => {
+        const transcriber = pipeline as unknown as Transcriber;
+        addLanguageToWhisperWordChunks(transcriber);
+        return transcriber;
+      }).catch((error) => {
+        cachedTranscriber = null;
+        throw error;
+      });
+      const transcriber = await cachedTranscriber;
+      setSttDownloadProgress(null);
+      setSttStatus("transcribing");
 
       const output = await transcriber(audio, {
         return_timestamps: "word",
@@ -88,6 +106,7 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
       }
       setSttStatus("done");
     } catch (sttError) {
+      setSttDownloadProgress(null);
       const message = sttError instanceof Error ? sttError.message : String(sttError);
       setError(`Speech-to-text failed: ${message}`);
       setSttStatus("error");
@@ -96,6 +115,7 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
 
   return {
     generateSubtitles,
+    sttDownloadProgress,
     sttStatus
   };
 }

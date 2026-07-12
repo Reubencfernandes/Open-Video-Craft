@@ -314,9 +314,11 @@ export interface ExportVideoRequest {
   volume: number;
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   backgroundAudioImportIds: string[];
+  subtitles: Array<{ start: number; end: number; text: string }>;
 }
 
 export interface ExportVideoResult {
   path: string;
   bytesWritten: number;
+  subtitlePath: string | null;
 }

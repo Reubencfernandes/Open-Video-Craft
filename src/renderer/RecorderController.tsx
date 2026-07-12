@@ -77,6 +77,7 @@ export function RecorderController() {
   const activeSegmentStartedAtRef = useRef<number | null>(null);
   const lastProjectUiSyncAtRef = useRef(0);
   const stoppingRef = useRef(false);
+  const failingRef = useRef(false);
 
   const selectedSource = useMemo(
     () => sources.find((source) => source.id === selectedSourceId) ?? null,
@@ -235,7 +236,8 @@ export function RecorderController() {
       const acquired = await getOptionalCameraStream(
         true,
         selectedCameraId,
-        cameraQualityPresets[cameraQuality]
+        cameraQualityPresets[cameraQuality],
+        setErrorMessage
       );
       if (cancelled) {
         acquired?.getTracks().forEach((track) => track.stop());
@@ -315,6 +317,7 @@ export function RecorderController() {
     setState("preparing");
     setErrorMessage(null);
     stoppingRef.current = false;
+    failingRef.current = false;
     writeQueuesRef.current = {};
 
     try {
@@ -363,11 +366,12 @@ export function RecorderController() {
       const cameraStream = await getOptionalCameraStream(
         cameraEnabled,
         selectedCameraId,
-        cameraQualityPresets[cameraQuality]
+        cameraQualityPresets[cameraQuality],
+        setErrorMessage
       );
       cameraStreamRef.current = cameraStream;
       setCameraPreviewStream(cameraStream);
-      const micStream = await getOptionalMicStream(micEnabled, selectedMicId);
+      const micStream = await getOptionalMicStream(micEnabled, selectedMicId, setErrorMessage);
       micStreamRef.current = micStream;
 
       if (!cameraStream) {
@@ -564,6 +568,10 @@ export function RecorderController() {
   }
 
   async function failRecording(message: string) {
+    if (failingRef.current) {
+      return;
+    }
+    failingRef.current = true;
     stoppingRef.current = true;
     stopAllStreams();
     await window.openVideoCraft.windows.showCurrent();
@@ -611,6 +619,9 @@ export function RecorderController() {
     // unhandled rejection and made the recorder look healthy after disk/IPC
     // failures had already stopped a track from being written.
     void write.catch((error) => {
+      if (stoppingRef.current || failingRef.current) {
+        return;
+      }
       void failRecording(`Could not save ${track} recording data: ${toErrorMessage(error)}`);
     });
     writeQueuesRef.current[track] = write;

@@ -229,6 +229,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     removeZoomEffect: effects.removeZoomEffect,
     splitTimelineSegment: editing.splitTimelineSegment,
     undoTimelineEdit: editing.undoTimelineEdit,
+    sttDownloadProgress: subtitleGeneration.sttDownloadProgress,
     sttStatus: subtitleGeneration.sttStatus,
     updateSpeedEffect: effects.updateSpeedEffect,
     updateSubtitle: effects.updateSubtitle,

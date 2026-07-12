@@ -113,11 +113,17 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
-          gh release delete "$TAG_NAME" --yes >/dev/null 2>&1 || true
-          gh release create "$TAG_NAME" \
-            --title "$TAG_NAME" \
-            --notes-file CHANGELOG.md
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" --draft=true
+          else
+            gh release create "$TAG_NAME" \
+              --draft \
+              --title "$TAG_NAME" \
+              --notes-file CHANGELOG.md
+          fi
 
           while IFS= read -r -d '' file; do
             gh release upload "$TAG_NAME" "$file" --clobber
           done < <(find artifacts -type f -print0)
+
+          gh release edit "$TAG_NAME" --draft=false
