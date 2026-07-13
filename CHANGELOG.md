@@ -4,6 +4,26 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-13
+
+Editor UI polish, a redesigned custom zoom-curve editor, and a fix for on-device speech-to-text that never loaded its runtime in packaged builds.
+
+### Added
+
+- The custom zoom curve is now edited by dragging its two control points directly on the curve surface (with a live preview marker and a `cubic-bezier(…)` readout), replacing the four X/Y sliders.
+
+### Changed
+
+- Recolored the zoom, subtitle, and audio tool accents from amber to purple to match the timeline accent (curve, handles, easing badge, scale/gain sliders, subtitle selection).
+- Subtitle style picker is now a uniform 2×2 grid, and the Whisper explainer paragraph was removed from the Subtitles panel.
+- Speed panel no longer shows the redundant Start/End numeric inputs; timing is set by dragging the section on the timeline.
+- Home launcher: removed the non-functional notifications bell and the decorative project-card menu icon; the empty-preview placeholder now sits in a readable chip.
+
+### Fixed
+
+- On-device speech-to-text no longer fails with "no available backend found": the ONNX Runtime wasm files are bundled next to the renderer and loaded locally instead of from the jsdelivr CDN (which the renderer's content-security-policy blocks), and it runs single-threaded so it works over `file://`.
+- The Whisper model download progress is now aggregated across all model files into one monotonic percentage, so it no longer jumps up and then drops back as each file starts.
+
 ## [1.4.0] - 2026-07-12
 
 Editor workflow improvements — drag-and-drop media import, in-place project renaming, and a refreshed timeline look — plus a more reliable return to the launcher and an internal refactor of the main process and project store.
