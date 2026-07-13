@@ -47,7 +47,7 @@ export function HomeSidebar(props: {
               <path d="M20.3 1.5A19.4 19.4 0 0 0 15.6 0l-.6 1.2a17 17 0 0 0-6 0L8.4 0a19.5 19.5 0 0 0-4.7 1.5C.7 5.9-.1 10.2.3 14.4a19 19 0 0 0 5.8 3c.5-.6.9-1.3 1.3-2a12 12 0 0 1-2-1l.5-.4a13.9 13.9 0 0 0 12.2 0l.5.4a13 13 0 0 1-2 1c.4.7.8 1.4 1.3 2a19 19 0 0 0 5.8-3c.5-4.9-.8-9.1-3.4-12.9ZM8 11.8c-1.2 0-2.1-1.1-2.1-2.4C5.9 8 6.8 7 8 7s2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Zm8 0c-1.2 0-2.1-1.1-2.1-2.4C13.9 8 14.8 7 16 7s2.2 1.1 2.1 2.4c0 1.3-.9 2.4-2.1 2.4Z" />
             </svg>
           </button>
-          <button className="grid min-h-11 place-items-center rounded-xl bg-white/[0.045] text-slate-300 hover:text-white" type="button" title="Changelog" onClick={props.onOpenChangelog}><History size={17} /></button>
+          <button className="grid min-h-11 place-items-center rounded-xl bg-white/[0.045] text-slate-300 hover:text-white" type="button" title="Changelog" aria-label="Changelog" onClick={props.onOpenChangelog}><History size={17} /></button>
         </div>
       </div>
     </aside>

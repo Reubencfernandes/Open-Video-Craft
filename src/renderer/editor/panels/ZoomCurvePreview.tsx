@@ -1,24 +1,13 @@
-/** SVG curve thumbnail and animated progress marker. */
-import { applyZoomEasing } from "../zoom-utils";
+/** SVG curve thumbnail for easing preset buttons. */
 
 type Bezier = [number, number, number, number];
 
-export function ZoomCurvePreview(props: {
-  bezier: Bezier;
-  large?: boolean;
-  progress?: number;
-}) {
+export function ZoomCurvePreview(props: { bezier: Bezier }) {
   const [x1, y1, x2, y2] = props.bezier;
-  const progress = props.progress ?? 0;
-  const eased = applyZoomEasing(progress, { easing: "custom", bezier: props.bezier });
 
   return (
     <svg
-      className={
-        props.large
-          ? "h-24 w-full rounded-lg bg-black/30 p-2 text-amber-300"
-          : "h-7 w-10 text-current"
-      }
+      className="h-7 w-10 text-current"
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       aria-hidden="true"
@@ -38,16 +27,6 @@ export function ZoomCurvePreview(props: {
         strokeWidth="5"
         strokeLinecap="round"
       />
-      {props.large ? (
-        <circle
-          cx={progress * 100}
-          cy={(1 - eased) * 100}
-          r="4.5"
-          fill="white"
-          stroke="currentColor"
-          strokeWidth="2"
-        />
-      ) : null}
     </svg>
   );
 }

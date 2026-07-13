@@ -1,5 +1,5 @@
 /** Search-filtered project grid plus the compact latest-project row. */
-import { AlertTriangle, FolderOpen, MoreVertical, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
 import type { ProjectLibraryEntry } from "../../shared/types";
 import { ProjectArtwork } from "./ProjectArtwork";
 import { formatMediaAvailability, formatProjectDuration, formatProjectUpdatedAt } from "./project-formatters";
@@ -28,7 +28,7 @@ export function RecentProjectsSection(props: {
               <ProjectArtwork name={project.name} index={index} duration={formatProjectDuration(project.durationMs)} thumbnailUrl={project.thumbnailUrl} />
               <div className="flex min-w-0 items-center justify-between gap-2">
                 <strong className="truncate text-sm font-medium text-white">{project.name}</strong>
-                {!project.available ? <AlertTriangle className="text-amber-300" size={15} /> : <MoreVertical className="text-slate-500" size={15} />}
+                {!project.available ? <AlertTriangle className="shrink-0 text-amber-300" size={15} /> : null}
               </div>
               <p className="m-0 truncate text-[0.69rem] text-slate-500">{formatProjectUpdatedAt(project.updatedAt)} · {formatMediaAvailability(project)}</p>
               <div className="grid grid-cols-[1fr_auto] gap-2">

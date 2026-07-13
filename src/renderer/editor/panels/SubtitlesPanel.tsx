@@ -59,13 +59,6 @@ export function SubtitlesPanel(props: {
             ? "Transcribing…"
           : "Auto-generate (speech-to-text)"}
       </button>
-      <div className="flex gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-sm font-semibold leading-5 text-slate-300">
-        <WandSparkles size={14} />
-        <span>
-          Runs an open-source Whisper model on your device. The first run downloads the model
-          once, then transcribes the recording's audio into subtitles.
-        </span>
-      </div>
       <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-xs font-extrabold text-slate-400">
         <span>Model</span>
         <span className="truncate text-right text-white">{props.sttModelLabel}</span>
@@ -74,13 +67,13 @@ export function SubtitlesPanel(props: {
       </div>
       <div className="grid gap-2">
         <span className="text-xs font-extrabold text-slate-400">Subtitle style</span>
-        <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/[0.05] p-1">
+        <div className="grid grid-cols-2 gap-1.5 rounded-lg bg-white/[0.05] p-1.5">
           {subtitleStyleOptions.map((option) => (
             <button
-              className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+              className={`min-h-9 whitespace-nowrap rounded-md px-2 text-center text-xs font-extrabold transition ${
                 props.subtitleStyle === option.id
                   ? "bg-white text-[#111827]"
-                  : "text-slate-300 hover:bg-white/10 hover:text-white"
+                  : "bg-white/[0.04] text-slate-300 hover:bg-white/10 hover:text-white"
               }`}
               type="button"
               key={option.id}
@@ -94,7 +87,7 @@ export function SubtitlesPanel(props: {
       {selected ? (
         <div className="grid gap-3">
           <textarea
-            className="min-h-24 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-amber-300"
+            className="min-h-24 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-violet-400"
             value={selected.text}
             onChange={(event) => props.onUpdateSubtitle(selected.id, { text: event.target.value })}
           />
@@ -137,7 +130,7 @@ export function SubtitlesPanel(props: {
           <button
             className={`inline-flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold ${
               selected?.id === subtitle.id
-                ? "border-amber-300 bg-amber-400/10 text-white"
+                ? "border-violet-400 bg-violet-400/10 text-white"
                 : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
             }`}
             type="button"

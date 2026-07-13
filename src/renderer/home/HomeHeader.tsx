@@ -1,5 +1,5 @@
-/** Dashboard greeting, project search, and notification entry point. */
-import { Bell, Search } from "lucide-react";
+/** Dashboard greeting and project search. */
+import { Search } from "lucide-react";
 
 export function HomeHeader(props: {
   search: string;
@@ -16,9 +16,6 @@ export function HomeHeader(props: {
           <Search size={17} />
           <input className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500" type="search" placeholder="Search projects..." value={props.search} onChange={(event) => props.onSearchChange(event.target.value)} />
         </label>
-        <button className="grid size-11 place-items-center rounded-xl border border-white/[0.055] bg-white/[0.035] text-slate-300 hover:bg-white/[0.07] hover:text-white" type="button" title="Notifications">
-          <Bell size={17} />
-        </button>
       </div>
     </header>
   );

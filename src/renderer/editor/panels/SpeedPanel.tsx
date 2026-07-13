@@ -2,7 +2,7 @@
  * Speed tool: add speed regions and edit the selected region's rate/timing.
  */
 import { Trash2 } from "lucide-react";
-import { speedMinDurationSeconds, speedRates } from "../speed-utils";
+import { speedRates } from "../speed-utils";
 import { SpeedIcon } from "../SpeedIcon";
 import type { SpeedEffect } from "../types";
 
@@ -45,50 +45,6 @@ export function SpeedPanel(props: {
                 </button>
               ))}
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <label className="grid gap-1 text-xs font-extrabold text-slate-400">
-              <span>Start</span>
-              <input
-                className="h-9 rounded-md border border-white/10 bg-black/20 px-2 text-white"
-                type="number"
-                min={0}
-                step={0.1}
-                value={selected.start}
-                onChange={(event) => {
-                  if (!event.target.value.trim()) {
-                    return;
-                  }
-
-                  props.onUpdateSpeed(selected.id, {
-                    start: Math.max(0, Number(event.target.value))
-                  });
-                }}
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-extrabold text-slate-400">
-              <span>End</span>
-              <input
-                className="h-9 rounded-md border border-white/10 bg-black/20 px-2 text-white"
-                type="number"
-                min={selected.start + speedMinDurationSeconds}
-                step={0.1}
-                value={selected.end}
-                onChange={(event) => {
-                  if (!event.target.value.trim()) {
-                    return;
-                  }
-
-                  props.onUpdateSpeed(selected.id, {
-                    end: Math.max(
-                      selected.start + speedMinDurationSeconds,
-                      Number(event.target.value)
-                    )
-                  });
-                }}
-              />
-            </label>
           </div>
 
           <button

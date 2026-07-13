@@ -90,7 +90,7 @@ export function ZoomTargetPanel(props: {
         <div className="grid grid-cols-[auto_minmax(0,1fr)_4rem] items-center gap-2">
           <ZoomIn size={15} />
           <input
-            className="w-full accent-amber-500"
+            className="w-full accent-violet-400"
             type="range"
             min={125}
             max={300}

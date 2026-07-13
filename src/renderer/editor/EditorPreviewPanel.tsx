@@ -96,8 +96,10 @@ export function EditorPreviewPanel(props: {
               onSubtitleClick={props.onSubtitleClick}
             />
           ) : props.videoTimelineClips.length > 0 ? null : (
-            <div className="grid size-full place-items-center text-sm font-bold text-slate-400">
-              Import media or record a screen.
+            <div className="grid size-full place-items-center">
+              <span className="rounded-full bg-black/45 px-4 py-2 text-sm font-bold text-slate-200">
+                Import media or record a screen.
+              </span>
             </div>
           )}
         </div>
