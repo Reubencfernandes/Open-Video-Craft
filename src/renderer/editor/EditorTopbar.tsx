@@ -2,8 +2,7 @@
  * Editor top bar: back to launcher, project name, save, and export.
  */
 import { useEffect, useRef, useState } from "react";
-import { Home, Pencil, Save, Upload } from "lucide-react";
-import appLogo from "../assets/app.png";
+import { ChevronLeft, Menu, Pencil, Save, Upload } from "lucide-react";
 
 export function EditorTopbar(props: {
   projectName: string;
@@ -38,23 +37,23 @@ export function EditorTopbar(props: {
   };
 
   return (
-    <header className="grid grid-cols-[minmax(230px,1fr)_minmax(160px,auto)_minmax(260px,1fr)] items-center gap-4 border-b border-white/[0.06] bg-[#08090b]/95 px-6 py-4">
-      <div className="inline-flex min-w-0 items-center gap-3">
-        <div className="relative size-12 overflow-hidden rounded-2xl shadow-[0_8px_25px_rgb(31_91_255_/_0.3)]">
-          <img className="block size-full object-contain" src={appLogo} alt="" />
-        </div>
-        <div>
-          <strong className="block text-[1.15rem] font-extrabold tracking-[-0.02em] text-white">
-            Open Video Craft
-          </strong>
-          <small className="mt-0.5 block text-[0.72rem] font-medium text-slate-400">
-            Video Editor
-          </small>
-        </div>
+    <header className="editor-topbar grid grid-cols-[minmax(0,1fr)_minmax(180px,auto)_minmax(0,1fr)] items-center border-b border-white/[0.08] bg-[#171a21] px-2">
+      <div className="inline-flex min-w-0 items-center gap-1.5">
+        <button
+          className="grid size-8 flex-none place-items-center rounded text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
+          type="button"
+          title="Back to projects"
+          onClick={props.onBackHome}
+        >
+          <Menu size={17} />
+        </button>
+        <span className="hidden text-[0.78rem] font-semibold text-slate-100 sm:inline">
+          Open Video Craft
+        </span>
       </div>
 
       <div
-        className="inline-flex min-h-[3rem] min-w-[10.5rem] items-center justify-center gap-2 rounded-full border border-white/[0.12] bg-white/[0.025] px-5 text-sm font-semibold text-slate-100 shadow-[inset_0_1px_rgb(255_255_255_/_0.03)] focus-within:border-white/[0.24]"
+        className="editor-project-name inline-flex h-8 min-w-0 items-center justify-center gap-1.5 px-3 text-xs font-semibold text-slate-200 focus-within:text-white"
         onClick={() => inputRef.current?.focus()}
       >
         <input
@@ -77,36 +76,37 @@ export function EditorTopbar(props: {
             }
           }}
         />
-        <Pencil size={15} className="flex-none text-slate-400" />
+        <Pencil size={12} className="flex-none text-slate-500" />
       </div>
 
-      <div className="inline-flex justify-end gap-3">
+      <div className="editor-topbar-actions inline-flex min-w-0 justify-end gap-1.5">
         <button
-          className="inline-flex size-[3rem] items-center justify-center rounded-xl border border-white/[0.1] bg-white/[0.035] text-white hover:bg-white/10"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded px-2.5 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
           type="button"
-          title="Back to main menu"
+          title="Back to projects"
           onClick={props.onBackHome}
         >
-          <Home size={17} />
+          <ChevronLeft size={14} />
+          <span className="editor-action-label">Projects</span>
         </button>
         <button
-          className="inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-xl bg-white/[0.08] px-5 text-sm font-bold text-white transition hover:bg-white/[0.13] disabled:cursor-wait disabled:opacity-55"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded px-2.5 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white disabled:cursor-wait disabled:opacity-55"
           type="button"
           title="Save project (Ctrl+S)"
           disabled={props.saving}
           onClick={() => void props.onSave()}
         >
-          <Save size={17} />
-          {props.saving ? "Saving" : "Save"}
+          <Save size={14} />
+          <span className="editor-action-label">{props.saving ? "Saving" : "Save"}</span>
         </button>
         <button
-          className="inline-flex min-h-[3rem] items-center justify-center gap-2 rounded-xl bg-white px-7 text-sm font-extrabold text-black shadow-[0_8px_24px_rgb(255_255_255_/_0.08)] hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-55"
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded bg-[#c9ad73] px-3.5 text-xs font-bold text-[#17130c] transition hover:bg-[#dbc188] disabled:cursor-not-allowed disabled:opacity-55"
           type="button"
           disabled={props.exporting || !props.canExport}
           onClick={props.onOpenExport}
         >
-          <Upload size={17} />
-          Export
+          <Upload size={14} />
+          <span className="editor-action-label">Export</span>
         </button>
       </div>
     </header>

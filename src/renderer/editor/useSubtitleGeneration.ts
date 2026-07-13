@@ -13,6 +13,7 @@ import {
   addLanguageToWhisperWordChunks,
   createSubtitleSegmentsFromWhisperOutput,
   getWhisperOutputLanguage,
+  isMissingWhisperAttentionError,
   whisperTranscriptionModel
 } from "./subtitle-transcription";
 import type { WhisperTranscriptionOutput } from "./subtitle-transcription";
@@ -147,11 +148,27 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
       setSttDownloadProgress(null);
       setSttStatus("transcribing");
 
-      const output = await transcriber(audio, {
-        return_timestamps: "word",
-        chunk_length_s: 30,
-        stride_length_s: 5
-      });
+      let output: WhisperTranscriptionOutput;
+      try {
+        output = await transcriber(audio, {
+          return_timestamps: "word",
+          chunk_length_s: 30,
+          stride_length_s: 5
+        });
+      } catch (timestampError) {
+        if (!isMissingWhisperAttentionError(timestampError)) {
+          throw timestampError;
+        }
+
+        // Older cached exports may not expose decoder attention tensors. They
+        // can still produce Whisper segment timestamps, so gracefully retain
+        // working subtitles instead of failing the whole transcription.
+        output = await transcriber(audio, {
+          return_timestamps: true,
+          chunk_length_s: 30,
+          stride_length_s: 5
+        });
+      }
 
       const segments = createSubtitleSegmentsFromWhisperOutput(output);
 

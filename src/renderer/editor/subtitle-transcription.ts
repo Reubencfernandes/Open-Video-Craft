@@ -5,10 +5,16 @@
 import type { SubtitleSegment, SubtitleWord } from "./types";
 import { createId } from "./utils";
 
-// `onnx-community/whisper-base` is the openai/whisper-base weights converted to
-// ONNX for Transformers.js (the base `openai/` repo ships no ONNX files).
-export const whisperTranscriptionModel = "onnx-community/whisper-base";
-export const whisperTranscriptionModelLabel = "Whisper base (multilingual)";
+// The timestamped export includes the decoder cross-attention outputs required
+// by Transformers.js for word-level timestamps. The regular ONNX export can
+// transcribe text, but throws when `return_timestamps: "word"` is requested.
+export const whisperTranscriptionModel = "onnx-community/whisper-base_timestamped";
+export const whisperTranscriptionModelLabel = "Whisper base";
+
+export function isMissingWhisperAttentionError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /cross attentions|output_attentions=True/i.test(message);
+}
 
 type WhisperTimestamp = [number | null, number | null];
 

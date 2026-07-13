@@ -22,7 +22,7 @@ document.body.className =
     ? "m-0 h-full w-full overflow-hidden bg-transparent"
     : view === "editor"
       ? "m-0 h-full w-full overflow-hidden bg-[#121317]"
-      : "m-0 min-w-[960px] bg-[#121317]";
+      : "m-0 h-full w-full overflow-hidden bg-[#121317]";
 
 const root = document.getElementById("root") as HTMLElement;
 root.className = "h-full w-full";

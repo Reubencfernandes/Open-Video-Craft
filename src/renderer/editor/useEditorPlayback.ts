@@ -8,13 +8,10 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { AudioMeter } from "./audio-meter";
 import { canDriftSeek } from "./media-utils";
 import {
-  getClampedTimelineTimeForMediaTime,
   getMediaTimeForTimelineTime,
   type PlaybackSyncReason,
   shouldSeekPrimaryVideo,
-  shouldSeekSecondaryMedia,
-  videoStartupProgressToleranceSeconds,
-  videoStartupWatchdogMs
+  shouldSeekSecondaryMedia
 } from "./playback-sync";
 import {
   calculateTimelineDuration,
@@ -118,8 +115,6 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const pendingCameraSeekKeyRef = useRef<string | null>(null);
   const secondaryDriftSeekTimesRef = useRef<Map<string, number>>(new Map());
   const playbackAttemptTokenRef = useRef(0);
-  const primaryVideoWatchdogRef = useRef<number | null>(null);
-  const primaryVideoWatchdogRetriedRef = useRef(false);
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<AudioLevelState>({});
   const timelineDurationRef = useRef(0);
@@ -139,7 +134,6 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
   useEffect(() => {
     return () => {
-      clearPrimaryVideoWatchdog();
       audioMeterRef.current?.dispose();
     };
   }, []);
@@ -297,42 +291,23 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     );
   }
 
-  function findClipByPlaybackKey(key: string | null): TimelineMediaClip | null {
-    if (!key) {
-      return null;
-    }
-
-    return videoClipsRef.current.find((clip) => createClipPlaybackKey(clip) === key) ?? null;
-  }
-
   function getPrimaryPlaybackVideoElement(): HTMLVideoElement | null {
     return mainVideoRef.current ?? cameraRef.current;
   }
 
-  function getPlaybackClockClip(time: number): TimelineMediaClip | null {
-    const syncedKey = mainVideoRef.current
-      ? syncedVideoClipKeyRef.current
-      : syncedCameraClipKeyRef.current;
-    const syncedClip = findClipByPlaybackKey(syncedKey);
-    if (
-      syncedClip?.item.kind === "video" &&
-      time >= syncedClip.start &&
-      time <= syncedClip.start + syncedClip.duration
-    ) {
-      return syncedClip;
-    }
-
-    return findVideoClipAtTime(time);
-  }
-
   function getNextPlaybackTime(dt: number): number {
-    const clockClip = getPlaybackClockClip(currentTimeRef.current);
-    if (clockClip?.item.kind === "video") {
-      const videoEl = getPrimaryPlaybackVideoElement();
-      if (videoEl && videoEl.readyState >= HTMLMediaElement.HAVE_METADATA) {
-        return getClampedTimelineTimeForMediaTime(clockClip, videoEl.currentTime);
-      }
-
+    const clockClip = findVideoClipAtTime(currentTimeRef.current);
+    const videoEl = getPrimaryPlaybackVideoElement();
+    // Seeking or buffering a compressed screen recording can take a moment.
+    // Freeze the authoritative timeline until Chromium has a future frame,
+    // rather than racing ahead or treating normal decoder latency as failure.
+    if (
+      clockClip?.item.kind === "video" &&
+      videoEl &&
+      (videoEl.seeking ||
+        videoEl.paused ||
+        videoEl.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+    ) {
       return currentTimeRef.current;
     }
 
@@ -368,67 +343,6 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     });
   }
 
-  function clearPrimaryVideoWatchdog() {
-    if (primaryVideoWatchdogRef.current !== null) {
-      window.clearTimeout(primaryVideoWatchdogRef.current);
-      primaryVideoWatchdogRef.current = null;
-    }
-  }
-
-  function armPrimaryVideoWatchdog(resetRetry = true) {
-    clearPrimaryVideoWatchdog();
-    if (resetRetry) {
-      primaryVideoWatchdogRetriedRef.current = false;
-    }
-
-    const videoClip = findVideoClipAtTime(currentTimeRef.current);
-    const videoEl = getPrimaryPlaybackVideoElement();
-    if (!playingRef.current || videoClip?.item.kind !== "video" || !videoEl) {
-      return;
-    }
-
-    const clipKey = createClipPlaybackKey(videoClip);
-    const startMediaTime = videoEl.currentTime;
-    primaryVideoWatchdogRef.current = window.setTimeout(() => {
-      primaryVideoWatchdogRef.current = null;
-      if (!playingRef.current) {
-        return;
-      }
-
-      const currentClip = findVideoClipAtTime(currentTimeRef.current);
-      const currentVideoEl = getPrimaryPlaybackVideoElement();
-      if (
-        currentClip?.item.kind !== "video" ||
-        !currentVideoEl ||
-        createClipPlaybackKey(currentClip) !== clipKey
-      ) {
-        return;
-      }
-
-      const advanced =
-        currentVideoEl.currentTime - startMediaTime > videoStartupProgressToleranceSeconds;
-      if (advanced || currentVideoEl.ended) {
-        return;
-      }
-
-      if (!primaryVideoWatchdogRetriedRef.current) {
-        primaryVideoWatchdogRetriedRef.current = true;
-        const desired = getMediaTimeForTimelineTime(currentClip, currentTimeRef.current);
-        if (canSetMediaTime(currentVideoEl)) {
-          trySetMediaTime(currentVideoEl, desired);
-        }
-        playMediaElement(currentVideoEl, "video");
-        armPrimaryVideoWatchdog(false);
-        return;
-      }
-
-      stopPlayback(
-        "pause",
-        "Playback stalled because the video did not advance. Try seeking a little, then press Play again."
-      );
-    }, videoStartupWatchdogMs);
-  }
-
   function syncPrimaryVideoElement(input: {
     element: HTMLVideoElement;
     videoClip: TimelineMediaClip;
@@ -446,7 +360,9 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     const clipChanged = input.syncedKeyRef.current !== clipPlaybackKey;
     const pendingSeek = input.pendingSeekKeyRef.current === clipPlaybackKey;
     const syncReason = pendingSeek ? "clip-change" : input.reason;
-    const canSeek = canSetMediaTime(input.element);
+    const canSeek =
+      canSetMediaTime(input.element) &&
+      !(input.reason === "tick" && input.element.seeking);
     const shouldSeek = shouldSeekPrimaryVideo({
       reason: syncReason,
       isPlaying: input.isPlaying,
@@ -473,7 +389,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       input.pendingSeekKeyRef.current = clipPlaybackKey;
     } else if (
       !clipChanged ||
-      Math.abs(input.element.currentTime - desired) <= videoStartupProgressToleranceSeconds
+      Math.abs(input.element.currentTime - desired) <= 0.05
     ) {
       input.syncedKeyRef.current = clipPlaybackKey;
       input.pendingSeekKeyRef.current = null;
@@ -641,7 +557,6 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
   function stopPlayback(reason: PlaybackSyncReason = "pause", message?: string) {
     playbackAttemptTokenRef.current += 1;
-    clearPrimaryVideoWatchdog();
     playingRef.current = false;
     setPlaying(false);
     syncMediaToTime(currentTimeRef.current, false, reason);
@@ -669,17 +584,14 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     setPlaying(true);
     setError(null);
     syncMediaToTime(startAt, true, "play-start");
-    armPrimaryVideoWatchdog();
   }
 
   function seek(value: number) {
-    const nextTime = Math.max(0, Math.min(value, timelineDuration || value));
+    const duration = timelineDurationRef.current || timelineDuration;
+    const nextTime = Math.max(0, Math.min(value, duration || value));
     currentTimeRef.current = nextTime;
     setCurrentTime(nextTime);
     syncMediaToTime(nextTime, playingRef.current, "seek");
-    if (playingRef.current) {
-      armPrimaryVideoWatchdog();
-    }
   }
 
   function seekFrame(frame: number) {
@@ -712,9 +624,6 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     currentTimeRef.current = nextTime;
     setCurrentTime(nextTime);
     syncMediaToTime(nextTime, playingRef.current, "clip-change");
-    if (playingRef.current) {
-      armPrimaryVideoWatchdog();
-    }
   }
 
   function scheduleTimelinePlaybackSync(segments: TimelineSegment[]) {

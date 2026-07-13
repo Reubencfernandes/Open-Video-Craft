@@ -3,7 +3,8 @@ import {
   addLanguageToWhisperWordChunks,
   createSubtitleSegmentsFromWhisperOutput,
   formatSubtitleLanguage,
-  getWhisperOutputLanguage
+  getWhisperOutputLanguage,
+  isMissingWhisperAttentionError
 } from "../src/renderer/editor/subtitle-transcription";
 
 describe("subtitle transcription", () => {
@@ -72,5 +73,14 @@ describe("subtitle transcription", () => {
     expect(
       transcriber.tokenizer.collateWordTimestamps([], [], "french")
     ).toEqual([{ text: "bonjour", timestamp: [0, 0.5], language: "french" }]);
+  });
+
+  it("recognizes the missing-attention timestamp export failure", () => {
+    expect(
+      isMissingWhisperAttentionError(
+        new Error("Model outputs must contain cross attentions to extract timestamps.")
+      )
+    ).toBe(true);
+    expect(isMissingWhisperAttentionError(new Error("Network request failed"))).toBe(false);
   });
 });

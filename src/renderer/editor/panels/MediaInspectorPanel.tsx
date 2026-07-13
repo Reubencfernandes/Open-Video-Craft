@@ -5,13 +5,13 @@ import { formatSeconds } from "../utils";
 
 export function MediaInspectorPanel({ item }: { item: EditorMediaItem | null }) {
   if (!item) {
-    return <div className="grid min-h-40 place-items-center rounded-xl bg-white/[0.025] p-5 text-center text-sm leading-6 text-slate-400">Select media from the library to view its details.</div>;
+    return <div className="grid min-h-32 place-items-center p-4 text-center text-xs leading-5 text-slate-500">Select media from the library to view its details.</div>;
   }
 
   const Icon = item.kind === "audio" ? FileAudio : item.kind === "image" ? FileImage : FileVideo;
   return (
     <div className="grid content-start gap-4">
-      <div className="flex items-center gap-3 rounded-xl bg-white/[0.035] p-3"><span className="grid size-10 place-items-center rounded-lg bg-amber-500/10 text-amber-300"><Icon size={20} /></span><div className="min-w-0"><strong className="block truncate text-sm text-white">{item.name}</strong><span className="text-xs capitalize text-slate-500">{item.kind} media</span></div></div>
+      <div className="flex items-center gap-3 border-b border-white/[0.07] pb-3"><span className="grid size-9 place-items-center rounded bg-[#c9ad73]/10 text-[#d8bd82]"><Icon size={18} /></span><div className="min-w-0"><strong className="block truncate text-sm text-white">{item.name}</strong><span className="text-xs capitalize text-slate-500">{item.kind} media</span></div></div>
       <dl className="m-0 grid gap-3 text-xs"><MetadataRow label="Source" value={item.origin === "project" ? "Project recording" : "Imported media"} /><MetadataRow label="Track" value={item.track} /><MetadataRow label="Duration" value={item.duration ? formatSeconds(item.duration) : "Reading metadata…"} />{item.extension ? <MetadataRow label="Format" value={item.extension.toUpperCase()} /> : null}</dl>
     </div>
   );

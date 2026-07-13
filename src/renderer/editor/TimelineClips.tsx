@@ -24,10 +24,16 @@ import type {
  * differs by lane.
  */
 const clipBaseClassName =
-  "group absolute top-[0.2rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-lg border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
+  "group absolute top-[0.15rem] z-[1] inline-flex h-[1.7rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-sm border border-black/40 px-2 text-left text-[0.64rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
 
-/** Inset outline so selection is visible inside lanes with overflow:hidden. */
-const clipSelectedClassName = "outline outline-2 -outline-offset-2 outline-purple-400";
+/** Inset outlines match their lane instead of using one unrelated selection color. */
+const selectedOutlineClassName = {
+  video: "outline outline-2 -outline-offset-2 outline-amber-400",
+  audio: "outline outline-2 -outline-offset-2 outline-emerald-400",
+  zoom: "outline outline-2 -outline-offset-2 outline-purple-400",
+  speed: "outline outline-2 -outline-offset-2 outline-lime-400",
+  subtitle: "outline outline-2 -outline-offset-2 outline-rose-400"
+} as const;
 
 /** Widened hit areas on both clip edges used to start a trim drag; a white
  * pill handle fades in on hover, matching the reference design. */
@@ -77,7 +83,11 @@ export function TimelineClip(props: {
 
   return (
     <button
-      className={cx(clipBaseClassName, fillClassName, props.selected && clipSelectedClassName)}
+      className={cx(
+        clipBaseClassName,
+        fillClassName,
+        props.selected && selectedOutlineClassName[item.kind === "audio" ? "audio" : "video"]
+      )}
       type="button"
       data-segment-id={props.clip.id}
       style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
@@ -115,7 +125,7 @@ export function TimelineZoomClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#92610e]", props.selected && clipSelectedClassName)}
+      className={cx(clipBaseClassName, "bg-[#5b3287]", props.selected && selectedOutlineClassName.zoom)}
       type="button"
       title={`Zoom (${props.effect.speed})`}
       style={createTimelineClipStyle(
@@ -149,7 +159,7 @@ export function TimelineSpeedClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#3f6212]", props.selected && clipSelectedClassName)}
+      className={cx(clipBaseClassName, "bg-[#3f6212]", props.selected && selectedOutlineClassName.speed)}
       type="button"
       title={`Speed ${props.effect.rate}x`}
       style={createTimelineClipStyle(
@@ -184,7 +194,7 @@ export function TimelineSubtitleClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#7c3f16]", props.selected && clipSelectedClassName)}
+      className={cx(clipBaseClassName, "bg-[#7f2945]", props.selected && selectedOutlineClassName.subtitle)}
       type="button"
       title={props.subtitle.text}
       style={createTimelineClipStyle(

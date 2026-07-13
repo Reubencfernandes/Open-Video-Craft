@@ -13,15 +13,28 @@ const clip = {
 };
 
 describe("playback sync", () => {
-  it("does not drift-seek the primary video while it is already playing", () => {
+  it("does not drift-seek the primary video for normal sub-tolerance clock skew", () => {
     expect(
       shouldSeekPrimaryVideo({
         reason: "tick",
         isPlaying: true,
         clipChanged: false,
         canSeek: true,
-        currentMediaTime: 30,
+        currentMediaTime: 30.9,
         desiredMediaTime: 31
+      })
+    ).toBe(false);
+  });
+
+  it("does not hard-seek a playing primary video even when decoder progress lags", () => {
+    expect(
+      shouldSeekPrimaryVideo({
+        reason: "tick",
+        isPlaying: true,
+        clipChanged: false,
+        canSeek: true,
+        currentMediaTime: 2,
+        desiredMediaTime: 18
       })
     ).toBe(false);
   });

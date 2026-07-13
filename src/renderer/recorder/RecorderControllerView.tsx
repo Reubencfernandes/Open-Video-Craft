@@ -229,6 +229,7 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
 
         <footer className="grid grid-cols-4 gap-2 border-t border-white/[0.07] p-3">
           <FloatingDeviceControl
+            accent="mic"
             enabled={props.micEnabled}
             enabledIcon={<Mic size={25} />}
             disabledIcon={<MicOff size={25} />}
@@ -244,7 +245,7 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
           <button
             className={cx(
               "grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-45",
-              props.systemAudioEnabled && "border-emerald-300/40 bg-emerald-500/15 text-emerald-200"
+              props.systemAudioEnabled && "border-sky-300/40 bg-sky-500/15 text-sky-100"
             )}
             type="button"
             onClick={props.onToggleSystemAudio}
@@ -252,7 +253,9 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             aria-pressed={props.systemAudioEnabled}
             title={systemAudioLabel}
           >
-            {props.systemAudioEnabled ? <Volume2 size={25} /> : <VolumeX size={25} />}
+            <span className={props.systemAudioEnabled ? "text-sky-300" : "text-amber-300"}>
+              {props.systemAudioEnabled ? <Volume2 size={25} /> : <VolumeX size={25} />}
+            </span>
             <span>{props.systemAudioEnabled ? "System on" : "System off"}</span>
           </button>
 
@@ -263,11 +266,12 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
             disabled={!props.canStart}
             title={props.baseDirectory ?? "Choose project folder"}
           >
-            <FolderOpen size={25} />
+            <FolderOpen className="text-violet-300" size={25} />
             <span>{props.baseDirectory ? "Project set" : "Project"}</span>
           </button>
 
           <FloatingDeviceControl
+            accent="camera"
             enabled={props.cameraEnabled}
             enabledIcon={<Video size={25} />}
             disabledIcon={<VideoOff size={25} />}
@@ -363,68 +367,60 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
       <div className="flex flex-col items-center gap-4">
         {showCameraPreview ? <CameraPreview stream={props.cameraPreviewStream!} /> : null}
 
-        <button
-          className={cx(
-            "grid size-[76px] place-items-center rounded-full border-0 bg-rose-600 text-3xl font-extrabold text-white transition hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70",
-            (props.state === "recording" || props.state === "paused") &&
-              "bg-red-700 hover:bg-red-800"
-          )}
-          type="button"
-          disabled={
-            props.state === "preparing" ||
-            props.state === "countdown" ||
-            props.state === "processing" ||
-            props.state === "stopping"
-          }
-          onClick={() => {
-            if (isRecordingActive) {
-              props.onStopRecording();
-            } else {
-              props.onStartRecording();
+        {isRecordingActive ? (
+          <div className="grid justify-items-center gap-3 rounded-2xl border border-white/10 bg-black/20 p-3 shadow-lg">
+            <div className="inline-flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-rose-200">
+              <span className={`size-2.5 rounded-full ${props.state === "paused" ? "bg-amber-300" : "animate-pulse bg-rose-500"}`} />
+              {props.state === "paused" ? "Recording paused" : "Recording in progress"}
+            </div>
+            <div className="inline-flex items-center gap-2">
+              <button
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-amber-300/25 bg-amber-400/10 px-3 text-sm font-bold text-amber-100 hover:bg-amber-400/20"
+                type="button"
+                onClick={props.state === "paused" ? props.onResumeRecording : props.onPauseRecording}
+                aria-label={props.state === "paused" ? "Resume recording" : "Pause recording"}
+              >
+                {props.state === "paused" ? <Play size={17} /> : <Pause size={17} />}
+                <span>{props.state === "paused" ? "Resume" : "Pause"}</span>
+              </button>
+              <button
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-300/25 bg-rose-500/10 px-3 text-sm font-bold text-rose-100 hover:bg-rose-500/20"
+                type="button"
+                onClick={props.onCancelRecording}
+                aria-label="Cancel recording"
+              >
+                <X size={17} />
+                <span>Cancel</span>
+              </button>
+              <button
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-300/30 bg-emerald-500/15 px-3 text-sm font-bold text-emerald-100 hover:bg-emerald-500/25"
+                type="button"
+                onClick={props.onStopRecording}
+                aria-label="Finish recording"
+              >
+                <CheckCircle2 size={17} />
+                <span>Done</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="grid size-[76px] place-items-center rounded-full border-0 bg-rose-600 text-3xl font-extrabold text-white shadow-[0_0_0_8px_rgb(244_63_94_/_0.1)] transition hover:bg-rose-700 disabled:cursor-wait disabled:opacity-70"
+            type="button"
+            disabled={
+              props.state === "preparing" ||
+              props.state === "countdown" ||
+              props.state === "processing" ||
+              props.state === "stopping"
             }
-          }}
-          aria-label={primaryActionLabel}
-          title={isRecordingActive ? undefined : primaryActionLabel}
-        >
-          {props.state === "countdown" ? (
-            props.countdown
-          ) : isRecordingActive ? (
-            <CircleStop size={34} />
-          ) : null}
-        </button>
+            onClick={props.onStartRecording}
+            aria-label={primaryActionLabel}
+            title={primaryActionLabel}
+          >
+            {props.state === "countdown" ? props.countdown : null}
+          </button>
+        )}
       </div>
-
-      {isRecordingActive ? (
-        <div className="absolute bottom-14 inline-flex items-center gap-2">
-          <button
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/10 px-4 text-sm font-bold text-white hover:bg-white/15"
-            type="button"
-            onClick={props.state === "paused" ? props.onResumeRecording : props.onPauseRecording}
-            aria-label={props.state === "paused" ? "Resume recording" : "Pause recording"}
-          >
-            {props.state === "paused" ? <Play size={17} /> : <Pause size={17} />}
-            <span>{props.state === "paused" ? "Resume" : "Pause"}</span>
-          </button>
-          <button
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-red-300/30 bg-red-500/15 px-4 text-sm font-bold text-red-100 hover:bg-red-500/25"
-            type="button"
-            onClick={props.onCancelRecording}
-            aria-label="Cancel recording"
-          >
-            <X size={17} />
-            <span>Cancel</span>
-          </button>
-          <button
-            className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-500/15 px-4 text-sm font-bold text-emerald-100 hover:bg-emerald-500/25"
-            type="button"
-            onClick={props.onStopRecording}
-            aria-label="Finish recording"
-          >
-            <CheckCircle2 size={17} />
-            <span>Done</span>
-          </button>
-        </div>
-      ) : null}
 
       <div className="absolute bottom-5 max-w-[86%] truncate text-center text-xs font-bold text-slate-400">
         {props.state === "recording"

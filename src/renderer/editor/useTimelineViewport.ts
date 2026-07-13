@@ -2,7 +2,7 @@
  * Timeline viewport: panel height resize, horizontal time-axis zoom, and
  * mapping pointer X positions to timeline time.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { clampNumber } from "./utils";
 
@@ -15,15 +15,29 @@ const minTimelineZoom = 1;
 const maxTimelineZoom = 10;
 const timelineZoomStep = 1.5;
 
+function getDefaultTimelinePanelHeight(): number {
+  return clampNumber(Math.round(window.innerHeight * 0.3), 200, 300);
+}
+
 export function useTimelineViewport(params: UseTimelineViewportParams) {
   const { renderDuration, seek } = params;
-  const [timelinePanelHeight, setTimelinePanelHeight] = useState(360);
+  const [timelinePanelHeight, setTimelinePanelHeight] = useState(getDefaultTimelinePanelHeight);
   const [timelineZoom, setTimelineZoom] = useState(1);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const resizeDragRef = useRef<{
     startClientY: number;
     startHeight: number;
   } | null>(null);
+
+  useEffect(() => {
+    const fitTimelineToWindow = () => {
+      const maxHeight = Math.max(200, window.innerHeight - 220);
+      setTimelinePanelHeight((height) => Math.min(height, maxHeight));
+    };
+
+    window.addEventListener("resize", fitTimelineToWindow);
+    return () => window.removeEventListener("resize", fitTimelineToWindow);
+  }, []);
 
   function getTimelineTimeFromClientX(clientX: number): number | null {
     const timelineBody = bodyRef.current;
@@ -89,7 +103,7 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
 
   function resetTimelinePanelHeight() {
     finishTimelinePanelResize();
-    setTimelinePanelHeight(360);
+    setTimelinePanelHeight(getDefaultTimelinePanelHeight());
   }
 
   function finishTimelinePanelResize() {

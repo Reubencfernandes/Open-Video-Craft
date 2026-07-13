@@ -10,6 +10,7 @@ import { SpeedPanel } from "./panels/SpeedPanel";
 import { StylePanel } from "./panels/StylePanel";
 import { SubtitlesPanel } from "./panels/SubtitlesPanel";
 import { ZoomPanel } from "./panels/ZoomPanel";
+import { SlidersHorizontal } from "lucide-react";
 import { editorTools } from "./tools";
 import type {
   BackgroundCategory,
@@ -94,10 +95,17 @@ export function EditorToolPanel(props: {
 }) {
   const activeToolMeta = editorTools.find((tool) => tool.id === props.activeTool);
   return (
-    <aside className="order-4 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] shadow-[0_18px_45px_rgb(0_0_0_/_0.24)]">
-      <header className="flex min-h-12 items-center gap-2 border-b border-white/[0.06] px-4 text-sm font-semibold text-white"><span className="text-amber-300">{activeToolMeta?.icon}</span>{activeToolMeta?.label ?? "Inspector"}</header>
+    <aside className="editor-inspector order-4 flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-white/[0.08] bg-[#1b1f27]">
+      <header className="flex min-h-10 items-center gap-2 border-b border-white/[0.08] px-3 text-xs font-semibold text-slate-200">
+        <SlidersHorizontal size={14} className="text-slate-400" />
+        <span>Properties</span>
+        <span className="ml-auto inline-flex items-center gap-1.5 text-[0.68rem] font-medium text-slate-500">
+          <span className="text-[#d8bd82]">{activeToolMeta?.icon}</span>
+          {activeToolMeta?.label ?? "Inspector"}
+        </span>
+      </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4">
+      <div className="editor-inspector-content flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
 
       {props.activeTool === "media" ? <MediaInspectorPanel item={props.previewItem} /> : null}
 

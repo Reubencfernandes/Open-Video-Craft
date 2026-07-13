@@ -21,6 +21,7 @@ import { configureAppIdentity, getAppIconPath } from "./app-shell";
 import { registerAppStatusIpc } from "./app-status-ipc";
 import { getProductVersion } from "./app-version";
 import { startAutoUpdates } from "./auto-updates";
+import { shouldEnableDevTools } from "./dev-tools";
 import {
   assertDesktopPermissionKind,
   assertMediaPermissionKind,
@@ -152,8 +153,8 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
-    minWidth: 1080,
-    minHeight: 720,
+    minWidth: 760,
+    minHeight: 600,
     title: "Open Video Craft",
     icon: getAppIconPath(),
     backgroundColor: "#121317",
@@ -411,8 +412,8 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
     mainWindow = new BrowserWindow({
       width: 1360,
       height: 900,
-      minWidth: 1080,
-      minHeight: 720,
+      minWidth: 760,
+      minHeight: 600,
       title: "Open Video Craft Editor",
       icon: getAppIconPath(),
       backgroundColor: "#121317",
@@ -601,7 +602,16 @@ function closePermissionGuideWindow(): void {
 }
 
 function attachDevToolsShortcuts(window: BrowserWindow): void {
-  if (app.isPackaged && process.env.OVC_ENABLE_DEVTOOLS !== "1") {
+  // Windows users need access to Chromium's diagnostics in installed builds
+  // when capture, codec, or GPU behavior differs from development. Keep the
+  // packaged macOS surface locked down unless explicitly enabled, while
+  // allowing the conventional F12 / Ctrl+Shift+I shortcuts on Windows.
+  const devToolsEnabled = shouldEnableDevTools({
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    environmentOverride: process.env.OVC_ENABLE_DEVTOOLS
+  });
+  if (!devToolsEnabled) {
     return;
   }
   window.webContents.on("before-input-event", (event, input) => {

@@ -67,8 +67,8 @@ export function EditorPreviewPanel(props: {
   } as CSSProperties;
 
   return (
-    <section className="order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] shadow-[0_18px_45px_rgb(0_0_0_/_0.2)]">
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto p-5">
+    <section className="editor-preview order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#11151b]">
+      <div className="editor-preview-stage flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto bg-[radial-gradient(circle_at_50%_42%,#202630_0%,#141820_48%,#0e1116_100%)] p-5">
         <div className={props.previewClassName} style={previewFrameStyle}>
           {previewItem ? (
             <PreviewContent

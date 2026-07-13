@@ -36,6 +36,46 @@ import type {
   ZoomEffect
 } from "./types";
 
+const playheadColorByTool: Record<EditorTool, string> = {
+  media: "#f59e0b",
+  layout: "#f59e0b",
+  audio: "#34d399",
+  zoom: "#c084fc",
+  speed: "#a3e635",
+  subtitles: "#fb7185",
+  cut: "#f59e0b",
+  style: "#f59e0b"
+};
+
+function getPlayheadColor(props: {
+  activeTool: EditorTool;
+  selectedSegmentId: string | null;
+  selectedZoomId: string | null;
+  selectedSpeedId: string | null;
+  selectedSubtitleId: string | null;
+  videoClips: TimelineMediaClip[];
+  audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
+}): string {
+  if (props.selectedZoomId) return playheadColorByTool.zoom;
+  if (props.selectedSpeedId) return playheadColorByTool.speed;
+  if (props.selectedSubtitleId) return playheadColorByTool.subtitles;
+  if (
+    props.selectedSegmentId &&
+    props.audioTracks.some((track) =>
+      track.clips.some((clip) => clip.id === props.selectedSegmentId)
+    )
+  ) {
+    return playheadColorByTool.audio;
+  }
+  if (
+    props.selectedSegmentId &&
+    props.videoClips.some((clip) => clip.id === props.selectedSegmentId)
+  ) {
+    return playheadColorByTool.media;
+  }
+  return playheadColorByTool[props.activeTool];
+}
+
 /**
  * The bottom timeline panel: transport toolbar, ruler, playhead and the track
  * lanes (video, plus zoom/audio/subtitles depending on the active tool).
@@ -117,7 +157,7 @@ export function Timeline(props: {
   onContextMenuDelete: () => void;
 }) {
   return (
-    <section className="relative mx-3 mb-3 grid h-[calc(100%-0.75rem)] min-h-0 min-w-0 content-start gap-[0.45rem] overflow-auto rounded-xl border border-white/[0.07] bg-[#101113] px-[1.1rem] pb-4 pt-4 shadow-[0_18px_45px_rgb(0_0_0_/_0.3)] [--timeline-body-pad:0.7rem] [--timeline-label-width:148px] [--timeline-track-gap:0.85rem]">
+    <section className="editor-timeline relative grid h-full min-h-0 min-w-0 content-start gap-1 overflow-auto border-t border-white/[0.1] bg-[#171b22] px-2 pb-2 pt-3 [--timeline-body-pad:0.25rem] [--timeline-label-width:118px] [--timeline-track-gap:0.35rem]">
       <button
         className="group absolute left-0 right-0 top-0 z-30 grid h-4 cursor-row-resize place-items-center border-0 bg-transparent p-0"
         type="button"
@@ -129,7 +169,7 @@ export function Timeline(props: {
         onPointerCancel={props.onResizePointerUp}
         onDoubleClick={props.onResizeDoubleClick}
       >
-        <span className="h-1 w-20 rounded-full bg-white/[0.12] transition group-hover:bg-purple-400/80" />
+        <span className="h-px w-24 bg-white/[0.15] transition group-hover:bg-[#c9ad73]" />
       </button>
 
       <TimelineToolbar
@@ -151,9 +191,9 @@ export function Timeline(props: {
 
       {/* Horizontal-zoom viewport: the ruler and track body grow past 100% and
           scroll together so the time axis can be zoomed in like a real NLE. */}
-      <div className="grid min-w-0 content-start gap-[0.45rem] overflow-x-auto overflow-y-hidden">
+      <div className="grid min-w-0 content-start gap-1 overflow-x-auto overflow-y-hidden">
         <div
-          className="grid min-w-full content-start gap-[0.45rem]"
+          className="grid min-w-full content-start gap-1"
           style={{ width: `${props.timelineZoom * 100}%` }}
         >
           {/* The ruler is a scrub surface too: press or drag on it to move the
@@ -172,7 +212,7 @@ export function Timeline(props: {
               touch-none keeps pointer capture stable during drags. */}
           <div
             className={cx(
-              "relative grid min-h-[12.3rem] cursor-pointer select-none content-start gap-1.5 overflow-visible px-[var(--timeline-body-pad)] pb-3 pt-2.5 touch-none",
+              "relative grid min-h-[10rem] cursor-pointer select-none content-start gap-1 overflow-visible px-[var(--timeline-body-pad)] pb-2 pt-2 touch-none",
               props.scrubbing && "cursor-ew-resize"
             )}
             ref={props.bodyRef}
@@ -184,9 +224,13 @@ export function Timeline(props: {
             onDragOver={props.onBodyDragOver}
             onDrop={props.onBodyDrop}
           >
-        <TimelinePlayhead playheadPercent={props.playheadPercent} currentTime={props.currentTime} />
+        <TimelinePlayhead
+          playheadPercent={props.playheadPercent}
+          currentTime={props.currentTime}
+          color={getPlayheadColor(props)}
+        />
 
-        <TimelineTrack label="Video 1" accent="warm" icon={<Film size={14} />}>
+        <TimelineTrack label="Video 1" accent="amber" icon={<Film size={14} />}>
           {props.videoClips.map((clip) => (
             <TimelineClip
               key={clip.id}
@@ -234,7 +278,7 @@ export function Timeline(props: {
               <TimelineTrack
                 key={track.lane}
                 label={`Audio ${track.lane + 1}`}
-                accent="warm"
+                accent="green"
                 icon={<AudioLines size={14} />}
               >
                 {track.clips.map((clip) => (
@@ -253,7 +297,7 @@ export function Timeline(props: {
             ))}
 
         {props.subtitles.length > 0 ? (
-          <TimelineTrack label="Subtitles" accent="warm" icon={<Type size={14} />}>
+          <TimelineTrack label="Subtitles" accent="rose" icon={<Type size={14} />}>
             {props.subtitles.map((subtitle) => (
               <TimelineSubtitleClip
                 key={subtitle.id}

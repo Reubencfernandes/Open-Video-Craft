@@ -12,9 +12,6 @@ export type ClipPlaybackTiming = {
 
 export const primaryVideoDriftToleranceSeconds = 0.3;
 export const secondaryDriftSeekCooldownMs = 350;
-export const videoStartupWatchdogMs = 900;
-export const videoStartupProgressToleranceSeconds = 0.05;
-
 export function getMediaTimeForTimelineTime(
   clip: ClipPlaybackTiming,
   timelineTime: number
@@ -60,6 +57,14 @@ export function shouldSeekPrimaryVideo(input: {
 
   if (input.reason === "pause") {
     return false;
+  }
+
+  // Never hard-seek the primary decoder during ordinary playback. Recorded
+  // WebM files often have sparse keyframes; repeatedly assigning currentTime
+  // while they are playing can keep Chromium in a permanent seek/buffer loop.
+  // Explicit user seeks and clip changes are handled above.
+  if (input.reason === "tick") {
+    return !input.isPlaying && hasMediaDrift(input);
   }
 
   return !input.isPlaying && (input.clipChanged || hasMediaDrift(input));

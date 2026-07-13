@@ -85,6 +85,7 @@ Whisper model — your recordings never leave your machine.
 | Delete selected | `⌫` | `Delete` |
 | Undo / redo | `⌘Z` / `⇧⌘Z` | `Ctrl Z` / `Ctrl Y` |
 | Export | `⌘E` | `Ctrl E` |
+| Toggle Chromium DevTools | `OVC_ENABLE_DEVTOOLS=1` + `Ctrl Shift I` | `F12` or `Ctrl Shift I` |
 
 ## Install
 

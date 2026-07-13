@@ -544,9 +544,9 @@ export function EditorView() {
   };
 
   return (
-    <main className="editor-app grid h-screen min-h-screen overflow-hidden bg-[#0a0a0c] p-0 text-[#f7f7f8]">
+    <main className="editor-app grid h-dvh min-h-0 overflow-hidden bg-[#0a0a0c] p-0 text-[#f7f7f8]">
       <section
-        className="grid h-screen w-screen min-h-0 overflow-hidden bg-[#0a0a0c]"
+        className="editor-shell grid h-dvh w-full min-h-0 min-w-0 overflow-hidden bg-[#0a0a0c]"
         style={{
           gridTemplateRows: timelineVisible
             ? `auto minmax(0, 1fr) ${timelinePanelHeight}px`
@@ -579,11 +579,11 @@ export function EditorView() {
         <EditorNotifications error={error} exportMessage={exportMessage} onDismissError={() => setError(null)} onDismissMessage={() => setExportMessage(null)} />
         {!error && !exportMessage ? <UpdateNotification status={updateStatus} onInstall={() => void installUpdate()} /> : null}
 
-        <div className="grid min-h-0 grid-cols-[432px_minmax(420px,1fr)_320px] gap-3 px-3 py-2">
-          <div className="grid min-h-0 min-w-0 grid-cols-[92px_minmax(0,1fr)] overflow-hidden rounded-xl border border-white/[0.07] bg-[#111214] shadow-[0_18px_45px_rgb(0_0_0_/_0.24)]">
+        <div className="editor-workspace grid min-h-0 min-w-0 overflow-hidden">
+          <div className="editor-library flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-white/[0.08] bg-[#1a1e25]">
             <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
 
-            <aside className="flex min-h-0 min-w-0 flex-col overflow-hidden p-4">
+            <aside className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2.5">
               <MediaPanel
                 activeTab={activePanel}
                 visibleMedia={visibleMedia}

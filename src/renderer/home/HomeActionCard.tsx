@@ -10,15 +10,13 @@ export function HomeActionCard(props: {
   onAction: () => void;
 }) {
   return (
-    <article className="grid min-h-[12.8rem] grid-cols-[3.9rem_minmax(0,1fr)] gap-5 rounded-xl bg-[linear-gradient(135deg,rgb(255_255_255_/_0.045),rgb(255_255_255_/_0.015))] p-5 shadow-[inset_0_1px_rgb(255_255_255_/_0.025)]">
-      <span className="grid size-14 place-items-center rounded-full bg-white/[0.055]">{props.icon}</span>
-      <div className="grid min-w-0 content-start gap-2 pt-1">
-        <h2 className="m-0 text-xl font-medium tracking-[-0.02em] text-white">{props.title}</h2>
-        <p className="m-0 max-w-[18rem] text-sm leading-6 text-slate-400">{props.description}</p>
-        <button className="mt-4 inline-flex min-h-11 w-fit min-w-44 items-center justify-center rounded-lg bg-white/[0.055] px-5 text-sm font-medium text-slate-100 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-45" type="button" disabled={props.disabled} onClick={props.onAction}>
-          {props.actionLabel}
-        </button>
-      </div>
+    <article className="flex min-h-[13rem] min-w-0 flex-col items-center px-4 py-5 text-center sm:px-5 xl:min-h-[14rem] xl:py-6">
+      <span className="grid size-11 shrink-0 place-items-center">{props.icon}</span>
+      <h2 className="m-0 mt-2 text-xl font-medium tracking-[-0.02em] text-white">{props.title}</h2>
+      <p className="m-0 mt-2 max-w-[18rem] text-sm leading-6 text-slate-400">{props.description}</p>
+      <button className="mt-auto inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.055] px-4 text-sm font-medium text-slate-100 transition hover:border-white/[0.12] hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-45 sm:w-fit sm:min-w-40 xl:min-w-44 xl:px-5" type="button" disabled={props.disabled} onClick={props.onAction}>
+        {props.actionLabel}
+      </button>
     </article>
   );
 }

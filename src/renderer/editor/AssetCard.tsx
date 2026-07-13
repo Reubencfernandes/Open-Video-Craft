@@ -18,9 +18,9 @@ export function AssetCard(props: {
   onRemove?: () => void;
 }) {
   return (
-    <div className="group relative grid min-w-0 gap-1.5 text-left text-white">
+    <div className="group relative grid min-w-0 gap-1 text-left text-white">
       <button
-        className="grid min-w-0 cursor-pointer gap-1.5 border-0 bg-transparent p-0 text-left text-inherit"
+        className="grid min-w-0 cursor-pointer gap-1 border-0 bg-transparent p-0 text-left text-inherit"
         type="button"
         draggable={props.draggable}
         onClick={props.onSelect}
@@ -28,8 +28,8 @@ export function AssetCard(props: {
       >
         <div
           className={cx(
-            "grid aspect-[1.32] w-full place-items-center overflow-hidden rounded-lg border border-white/[0.08] bg-[#17181c] text-slate-400 [&>img]:h-full [&>img]:w-full [&>img]:object-cover",
-            props.selected && "border-amber-400/85 shadow-[0_0_0_3px_rgb(245_158_11_/_0.18)]"
+            "grid aspect-video w-full place-items-center overflow-hidden rounded-sm border border-white/[0.08] bg-[#11141a] text-slate-400 [&>img]:h-full [&>img]:w-full [&>img]:object-cover",
+            props.selected && "border-[#c9ad73] shadow-[0_0_0_1px_rgb(201_173_115_/_0.35)]"
           )}
         >
           {props.item.kind === "video" ? (
@@ -40,8 +40,8 @@ export function AssetCard(props: {
             <AudioLines size={18} />
           )}
         </div>
-        <strong className="truncate text-[0.72rem]">{props.item.name}</strong>
-        <span className="truncate text-[0.64rem] text-slate-500">
+        <strong className="truncate text-[0.68rem] font-semibold">{props.item.name}</strong>
+        <span className="truncate text-[0.6rem] text-slate-500">
           {props.item.origin === "project" ? "Recording" : props.item.kind}
         </span>
       </button>

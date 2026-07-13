@@ -38,22 +38,22 @@ export function TimelineTrack(props: {
         Boolean(props.controls) && "gap-y-2"
       )}
     >
-      <div className="inline-flex min-h-[2.6rem] min-w-0 items-center gap-2 rounded-lg border border-white/[0.06] bg-[#18181d] px-2 text-[0.72rem] font-bold text-slate-200">
+      <div className="inline-flex min-h-[2rem] min-w-0 items-center gap-1.5 border-r border-white/[0.08] bg-[#20242c] px-1.5 text-[0.66rem] font-semibold text-slate-300">
         <span
           className={cx(
-            "grid size-6 flex-none place-items-center rounded-md bg-white/[0.07]",
+            "grid size-5 flex-none place-items-center",
             accentClassName
           )}
         >
           {props.icon}
         </span>
         <span className="min-w-0 flex-1 truncate">{props.label}</span>
-        <span className="inline-flex flex-none items-center gap-1.5 pr-0.5 text-slate-500" aria-hidden="true">
-          <LockKeyhole size={12} />
-          <Eye size={12} />
+        <span className="inline-flex flex-none items-center gap-1 pr-0.5 text-slate-600" aria-hidden="true">
+          <LockKeyhole size={10} />
+          <Eye size={10} />
         </span>
       </div>
-      <div className="track-lane relative min-h-[2.6rem] overflow-hidden rounded-lg border border-white/[0.04] bg-[#101013] shadow-[inset_0_1px_3px_rgb(0_0_0_/_0.35)]">
+      <div className="track-lane relative min-h-[2rem] overflow-hidden border-y border-white/[0.045] bg-[#11151b] shadow-[inset_0_1px_3px_rgb(0_0_0_/_0.35)]">
         {props.children}
       </div>
       {props.controls ? <div className="col-start-2 min-w-0">{props.controls}</div> : null}

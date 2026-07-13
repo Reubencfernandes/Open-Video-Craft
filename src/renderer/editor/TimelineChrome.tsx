@@ -14,7 +14,7 @@ import {
 import { createTimelineTicks, formatSeconds, formatTimecode } from "./utils";
 
 const toolbarButtonClassName =
-  "grid size-8 cursor-pointer place-items-center rounded-lg border-0 bg-transparent text-slate-300 transition hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-35";
+  "grid size-7 cursor-pointer place-items-center rounded border-0 bg-transparent text-slate-400 transition hover:bg-white/[0.08] hover:text-white disabled:cursor-not-allowed disabled:opacity-35";
 
 /**
  * The timeline's editing toolbar: current / total timecode on the left,
@@ -38,8 +38,8 @@ export function TimelineToolbar(props: {
   onZoomReset: () => void;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(220px,auto)_minmax(0,1fr)_auto] items-center gap-3">
-      <div className="inline-flex h-9 min-w-0 items-center gap-1.5 px-1.5 text-[0.82rem] font-bold tabular-nums">
+    <div className="timeline-toolbar grid grid-cols-[minmax(180px,auto)_minmax(0,1fr)_auto] items-center gap-2 border-b border-white/[0.07] pb-1">
+      <div className="inline-flex h-8 min-w-0 items-center gap-1.5 px-1.5 text-[0.7rem] font-semibold tabular-nums">
         <span className="text-white">
           {formatTimecode(props.currentTime, props.currentFrame)}
         </span>
@@ -48,7 +48,7 @@ export function TimelineToolbar(props: {
         </span>
       </div>
 
-      <div className="inline-flex h-9 items-center gap-1">
+      <div className="inline-flex h-8 items-center gap-0.5">
         <button className={toolbarButtonClassName} type="button" title="Undo timeline clip edit (Ctrl+Z)" onClick={props.onUndo}>
           <Undo2 size={15} />
         </button>
@@ -76,7 +76,7 @@ export function TimelineToolbar(props: {
         </button>
       </div>
 
-      <div className="inline-flex h-9 items-center gap-0.5 rounded-lg text-slate-300">
+      <div className="inline-flex h-8 items-center gap-0.5 text-slate-300">
         <button
           className={toolbarButtonClassName}
           type="button"
@@ -113,7 +113,7 @@ export function TimelineToolbar(props: {
  */
 export function TimelineRuler(props: { duration: number }) {
   return (
-    <div className="grid h-6 grid-cols-6 items-end border-b border-white/10 pl-[calc(var(--timeline-label-width)+var(--timeline-track-gap))] text-[0.66rem] tabular-nums text-slate-500">
+    <div className="grid h-5 grid-cols-6 items-end border-b border-white/10 pl-[calc(var(--timeline-label-width)+var(--timeline-track-gap))] text-[0.58rem] tabular-nums text-slate-500">
       {createTimelineTicks(props.duration).map((tick) => (
         <span
           key={tick}
@@ -131,16 +131,21 @@ export function TimelineRuler(props: { duration: number }) {
  * style. The outer div is a widened invisible hit/positioning area centered
  * on the current time; the line is drawn with ::before.
  */
-export function TimelinePlayhead(props: { playheadPercent: number; currentTime: number }) {
+export function TimelinePlayhead(props: {
+  playheadPercent: number;
+  currentTime: number;
+  color: string;
+}) {
   return (
     <div
-      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2 before:rounded-full before:bg-[#a855f7] before:content-['']"
+      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2 before:rounded-full before:bg-[var(--playhead-color)] before:content-['']"
       aria-hidden="true"
       style={{
+        "--playhead-color": props.color,
         left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${props.playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
-      }}
+      } as React.CSSProperties}
     >
-      <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border border-[#a855f7] bg-[#17131f] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums text-white shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]">
+      <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border bg-[#17131f] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]" style={{ borderColor: props.color, color: props.color }}>
         {formatSeconds(props.currentTime)}
       </span>
     </div>

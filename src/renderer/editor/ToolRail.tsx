@@ -10,14 +10,14 @@ export function ToolRail(props: {
 }) {
   return (
     <aside
-      className="grid content-start justify-items-stretch gap-1 overflow-auto bg-[#101113] p-1"
+      className="editor-tool-rail grid flex-none content-start justify-items-stretch overflow-auto border-b border-white/[0.08] bg-[#1c2028]"
       aria-label="Editor tools"
     >
       {editorTools.map((tool) => (
         <button
-          className={`grid min-h-[3.95rem] w-full min-w-0 content-center justify-items-center gap-1 rounded-xl text-[0.65rem] font-medium transition ${
+          className={`flex min-h-10 w-full min-w-0 items-center gap-3 border-b border-white/[0.06] px-3 text-left text-xs font-medium transition ${
             props.activeTool === tool.id
-              ? "bg-white/[0.075] text-amber-300"
+              ? "bg-white/[0.065] text-[#d8bd82] shadow-[inset_3px_0_0_#c9ad73]"
               : "bg-transparent text-slate-300 hover:bg-white/[0.035] hover:text-white"
           }`}
           type="button"
@@ -26,12 +26,12 @@ export function ToolRail(props: {
           onClick={() => props.onToolChange(tool.id)}
         >
           <span
-            className="grid place-items-center"
+            className="grid size-5 flex-none place-items-center"
             aria-hidden="true"
           >
             {tool.icon}
           </span>
-          <span className="max-w-full truncate">{tool.label}</span>
+          <span className="min-w-0 flex-1 truncate">{tool.label}</span>
         </button>
       ))}
     </aside>

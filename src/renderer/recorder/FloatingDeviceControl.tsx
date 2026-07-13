@@ -10,21 +10,29 @@ export function FloatingDeviceControl(props: {
   disabledIcon: ReactNode;
   enabledLabel: string;
   disabledLabel: string;
+  accent: "mic" | "camera";
   options: DeviceOption[];
   value: string | null;
   disabled: boolean;
   onToggle: () => void;
   onValueChange: (value: string | null) => void;
 }) {
+  const enabledSurface = props.accent === "mic"
+    ? "border-emerald-300/35 bg-emerald-500/10"
+    : "border-cyan-300/35 bg-cyan-500/10";
+  const iconColor = props.enabled
+    ? props.accent === "mic" ? "text-emerald-300" : "text-cyan-300"
+    : "text-rose-300";
+
   return (
-    <div className="grid min-h-16 place-items-center gap-1 rounded-lg border border-white/10 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200">
+    <div className={`grid min-h-16 place-items-center gap-1 rounded-lg border bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-slate-200 transition-colors ${props.enabled ? enabledSurface : "border-white/10"}`}>
       <button
         className="grid w-full min-w-0 place-items-center gap-1 border-0 bg-transparent text-inherit transition-transform duration-150 active:scale-[0.88] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100"
         type="button"
         onClick={props.onToggle}
         disabled={props.disabled}
       >
-        <span className="inline-flex min-h-7 items-center justify-center text-cyan-300">
+        <span className={`inline-flex min-h-7 items-center justify-center ${iconColor}`}>
           <span className="inline-flex transition-all duration-150">
             {props.enabled ? props.enabledIcon : props.disabledIcon}
           </span>

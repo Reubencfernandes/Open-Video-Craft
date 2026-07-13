@@ -37,40 +37,46 @@ export function SubtitlesPanel(props: {
   const selected = props.selectedSubtitle;
 
   return (
-    <div className="grid min-h-0 content-start gap-4 overflow-auto">
+    <div className="grid min-h-0 content-start gap-3 overflow-auto">
       <button
-        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-sm font-extrabold text-white hover:bg-white/10"
+        className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10"
         type="button"
         onClick={props.onAddSubtitle}
       >
-        <Captions size={16} />
-        Add subtitle
+        <Captions className="shrink-0" size={16} />
+        <span className="truncate">Add subtitle</span>
       </button>
       <button
-        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-sm font-extrabold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
+        className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
         type="button"
         disabled={props.sttStatus === "loading" || props.sttStatus === "transcribing"}
         onClick={props.onGenerateSubtitles}
       >
-        <WandSparkles size={16} />
-        {props.sttStatus === "loading"
-          ? `Loading ${props.sttModelLabel}${props.sttDownloadProgress === null ? "" : ` ${Math.round(props.sttDownloadProgress)}%`}…`
-          : props.sttStatus === "transcribing"
-            ? "Transcribing…"
-          : "Auto-generate (speech-to-text)"}
+        <WandSparkles className="shrink-0" size={16} />
+        <span className="min-w-0 truncate">
+          {props.sttStatus === "loading"
+            ? `Loading ${props.sttModelLabel}${props.sttDownloadProgress === null ? "" : ` ${Math.round(props.sttDownloadProgress)}%`}…`
+            : props.sttStatus === "transcribing"
+              ? "Transcribing…"
+              : "Auto-generate subtitles"}
+        </span>
       </button>
-      <div className="grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-xs font-extrabold text-slate-400">
-        <span>Model</span>
-        <span className="truncate text-right text-white">{props.sttModelLabel}</span>
-        <span>Language</span>
-        <span className="truncate text-right text-white">{props.subtitleLanguage}</span>
+      <div className="grid gap-2 rounded-lg border border-white/[0.08] p-3 text-xs">
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <span className="font-bold text-slate-400">Model</span>
+          <span className="min-w-0 truncate text-right font-semibold text-white">{props.sttModelLabel}</span>
+        </div>
+        <div className="flex min-w-0 items-center justify-between gap-3">
+          <span className="font-bold text-slate-400">Language</span>
+          <span className="min-w-0 truncate text-right font-semibold text-white">{props.subtitleLanguage}</span>
+        </div>
       </div>
       <div className="grid gap-2">
-        <span className="text-xs font-extrabold text-slate-400">Subtitle style</span>
-        <div className="grid grid-cols-2 gap-1.5 rounded-lg bg-white/[0.05] p-1.5">
+        <span className="text-xs font-bold text-slate-400">Subtitle style</span>
+        <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-white/[0.06] p-1.5">
           {subtitleStyleOptions.map((option) => (
             <button
-              className={`min-h-9 whitespace-nowrap rounded-md px-2 text-center text-xs font-extrabold transition ${
+              className={`min-h-9 whitespace-nowrap rounded-md px-2 text-center text-xs font-bold transition ${
                 props.subtitleStyle === option.id
                   ? "bg-white text-[#111827]"
                   : "bg-white/[0.04] text-slate-300 hover:bg-white/10 hover:text-white"

@@ -45,8 +45,8 @@ export function MediaPanel(props: {
 
   return (
     <div
-      className={`flex min-h-0 flex-1 flex-col gap-4 overflow-auto rounded-xl transition ${
-        dropActive ? "ring-2 ring-inset ring-purple-400/70" : ""
+      className={`flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto transition ${
+        dropActive ? "ring-1 ring-inset ring-[#c9ad73]" : ""
       }`}
       onDragOver={(event) => {
         if (!isFileDrag(event)) return;
@@ -69,19 +69,19 @@ export function MediaPanel(props: {
       }}
     >
       <button
-        className="inline-flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] text-sm font-semibold text-white transition hover:border-white/[0.14] hover:bg-white/[0.08]"
+        className="inline-flex h-9 w-full flex-none items-center justify-center gap-2 rounded border border-white/[0.1] bg-white/[0.035] text-xs font-semibold text-slate-100 transition hover:border-[#c9ad73]/50 hover:bg-white/[0.07]"
         type="button"
         onClick={props.onImport}
       >
-        <Upload size={17} className="text-slate-200" />
+        <Upload size={14} className="text-[#d8bd82]" />
         Import Media
       </button>
-      <div className="flex gap-1.5">
+      <div className="grid flex-none grid-cols-2 gap-1">
         {mediaTabs.map((tab) => (
           <button
-            className={`min-w-0 flex-1 truncate rounded-lg px-2 py-2 text-xs font-semibold transition ${
+            className={`min-w-0 flex-1 truncate rounded px-1.5 py-1.5 text-[0.68rem] font-semibold transition ${
               props.activeTab === tab.id
-                ? "bg-purple-500/15 text-white"
+                ? "bg-[#c9ad73]/15 text-[#e3ca92]"
                 : "text-slate-400 hover:bg-white/[0.05] hover:text-white"
             }`}
             type="button"
@@ -93,7 +93,7 @@ export function MediaPanel(props: {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         {props.visibleMedia.map((item) => (
           <AssetCard
             key={item.id}
@@ -114,7 +114,7 @@ export function MediaPanel(props: {
       </div>
 
       {props.visibleMedia.length === 0 ? (
-        <div className="grid min-h-32 place-items-center gap-2 rounded-lg border border-dashed border-white/10 p-4 text-center text-sm font-bold text-slate-400">
+        <div className="grid min-h-24 place-items-center gap-2 border border-dashed border-white/10 p-3 text-center text-xs font-semibold leading-5 text-slate-500">
           <Plus size={18} />
           <span>Import, drag &amp; drop media, or finish a recording to begin editing.</span>
         </div>

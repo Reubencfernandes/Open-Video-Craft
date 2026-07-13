@@ -168,7 +168,7 @@ export function App() {
     : recentProjects;
 
   return (
-    <main className="grid h-screen min-h-[760px] grid-cols-[280px_minmax(0,1fr)] gap-4 overflow-hidden bg-[radial-gradient(circle_at_92%_8%,rgb(55_65_81_/_0.16),transparent_28%),#050606] p-3 text-white">
+    <main className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-2 overflow-hidden bg-[radial-gradient(circle_at_92%_8%,rgb(55_65_81_/_0.16),transparent_28%),#050606] p-2 text-white md:grid-cols-[88px_minmax(0,1fr)] md:grid-rows-1 md:gap-3 md:p-3 xl:grid-cols-[260px_minmax(0,1fr)]">
       <HomeSidebar
         disabled={busyAction !== null}
         version={appInfo?.version ?? latestRelease.version}
@@ -181,11 +181,11 @@ export function App() {
         onOpenChangelog={() => setChangelogOpen(true)}
       />
 
-      <section className="min-h-0 overflow-auto rounded-2xl bg-[linear-gradient(145deg,#101112,#090a0b)] px-9 py-8 shadow-[0_24px_80px_rgb(0_0_0_/_0.3)]">
-        <div className="grid gap-8">
+      <section className="min-h-0 min-w-0 overflow-auto rounded-2xl bg-[linear-gradient(145deg,#101112,#090a0b)] px-4 py-5 shadow-[0_24px_80px_rgb(0_0_0_/_0.3)] sm:px-6 md:py-6 xl:px-9 xl:py-8">
+        <div className="grid gap-6 xl:gap-8">
           <HomeHeader search={projectSearch} onSearchChange={setProjectSearch} />
 
-          <div className="grid grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 xl:gap-0">
             <HomeActionCard icon={<Video className="text-rose-400" size={27} />} title="Record" description="Record your screen, webcam, or voice with high quality." actionLabel="Start Recording" disabled={busyAction !== null} onAction={() => void openRecorder()} />
             <HomeActionCard icon={<Clapperboard className="text-amber-400" size={27} />} title="Edit a Project" description="Open the editor and start creating your next video." actionLabel="Open Editor" disabled={busyAction !== null} onAction={() => void openEditor()} />
             <HomeActionCard icon={<FolderOpen className="text-emerald-400" size={27} />} title="Open a Project" description="Browse and open any of your saved projects." actionLabel="Browse Projects" disabled={busyAction !== null} onAction={() => void openExistingProject()} />

@@ -315,7 +315,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     backgroundSize: "cover"
   } as CSSProperties;
   const previewClassName =
-    "relative w-[min(100%,calc(940px*var(--preview-zoom,1)))] flex-none aspect-video overflow-hidden rounded-[10px] bg-[#050608] shadow-[0_26px_70px_rgb(0_0_0_/_0.42)]";
+    "relative w-[min(100%,calc(940px*var(--preview-zoom,1)))] flex-none aspect-video overflow-hidden bg-[#030405] shadow-[0_18px_60px_rgb(0_0_0_/_0.58)] ring-1 ring-black/80";
   const timelineVisible =
     activeTool === "media" ||
     activeTool === "cut" ||
