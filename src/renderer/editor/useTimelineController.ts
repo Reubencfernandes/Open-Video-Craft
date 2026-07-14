@@ -38,8 +38,10 @@ type UseTimelineControllerParams = {
   allMedia: EditorMediaItem[];
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
   audioSources: EditorMediaItem[];
+  beginPlaybackInteraction: () => void;
   currentTime: number;
   currentTimeRef: MutableRefObject<number>;
+  endPlaybackInteraction: () => void;
   getTimelineTimeFromClientX: (clientX: number) => number | null;
   isEditorStateReady: boolean;
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
@@ -95,6 +97,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     mediaById: params.mediaById,
     mediaDurationById: params.mediaDurationById,
     scheduleTimelinePlaybackSync: params.scheduleTimelinePlaybackSync,
+    seek: params.seek,
     selectedItemId: params.selectedItemId,
     selectedTimelineItemId: params.selectedTimelineItemId,
     selectedTimelineSegmentId: params.selectedTimelineSegmentId,
@@ -141,7 +144,9 @@ export function useTimelineController(params: UseTimelineControllerParams) {
   });
 
   const drags = useTimelineDragInteractions({
+    beginPlaybackInteraction: params.beginPlaybackInteraction,
     currentTimeRef: params.currentTimeRef,
+    endPlaybackInteraction: params.endPlaybackInteraction,
     getTimelineTimeFromClientX: params.getTimelineTimeFromClientX,
     mediaDurationById: params.mediaDurationById,
     scheduleTimelinePlaybackSync: params.scheduleTimelinePlaybackSync,

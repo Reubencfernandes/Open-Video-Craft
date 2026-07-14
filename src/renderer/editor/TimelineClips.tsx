@@ -2,7 +2,7 @@
  * Clip components for every lane (media, zoom, speed, subtitle) and the
  * cubic-Bézier audio waveform.
  */
-import { Type, ZoomIn } from "lucide-react";
+import { Blend, Pilcrow, Type, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
@@ -12,11 +12,47 @@ import { SpeedIcon } from "./SpeedIcon";
 import { createTimelineClipStyle } from "./timeline-utils";
 import type {
   SpeedEffect,
+  ClipTransition,
   SubtitleSegment,
+  TextOverlay,
   TimelineMediaClip,
   TimelineTrimEdge,
   ZoomEffect
 } from "./types";
+
+/** Compact marker centered over the cut rendered by a clip transition. */
+export function TimelineTransitionMarker(props: {
+  transition: ClipTransition;
+  cutTime: number;
+  timelineDuration: number;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="absolute top-[0.3rem] z-[3] grid h-[1.4rem] min-w-5 place-items-center overflow-hidden rounded border border-cyan-200/60 bg-cyan-500/75 text-white shadow-lg hover:bg-cyan-400"
+      title={`${transitionLabel(props.transition.type)} (${props.transition.duration.toFixed(1)}s)`}
+      style={createTimelineClipStyle(
+        Math.max(0, props.cutTime - props.transition.duration / 2),
+        props.transition.duration,
+        props.timelineDuration
+      )}
+      onClick={(event) => { event.stopPropagation(); props.onSelect(); }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <Blend size={12} />
+    </button>
+  );
+}
+
+function transitionLabel(type: ClipTransition["type"]): string {
+  return ({
+    crossfade: "Crossfade",
+    "fade-black": "Fade through black",
+    "slide-left": "Slide left",
+    "wipe-left": "Wipe left"
+  })[type];
+}
 
 /**
  * Compact clip look: neutral/warm fills for audio/text, decoded filmstrip
@@ -32,23 +68,34 @@ const selectedOutlineClassName = {
   audio: "outline outline-2 -outline-offset-2 outline-emerald-400",
   zoom: "outline outline-2 -outline-offset-2 outline-purple-400",
   speed: "outline outline-2 -outline-offset-2 outline-lime-400",
-  subtitle: "outline outline-2 -outline-offset-2 outline-rose-400"
+  subtitle: "outline outline-2 -outline-offset-2 outline-rose-400",
+  text: "outline outline-2 -outline-offset-2 outline-sky-400"
 } as const;
 
 /** Widened hit areas on both clip edges used to start a trim drag; a white
  * pill handle fades in on hover, matching the reference design. */
 function ClipTrimEdges(props: {
   onTrimPointerDown: (event: ReactPointerEvent<HTMLElement>, edge: TimelineTrimEdge) => void;
+  onPointerMove?: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerUp?: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   return (
     <>
       <span
+        data-trim-edge="start"
         className="absolute inset-y-0 left-0 z-[4] w-2.5 cursor-ew-resize after:absolute after:bottom-2 after:left-1 after:top-2 after:w-[3px] after:rounded-full after:bg-white/85 after:opacity-0 after:transition group-hover:after:opacity-100"
         onPointerDown={(event) => props.onTrimPointerDown(event, "start")}
+        onPointerMove={props.onPointerMove ? (event) => { event.stopPropagation(); props.onPointerMove?.(event); } : undefined}
+        onPointerUp={props.onPointerUp ? (event) => { event.stopPropagation(); props.onPointerUp?.(event); } : undefined}
+        onPointerCancel={props.onPointerUp ? (event) => { event.stopPropagation(); props.onPointerUp?.(event); } : undefined}
       />
       <span
+        data-trim-edge="end"
         className="absolute inset-y-0 right-0 z-[4] w-2.5 cursor-ew-resize after:absolute after:bottom-2 after:right-1 after:top-2 after:w-[3px] after:rounded-full after:bg-white/85 after:opacity-0 after:transition group-hover:after:opacity-100"
         onPointerDown={(event) => props.onTrimPointerDown(event, "end")}
+        onPointerMove={props.onPointerMove ? (event) => { event.stopPropagation(); props.onPointerMove?.(event); } : undefined}
+        onPointerUp={props.onPointerUp ? (event) => { event.stopPropagation(); props.onPointerUp?.(event); } : undefined}
+        onPointerCancel={props.onPointerUp ? (event) => { event.stopPropagation(); props.onPointerUp?.(event); } : undefined}
       />
     </>
   );
@@ -71,6 +118,8 @@ export function TimelineClip(props: {
     edge: TimelineTrimEdge
   ) => void;
   onMovePointerDown: (event: ReactPointerEvent<HTMLElement>, segmentId: string) => void;
+  onInteractionPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onInteractionPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const item = props.clip.item;
   const { frames } = useMediaFilmstrip(item);
@@ -106,6 +155,8 @@ export function TimelineClip(props: {
       <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
       <ClipTrimEdges
         onTrimPointerDown={(event, edge) => props.onTrimPointerDown(event, props.clip.id, edge)}
+        onPointerMove={props.onInteractionPointerMove}
+        onPointerUp={props.onInteractionPointerUp}
       />
     </button>
   );
@@ -127,6 +178,7 @@ export function TimelineZoomClip(props: {
     <button
       className={cx(clipBaseClassName, "bg-[#5b3287]", props.selected && selectedOutlineClassName.zoom)}
       type="button"
+      data-zoom-effect-id={props.effect.id}
       title={`Zoom (${props.effect.speed})`}
       style={createTimelineClipStyle(
         props.effect.start,
@@ -161,6 +213,7 @@ export function TimelineSpeedClip(props: {
     <button
       className={cx(clipBaseClassName, "bg-[#3f6212]", props.selected && selectedOutlineClassName.speed)}
       type="button"
+      data-speed-effect-id={props.effect.id}
       title={`Speed ${props.effect.rate}x`}
       style={createTimelineClipStyle(
         props.effect.start,
@@ -196,6 +249,7 @@ export function TimelineSubtitleClip(props: {
     <button
       className={cx(clipBaseClassName, "bg-[#7f2945]", props.selected && selectedOutlineClassName.subtitle)}
       type="button"
+      data-subtitle-id={props.subtitle.id}
       title={props.subtitle.text}
       style={createTimelineClipStyle(
         props.subtitle.start,
@@ -210,6 +264,32 @@ export function TimelineSubtitleClip(props: {
       <ClipTrimEdges
         onTrimPointerDown={(event, edge) => props.onDragPointerDown(event, props.subtitle.id, edge)}
       />
+    </button>
+  );
+}
+
+/** A freeform text layer on the shared timeline. */
+export function TimelineTextClip(props: {
+  overlay: TextOverlay;
+  duration: number;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      className={cx(clipBaseClassName, "bg-[#075985]", props.selected && selectedOutlineClassName.text)}
+      type="button"
+      data-text-overlay-clip-id={props.overlay.id}
+      title={props.overlay.text}
+      style={createTimelineClipStyle(
+        props.overlay.start,
+        props.overlay.end - props.overlay.start,
+        props.duration
+      )}
+      onClick={props.onSelect}
+    >
+      <Pilcrow className="relative z-[2] flex-none" size={13} />
+      <strong className="relative z-[2] min-w-0 truncate">{props.overlay.text || "Text"}</strong>
     </button>
   );
 }

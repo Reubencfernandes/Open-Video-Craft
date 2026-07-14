@@ -21,15 +21,14 @@ import type {
 } from "react";
 import {
   areTimelineSegmentsEqual,
-  canSplitTimelineSegment,
-  findTimelineSegmentAtTime,
   getTimelineMediaDuration,
   getTimelineTrackKind,
   moveTimelineSegment,
   resolveAudioLane,
   syncTimelineSegments
 } from "./timeline-utils";
-import { clampNumber, createId } from "./utils";
+import { splitTimelineSegments } from "./timeline-split";
+import { createId } from "./utils";
 import { mediaDragType } from "./types";
 import type {
   EditorMediaItem,
@@ -46,6 +45,7 @@ type UseTimelineEditingParams = {
   mediaById: Map<string, EditorMediaItem>;
   mediaDurationById: Map<string, number>;
   scheduleTimelinePlaybackSync: (segments: TimelineSegment[]) => void;
+  seek: (time: number) => void;
   selectedItemId: string | null;
   selectedTimelineItemId: string | null;
   selectedTimelineSegmentId: string | null;
@@ -73,6 +73,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     mediaById,
     mediaDurationById,
     scheduleTimelinePlaybackSync,
+    seek,
     selectedItemId,
     selectedTimelineItemId,
     selectedTimelineSegmentId,
@@ -276,39 +277,17 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
   }
 
   function splitTimelineSegment(segmentId: string | null, time: number) {
-    const targetSegment =
-      (segmentId ? timelineSegments.find((segment) => segment.id === segmentId) : null) ??
-      findTimelineSegmentAtTime(timelineSegments, time);
-
-    if (!targetSegment || !canSplitTimelineSegment(targetSegment, time)) {
+    const result = splitTimelineSegments(timelineSegments, segmentId, time);
+    if (!result) {
       setTimelineContextMenu(null);
       return;
     }
 
-    const splitTime = clampNumber(time, targetSegment.start + 0.1, targetSegment.end - 0.1);
-    const nextSegmentId = `${targetSegment.id}-split-${Date.now()}`;
-
-    commitTimelineSegments((segments) =>
-      segments.flatMap((segment) => {
-        if (segment.id !== targetSegment.id) {
-          return [segment];
-        }
-
-        return [
-          {
-            ...segment,
-            end: splitTime
-          },
-          {
-            ...segment,
-            id: nextSegmentId,
-            start: splitTime,
-            sourceStart: segment.sourceStart + (splitTime - segment.start)
-          }
-        ];
-      })
-    );
-    setSelectedTimelineSegmentId(nextSegmentId);
+    commitTimelineSegments(() => result.segments);
+    // Keep the original half selected and preview it from its beginning. This
+    // avoids the split action unexpectedly leaving playback on the right half.
+    setSelectedTimelineSegmentId(result.left.id);
+    window.queueMicrotask(() => seek(result.left.start));
     setTimelineContextMenu(null);
   }
 

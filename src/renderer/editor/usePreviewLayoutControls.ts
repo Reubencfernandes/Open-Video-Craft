@@ -1,7 +1,7 @@
 /**
  * Pointer drag/resize of the screen and camera inside the preview frame.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   Dispatch,
   PointerEvent as ReactPointerEvent,
@@ -14,13 +14,16 @@ import {
   getScreenResizeDirection,
   resizeCameraFrameAroundCenter
 } from "./layout-geometry";
+import {
+  emptyViewportSnapGuides,
+  snapRectangleToViewportGrid,
+  type ViewportSnapOverlay
+} from "./layout-snapping";
 import type {
   CameraContentTransform,
   CameraFrame,
   CameraLayoutDrag,
   CameraPosition,
-  EditorTool,
-  LayoutMode,
   ScreenLayoutDrag,
   ScreenLayoutDragMode
 } from "./types";
@@ -33,10 +36,8 @@ type ScreenPosition = {
 };
 
 type UsePreviewLayoutControlsParams = {
-  activeTool: EditorTool;
   cameraEditEnabled: boolean;
   cameraFrame: CameraFrame;
-  layoutMode: LayoutMode;
   screenEditEnabled: boolean;
   screenPosition: ScreenPosition;
   setCameraContentTransform: Dispatch<SetStateAction<CameraContentTransform>>;
@@ -48,10 +49,8 @@ type UsePreviewLayoutControlsParams = {
 
 export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams) {
   const {
-    activeTool,
     cameraEditEnabled,
     cameraFrame,
-    layoutMode,
     screenEditEnabled,
     screenPosition,
     setCameraContentTransform,
@@ -63,6 +62,10 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
 
   const screenLayoutDragRef = useRef<ScreenLayoutDrag | null>(null);
   const cameraLayoutDragRef = useRef<CameraLayoutDrag | null>(null);
+  const [snapOverlay, setSnapOverlay] = useState<ViewportSnapOverlay>({
+    target: null,
+    guides: emptyViewportSnapGuides
+  });
 
   useEffect(() => {
     function handlePointerMove(event: PointerEvent) {
@@ -101,7 +104,7 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
     event: ReactPointerEvent<HTMLElement>,
     mode: ScreenLayoutDragMode
   ) {
-    if (event.button !== 0 || activeTool !== "layout" || layoutMode === "camera-only") {
+    if (event.button !== 0 || !screenEditEnabled) {
       return;
     }
 
@@ -110,7 +113,15 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
       ? target
       : target?.closest<HTMLElement>("[data-screen-edit-overlay]");
     const bounds = overlay?.getBoundingClientRect();
-    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+    const canvasBounds = overlay?.parentElement?.getBoundingClientRect();
+    if (
+      !bounds ||
+      !canvasBounds ||
+      bounds.width <= 0 ||
+      bounds.height <= 0 ||
+      canvasBounds.width <= 0 ||
+      canvasBounds.height <= 0
+    ) {
       return;
     }
 
@@ -122,8 +133,16 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
       startClientY: event.clientY,
       startPosition: screenPosition,
       boundsWidth: bounds.width,
-      boundsHeight: bounds.height
+      boundsHeight: bounds.height,
+      canvasWidth: canvasBounds.width,
+      canvasHeight: canvasBounds.height,
+      startBoundsLeft: bounds.left - canvasBounds.left,
+      startBoundsTop: bounds.top - canvasBounds.top,
+      // CSS translate percentages use the untransformed element box.
+      translationWidth: Math.max(1, overlay?.offsetWidth ?? bounds.width),
+      translationHeight: Math.max(1, overlay?.offsetHeight ?? bounds.height)
     };
+    setSnapOverlay({ target: "screen", guides: emptyViewportSnapGuides });
   }
 
   function updateScreenLayoutDrag(clientX: number, clientY: number) {
@@ -135,11 +154,32 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
     const deltaX = clientX - drag.startClientX;
     const deltaY = clientY - drag.startClientY;
     if (drag.mode === "move") {
+      const rawLeft = drag.startBoundsLeft + deltaX;
+      const rawTop = drag.startBoundsTop + deltaY;
+      const snapped = snapRectangleToViewportGrid({
+        left: rawLeft,
+        top: rawTop,
+        width: drag.boundsWidth,
+        height: drag.boundsHeight,
+        canvasWidth: drag.canvasWidth,
+        canvasHeight: drag.canvasHeight
+      });
+      const snappedDeltaX = deltaX + (snapped.left - rawLeft);
+      const snappedDeltaY = deltaY + (snapped.top - rawTop);
       setScreenPosition({
         ...drag.startPosition,
-        x: clampNumber(drag.startPosition.x + (deltaX / drag.boundsWidth) * 100, -120, 120),
-        y: clampNumber(drag.startPosition.y + (deltaY / drag.boundsHeight) * 100, -120, 120)
+        x: clampNumber(
+          drag.startPosition.x + (snappedDeltaX / drag.translationWidth) * 100,
+          -120,
+          120
+        ),
+        y: clampNumber(
+          drag.startPosition.y + (snappedDeltaY / drag.translationHeight) * 100,
+          -120,
+          120
+        )
       });
+      setSnapOverlay({ target: "screen", guides: snapped.guides });
       return;
     }
 
@@ -156,7 +196,11 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
   }
 
   function finishScreenLayoutDrag() {
+    if (!screenLayoutDragRef.current) {
+      return;
+    }
     screenLayoutDragRef.current = null;
+    setSnapOverlay({ target: null, guides: emptyViewportSnapGuides });
   }
 
   function beginCameraLayoutDrag(
@@ -194,6 +238,7 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
       canvasWidth: canvasBounds.width,
       canvasHeight: canvasBounds.height
     };
+    setSnapOverlay({ target: "camera", guides: emptyViewportSnapGuides });
   }
 
   function updateCameraLayoutDrag(clientX: number, clientY: number) {
@@ -209,15 +254,24 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
     const startSize = (drag.startFrame.size / 100) * drag.canvasWidth;
 
     if (drag.mode === "move") {
+      const snapped = snapRectangleToViewportGrid({
+        left: startLeft + deltaX,
+        top: startTop + deltaY,
+        width: startSize,
+        height: startSize,
+        canvasWidth: drag.canvasWidth,
+        canvasHeight: drag.canvasHeight
+      });
       setCameraFrame(
         createCameraFrameFromPixels(
-          startLeft + deltaX,
-          startTop + deltaY,
+          snapped.left,
+          snapped.top,
           startSize,
           drag.canvasWidth,
           drag.canvasHeight
         )
       );
+      setSnapOverlay({ target: "camera", guides: snapped.guides });
       return;
     }
 
@@ -246,7 +300,11 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
   }
 
   function finishCameraLayoutDrag() {
+    if (!cameraLayoutDragRef.current) {
+      return;
+    }
     cameraLayoutDragRef.current = null;
+    setSnapOverlay({ target: null, guides: emptyViewportSnapGuides });
   }
 
   function selectCameraPosition(position: CameraPosition) {
@@ -283,6 +341,7 @@ export function usePreviewLayoutControls(params: UsePreviewLayoutControlsParams)
     resetCameraContentTransform,
     selectCameraPosition,
     selectCameraSize,
+    snapOverlay,
     updateCameraContentTransform
   };
 }

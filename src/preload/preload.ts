@@ -4,13 +4,17 @@
  */
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
+  AiConnectionStatus,
+  AiProvider,
   AppInfo,
+  ConfigureAiProviderRequest,
   CreateProjectRequest,
   DesktopPermissionKind,
   DesktopPermissionStatus,
   ExportVideoRequest,
   ExportVideoResult,
   EditorProjectStateView,
+  EditorSessionStateRequest,
   FailRecordingRequest,
   ImportedMediaFile,
   ProjectLibraryEntry,
@@ -22,10 +26,18 @@ import type {
   StartRecordingRequest,
   StopRecordingRequest,
   UpdateStatus,
+  UndoAgentEditRequest,
   WriteChunkRequest
 } from "../shared/types";
 
 const api = {
+  ai: {
+    getStatus: (): Promise<AiConnectionStatus> => ipcRenderer.invoke("ai:get-status"),
+    configure: (request: ConfigureAiProviderRequest): Promise<AiConnectionStatus> =>
+      ipcRenderer.invoke("ai:configure", request),
+    disconnect: (provider: AiProvider): Promise<AiConnectionStatus> =>
+      ipcRenderer.invoke("ai:disconnect", provider)
+  },
   app: {
     getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
     openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:open-external", url)
@@ -119,6 +131,15 @@ const api = {
       ipcRenderer.invoke("editor:load-project-state", projectId),
     saveProjectState: (request: SaveEditorProjectStateRequest): Promise<EditorProjectStateView> =>
       ipcRenderer.invoke("editor:save-project-state", request),
+    setSessionState: (request: EditorSessionStateRequest): Promise<boolean> =>
+      ipcRenderer.invoke("editor:set-session-state", request),
+    undoAgentEdit: (request: UndoAgentEditRequest): Promise<EditorProjectStateView> =>
+      ipcRenderer.invoke("editor:undo-agent-edit", request),
+    onProjectStateChanged: (callback: (state: EditorProjectStateView) => void): (() => void) => {
+      const listener = (_event: unknown, state: EditorProjectStateView) => callback(state);
+      ipcRenderer.on("editor:project-state-changed", listener);
+      return () => ipcRenderer.removeListener("editor:project-state-changed", listener);
+    },
     exportVideo: (request: ExportVideoRequest): Promise<ExportVideoResult | null> =>
       ipcRenderer.invoke("editor:export-video", request)
   },

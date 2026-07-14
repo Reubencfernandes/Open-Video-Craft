@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  getSafeMediaSeekTarget,
   getMediaTimeForTimelineTime,
   getTimelineTimeForMediaTime,
+  isMediaTimePlayable,
   shouldSeekPrimaryVideo,
   shouldSeekSecondaryMedia
 } from "../src/renderer/editor/playback-sync";
@@ -79,6 +81,13 @@ describe("playback sync", () => {
   it("maps media time and timeline time through the clip source offset", () => {
     expect(getMediaTimeForTimelineTime(clip, 14.5)).toBe(32.5);
     expect(getTimelineTimeForMediaTime(clip, 32.5)).toBe(14.5);
+  });
+
+  it("clamps short secondary tracks and prevents end-of-media restarts", () => {
+    expect(getSafeMediaSeekTarget(10.2, 10)).toBeCloseTo(9.999);
+    expect(isMediaTimePlayable(10.2, 10)).toBe(false);
+    expect(isMediaTimePlayable(9.5, 10)).toBe(true);
+    expect(isMediaTimePlayable(43, Number.POSITIVE_INFINITY)).toBe(true);
   });
 
   it("throttles secondary drift seeks while playback is running", () => {

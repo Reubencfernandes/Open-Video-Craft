@@ -2,7 +2,7 @@
  * Export modal: format and resolution selection.
  */
 import { Download, X } from "lucide-react";
-import type { ExportResolution, ExportVideoFormat } from "../../shared/types";
+import type { ExportResolution, ExportSubtitleMode, ExportVideoFormat } from "../../shared/types";
 
 const exportFormats: ExportVideoFormat[] = ["mp4", "webm", "mov"];
 const exportResolutions: ExportResolution[] = ["source", "720p", "1080p", "1440p"];
@@ -11,12 +11,14 @@ const exportResolutions: ExportResolution[] = ["source", "720p", "1080p", "1440p
 export function ExportDialog(props: {
   exportFormat: ExportVideoFormat;
   exportResolution: ExportResolution;
+  exportSubtitleMode: ExportSubtitleMode;
   exporting: boolean;
   hasSubtitles: boolean;
   onClose: () => void;
   onExport: () => void;
   onFormatChange: (format: ExportVideoFormat) => void;
   onResolutionChange: (resolution: ExportResolution) => void;
+  onSubtitleModeChange: (mode: ExportSubtitleMode) => void;
 }) {
   return (
     <div
@@ -57,6 +59,16 @@ export function ExportDialog(props: {
             ))}
           </select>
         </label>
+        {props.hasSubtitles ? (
+          <label className="grid gap-1 text-xs font-extrabold text-slate-400">
+            <span>Subtitles</span>
+            <select className="themed-select h-11" value={props.exportSubtitleMode} onChange={(event) => props.onSubtitleModeChange(event.target.value as ExportSubtitleMode)} disabled={props.exporting}>
+              <option value="burn-in">Burn into video</option>
+              <option value="sidecar">Separate .srt file</option>
+              <option value="none">Do not export</option>
+            </select>
+          </label>
+        ) : null}
         <label className="grid gap-1 text-xs font-extrabold text-slate-400">
           <span>Format</span>
           <select
@@ -74,9 +86,9 @@ export function ExportDialog(props: {
         </label>
         <div className="grid gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-xs leading-5 text-slate-300">
           <strong className="text-white">What this export includes</strong>
-          <span>Video trim, resolution, master/per-track audio levels, microphone, system audio, and background audio.</span>
-          <span>{props.hasSubtitles ? "Subtitles are exported beside the video as an .srt file." : "No subtitles are currently present."}</span>
-          <span className="text-amber-200">Visual layout/backgrounds, camera compositing, zoom/speed effects, and split/reordered clips are not yet rendered into the video.</span>
+          <span>Timeline cuts, reordered clips, transitions, gaps, resolution, and mixed project/imported audio.</span>
+          <span>{props.hasSubtitles ? "Choose burned-in, sidecar, or disabled subtitles above." : "No subtitles are currently present."}</span>
+          <span className="text-amber-200">Visual layout/backgrounds, camera compositing, zoom/speed effects, and advanced subtitle styles remain preview-only.</span>
         </div>
         <div className="flex items-center justify-between gap-3">
           <button

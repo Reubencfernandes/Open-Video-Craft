@@ -128,7 +128,9 @@ const demoImports = [
 ];
 
 const demoEditorState = {
+  revision: 1,
   savedAt: iso(12),
+  lastMutation: { source: "editor", at: iso(12), editId: null, summary: null },
   imports: demoImports,
   state: {
     v: 2,
@@ -169,6 +171,17 @@ const demoEditorState = {
 };
 
 const api = {
+  ai: {
+    getStatus: async () => ({
+      privacyAccepted: false,
+      providers: ["codex", "claude"].map((provider) => ({
+        provider, installed: true, supported: true, configured: false, version: `${provider} demo`,
+        setupCommand: `${provider} mcp add open-video-craft`, message: null
+      }))
+    }),
+    configure: async () => api.ai.getStatus(),
+    disconnect: async () => api.ai.getStatus()
+  },
   app: {
     getInfo: async () => appInfo,
     openExternal: async () => true
@@ -235,6 +248,9 @@ const api = {
     removeImportedMedia: async () => true,
     loadProjectState: async () => demoEditorState,
     saveProjectState: async () => demoEditorState,
+    setSessionState: async () => true,
+    undoAgentEdit: async () => demoEditorState,
+    onProjectStateChanged: () => () => undefined,
     exportVideo: async () => null
   },
   overlays: {

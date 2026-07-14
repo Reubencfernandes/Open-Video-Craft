@@ -10,6 +10,7 @@ import path from "node:path";
 import type { BrowserWindow } from "electron";
 import { chooseExportPath as showExportPathDialog } from "./file-dialogs";
 import { exportVideo } from "./ffmpeg";
+import { exportEditorProjectToPath } from "./composition-export";
 import type { ProjectStore } from "./project-store";
 import { writeSubtitleSidecar } from "./subtitle-export";
 import type { ExportVideoRequest, ExportVideoResult } from "../shared/types";
@@ -39,6 +40,24 @@ export async function exportEditorVideo(
 
   if (!outputPath) {
     return null;
+  }
+
+  if (request.source.kind === "project") {
+    const document = await context.projectStore.readEditorState(request.source.projectId);
+    if (document?.state.timelineSegments.some((segment) => segment.track === "video")) {
+      const project = context.projectStore.getProject(request.source.projectId);
+      return exportEditorProjectToPath({
+        rootPath: project.rootPath,
+        project,
+        document,
+        outputPath,
+        format: request.format,
+        resolution: request.resolution,
+        subtitleMode: request.subtitleMode ?? "burn-in",
+        trimStart: request.trimStart,
+        trimEnd: request.trimEnd
+      });
+    }
   }
 
   const bytesWritten = await exportVideo({

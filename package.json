@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "1.6.0",
+  "version": "1.0.0",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -26,6 +26,7 @@
     "dist:mac:universal": "node scripts/check-mac-signing.mjs && npm run build:icons && npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
+    "test:mcp": "npm run build:main && node scripts/test-mcp-smoke.mjs",
     "start": "electron dist-electron/main/main.js"
   },
   "build": {
@@ -34,7 +35,8 @@
     "copyright": "Copyright (c) 2026 Reuben Chagas Fernandes",
     "asar": true,
     "asarUnpack": [
-      "node_modules/ffmpeg-static/**/*"
+      "node_modules/ffmpeg-static/**/*",
+      "node_modules/onnxruntime-node/**/*"
     ],
     "electronUpdaterCompatibility": ">=2.16",
     "directories": {
@@ -132,11 +134,13 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0",
     "lucide-react": "^1.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "wavesurfer.js": "^7.12.8"
+    "wavesurfer.js": "^7.12.8",
+    "zod": "^4.4.3"
   }
 }

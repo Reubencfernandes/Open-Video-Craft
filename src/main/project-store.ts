@@ -13,7 +13,6 @@ import {
 } from "../shared/defaults";
 import {
   createProjectFolderName,
-  editorStateFileName,
   getMediaTrackRelativePath,
   importsDirectoryName,
   mediaDirectoryName,
@@ -22,15 +21,14 @@ import {
   slugify
 } from "./project-paths";
 import {
-  cloneJsonValue,
   exists,
-  isEditorProjectStateFile,
   isEditorProjectImportInput,
-  isMissingFileError,
   readProjectFile,
   sanitizeDurationMs,
   writeJsonFileAtomic
 } from "./project-file";
+import { readEditorDocument, saveEditorDocument } from "./editor-document-store";
+import type { EditorStateSnapshot } from "../shared/editor-domain";
 import type {
   EditorProjectImport,
   EditorProjectImportInput,
@@ -319,7 +317,8 @@ export class ProjectStore {
   async saveEditorState(
     projectId: string,
     input: {
-      state: unknown;
+      baseRevision?: number;
+      state: EditorStateSnapshot;
       imports: EditorProjectImportInput[];
     },
     resolveImportedPath: (importId: string) => string | null
@@ -331,37 +330,19 @@ export class ProjectStore {
           this.persistEditorImport(record, imported, resolveImportedPath(imported.id))
         )
       );
-      const file: EditorProjectStateFile = {
-        schemaVersion: 1,
-        savedAt: this.clock().toISOString(),
-        state: cloneJsonValue(input.state),
-        imports
-      };
-
-      await writeJsonFileAtomic(path.join(record.rootPath, editorStateFileName), file);
-      return file;
+      return saveEditorDocument({
+        rootPath: record.rootPath,
+        baseRevision: input.baseRevision ?? 0,
+        state: input.state,
+        imports,
+        source: "editor"
+      });
     });
   }
 
   async readEditorState(projectId: string): Promise<EditorProjectStateFile | null> {
     const record = this.getRecord(projectId);
-    const filePath = path.join(record.rootPath, editorStateFileName);
-
-    try {
-      const raw = await fs.readFile(filePath, "utf8");
-      const parsed = JSON.parse(raw) as unknown;
-      if (!isEditorProjectStateFile(parsed)) {
-        throw new Error(`"${filePath}" is not a valid Open Video Craft editor state file.`);
-      }
-
-      return parsed;
-    } catch (error) {
-      if (isMissingFileError(error)) {
-        return null;
-      }
-
-      throw error;
-    }
+    return readEditorDocument(record.rootPath);
   }
 
   resolveProjectFile(projectId: string, relativePath: string): string {
@@ -548,4 +529,3 @@ export function createMediaUrl(projectId: string, relativePath: string): string 
 
   return `ovc-media://project/${encodeURIComponent(projectId)}/${encodedPath}`;
 }
-

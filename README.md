@@ -54,6 +54,7 @@ Whisper model — your recordings never leave your machine.
 ### Editing
 
 - Multi-lane timeline: video, audio lanes, zoom, speed, and subtitle tracks.
+- Export-correct crossfade, fade-through-black, slide-left, and wipe-left clip transitions.
 - Move, trim, split, delete, and **copy/paste clips** — with undo/redo.
 - Horizontal timeline zoom and a resizable timeline panel.
 - Zoom-in effects with an adjustable focal point; speed sections up to 5×.
@@ -67,12 +68,30 @@ Whisper model — your recordings never leave your machine.
   invalid or unsupported `editor.json`.
 - Export to MP4 / WebM / MOV at source, 720p, 1080p, or 1440p, with microphone,
   system audio, background audio, per-track levels, and optional `.srt` subtitles.
+- Connect Claude Code or Codex through the built-in local MCP server so an AI
+  agent can inspect, cut, sequence, transition, subtitle, mix, undo, and export a project.
 
-> **Current export scope:** trim, resolution, source/system/microphone/background
-> audio, gain/mute settings, and subtitle sidecars are exported. Camera
-> compositing, visual layouts/backgrounds, zoom/speed effects, and split or
-> reordered timeline clips are preview/editor features that are not yet rendered
-> into the exported video. The export dialog shows this before every export.
+> **Current export scope:** timeline cuts, reordered clips, clip transitions, intentional gaps,
+> resolution, source/system/microphone/imported audio, gain/mute settings, and
+> clean burned-in or sidecar subtitles are exported. Camera compositing, visual
+> layouts/backgrounds, zoom/speed effects, and advanced subtitle styles remain
+> preview-only. The export dialog shows this before every export.
+
+### AI editing with Claude Code or Codex
+
+For module boundaries, revision/locking behavior, data flow, privacy guarantees,
+and extension guidance, see [AI integration architecture](docs/AI_INTEGRATION.md).
+
+Open a saved project, select **AI** in the editor top bar, acknowledge the
+context-sharing notice, and connect either installed client. Open Video Craft
+registers one user-scoped `open-video-craft` stdio MCP server; it does not ask
+for or store provider API keys.
+
+The agent can analyze speech, silence, and periodic contact-sheet frames
+locally, then commit a complete edit request as one revision with one-click
+rollback. Raw video is never returned through MCP automatically. Timeline
+metadata, transcripts, and contact-sheet images requested by the connected
+client are handled under that provider's data policy.
 
 ### Keyboard shortcuts
 
@@ -119,6 +138,8 @@ my-recording-project/
     camera.webm
     mic.webm  mic.wav
     system.webm  system.wav   # system audio, when enabled
+  exports/          # videos exported by an AI agent
+  .ovc/             # disposable analysis cache, locks, and bounded AI history
 ```
 
 Paths are relative, so a project keeps working after moving folders or machines.

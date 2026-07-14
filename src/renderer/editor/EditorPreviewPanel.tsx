@@ -9,14 +9,21 @@ import type {
   RefObject
 } from "react";
 import { PreviewContent } from "./PreviewContent";
+import { PreviewLayoutGrid } from "./PreviewLayoutGrid";
+import { PreviewQualityControl } from "./PreviewQualityControl";
 import { PreviewTransportBar } from "./PreviewTransportBar";
 import { TimelineAudioElements } from "./TimelineAudioElements";
+import { TextOverlayLayer } from "./TextOverlayLayer";
+import { usePreviewQuality } from "./usePreviewQuality";
+import { useElementFullscreen } from "./useElementFullscreen";
+import type { ViewportSnapOverlay } from "./layout-snapping";
 import type {
   EditorMediaItem,
   LayoutMode,
   ScreenLayoutDragMode,
   SubtitleSegment,
   SubtitleStyle,
+  TextOverlay,
   TimelineMediaClip
 } from "./types";
 
@@ -35,8 +42,11 @@ export function EditorPreviewPanel(props: {
   cameraVideoStyle: CSSProperties;
   screenEditEnabled: boolean;
   cameraEditEnabled: boolean;
+  snapOverlay: ViewportSnapOverlay;
   activeSubtitle: SubtitleSegment | null;
   subtitleStyle: SubtitleStyle;
+  textOverlays: TextOverlay[];
+  selectedTextOverlayId: string | null;
   currentTime: number;
   playing: boolean;
   currentFrame: number;
@@ -59,7 +69,15 @@ export function EditorPreviewPanel(props: {
   onMediaDuration: (itemId: string, duration: number | null) => void;
   onPreviewZoomChange: (zoom: number) => void;
   onSubtitleClick: (subtitleId: string) => void;
+  onTextOverlayClick: (textOverlayId: string) => void;
+  onTextOverlayMove: (textOverlayId: string, x: number, y: number) => void;
 }) {
+  const { quality: previewQuality, setQuality: setPreviewQuality } = usePreviewQuality();
+  const {
+    elementRef: previewPanelRef,
+    fullscreen: previewFullscreen,
+    toggleFullscreen: togglePreviewFullscreen
+  } = useElementFullscreen<HTMLElement>();
   const previewItem = props.previewItem;
   const previewFrameStyle = {
     ...props.previewFrameStyle,
@@ -67,9 +85,12 @@ export function EditorPreviewPanel(props: {
   } as CSSProperties;
 
   return (
-    <section className="editor-preview order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#11151b]">
+    <section
+      className="editor-preview order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#11151b]"
+      ref={previewPanelRef}
+    >
       <div className="editor-preview-stage flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto bg-[radial-gradient(circle_at_50%_42%,#202630_0%,#141820_48%,#0e1116_100%)] p-5">
-        <div className={props.previewClassName} style={previewFrameStyle}>
+        <div className={`editor-preview-frame ${props.previewClassName}`} style={previewFrameStyle}>
           {previewItem ? (
             <PreviewContent
               item={previewItem}
@@ -84,6 +105,7 @@ export function EditorPreviewPanel(props: {
               activeSubtitle={props.activeSubtitle}
               subtitleStyle={props.subtitleStyle}
               currentTime={props.currentTime}
+              previewQuality={previewQuality}
               mainVideoRef={props.mainVideoRef}
               cameraRef={props.cameraRef}
               onScreenEditPointerDown={props.onScreenEditPointerDown}
@@ -102,10 +124,32 @@ export function EditorPreviewPanel(props: {
               </span>
             </div>
           )}
+          <TextOverlayLayer
+            overlays={props.textOverlays}
+            currentTime={props.currentTime}
+            selectedId={props.selectedTextOverlayId}
+            onSelect={props.onTextOverlayClick}
+            onMove={props.onTextOverlayMove}
+          />
+          <PreviewLayoutGrid overlay={props.snapOverlay} />
         </div>
       </div>
 
-      <PreviewTransportBar playing={props.playing} currentFrame={props.currentFrame} totalFrames={props.totalFrames} onTogglePlayback={props.onTogglePlayback} onSeekFrame={props.onSeekFrame} />
+      <PreviewTransportBar
+        playing={props.playing}
+        currentFrame={props.currentFrame}
+        totalFrames={props.totalFrames}
+        fullscreen={previewFullscreen}
+        transportAccessory={(
+          <PreviewQualityControl
+            quality={previewQuality}
+            onChange={setPreviewQuality}
+          />
+        )}
+        onTogglePlayback={props.onTogglePlayback}
+        onToggleFullscreen={() => void togglePreviewFullscreen()}
+        onSeekFrame={props.onSeekFrame}
+      />
       <TimelineAudioElements clips={props.audioTimelineClips} elementsRef={props.audioElsRef} onMediaDuration={props.onMediaDuration} />
     </section>
   );

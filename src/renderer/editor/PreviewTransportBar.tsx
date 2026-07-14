@@ -7,11 +7,14 @@
 import {
   ChevronsLeft,
   ChevronsRight,
+  Maximize2,
+  Minimize2,
   Pause,
   Play,
   SkipBack,
   SkipForward
 } from "lucide-react";
+import type { ReactNode } from "react";
 
 const transportButtonClassName =
   "grid size-7 place-items-center rounded text-slate-400 transition hover:bg-white/[0.08] hover:text-white";
@@ -20,7 +23,10 @@ export function PreviewTransportBar(props: {
   playing: boolean;
   currentFrame: number;
   totalFrames: number;
+  fullscreen: boolean;
+  transportAccessory?: ReactNode;
   onTogglePlayback: () => void;
+  onToggleFullscreen: () => void;
   onSeekFrame: (frame: number) => void;
 }) {
   return (
@@ -36,6 +42,17 @@ export function PreviewTransportBar(props: {
         </button>
         <button className={transportButtonClassName} type="button" title="Next frame" onClick={() => props.onSeekFrame(props.currentFrame + 1)}><ChevronsRight size={17} /></button>
         <button className={transportButtonClassName} type="button" title="Jump to end" onClick={() => props.onSeekFrame(props.totalFrames)}><SkipForward size={16} /></button>
+        <button
+          className={transportButtonClassName}
+          type="button"
+          title={props.fullscreen ? "Exit fullscreen preview" : "Show preview fullscreen"}
+          aria-label={props.fullscreen ? "Exit fullscreen preview" : "Show preview fullscreen"}
+          aria-pressed={props.fullscreen}
+          onClick={props.onToggleFullscreen}
+        >
+          {props.fullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
+        {props.transportAccessory}
       </div>
 
       {/* Empty third column keeps playback controls optically centered. */}

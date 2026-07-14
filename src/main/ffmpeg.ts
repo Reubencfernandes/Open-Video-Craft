@@ -21,6 +21,83 @@ interface ExportVideoJob {
   preserveSourceAudio: boolean;
 }
 
+export interface TimelineCompositionVideoSegment {
+  id?: string;
+  path: string;
+  kind: "video" | "image";
+  start: number;
+  end: number;
+  sourceStart: number;
+  volume: number;
+  hasAudio: boolean;
+}
+
+export interface TimelineCompositionTransition {
+  fromSegmentId: string;
+  toSegmentId: string;
+  type: "crossfade" | "fade-black" | "slide-left" | "wipe-left";
+  duration: number;
+}
+
+export interface TimelineCompositionZoomEffect {
+  start: number;
+  end: number;
+  speed: "slow" | "medium" | "fast";
+  easing?: "linear" | "ease-in" | "ease-out" | "ease-in-out" | "custom";
+  bezier?: [number, number, number, number];
+  scale: number;
+  targetX: number;
+  targetY: number;
+}
+
+export interface TimelineCompositionSpeedEffect {
+  start: number;
+  end: number;
+  rate: 1 | 2 | 3 | 4 | 5;
+}
+
+export interface TimelineCompositionTextOverlay {
+  start: number;
+  end: number;
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  weight: 400 | 600 | 700 | 800;
+  animation: "none" | "fade" | "pop" | "slide-up";
+}
+
+export interface TimelineCompositionAudioSegment {
+  path: string;
+  start: number;
+  end: number;
+  sourceStart: number;
+  volume: number;
+}
+
+export interface TimelineCompositionJob {
+  videoSegments: TimelineCompositionVideoSegment[];
+  audioSegments: TimelineCompositionAudioSegment[];
+  outputPath: string;
+  format: ExportVideoFormat;
+  resolution: ExportResolution;
+  trimStart: number;
+  trimEnd: number | null;
+  subtitlePath?: string | null;
+  transitions?: TimelineCompositionTransition[];
+  zoomEffects?: TimelineCompositionZoomEffect[];
+  speedEffects?: TimelineCompositionSpeedEffect[];
+  textOverlays?: TimelineCompositionTextOverlay[];
+}
+
+type CompositionPiece = {
+  inputIndex: number;
+  duration: number;
+  gap: boolean;
+  segment?: TimelineCompositionVideoSegment;
+};
+
 // ffmpeg-static reports a path inside app.asar, but asar archives are files,
 // so spawning from them fails with ENOTDIR. The binary is asarUnpack'ed next
 // to the archive; point at that copy when packaged.
@@ -178,6 +255,387 @@ export async function exportVideo(job: ExportVideoJob): Promise<number> {
   return outputStats.size;
 }
 
+/** Render the saved timeline, including reordered clips, gaps and delayed audio. */
+export async function exportTimelineComposition(job: TimelineCompositionJob): Promise<number> {
+  const videoSegments = [...job.videoSegments].sort((a, b) => a.start - b.start);
+  if (videoSegments.length === 0) throw new Error("The timeline has no video clips to export.");
+  const timelineEnd = videoSegments.reduce((max, item) => Math.max(max, item.end), 0);
+  const [width, height] = getResolutionDimensions(job.resolution) ?? [1920, 1080];
+  const args: string[] = ["-y"];
+  const pieces: CompositionPiece[] = [];
+  let inputIndex = 0;
+  let cursor = 0;
+  for (const segment of videoSegments) {
+    if (segment.start > cursor + 0.01) {
+      const duration = segment.start - cursor;
+      args.push("-f", "lavfi", "-t", formatFfmpegNumber(duration), "-i", `color=c=black:s=${width}x${height}:r=30`);
+      pieces.push({ inputIndex: inputIndex++, duration, gap: true });
+    }
+    const duration = segment.end - segment.start;
+    if (segment.kind === "image") {
+      args.push("-loop", "1", "-t", formatFfmpegNumber(duration), "-i", segment.path);
+    } else {
+      if (segment.sourceStart > 0) args.push("-ss", formatFfmpegNumber(segment.sourceStart));
+      args.push("-t", formatFfmpegNumber(duration), "-i", segment.path);
+    }
+    pieces.push({ inputIndex: inputIndex++, duration, gap: false, segment });
+    cursor = Math.max(cursor, segment.end);
+  }
+  if (cursor < timelineEnd) {
+    const duration = timelineEnd - cursor;
+    args.push("-f", "lavfi", "-t", formatFfmpegNumber(duration), "-i", `color=c=black:s=${width}x${height}:r=30`);
+    pieces.push({ inputIndex: inputIndex++, duration, gap: true });
+  }
+
+  const transitions = job.transitions ?? [];
+  const audioInputs: Array<{
+    inputIndex: number;
+    start: number;
+    duration: number;
+    volume: number;
+    fadeIn: number;
+    fadeOut: number;
+  }> = [];
+  for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex += 1) {
+    const piece = pieces[pieceIndex];
+    if (!piece.gap && piece.segment?.hasAudio) {
+      audioInputs.push({
+        inputIndex: piece.inputIndex,
+        start: piece.segment.start,
+        duration: piece.duration,
+        volume: piece.segment.volume,
+        fadeIn: (getTransitionBetween(pieces[pieceIndex - 1], piece, transitions)?.duration ?? 0) / 2,
+        fadeOut: (getTransitionBetween(piece, pieces[pieceIndex + 1], transitions)?.duration ?? 0) / 2
+      });
+    }
+  }
+  for (const segment of job.audioSegments) {
+    const duration = segment.end - segment.start;
+    if (segment.sourceStart > 0) args.push("-ss", formatFfmpegNumber(segment.sourceStart));
+    args.push("-t", formatFfmpegNumber(duration), "-i", segment.path);
+    audioInputs.push({ inputIndex: inputIndex++, start: segment.start, duration, volume: segment.volume, fadeIn: 0, fadeOut: 0 });
+  }
+
+  const filters: string[] = [];
+  appendTransitionVideoFilters(filters, pieces, transitions, width, height);
+  const trimEnd = job.trimEnd && job.trimEnd > job.trimStart ? job.trimEnd : timelineEnd;
+  const sourceDuration = Math.max(0.1, trimEnd - job.trimStart);
+  const speedRegions = createSpeedRegions(job.speedEffects ?? [], job.trimStart, trimEnd);
+  const zoomEffects = clipZoomEffects(job.zoomEffects ?? [], job.trimStart, trimEnd);
+  const subtitleFilter = job.subtitlePath ? `,subtitles='${escapeFilterPath(job.subtitlePath)}'` : "";
+  filters.push(`[vcat]trim=start=${formatFfmpegNumber(job.trimStart)}:end=${formatFfmpegNumber(trimEnd)},setpts=PTS-STARTPTS[vtrim]`);
+  let videoLabel = "vtrim";
+  if (zoomEffects.length > 0) {
+    appendZoomVideoFilter(filters, videoLabel, "vzoom", zoomEffects, width, height);
+    videoLabel = "vzoom";
+  }
+  if (speedRegions.some((region) => region.rate !== 1)) {
+    appendSpeedVideoFilters(filters, videoLabel, "vspeed", speedRegions);
+    videoLabel = "vspeed";
+  }
+  if (job.textOverlays?.length) {
+    appendTextOverlayFilters(filters, videoLabel, "vtext", job.textOverlays, width, height);
+    videoLabel = "vtext";
+  }
+  filters.push(`[${videoLabel}]null${subtitleFilter}[vout]`);
+
+  const audioLabels: string[] = [];
+  audioInputs.forEach((input, index) => {
+    const delay = Math.max(0, Math.round(input.start * 1000));
+    const label = `a${index}`;
+    const fadeIn = input.fadeIn > 0 ? `,afade=t=in:st=0:d=${formatFfmpegNumber(input.fadeIn)}` : "";
+    const fadeOut = input.fadeOut > 0
+      ? `,afade=t=out:st=${formatFfmpegNumber(Math.max(0, input.duration - input.fadeOut))}:d=${formatFfmpegNumber(input.fadeOut)}`
+      : "";
+    filters.push(`[${input.inputIndex}:a:0]atrim=duration=${formatFfmpegNumber(input.duration)},asetpts=PTS-STARTPTS,volume=${formatFfmpegNumber(clampVolume(input.volume))}${fadeIn}${fadeOut},adelay=${delay}:all=1[${label}]`);
+    audioLabels.push(`[${label}]`);
+  });
+  if (audioLabels.length > 0) {
+    filters.push(`${audioLabels.join("")}amix=inputs=${audioLabels.length}:duration=longest:dropout_transition=0:normalize=0[amix]`);
+    filters.push(`[amix]atrim=start=${formatFfmpegNumber(job.trimStart)}:end=${formatFfmpegNumber(trimEnd)},asetpts=PTS-STARTPTS[atrim]`);
+    if (speedRegions.some((region) => region.rate !== 1)) {
+      appendSpeedAudioFilters(filters, "atrim", "aout", speedRegions);
+    } else {
+      filters.push("[atrim]anull[aout]");
+    }
+  }
+
+  args.push("-filter_complex", filters.join(";"), "-map", "[vout]");
+  if (audioLabels.length > 0) args.push("-map", "[aout]"); else args.push("-an");
+  const outputDuration = speedRegions.reduce(
+    (total, region) => total + (region.end - region.start) / region.rate,
+    0
+  ) || sourceDuration;
+  args.push(...createCodecArgs(job.format), "-t", formatFfmpegNumber(Math.max(0.1, outputDuration)), job.outputPath);
+  await runProcess(resolveFfmpegPath(), args);
+  return (await fs.stat(job.outputPath)).size;
+}
+
+type RelativeSpeedRegion = { start: number; end: number; rate: 1 | 2 | 3 | 4 | 5 };
+type RelativeZoomEffect = TimelineCompositionZoomEffect & { start: number; end: number };
+
+/** Split a trimmed timeline into contiguous normal/speed regions. */
+function createSpeedRegions(
+  effects: TimelineCompositionSpeedEffect[],
+  trimStart: number,
+  trimEnd: number
+): RelativeSpeedRegion[] {
+  const duration = Math.max(0, trimEnd - trimStart);
+  const clipped = effects
+    .map((effect) => ({
+      start: Math.max(0, effect.start - trimStart),
+      end: Math.min(duration, effect.end - trimStart),
+      rate: effect.rate
+    }))
+    .filter((effect) => effect.end - effect.start >= 0.01)
+    .sort((a, b) => a.start - b.start);
+  const regions: RelativeSpeedRegion[] = [];
+  let cursor = 0;
+  for (const effect of clipped) {
+    if (effect.start > cursor + 0.001) regions.push({ start: cursor, end: effect.start, rate: 1 });
+    regions.push({ start: Math.max(cursor, effect.start), end: effect.end, rate: effect.rate });
+    cursor = Math.max(cursor, effect.end);
+  }
+  if (cursor < duration - 0.001) regions.push({ start: cursor, end: duration, rate: 1 });
+  return regions.length > 0 ? regions : [{ start: 0, end: duration, rate: 1 }];
+}
+
+function clipZoomEffects(
+  effects: TimelineCompositionZoomEffect[],
+  trimStart: number,
+  trimEnd: number
+): RelativeZoomEffect[] {
+  const duration = Math.max(0, trimEnd - trimStart);
+  return effects.map((effect) => ({
+    ...effect,
+    start: Math.max(0, effect.start - trimStart),
+    end: Math.min(duration, effect.end - trimStart)
+  })).filter((effect) => effect.end - effect.start >= 0.01);
+}
+
+/** Dynamic scale + fixed crop reproduces the editor's focus-point zoom. */
+function appendZoomVideoFilter(
+  filters: string[],
+  inputLabel: string,
+  outputLabel: string,
+  effects: RelativeZoomEffect[],
+  width: number,
+  height: number
+): void {
+  const strengthTerms = effects.map(createZoomStrengthExpression);
+  const scale = `1${effects.map((effect, index) => `+(${strengthTerms[index]})*${formatFfmpegNumber(effect.scale - 1)}`).join("")}`;
+  const originX = `50${effects.map((effect, index) => `+(${strengthTerms[index]})*${formatFfmpegNumber(effect.targetX - 50)}`).join("")}`;
+  const originY = `50${effects.map((effect, index) => `+(${strengthTerms[index]})*${formatFfmpegNumber(effect.targetY - 50)}`).join("")}`;
+  filters.push(
+    `[${inputLabel}]scale=w='trunc(${width}*(${scale})/2)*2':h='trunc(${height}*(${scale})/2)*2':eval=frame,` +
+    `crop=${width}:${height}:x='(in_w-out_w)*((${originX})/100)':y='(in_h-out_h)*((${originY})/100)'[${outputLabel}]`
+  );
+}
+
+function createZoomStrengthExpression(effect: RelativeZoomEffect): string {
+  const duration = effect.end - effect.start;
+  const rampBySpeed = { slow: 1.6, medium: 1.1, fast: 0.45 } as const;
+  const ramp = Math.max(0.01, Math.min(rampBySpeed[effect.speed], duration / 2));
+  const raw = `min(1,min(max(0,(t-${formatFfmpegNumber(effect.start)})/${formatFfmpegNumber(ramp)}),max(0,(${formatFfmpegNumber(effect.end)}-t)/${formatFfmpegNumber(ramp)})))`;
+  const eased = createZoomEasingExpression(raw, effect);
+  return `if(between(t,${formatFfmpegNumber(effect.start)},${formatFfmpegNumber(effect.end)}),${eased},0)`;
+}
+
+function createZoomEasingExpression(progress: string, effect: RelativeZoomEffect): string {
+  switch (effect.easing ?? "ease-in-out") {
+    case "linear":
+      return progress;
+    case "ease-in":
+      return `(${progress})*(${progress})`;
+    case "ease-out":
+      return `1-(1-(${progress}))*(1-(${progress}))`;
+    case "custom": {
+      const [, y1, , y2] = effect.bezier ?? [0.42, 0, 0.58, 1];
+      return `3*(1-(${progress}))*(1-(${progress}))*(${progress})*${formatFfmpegNumber(y1)}+3*(1-(${progress}))*(${progress})*(${progress})*${formatFfmpegNumber(y2)}+(${progress})*(${progress})*(${progress})`;
+    }
+    case "ease-in-out":
+      return `(${progress})*(${progress})*(3-2*(${progress}))`;
+  }
+}
+
+function appendSpeedVideoFilters(
+  filters: string[],
+  inputLabel: string,
+  outputLabel: string,
+  regions: RelativeSpeedRegion[]
+): void {
+  const sources = regions.map((_region, index) => `vspeed${index}src`);
+  filters.push(`[${inputLabel}]split=${regions.length}${sources.map((label) => `[${label}]`).join("")}`);
+  const outputs = regions.map((region, index) => {
+    const output = `vspeed${index}`;
+    filters.push(
+      `[${sources[index]}]trim=start=${formatFfmpegNumber(region.start)}:end=${formatFfmpegNumber(region.end)},` +
+      `setpts=(PTS-STARTPTS)/${formatFfmpegNumber(region.rate)}[${output}]`
+    );
+    return `[${output}]`;
+  });
+  filters.push(`${outputs.join("")}concat=n=${outputs.length}:v=1:a=0[${outputLabel}]`);
+}
+
+function appendSpeedAudioFilters(
+  filters: string[],
+  inputLabel: string,
+  outputLabel: string,
+  regions: RelativeSpeedRegion[]
+): void {
+  const sources = regions.map((_region, index) => `aspeed${index}src`);
+  filters.push(`[${inputLabel}]asplit=${regions.length}${sources.map((label) => `[${label}]`).join("")}`);
+  const outputs = regions.map((region, index) => {
+    const output = `aspeed${index}`;
+    filters.push(
+      `[${sources[index]}]atrim=start=${formatFfmpegNumber(region.start)}:end=${formatFfmpegNumber(region.end)},` +
+      `asetpts=PTS-STARTPTS,atempo=${formatFfmpegNumber(region.rate)}[${output}]`
+    );
+    return `[${output}]`;
+  });
+  filters.push(`${outputs.join("")}concat=n=${outputs.length}:v=0:a=1[${outputLabel}]`);
+}
+
+function appendTextOverlayFilters(
+  filters: string[],
+  inputLabel: string,
+  outputLabel: string,
+  overlays: TimelineCompositionTextOverlay[],
+  width: number,
+  height: number
+): void {
+  let currentLabel = inputLabel;
+  overlays.forEach((overlay, index) => {
+    const nextLabel = index === overlays.length - 1 ? outputLabel : `vtext${index}`;
+    const start = formatFfmpegNumber(overlay.start);
+    const end = formatFfmpegNumber(overlay.end);
+    const ramp = formatFfmpegNumber(Math.min(0.4, Math.max(0.08, (overlay.end - overlay.start) / 2)));
+    const progress = `clip((t-${start})/${ramp},0,1)`;
+    const baseFontSize = Math.max(12, Math.round(overlay.size * height / 1080));
+    const fontSize = overlay.animation === "pop"
+      ? `'${baseFontSize}*(0.72+0.28*${progress})'`
+      : String(baseFontSize);
+    const x = `${formatFfmpegNumber(overlay.x / 100)}*w-text_w/2`;
+    const baseY = `${formatFfmpegNumber(overlay.y / 100)}*h-text_h/2`;
+    const y = overlay.animation === "slide-up"
+      ? `${baseY}+(1-${progress})*${formatFfmpegNumber(height * 0.04)}`
+      : baseY;
+    const alpha = overlay.animation === "none" ? "1" : `'${progress}'`;
+    const borderWidth = overlay.weight >= 700 ? 1 : 0;
+    filters.push(
+      `[${currentLabel}]drawtext=text='${escapeDrawtextText(overlay.text)}':` +
+      `fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
+      `alpha=${alpha}:borderw=${borderWidth}:bordercolor=black@0.55:` +
+      `enable='between(t,${start},${end})'[${nextLabel}]`
+    );
+    currentLabel = nextLabel;
+  });
+}
+
+/**
+ * Builds fixed-duration transition windows. Half of each window comes from the
+ * outgoing clip and half from the incoming clip; cloned boundary frames fill
+ * the opposite halves before FFmpeg's xfade combines them. Clip/timeline
+ * duration therefore stays unchanged and subtitles remain synchronized.
+ */
+function appendTransitionVideoFilters(
+  filters: string[],
+  pieces: CompositionPiece[],
+  transitions: TimelineCompositionTransition[],
+  width: number,
+  height: number
+): void {
+  const transitionAfter = new Map<number, TimelineCompositionTransition>();
+  for (let index = 0; index < pieces.length - 1; index += 1) {
+    const transition = getTransitionBetween(pieces[index], pieces[index + 1], transitions);
+    if (transition) transitionAfter.set(index, transition);
+  }
+
+  const labels = pieces.map((piece, index) => {
+    const incoming = transitionAfter.get(index - 1);
+    const outgoing = transitionAfter.get(index);
+    const lead = (incoming?.duration ?? 0) / 2;
+    const trail = (outgoing?.duration ?? 0) / 2;
+    const base = `v${index}base`;
+    const branchNames = ["body", ...(incoming ? ["head"] : []), ...(outgoing ? ["tail"] : [])];
+    filters.push(
+      `[${piece.inputIndex}:v:0]setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
+      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[${base}]`
+    );
+    const sources = branchNames.map((name) => `v${index}${name}src`);
+    if (sources.length === 1) filters.push(`[${base}]null[${sources[0]}]`);
+    else filters.push(`[${base}]split=${sources.length}${sources.map((label) => `[${label}]`).join("")}`);
+
+    const body = `v${index}body`;
+    filters.push(
+      `[${sources[0]}]trim=start=${formatFfmpegNumber(lead)}:` +
+      `end=${formatFfmpegNumber(piece.duration - trail)},setpts=PTS-STARTPTS[${body}]`
+    );
+    let sourceIndex = 1;
+    let head: string | null = null;
+    let tail: string | null = null;
+    if (incoming) {
+      head = `v${index}head`;
+      filters.push(
+        `[${sources[sourceIndex++]}]trim=start=0:end=${formatFfmpegNumber(lead)},setpts=PTS-STARTPTS,` +
+        `tpad=start_mode=clone:start_duration=${formatFfmpegNumber(lead)},` +
+        `trim=duration=${formatFfmpegNumber(incoming.duration)},setpts=PTS-STARTPTS[${head}]`
+      );
+    }
+    if (outgoing) {
+      tail = `v${index}tail`;
+      filters.push(
+        `[${sources[sourceIndex]}]trim=start=${formatFfmpegNumber(piece.duration - trail)}:` +
+        `end=${formatFfmpegNumber(piece.duration)},setpts=PTS-STARTPTS,` +
+        `tpad=stop_mode=clone:stop_duration=${formatFfmpegNumber(trail)},` +
+        `trim=duration=${formatFfmpegNumber(outgoing.duration)},setpts=PTS-STARTPTS[${tail}]`
+      );
+    }
+    return { body, head, tail };
+  });
+
+  const outputUnits: string[] = [];
+  for (let index = 0; index < pieces.length; index += 1) {
+    outputUnits.push(`[${labels[index].body}]`);
+    const transition = transitionAfter.get(index);
+    if (!transition) continue;
+    const tail = labels[index].tail;
+    const head = labels[index + 1].head;
+    if (!tail || !head) continue;
+    const output = `vtransition${index}`;
+    filters.push(
+      `[${tail}][${head}]xfade=transition=${toFfmpegTransition(transition.type)}:` +
+      `duration=${formatFfmpegNumber(transition.duration)}:offset=0[${output}]`
+    );
+    outputUnits.push(`[${output}]`);
+  }
+  filters.push(`${outputUnits.join("")}concat=n=${outputUnits.length}:v=1:a=0[vcat]`);
+}
+
+function getTransitionBetween(
+  from: CompositionPiece | undefined,
+  to: CompositionPiece | undefined,
+  transitions: TimelineCompositionTransition[]
+): TimelineCompositionTransition | null {
+  if (!from?.segment?.id || !to?.segment?.id || from.gap || to.gap) return null;
+  return transitions.find((item) =>
+    item.fromSegmentId === from.segment?.id && item.toSegmentId === to.segment?.id
+  ) ?? null;
+}
+
+function toFfmpegTransition(type: TimelineCompositionTransition["type"]): string {
+  return ({ crossfade: "fade", "fade-black": "fadeblack", "slide-left": "slideleft", "wipe-left": "wipeleft" })[type];
+}
+
+export async function mediaHasAudio(filePath: string): Promise<boolean> {
+  try {
+    const stderr = await runProcessCapture(resolveFfmpegPath(), ["-i", filePath]);
+    return /Stream #\S+: Audio:/i.test(stderr);
+  } catch (error) {
+    return /Stream #\S+: Audio:/i.test(error instanceof Error ? error.message : String(error));
+  }
+}
+
 function addInput(args: string[], inputPath: string, trimStart: number): void {
   if (trimStart > 0) {
     args.push("-ss", formatFfmpegNumber(trimStart));
@@ -261,6 +719,19 @@ function formatFfmpegNumber(value: number): string {
   return value.toFixed(3).replace(/\.?0+$/, "");
 }
 
+function escapeFilterPath(filePath: string): string {
+  return filePath.replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "\\'");
+}
+
+function escapeDrawtextText(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/:/g, "\\:")
+    .replace(/%/g, "\\%")
+    .replace(/\r?\n/g, "\\n");
+}
+
 // In-flight FFmpeg children, so the app can kill them on quit instead of
 // letting an export/remux outlive the app (burning CPU, writing a half file).
 const activeProcesses = new Set<ReturnType<typeof spawn>>();
@@ -298,6 +769,16 @@ function runProcess(command: string, args: string[]): Promise<void> {
 
       reject(new Error(`FFmpeg exited with code ${code ?? "unknown"}: ${stderr}`));
     });
+  });
+}
+
+function runProcessCapture(command: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, ["-hide_banner", "-nostdin", ...args], { windowsHide: true });
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-maxStderrChars); });
+    child.on("error", reject);
+    child.on("close", (code) => code === 0 ? resolve(stderr) : reject(new Error(stderr)));
   });
 }
 

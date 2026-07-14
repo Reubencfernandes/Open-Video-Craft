@@ -2,7 +2,7 @@
  * Editor top bar: back to launcher, project name, save, and export.
  */
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, Menu, Pencil, Save, Upload } from "lucide-react";
+import { Bot, ChevronLeft, Menu, Pencil, Save, Upload } from "lucide-react";
 
 export function EditorTopbar(props: {
   projectName: string;
@@ -13,6 +13,7 @@ export function EditorTopbar(props: {
   onRename: (name: string) => void;
   onSave: () => Promise<void>;
   onOpenExport: () => void;
+  onOpenAi: () => void;
 }) {
   const [draftName, setDraftName] = useState(props.projectName);
   const [editingName, setEditingName] = useState(false);
@@ -80,6 +81,15 @@ export function EditorTopbar(props: {
       </div>
 
       <div className="editor-topbar-actions inline-flex min-w-0 justify-end gap-1.5">
+        <button
+          className="inline-flex h-8 items-center justify-center gap-1.5 rounded px-2.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-300/10 hover:text-amber-100"
+          type="button"
+          title="Connect Claude Code or Codex"
+          onClick={props.onOpenAi}
+        >
+          <Bot size={14} />
+          <span className="editor-action-label">AI</span>
+        </button>
         <button
           className="inline-flex h-8 items-center justify-center gap-1.5 rounded px-2.5 text-xs font-semibold text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
           type="button"

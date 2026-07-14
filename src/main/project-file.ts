@@ -7,6 +7,7 @@
 import { promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { parseEditorDocument } from "../shared/editor-domain";
 import { importsDirectoryName, mediaTrackRelativePaths } from "./project-paths";
 import type {
   EditorProjectImport,
@@ -119,17 +120,19 @@ function isValidProjectTrack(key: MediaTrackKey, value: unknown): value is Proje
 }
 
 export function isEditorProjectStateFile(value: unknown): value is EditorProjectStateFile {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-
-  const state = value as Partial<EditorProjectStateFile>;
-  return (
-    state.schemaVersion === 1 &&
-    isNonEmptyString(state.savedAt) &&
-    Array.isArray(state.imports) &&
-    state.imports.every(isEditorProjectImport)
+  const document = parseEditorDocument(value);
+  return Boolean(
+    value && typeof value === "object" && !Array.isArray(value) &&
+    (value as { schemaVersion?: unknown }).schemaVersion === 2 &&
+    document && document.imports.every(isEditorProjectImport)
   );
+}
+
+export function parseEditorProjectStateFile(value: unknown): EditorProjectStateFile | null {
+  const document = parseEditorDocument(value);
+  return document && document.imports.every(isEditorProjectImport)
+    ? document as EditorProjectStateFile
+    : null;
 }
 
 function isEditorProjectImport(value: unknown): value is EditorProjectImport {

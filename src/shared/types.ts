@@ -1,3 +1,8 @@
+import type {
+  EditorMutation,
+  EditorStateSnapshot
+} from "./editor-domain";
+
 /**
  * Types shared by the main process, preload bridge, and renderer: recording
  * tracks, project files, permissions, editor imports, and export requests.
@@ -280,27 +285,66 @@ export interface EditorProjectImport {
 export type EditorProjectImportInput = Omit<EditorProjectImport, "relativePath">;
 
 export interface EditorProjectStateFile {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  revision: number;
   savedAt: string;
-  state: unknown;
+  state: EditorStateSnapshot;
   imports: EditorProjectImport[];
+  lastMutation: EditorMutation;
 }
 
 export interface SaveEditorProjectStateRequest {
   projectId: string;
-  state: unknown;
+  baseRevision: number;
+  state: EditorStateSnapshot;
   imports: EditorProjectImportInput[];
 }
 
 export interface EditorProjectStateView {
+  revision: number;
   savedAt: string;
-  state: unknown;
+  state: EditorStateSnapshot;
+  lastMutation: EditorMutation;
   imports: Array<EditorProjectImportInput & { url: string }>;
+}
+
+export type AiProvider = "codex" | "claude";
+
+export interface AiConnectionProviderStatus {
+  provider: AiProvider;
+  installed: boolean;
+  supported: boolean;
+  configured: boolean;
+  version: string | null;
+  setupCommand: string;
+  message: string | null;
+}
+
+export interface AiConnectionStatus {
+  privacyAccepted: boolean;
+  providers: AiConnectionProviderStatus[];
+}
+
+export interface ConfigureAiProviderRequest {
+  provider: AiProvider;
+  privacyAccepted: boolean;
+}
+
+export interface EditorSessionStateRequest {
+  projectId: string;
+  dirty: boolean;
+}
+
+export interface UndoAgentEditRequest {
+  projectId: string;
+  baseRevision: number;
+  editId: string;
 }
 
 export type ExportVideoFormat = "mp4" | "webm" | "mov";
 
 export type ExportResolution = "source" | "720p" | "1080p" | "1440p";
+export type ExportSubtitleMode = "burn-in" | "sidecar" | "none";
 
 export interface ExportVideoRequest {
   source:
@@ -320,6 +364,7 @@ export interface ExportVideoRequest {
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   backgroundAudioImportIds: string[];
   subtitles: Array<{ start: number; end: number; text: string }>;
+  subtitleMode?: ExportSubtitleMode;
 }
 
 export interface ExportVideoResult {

@@ -12,6 +12,33 @@ export type ClipPlaybackTiming = {
 
 export const primaryVideoDriftToleranceSeconds = 0.3;
 export const secondaryDriftSeekCooldownMs = 350;
+
+export function getSafeMediaSeekTarget(
+  desiredMediaTime: number,
+  mediaDuration: number,
+  endMargin = 0.001
+): number {
+  if (!Number.isFinite(mediaDuration) || mediaDuration <= 0) {
+    return Math.max(0, desiredMediaTime);
+  }
+  return Math.min(
+    Math.max(0, mediaDuration - endMargin),
+    Math.max(0, desiredMediaTime)
+  );
+}
+
+export function isMediaTimePlayable(
+  desiredMediaTime: number,
+  mediaDuration: number,
+  endMargin = 0.001
+): boolean {
+  return (
+    desiredMediaTime >= 0 &&
+    (!Number.isFinite(mediaDuration) ||
+      mediaDuration <= 0 ||
+      desiredMediaTime < mediaDuration - endMargin)
+  );
+}
 export function getMediaTimeForTimelineTime(
   clip: ClipPlaybackTiming,
   timelineTime: number

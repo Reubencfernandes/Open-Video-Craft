@@ -155,21 +155,32 @@ select,
    cards so the interface reads as one professional desktop surface. */
 .editor-workspace {
   grid-template-columns:
-    minmax(190px, 230px)
-    minmax(320px, 1fr)
-    minmax(220px, 280px);
+    var(--editor-library-width, minmax(190px, 230px))
+    minmax(320px, 1fr);
+}
+
+.editor-preview:fullscreen .editor-preview-stage {
+  padding: 0.5rem;
+}
+
+.editor-preview:fullscreen .editor-preview-frame {
+  width: min(100%, calc(177.777vh - 6.222rem));
+  max-height: calc(100vh - 3.5rem);
+  box-shadow: none;
+}
+
+.editor-preview-frame {
+  container-type: size;
 }
 
 @media (max-width: 1199px) {
   .editor-workspace {
     grid-template-columns:
-      minmax(170px, 205px)
-      minmax(280px, 1fr)
-      minmax(190px, 230px);
+      var(--editor-library-width, minmax(170px, 205px))
+      minmax(280px, 1fr);
   }
 
-  .editor-library > aside,
-  .editor-inspector-content {
+  .editor-library-panel {
     padding: 0.6rem;
   }
 
@@ -201,9 +212,8 @@ select,
 
   .editor-workspace {
     grid-template-columns:
-      minmax(150px, 185px)
-      minmax(250px, 1fr)
-      minmax(170px, 205px);
+      var(--editor-library-width, minmax(150px, 185px))
+      minmax(250px, 1fr);
   }
 
   .editor-tool-rail button {
@@ -223,8 +233,12 @@ select,
 }
 
 @media (max-width: 720px) {
+  .workspace-resize-handle {
+    display: none;
+  }
+
   .editor-workspace {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(260px, 1fr) minmax(220px, 0.85fr);
     overflow-y: auto;
   }
@@ -235,13 +249,7 @@ select,
   }
 
   .editor-library {
-    grid-column: 1;
-    grid-row: 2;
-    border-top: 1px solid rgb(255 255 255 / 0.08);
-  }
-
-  .editor-inspector {
-    grid-column: 2;
+    grid-column: 1 / -1;
     grid-row: 2;
     border-top: 1px solid rgb(255 255 255 / 0.08);
   }
@@ -268,12 +276,11 @@ select,
 
   .editor-workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 260px 260px 260px;
+    grid-template-rows: 260px 260px;
   }
 
   .editor-preview,
-  .editor-library,
-  .editor-inspector {
+  .editor-library {
     grid-column: 1;
   }
 
@@ -283,10 +290,6 @@ select,
 
   .editor-library {
     grid-row: 2;
-  }
-
-  .editor-inspector {
-    grid-row: 3;
   }
 
   .editor-timeline {

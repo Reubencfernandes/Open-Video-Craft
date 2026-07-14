@@ -20,6 +20,7 @@ import type {
   ProjectView
 } from "../shared/types";
 import { ExportDialog } from "./editor/ExportDialog";
+import { AiConnectionDialog } from "./editor/AiConnectionDialog";
 import { EditorNotifications } from "./editor/EditorNotifications";
 import { UpdateNotification } from "./notifications/UpdateNotification";
 import { EditorPreviewPanel } from "./editor/EditorPreviewPanel";
@@ -27,6 +28,7 @@ import { EditorTimelineSection } from "./editor/EditorTimelineSection";
 import { EditorToolPanel } from "./editor/EditorToolPanel";
 import { EditorTopbar } from "./editor/EditorTopbar";
 import { ToolRail } from "./editor/ToolRail";
+import { WorkspaceResizeHandle } from "./editor/WorkspaceResizeHandle";
 import { getCameraFrameFromPreset } from "./editor/layout-geometry";
 import { MediaPanel } from "./editor/panels/MediaPanel";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
@@ -37,14 +39,16 @@ import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
 import { useTimelineController } from "./editor/useTimelineController";
 import { useTimelineViewport } from "./editor/useTimelineViewport";
+import { useWorkspacePanelResize } from "./editor/useWorkspacePanelResize";
 import { useAppUpdateStatus } from "./useAppUpdateStatus";
 import {
   formatSubtitleLanguage,
   whisperTranscriptionModelLabel
 } from "./editor/subtitle-transcription";
-import { canSplitTimelineSegmentAt } from "./editor/timeline-utils";
-import { clampNumber } from "./editor/utils";
+import { canSplitTimelineSegmentAt, findSplittableTimelineSegment } from "./editor/timeline-utils";
+import { clampNumber, createId } from "./editor/utils";
 import { getZoomPreviewTime } from "./editor/zoom-utils";
+import { sanitizeClipTransitions, validateClipTransitions } from "../shared/editor-domain";
 import type {
   BackgroundCategory,
   BackgroundStyle,
@@ -53,6 +57,7 @@ import type {
   CameraFrame,
   CameraPosition,
   CameraShape,
+  ClipTransition,
   EditorMediaItem,
   EditorTool,
   LayoutMode,
@@ -61,6 +66,7 @@ import type {
   SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
+  TextOverlay,
   TimelineContextMenu,
   TimelineSegment,
   VideoCornerStyle,
@@ -117,9 +123,12 @@ export function EditorView() {
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
   const [zoomPreviewTime, setZoomPreviewTime] = useState<number | null>(null);
   const [speedEffects, setSpeedEffects] = useState<SpeedEffect[]>([]);
+  const [transitions, setTransitions] = useState<ClipTransition[]>([]);
   const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
+  const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
+  const [selectedTextOverlayId, setSelectedTextOverlayId] = useState<string | null>(null);
   const [subtitleLanguage, setSubtitleLanguage] = useState<string | null>(null);
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyle>("karaoke");
   const [trimRange, setTrimRange] = useState({ start: 0, end: 0 });
@@ -127,6 +136,7 @@ export function EditorView() {
   const [selectedTimelineSegmentId, setSelectedTimelineSegmentId] = useState<string | null>(null);
   const [timelineContextMenu, setTimelineContextMenu] = useState<TimelineContextMenu>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [scrubbingTimeline, setScrubbingTimeline] = useState(false);
@@ -142,8 +152,11 @@ export function EditorView() {
     allowUnload,
     hasUnsavedChanges,
     isReady: isEditorStateReady,
+    lastAgentEdit,
+    revision,
     saving,
-    saveState
+    saveState,
+    undoLastAgentEdit
   } = useEditorPersistence({
     activeBackgroundCategory,
     audioLevels,
@@ -191,17 +204,21 @@ export function EditorView() {
     setScreenAspectRatio,
     setScreenPosition,
     setSpeedEffects,
+    setTransitions,
     setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
+    setTextOverlays,
     setTimelineSegments,
     setTrimRange,
     setVideoCornerStyle,
     setZoomEffects,
     speedEffects,
+    transitions,
     subtitleLanguage,
     subtitleStyle,
     subtitles,
+    textOverlays,
     timelineSegments,
     trimRange,
     videoCornerStyle,
@@ -214,6 +231,15 @@ export function EditorView() {
       : null;
     setCustomBackgroundUrl(customBackground?.url ?? null);
   }, [customBackgroundImportId, importedMedia]);
+
+  // Clip edits can invalidate a cut reference. Remove only stale transition
+  // metadata; never move or trim the user's clips as background housekeeping.
+  useEffect(() => {
+    setTransitions((current) => {
+      const next = sanitizeClipTransitions(timelineSegments, current);
+      return next.length === current.length ? current : next;
+    });
+  }, [timelineSegments]);
 
   // ---------------------------------------------------------------------------
   // Derived data: media library, timeline clips, playback geometry.
@@ -246,8 +272,8 @@ export function EditorView() {
     screenStyle,
     selectedItem,
     selectedSubtitle,
+    selectedTextOverlay,
     selectedSpeedEffect,
-    selectedTimelineClip,
     selectedTimelineItemId,
     selectedZoomEffect,
     timelineDuration,
@@ -259,7 +285,6 @@ export function EditorView() {
     visibleMedia
   } = useEditorDerivedData({
     activePanel,
-    activeTool,
     backgroundStyle,
     cameraBorderStyle,
     cameraContentTransform,
@@ -277,11 +302,13 @@ export function EditorView() {
     screenPosition,
     selectedItemId,
     selectedSubtitleId,
+    selectedTextOverlayId,
     selectedTimelineSegmentId,
     selectedZoomId,
     selectedSpeedId,
     speedEffects,
     subtitles,
+    textOverlays,
     timelineSegments,
     timelineViewDuration,
     videoCornerStyle,
@@ -289,10 +316,54 @@ export function EditorView() {
     zoomPreviewTime
   });
 
+  function addTextOverlay() {
+    const start = Math.min(currentTime, Math.max(0, timelineDuration - 0.1));
+    const nextOverlay: TextOverlay = {
+      id: createId("text"),
+      start,
+      end: Math.min(timelineDuration, start + 3),
+      text: "Your text",
+      x: 50,
+      y: 50,
+      size: 64,
+      color: "#ffffff",
+      weight: 700,
+      animation: "fade"
+    };
+    nextOverlay.end = Math.max(start + 0.2, nextOverlay.end);
+    setTextOverlays((current) => [...current, nextOverlay]);
+    setSelectedTextOverlayId(nextOverlay.id);
+    setActiveTool("text");
+  }
+
+  function updateTextOverlay(id: string, updates: Partial<TextOverlay>) {
+    setTextOverlays((current) => current.map((overlay) => {
+      if (overlay.id !== id) return overlay;
+      const next = { ...overlay, ...updates };
+      const start = clampNumber(next.start, 0, Math.max(0, timelineRenderDuration - 0.2));
+      return {
+        ...next,
+        start,
+        end: clampNumber(next.end, start + 0.2, Math.max(start + 0.2, timelineRenderDuration)),
+        x: clampNumber(next.x, 0, 100),
+        y: clampNumber(next.y, 0, 100),
+        size: clampNumber(next.size, 12, 240),
+        color: /^#[0-9a-f]{6}$/i.test(next.color) ? next.color : overlay.color
+      };
+    }));
+  }
+
+  function removeTextOverlay(id: string) {
+    setTextOverlays((current) => current.filter((overlay) => overlay.id !== id));
+    setSelectedTextOverlayId((current) => current === id ? null : current);
+  }
+
   const {
     audioElsRef,
+    beginPlaybackInteraction,
     cameraRef,
     currentTimeRef,
+    endPlaybackInteraction,
     getAudioLevel,
     mainVideoRef,
     playingRef,
@@ -343,6 +414,16 @@ export function EditorView() {
   });
 
   const {
+    beginPanelResize,
+    endPanelResize,
+    movePanelResize,
+    nudgePanelWidth,
+    resetPanelWidth,
+    workspaceRef,
+    workspaceStyle
+  } = useWorkspacePanelResize();
+
+  const {
     importCustomBackground,
     importMedia,
     importMediaFromPaths,
@@ -381,10 +462,12 @@ export function EditorView() {
     exportFormat,
     exporting,
     exportResolution,
+    exportSubtitleMode,
     hasSubtitles,
     openExportDialog,
     setExportFormat,
-    setExportResolution
+    setExportResolution,
+    setExportSubtitleMode
   } = useEditorExport({
     audioLevels,
     backgroundAudioIds,
@@ -395,7 +478,8 @@ export function EditorView() {
     setError,
     setExportMessage,
     subtitles,
-    trimRange
+    trimRange,
+    beforeExport: saveState
   });
 
   const {
@@ -404,12 +488,11 @@ export function EditorView() {
     resetCameraContentTransform,
     selectCameraPosition,
     selectCameraSize,
+    snapOverlay,
     updateCameraContentTransform
   } = usePreviewLayoutControls({
-    activeTool,
     cameraEditEnabled,
     cameraFrame,
-    layoutMode,
     screenEditEnabled,
     screenPosition,
     setCameraContentTransform,
@@ -456,8 +539,10 @@ export function EditorView() {
     allMedia,
     audioElsRef,
     audioSources,
+    beginPlaybackInteraction,
     currentTime,
     currentTimeRef,
+    endPlaybackInteraction,
     getTimelineTimeFromClientX,
     isEditorStateReady,
     knownTimelineItemIdsRef,
@@ -562,28 +647,44 @@ export function EditorView() {
           onRename={renameProject}
           onSave={saveState}
           onOpenExport={openExportDialog}
+          onOpenAi={() => setAiDialogOpen(true)}
+        />
+
+        <AiConnectionDialog
+          open={aiDialogOpen}
+          revision={revision}
+          lastAgentEdit={lastAgentEdit}
+          onClose={() => setAiDialogOpen(false)}
+          onUndo={undoLastAgentEdit}
         />
 
         {exportDialogOpen ? (
           <ExportDialog
             exportFormat={exportFormat}
             exportResolution={exportResolution}
+            exportSubtitleMode={exportSubtitleMode}
             exporting={exporting}
             hasSubtitles={hasSubtitles}
             onClose={closeExportDialog}
             onExport={() => void exportCurrentVideo()}
             onFormatChange={setExportFormat}
             onResolutionChange={setExportResolution}
+            onSubtitleModeChange={setExportSubtitleMode}
           />
         ) : null}
         <EditorNotifications error={error} exportMessage={exportMessage} onDismissError={() => setError(null)} onDismissMessage={() => setExportMessage(null)} />
         {!error && !exportMessage ? <UpdateNotification status={updateStatus} onInstall={() => void installUpdate()} /> : null}
 
-        <div className="editor-workspace grid min-h-0 min-w-0 overflow-hidden">
-          <div className="editor-library flex min-h-0 min-w-0 flex-col overflow-hidden border-r border-white/[0.08] bg-[#1a1e25]">
+        <div
+          className="editor-workspace grid min-h-0 min-w-0 overflow-hidden"
+          ref={workspaceRef}
+          style={workspaceStyle}
+        >
+          <div className="editor-library relative flex min-h-0 min-w-0 overflow-hidden border-r border-white/[0.08] bg-[#1a1e25]">
             <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
 
-            <aside className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2.5">
+            <aside className="editor-library-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2.5">
+              {activeTool === "media" ? (
               <MediaPanel
                 activeTab={activePanel}
                 visibleMedia={visibleMedia}
@@ -595,9 +696,7 @@ export function EditorView() {
                 onItemDuration={updateMediaDuration}
                 onRemoveItem={removeImportedMedia}
               />
-            </aside>
-          </div>
-
+              ) : (
           <EditorToolPanel
             activeTool={activeTool}
             layoutMode={layoutMode}
@@ -617,6 +716,8 @@ export function EditorView() {
             previewItem={previewItem}
             selectedZoomEffect={selectedZoomEffect}
             selectedSpeedEffect={selectedSpeedEffect}
+            transitions={transitions}
+            videoClips={videoTimelineClips}
             sttDownloadProgress={sttDownloadProgress}
             sttStatus={sttStatus}
             sttModelLabel={whisperTranscriptionModelLabel}
@@ -624,7 +725,8 @@ export function EditorView() {
             subtitleStyle={subtitleStyle}
             subtitles={subtitles}
             selectedSubtitle={selectedSubtitle}
-            selectedClip={selectedTimelineClip}
+            textOverlays={textOverlays}
+            selectedTextOverlay={selectedTextOverlay}
             activeBackgroundCategory={activeBackgroundCategory}
             backgroundStyle={backgroundStyle}
             videoCornerStyle={videoCornerStyle}
@@ -656,20 +758,56 @@ export function EditorView() {
             onAddSpeed={addSpeedEffect}
             onUpdateSpeed={updateSpeedEffect}
             onRemoveSpeed={removeSpeedEffect}
+            onSetTransition={(input) => {
+              setTransitions((current) => {
+                const next = [
+                  ...current.filter((item) =>
+                    item.fromSegmentId !== input.fromSegmentId || item.toSegmentId !== input.toSegmentId
+                  ),
+                  { ...input, id: `${input.fromSegmentId}:${input.toSegmentId}:transition` }
+                ];
+                try {
+                  validateClipTransitions(timelineSegments, next);
+                  setError(null);
+                  return next;
+                } catch (transitionError) {
+                  setError(transitionError instanceof Error ? transitionError.message : String(transitionError));
+                  return current;
+                }
+              });
+            }}
+            onRemoveTransition={(fromSegmentId, toSegmentId) =>
+              setTransitions((current) => current.filter((item) =>
+                item.fromSegmentId !== fromSegmentId || item.toSegmentId !== toSegmentId
+              ))
+            }
             onAddSubtitle={addSubtitle}
             onGenerateSubtitles={() => void generateSubtitles()}
             onSubtitleStyleChange={setSubtitleStyle}
             onUpdateSubtitle={updateSubtitle}
             onSelectSubtitle={setSelectedSubtitleId}
-            onSplitAtPlayhead={() =>
-              splitTimelineSegment(selectedTimelineSegmentId, currentTime)
-            }
-            onDeleteSelected={deleteSelectedTimelineSegment}
+            onAddTextOverlay={addTextOverlay}
+            onSelectTextOverlay={setSelectedTextOverlayId}
+            onUpdateTextOverlay={updateTextOverlay}
+            onRemoveTextOverlay={removeTextOverlay}
             onBackgroundCategoryChange={setActiveBackgroundCategory}
             onBackgroundStyleChange={setBackgroundStyle}
             onUploadCustomBackground={() => void importCustomBackground()}
             onCornerStyleChange={setVideoCornerStyle}
           />
+              )}
+            </aside>
+
+            <WorkspaceResizeHandle
+              edge="right"
+              label="Resize tool panel"
+              onPointerDown={(event) => beginPanelResize(event, "library")}
+              onPointerMove={movePanelResize}
+              onPointerUp={endPanelResize}
+              onDoubleClick={() => resetPanelWidth("library")}
+              onNudge={(deltaX) => nudgePanelWidth("library", deltaX)}
+            />
+          </div>
 
           <EditorPreviewPanel
             previewClassName={previewClassName}
@@ -686,8 +824,11 @@ export function EditorView() {
             cameraVideoStyle={cameraVideoStyle}
             screenEditEnabled={screenEditEnabled}
             cameraEditEnabled={cameraEditEnabled}
+            snapOverlay={snapOverlay}
             activeSubtitle={activeSubtitle}
             subtitleStyle={subtitleStyle}
+            textOverlays={textOverlays}
+            selectedTextOverlayId={selectedTextOverlayId}
             currentTime={currentTime}
             playing={playing}
             currentFrame={currentFrame}
@@ -708,6 +849,13 @@ export function EditorView() {
             onSubtitleClick={(subtitleId) => {
               setSelectedSubtitleId(subtitleId);
               setActiveTool("subtitles");
+            }}
+            onTextOverlayClick={(textOverlayId) => {
+              setSelectedTextOverlayId(textOverlayId);
+              setActiveTool("text");
+            }}
+            onTextOverlayMove={(textOverlayId, x, y) => {
+              updateTextOverlay(textOverlayId, { x, y });
             }}
           />
         </div>
@@ -736,17 +884,23 @@ export function EditorView() {
           audioLevels={audioLevels}
           zoomEffects={zoomEffects}
           speedEffects={speedEffects}
+          transitions={transitions}
           subtitles={subtitles}
+          textOverlays={textOverlays}
           selectedSegmentId={selectedTimelineSegmentId}
           selectedZoomId={selectedZoomEffect?.id ?? null}
           selectedSpeedId={selectedSpeedEffect?.id ?? null}
           selectedSubtitleId={selectedSubtitle?.id ?? null}
+          selectedTextOverlayId={selectedTextOverlay?.id ?? null}
           contextMenu={timelineContextMenu}
           canSplitAtContextMenu={
             timelineContextMenu
               ? canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)
               : false
           }
+          canSplitAtPlayhead={Boolean(
+            findSplittableTimelineSegment(timelineSegments, selectedTimelineSegmentId, currentTime)
+          )}
           onTogglePlayback={() => void togglePlayback()}
           onSeekFrame={seekFrame}
           onUndo={undoTimelineEdit}
@@ -769,9 +923,19 @@ export function EditorView() {
             setActiveTool("speed");
             seek((effect.start + effect.end) / 2);
           }}
+          onSelectTransition={() => setActiveTool("transitions")}
           onSelectSubtitle={(subtitleId) => {
             setSelectedSubtitleId(subtitleId);
             setActiveTool("subtitles");
+            const subtitle = subtitles.find((item) => item.id === subtitleId);
+            if (subtitle) {
+              seek((subtitle.start + subtitle.end) / 2);
+            }
+          }}
+          onSelectTextOverlay={(overlay) => {
+            setSelectedTextOverlayId(overlay.id);
+            setActiveTool("text");
+            seek((overlay.start + overlay.end) / 2);
           }}
           onTrimPointerDown={beginTimelineClipTrim}
           onMovePointerDown={beginTimelineClipMove}

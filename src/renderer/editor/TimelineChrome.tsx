@@ -11,6 +11,7 @@ import {
   Trash2,
   Undo2
 } from "lucide-react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { createTimelineTicks, formatSeconds, formatTimecode } from "./utils";
 
 const toolbarButtonClassName =
@@ -135,15 +136,23 @@ export function TimelinePlayhead(props: {
   playheadPercent: number;
   currentTime: number;
   color: string;
+  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   return (
     <div
       className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-[2px] before:-translate-x-1/2 before:rounded-full before:bg-[var(--playhead-color)] before:content-['']"
       aria-hidden="true"
+      data-timeline-playhead
       style={{
         "--playhead-color": props.color,
         left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${props.playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
       } as React.CSSProperties}
+      onPointerDown={(event) => { event.stopPropagation(); props.onPointerDown(event); }}
+      onPointerMove={(event) => { event.stopPropagation(); props.onPointerMove(event); }}
+      onPointerUp={(event) => { event.stopPropagation(); props.onPointerUp(event); }}
+      onPointerCancel={(event) => { event.stopPropagation(); props.onPointerUp(event); }}
     >
       <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full border bg-[#17131f] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]" style={{ borderColor: props.color, color: props.color }}>
         {formatSeconds(props.currentTime)}

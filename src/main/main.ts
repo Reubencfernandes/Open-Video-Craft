@@ -14,10 +14,11 @@ import {
   screen as electronScreen,
   shell,
 } from "electron";
-import { promises as fs } from "node:fs";
+import { promises as fs, watch as watchFs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
+import { AiConnectionManager } from "./ai-connection";
 import { registerAppStatusIpc } from "./app-status-ipc";
 import { getProductVersion } from "./app-version";
 import { startAutoUpdates } from "./auto-updates";
@@ -52,12 +53,18 @@ import {
 } from "./request-validation";
 import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
+import { setEditorSessionState, undoAgentEdit } from "./editor-document-store";
+import { writeJsonFileAtomic } from "./project-file";
 import { createMediaUrl, ProjectStore } from "./project-store";
 import type {
+  AiConnectionStatus,
+  AiProvider,
+  ConfigureAiProviderRequest,
   CreateProjectRequest,
   DesktopPermissionStatus,
   EditorProjectStateFile,
   EditorProjectStateView,
+  EditorSessionStateRequest,
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
@@ -70,6 +77,7 @@ import type {
   SourceSummary,
   StartRecordingRequest,
   StopRecordingRequest,
+  UndoAgentEditRequest,
   WriteChunkRequest
 } from "../shared/types";
 
@@ -120,6 +128,10 @@ let displayOverlayWindows: BrowserWindow[] = [];
 let activeDisplayOverlaySourceId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
+let aiConnectionManager: AiConnectionManager | null = null;
+let editorStateWatcher: ReturnType<typeof watchFs> | null = null;
+let editorStateWatchTimer: NodeJS.Timeout | null = null;
+let watchedEditorProjectId: string | null = null;
 let recorderCloseTimeout: NodeJS.Timeout | null = null;
 let recorderCloseRequested = false;
 const recorderRestoreHandlers = new WeakMap<BrowserWindow, () => void>();
@@ -149,6 +161,15 @@ function getProjectLibrary(): ProjectLibrary {
   return projectLibrary;
 }
 
+function getAiConnectionManager(): AiConnectionManager {
+  aiConnectionManager ??= new AiConnectionManager({
+    userDataPath: app.getPath("userData"),
+    electronExecutable: process.execPath,
+    serverEntrypoint: path.join(__dirname, "../mcp/server.js")
+  });
+  return aiConnectionManager;
+}
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -168,6 +189,7 @@ async function createWindow(): Promise<void> {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    stopEditorStateWatcher();
     void closeDisplayOverlay();
     closePermissionGuideWindow();
   });
@@ -426,6 +448,7 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
     });
     mainWindow.on("closed", () => {
       mainWindow = null;
+      stopEditorStateWatcher();
       void closeDisplayOverlay();
       closePermissionGuideWindow();
     });
@@ -651,6 +674,46 @@ function refreshDisplayOverlay(): void {
   void enqueueOverlayOp(() => showDisplayOverlay(sourceId));
 }
 
+async function setActiveEditorProject(projectId: string): Promise<void> {
+  const project = projectStore.getProject(projectId);
+  await writeJsonFileAtomic(path.join(app.getPath("userData"), "active-editor.json"), {
+    schemaVersion: 1,
+    projectId,
+    rootPath: project.rootPath,
+    updatedAt: new Date().toISOString()
+  });
+  if (watchedEditorProjectId === projectId && editorStateWatcher) return;
+  editorStateWatcher?.close();
+  editorStateWatcher = null;
+  watchedEditorProjectId = projectId;
+  editorStateWatcher = watchFs(project.rootPath, (_eventType, filename) => {
+    const name = filename?.toString() ?? null;
+    if (name && name !== "editor.json" && !name.startsWith(".editor.json.")) return;
+    if (editorStateWatchTimer) clearTimeout(editorStateWatchTimer);
+    editorStateWatchTimer = setTimeout(() => {
+      void (async () => {
+        try {
+          const state = await projectStore.readEditorState(projectId);
+          if (state && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("editor:project-state-changed", toEditorProjectStateView(projectId, state));
+          }
+        } catch {
+          // Atomic replacement can briefly race a watcher event; the next event
+          // or explicit load will recover without disturbing the editor.
+        }
+      })();
+    }, 120);
+  });
+}
+
+function stopEditorStateWatcher(): void {
+  if (editorStateWatchTimer) clearTimeout(editorStateWatchTimer);
+  editorStateWatchTimer = null;
+  editorStateWatcher?.close();
+  editorStateWatcher = null;
+  watchedEditorProjectId = null;
+}
+
 function registerDisplayOverlayRefreshHandlers(): void {
   electronScreen.on("display-added", refreshDisplayOverlay);
   electronScreen.on("display-removed", refreshDisplayOverlay);
@@ -659,6 +722,38 @@ function registerDisplayOverlayRefreshHandlers(): void {
 
 function registerIpc(): void {
   registerAppStatusIpc();
+
+  ipcMain.handle("ai:get-status", (): Promise<AiConnectionStatus> =>
+    getAiConnectionManager().getStatus()
+  );
+  ipcMain.handle("ai:configure", (_event, request: ConfigureAiProviderRequest): Promise<AiConnectionStatus> => {
+    assertAiProvider(request?.provider);
+    return getAiConnectionManager().configure(request.provider, request.privacyAccepted === true);
+  });
+  ipcMain.handle("ai:disconnect", (_event, provider: AiProvider): Promise<AiConnectionStatus> => {
+    assertAiProvider(provider);
+    return getAiConnectionManager().disconnect(provider);
+  });
+
+  ipcMain.handle("editor:set-session-state", async (_event, request: EditorSessionStateRequest): Promise<boolean> => {
+    if (!request || typeof request.projectId !== "string" || typeof request.dirty !== "boolean") {
+      throw new Error("Invalid editor session state.");
+    }
+    const project = projectStore.getProject(request.projectId);
+    await Promise.all([
+      setActiveEditorProject(request.projectId),
+      setEditorSessionState(project.rootPath, request.dirty)
+    ]);
+    return true;
+  });
+  ipcMain.handle("editor:undo-agent-edit", async (_event, request: UndoAgentEditRequest): Promise<EditorProjectStateView> => {
+    if (!request || typeof request.projectId !== "string" || !Number.isInteger(request.baseRevision) || typeof request.editId !== "string") {
+      throw new Error("Invalid AI undo request.");
+    }
+    const project = projectStore.getProject(request.projectId);
+    const state = await undoAgentEdit({ rootPath: project.rootPath, baseRevision: request.baseRevision, editId: request.editId });
+    return toEditorProjectStateView(request.projectId, state);
+  });
 
   ipcMain.handle("sources:list", async (): Promise<SourceSummary[]> => {
     // Request sources without live thumbnails or window icons. Capturing a
@@ -837,6 +932,7 @@ function registerIpc(): void {
       const saved = await projectStore.saveEditorState(
         request.projectId,
         {
+          baseRevision: request.baseRevision,
           state: request.state,
           imports: request.imports
         },
@@ -1087,6 +1183,10 @@ function registerIpc(): void {
   });
 }
 
+function assertAiProvider(value: unknown): asserts value is AiProvider {
+  if (value !== "codex" && value !== "claude") throw new Error("Unknown AI provider.");
+}
+
 async function getProjectForEditor(projectId: string): Promise<ProjectView> {
   if (projectStore.hasProject(projectId)) {
     const project = projectStore.getProject(projectId);
@@ -1133,8 +1233,10 @@ function toEditorProjectStateView(
   state: EditorProjectStateFile
 ): EditorProjectStateView {
   return {
+    revision: state.revision,
     savedAt: state.savedAt,
     state: state.state,
+    lastMutation: state.lastMutation,
     imports: state.imports.map((imported) => {
       const filePath = projectStore.resolveProjectFile(projectId, imported.relativePath);
       importedMediaCache.set(imported.id, filePath);
@@ -1260,6 +1362,7 @@ app.on("second-instance", () => {
 });
 
 app.on("before-quit", () => {
+  stopEditorStateWatcher();
   void closeDisplayOverlay();
   closePermissionGuideWindow();
 });

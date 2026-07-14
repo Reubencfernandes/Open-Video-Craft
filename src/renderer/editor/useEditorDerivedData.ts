@@ -24,12 +24,12 @@ import type {
   CameraPosition,
   CameraShape,
   EditorMediaItem,
-  EditorTool,
   LayoutMode,
   MediaPanel,
   ScreenAspectRatio,
   SpeedEffect,
   SubtitleSegment,
+  TextOverlay,
   TimelineSegment,
   VideoCornerStyle,
   ZoomEffect
@@ -59,6 +59,8 @@ type UseEditorDerivedDataParams = {
   selectedSpeedId: string | null;
   subtitles: SubtitleSegment[];
   selectedSubtitleId: string | null;
+  textOverlays: TextOverlay[];
+  selectedTextOverlayId: string | null;
   layoutMode: LayoutMode;
   screenAspectRatio: ScreenAspectRatio;
   screenPosition: ScreenPosition;
@@ -71,7 +73,6 @@ type UseEditorDerivedDataParams = {
   cameraShape: CameraShape;
   cameraBorderStyle: CameraBorderStyle;
   videoCornerStyle: VideoCornerStyle;
-  activeTool: EditorTool;
 };
 
 export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
@@ -92,6 +93,8 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     selectedSpeedId,
     subtitles,
     selectedSubtitleId,
+    textOverlays,
+    selectedTextOverlayId,
     layoutMode,
     screenAspectRatio,
     screenPosition,
@@ -103,8 +106,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     cameraContentTransform,
     cameraShape,
     cameraBorderStyle,
-    videoCornerStyle,
-    activeTool
+    videoCornerStyle
   } = params;
 
   const projectMedia = useMemo(() => createProjectMedia(project), [project]);
@@ -184,9 +186,10 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
         zoomEffects,
         speedEffects,
         subtitles,
-        activeDuration
+        activeDuration,
+        textOverlays
       ),
-    [activeDuration, audioTimelineClips, speedEffects, subtitles, videoTimelineClips, zoomEffects]
+    [activeDuration, audioTimelineClips, speedEffects, subtitles, textOverlays, videoTimelineClips, zoomEffects]
   );
   const timelineRenderDuration = Math.max(timelineViewDuration, timelineDuration);
   const totalFrames = Math.max(1, Math.floor(timelineRenderDuration * frameRate));
@@ -201,14 +204,13 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     null;
   const selectedSubtitle =
     subtitles.find((subtitle) => subtitle.id === selectedSubtitleId) ?? subtitles[0] ?? null;
+  const selectedTextOverlay =
+    textOverlays.find((overlay) => overlay.id === selectedTextOverlayId) ?? textOverlays[0] ?? null;
   const selectedZoomEffect =
     zoomEffects.find((effect) => effect.id === selectedZoomId) ?? null;
   const selectedSpeedEffect =
     speedEffects.find((effect) => effect.id === selectedSpeedId) ?? null;
   const audioSources = allMedia.filter((item) => item.kind === "audio");
-  const selectedTimelineClip =
-    timelineClips.find((clip) => clip.id === selectedTimelineSegmentId) ?? null;
-
   const screenAspectEnabled =
     layoutMode === "screen-only" ||
     layoutMode === "bubble" ||
@@ -301,9 +303,11 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
               transform: "none"
             }
           : null;
-  const screenEditEnabled = activeTool === "layout" && layoutMode !== "camera-only";
+  // Direct manipulation is always available in the viewport. The Layout tool
+  // exposes detailed controls, but no longer gates drag/resize interactions.
+  const screenEditEnabled = layoutMode !== "camera-only";
   const cameraEditEnabled =
-    activeTool === "layout" && cameraFreeformEnabled && Boolean(projectCamera);
+    cameraFreeformEnabled && Boolean(projectCamera);
   const previewFrameStyle = {
     "--camera-size": `${cameraSize}%`,
     backgroundColor: "#050608",
@@ -316,13 +320,9 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
   } as CSSProperties;
   const previewClassName =
     "relative w-[min(100%,calc(940px*var(--preview-zoom,1)))] flex-none aspect-video overflow-hidden bg-[#030405] shadow-[0_18px_60px_rgb(0_0_0_/_0.58)] ring-1 ring-black/80";
-  const timelineVisible =
-    activeTool === "media" ||
-    activeTool === "cut" ||
-    activeTool === "zoom" ||
-    activeTool === "speed" ||
-    activeTool === "audio" ||
-    activeTool === "subtitles";
+  // Keep the shared time axis visible while switching tools. Effects and
+  // subtitles must not disappear just because Layout or Style is selected.
+  const timelineVisible = true;
 
   return {
     activeDuration,
@@ -352,8 +352,8 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     screenStyle,
     selectedItem,
     selectedSubtitle,
+    selectedTextOverlay,
     selectedSpeedEffect,
-    selectedTimelineClip,
     selectedTimelineItemId,
     selectedZoomEffect,
     timelineDuration,

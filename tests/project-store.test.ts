@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createDefaultEdits } from "../src/shared/defaults";
+import { createDefaultEditorState } from "../src/shared/editor-domain";
 import { ProjectStore, createProjectFolderName, getMediaTrackRelativePath } from "../src/main/project-store";
 
 let tmpDir: string;
@@ -176,7 +177,12 @@ describe("ProjectStore", () => {
     await store.saveEditorState(
       project.id,
       {
-        state: { v: 2, timelineSegments: [{ id: "clip", itemId: "music", start: 0 }] },
+        state: {
+          ...createDefaultEditorState(),
+          timelineSegments: [
+            { id: "clip", itemId: "music", track: "audio", lane: 0, start: 0, end: 12, sourceStart: 0 }
+          ]
+        },
         imports: [
           {
             id: "music",
@@ -194,10 +200,9 @@ describe("ProjectStore", () => {
     await reloadedStore.loadProject(project.rootPath);
     const saved = await reloadedStore.readEditorState(project.id);
 
-    expect(saved?.state).toEqual({
-      v: 2,
-      timelineSegments: [{ id: "clip", itemId: "music", start: 0 }]
-    });
+    expect(saved?.state.timelineSegments).toEqual([
+      { id: "clip", itemId: "music", track: "audio", lane: 0, start: 0, end: 12, sourceStart: 0 }
+    ]);
     expect(saved?.imports).toMatchObject([
       {
         id: "music",

@@ -8,6 +8,7 @@ import type {
   EditorMediaItem,
   SpeedEffect,
   SubtitleSegment,
+  TextOverlay,
   TimelineContextMenu,
   TimelineMediaClip,
   TimelineSegment,
@@ -48,8 +49,12 @@ export function syncTimelineSegments(
   newItemIds: ReadonlySet<string>
 ): TimelineSegment[] {
   const itemIds = new Set(items.map((item) => item.id));
-  const nextSegments = currentSegments
-    .filter((segment) => itemIds.has(segment.itemId))
+  const retainedSegments = currentSegments.filter((segment) => itemIds.has(segment.itemId));
+  const segmentCountByItemId = retainedSegments.reduce((counts, segment) => {
+    counts.set(segment.itemId, (counts.get(segment.itemId) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
+  const nextSegments = retainedSegments
     .map((segment) => {
       const itemDuration = mediaDurationById.get(segment.itemId) ?? 1;
       const track = segment.track;
@@ -61,6 +66,7 @@ export function syncTimelineSegments(
       // against the raw media duration.
       const maxEnd = segment.start + Math.max(0.1, itemDuration - sourceStart);
       const wasPlaceholderFullClip =
+        segmentCountByItemId.get(segment.itemId) === 1 &&
         segment.sourceStart === 0 &&
         segment.end - segment.start <= 1.05 &&
         itemDuration > 1.05;
@@ -162,6 +168,23 @@ export function canSplitTimelineSegmentAt(
       ? segments.find((item) => item.id === contextMenu.segmentId)
       : null) ?? findTimelineSegmentAtTime(segments, contextMenu.time);
   return segment ? canSplitTimelineSegment(segment, contextMenu.time) : false;
+}
+
+/**
+ * Resolve the clip to split at a playhead time. A stale selection must not
+ * block splitting a different clip under the playhead.
+ */
+export function findSplittableTimelineSegment(
+  segments: TimelineSegment[],
+  selectedSegmentId: string | null,
+  time: number
+): TimelineSegment | null {
+  const selected = selectedSegmentId
+    ? segments.find((segment) => segment.id === selectedSegmentId) ?? null
+    : null;
+  if (selected && canSplitTimelineSegment(selected, time)) return selected;
+  const underPlayhead = findTimelineSegmentAtTime(segments, time);
+  return underPlayhead && canSplitTimelineSegment(underPlayhead, time) ? underPlayhead : null;
 }
 
 export function trimTimelineSegment(
@@ -442,7 +465,8 @@ export function calculateTimelineDuration(
   zoomEffects: ZoomEffect[],
   speedEffects: SpeedEffect[],
   subtitles: SubtitleSegment[],
-  activeDuration: number
+  activeDuration: number,
+  textOverlays: TextOverlay[] = []
 ): number {
   const timelineContentEnd = Math.max(
     0,
@@ -450,7 +474,8 @@ export function calculateTimelineDuration(
     ...audioClips.map((clip) => clip.start + clip.duration),
     ...zoomEffects.map((effect) => effect.end),
     ...speedEffects.map((effect) => effect.end),
-    ...subtitles.map((subtitle) => subtitle.end)
+    ...subtitles.map((subtitle) => subtitle.end),
+    ...textOverlays.map((overlay) => overlay.end)
   );
 
   return Math.max(timelineContentEnd, timelineContentEnd > 0 ? 0 : activeDuration, 1);

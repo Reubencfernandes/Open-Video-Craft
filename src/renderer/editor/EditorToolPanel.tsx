@@ -1,17 +1,14 @@
 /**
- * Right-hand inspector router. Exactly one panel is rendered for the selected
- * rail category so controls from unrelated tools can never appear together.
+ * Active-tool content router shown beside the editor tool rail.
  */
 import { AudioPanel } from "./panels/AudioPanel";
-import { CutPanel } from "./panels/CutPanel";
 import { LayoutPanel } from "./panels/LayoutPanel";
-import { MediaInspectorPanel } from "./panels/MediaInspectorPanel";
 import { SpeedPanel } from "./panels/SpeedPanel";
 import { StylePanel } from "./panels/StylePanel";
 import { SubtitlesPanel } from "./panels/SubtitlesPanel";
+import { TransitionPanel } from "./panels/TransitionPanel";
+import { TextPanel } from "./panels/TextPanel";
 import { ZoomPanel } from "./panels/ZoomPanel";
-import { SlidersHorizontal } from "lucide-react";
-import { editorTools } from "./tools";
 import type {
   BackgroundCategory,
   BackgroundStyle,
@@ -19,6 +16,7 @@ import type {
   CameraBorderStyle,
   CameraPosition,
   CameraShape,
+  ClipTransition,
   EditorMediaItem,
   EditorTool,
   LayoutMode,
@@ -26,6 +24,7 @@ import type {
   SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
+  TextOverlay,
   TimelineMediaClip,
   VideoCornerStyle,
   ZoomEffect
@@ -50,6 +49,8 @@ export function EditorToolPanel(props: {
   previewItem: EditorMediaItem | null;
   selectedZoomEffect: ZoomEffect | null;
   selectedSpeedEffect: SpeedEffect | null;
+  transitions: ClipTransition[];
+  videoClips: TimelineMediaClip[];
   sttStatus: "idle" | "loading" | "transcribing" | "done" | "error";
   sttDownloadProgress: number | null;
   sttModelLabel: string;
@@ -57,7 +58,8 @@ export function EditorToolPanel(props: {
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
   selectedSubtitle: SubtitleSegment | null;
-  selectedClip: TimelineMediaClip | null;
+  textOverlays: TextOverlay[];
+  selectedTextOverlay: TextOverlay | null;
   activeBackgroundCategory: BackgroundCategory;
   backgroundStyle: BackgroundStyle;
   videoCornerStyle: VideoCornerStyle;
@@ -81,33 +83,24 @@ export function EditorToolPanel(props: {
   onAddSpeed: () => void;
   onUpdateSpeed: (id: string, updates: Partial<SpeedEffect>) => void;
   onRemoveSpeed: (id: string) => void;
+  onSetTransition: (input: Omit<ClipTransition, "id">) => void;
+  onRemoveTransition: (fromSegmentId: string, toSegmentId: string) => void;
   onAddSubtitle: () => void;
   onGenerateSubtitles: () => void;
   onSubtitleStyleChange: (style: SubtitleStyle) => void;
   onUpdateSubtitle: (id: string, updates: Partial<SubtitleSegment>) => void;
   onSelectSubtitle: (subtitleId: string | null) => void;
-  onSplitAtPlayhead: () => void;
-  onDeleteSelected: () => void;
+  onAddTextOverlay: () => void;
+  onSelectTextOverlay: (id: string) => void;
+  onUpdateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
+  onRemoveTextOverlay: (id: string) => void;
   onBackgroundCategoryChange: (category: BackgroundCategory) => void;
   onBackgroundStyleChange: (style: BackgroundStyle) => void;
   onUploadCustomBackground: () => void;
   onCornerStyleChange: (style: VideoCornerStyle) => void;
 }) {
-  const activeToolMeta = editorTools.find((tool) => tool.id === props.activeTool);
   return (
-    <aside className="editor-inspector order-4 flex min-h-0 min-w-0 flex-col overflow-hidden border-l border-white/[0.08] bg-[#1b1f27]">
-      <header className="flex min-h-10 items-center gap-2 border-b border-white/[0.08] px-3 text-xs font-semibold text-slate-200">
-        <SlidersHorizontal size={14} className="text-slate-400" />
-        <span>Properties</span>
-        <span className="ml-auto inline-flex items-center gap-1.5 text-[0.68rem] font-medium text-slate-500">
-          <span className="text-[#d8bd82]">{activeToolMeta?.icon}</span>
-          {activeToolMeta?.label ?? "Inspector"}
-        </span>
-      </header>
-
-      <div className="editor-inspector-content flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-3">
-
-      {props.activeTool === "media" ? <MediaInspectorPanel item={props.previewItem} /> : null}
+    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto transition">
 
       {props.activeTool === "layout" ? (
         <LayoutPanel
@@ -166,6 +159,15 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
+      {props.activeTool === "transitions" ? (
+        <TransitionPanel
+          videoClips={props.videoClips}
+          transitions={props.transitions}
+          onSetTransition={props.onSetTransition}
+          onRemoveTransition={props.onRemoveTransition}
+        />
+      ) : null}
+
       {props.activeTool === "subtitles" ? (
         <SubtitlesPanel
           sttDownloadProgress={props.sttDownloadProgress}
@@ -183,11 +185,14 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
-      {props.activeTool === "cut" ? (
-        <CutPanel
-          selectedClip={props.selectedClip}
-          onSplitAtPlayhead={props.onSplitAtPlayhead}
-          onDeleteSelected={props.onDeleteSelected}
+      {props.activeTool === "text" ? (
+        <TextPanel
+          overlays={props.textOverlays}
+          selectedOverlay={props.selectedTextOverlay}
+          onAdd={props.onAddTextOverlay}
+          onSelect={props.onSelectTextOverlay}
+          onUpdate={props.onUpdateTextOverlay}
+          onRemove={props.onRemoveTextOverlay}
         />
       ) : null}
 
@@ -202,7 +207,6 @@ export function EditorToolPanel(props: {
           onCornerStyleChange={props.onCornerStyleChange}
         />
       ) : null}
-      </div>
-    </aside>
+    </div>
   );
 }

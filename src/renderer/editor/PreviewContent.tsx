@@ -4,6 +4,8 @@
  * subtitle overlay and layout-edit handles.
  */
 import type { CSSProperties, PointerEvent as ReactPointerEvent, RefObject } from "react";
+import { PreviewVideo } from "./PreviewVideo";
+import type { PreviewQuality } from "./preview-quality";
 import { clampNumber } from "./utils";
 import type {
   EditorMediaItem,
@@ -20,10 +22,10 @@ const mediaFrameClassName =
   "absolute inset-0 size-full border-0 bg-transparent transition-[transform] duration-[45ms] ease-[cubic-bezier(0.2,0,0.2,1)] will-change-transform";
 
 const editOverlayClassName =
-  "absolute z-[3] box-border cursor-grab touch-none border border-amber-300/90 bg-emerald-500/10 shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
+  "group absolute z-[3] box-border cursor-grab touch-none border border-transparent bg-transparent shadow-none transition-[border-color,background-color,box-shadow] hover:border-amber-300/90 hover:bg-emerald-500/10 hover:shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
 
 const handleBaseClassName =
-  "absolute z-[1] size-3 rounded-full border-2 border-white bg-amber-300 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)]";
+  "absolute z-[1] size-3 rounded-full border-2 border-white bg-amber-300 opacity-0 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)] transition-opacity group-hover:opacity-100";
 
 const handleClassByMode: Record<ScreenLayoutDragMode, string> = {
   move: "",
@@ -55,6 +57,7 @@ export function PreviewContent(props: {
   activeSubtitle: SubtitleSegment | null;
   subtitleStyle: SubtitleStyle;
   currentTime: number;
+  previewQuality: PreviewQuality;
   mainVideoRef: RefObject<HTMLVideoElement | null>;
   cameraRef: RefObject<HTMLVideoElement | null>;
   onScreenEditPointerDown: (
@@ -96,8 +99,9 @@ export function PreviewContent(props: {
       <>
         {showScreen ? (
           <>
-            <video
-              ref={props.mainVideoRef}
+            <PreviewVideo
+              videoRef={props.mainVideoRef}
+              quality={props.previewQuality}
               className={mediaFrameClassName}
               style={props.screenStyle}
               src={props.item.url}
@@ -123,8 +127,9 @@ export function PreviewContent(props: {
         {showCamera && props.projectCamera ? (
           <>
             <div className={mediaFrameClassName} style={props.cameraStyle ?? undefined}>
-              <video
-                ref={props.cameraRef}
+              <PreviewVideo
+                videoRef={props.cameraRef}
+                quality={props.previewQuality}
                 className="absolute inset-0 size-full border-0 bg-transparent"
                 style={props.cameraVideoStyle}
                 src={props.projectCamera.url}
@@ -158,8 +163,9 @@ export function PreviewContent(props: {
 
   return (
     <>
-      <video
-        ref={props.mainVideoRef}
+      <PreviewVideo
+        videoRef={props.mainVideoRef}
+        quality={props.previewQuality}
         className={mediaFrameClassName}
         style={props.screenStyle}
         src={props.item.url}

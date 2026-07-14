@@ -8,6 +8,7 @@ import type {
 } from "react";
 import type {
   ExportResolution,
+  ExportSubtitleMode,
   ExportVideoFormat,
   ExportVideoRequest,
   ProjectView
@@ -27,6 +28,7 @@ type UseEditorExportParams = {
   setExportMessage: Dispatch<SetStateAction<string | null>>;
   subtitles: SubtitleSegment[];
   trimRange: { start: number; end: number };
+  beforeExport: () => Promise<void>;
 };
 
 export function useEditorExport(params: UseEditorExportParams) {
@@ -44,6 +46,7 @@ export function useEditorExport(params: UseEditorExportParams) {
   } = params;
   const [exportFormat, setExportFormat] = useState<ExportVideoFormat>("mp4");
   const [exportResolution, setExportResolution] = useState<ExportResolution>("1080p");
+  const [exportSubtitleMode, setExportSubtitleMode] = useState<ExportSubtitleMode>("burn-in");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -84,6 +87,7 @@ export function useEditorExport(params: UseEditorExportParams) {
     setExporting(true);
 
     try {
+      await params.beforeExport();
       const result = await window.openVideoCraft.editor.exportVideo({
         source,
         format: exportFormat,
@@ -93,7 +97,8 @@ export function useEditorExport(params: UseEditorExportParams) {
         volume: masterVolume / 100,
         audioLevels,
         backgroundAudioImportIds: backgroundAudioIds,
-        subtitles: subtitles.map(({ start, end, text }) => ({ start, end, text }))
+        subtitles: subtitles.map(({ start, end, text }) => ({ start, end, text })),
+        subtitleMode: exportSubtitleMode
       });
 
       if (result) {
@@ -115,9 +120,11 @@ export function useEditorExport(params: UseEditorExportParams) {
     exportFormat,
     exporting,
     exportResolution,
+    exportSubtitleMode,
     hasSubtitles: subtitles.length > 0,
     openExportDialog: () => setExportDialogOpen(true),
     setExportFormat,
-    setExportResolution
+    setExportResolution,
+    setExportSubtitleMode
   };
 }

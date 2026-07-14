@@ -27,12 +27,14 @@ import type {
   CameraFrame,
   CameraPosition,
   CameraShape,
+  ClipTransition,
   EditorMediaItem,
   LayoutMode,
   ScreenAspectRatio,
   SpeedEffect,
   SubtitleSegment,
   SubtitleStyle,
+  TextOverlay,
   TimelineSegment,
   VideoCornerStyle,
   ZoomEffect
@@ -80,17 +82,21 @@ type UseEditorPersistenceParams = {
   setScreenAspectRatio: Dispatch<SetStateAction<ScreenAspectRatio>>;
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
+  setTransitions: Dispatch<SetStateAction<ClipTransition[]>>;
   setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitleStyle: Dispatch<SetStateAction<SubtitleStyle>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
+  setTextOverlays: Dispatch<SetStateAction<TextOverlay[]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setTrimRange: Dispatch<SetStateAction<TrimRange>>;
   setVideoCornerStyle: Dispatch<SetStateAction<VideoCornerStyle>>;
   setZoomEffects: Dispatch<SetStateAction<ZoomEffect[]>>;
   speedEffects: SpeedEffect[];
+  transitions: ClipTransition[];
   subtitleStyle: SubtitleStyle;
   subtitleLanguage: string | null;
   subtitles: SubtitleSegment[];
+  textOverlays: TextOverlay[];
   timelineSegments: TimelineSegment[];
   trimRange: TrimRange;
   videoCornerStyle: VideoCornerStyle;
@@ -115,9 +121,11 @@ type RestoreActionParams = {
   setScreenAspectRatio: Dispatch<SetStateAction<ScreenAspectRatio>>;
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
+  setTransitions: Dispatch<SetStateAction<ClipTransition[]>>;
   setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitleStyle: Dispatch<SetStateAction<SubtitleStyle>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
+  setTextOverlays: Dispatch<SetStateAction<TextOverlay[]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setTrimRange: Dispatch<SetStateAction<TrimRange>>;
   setVideoCornerStyle: Dispatch<SetStateAction<VideoCornerStyle>>;
@@ -167,17 +175,21 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setScreenAspectRatio,
     setScreenPosition,
     setSpeedEffects,
+    setTransitions,
     setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
+    setTextOverlays,
     setTimelineSegments,
     setTrimRange,
     setVideoCornerStyle,
     setZoomEffects,
     speedEffects,
+    transitions,
     subtitleStyle,
     subtitleLanguage,
     subtitles,
+    textOverlays,
     timelineSegments,
     trimRange,
     videoCornerStyle,
@@ -185,6 +197,9 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   } = params;
   const [isReady, setIsReady] = useState(!projectId);
   const [saving, setSaving] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const [lastAgentEdit, setLastAgentEdit] = useState<EditorProjectStateView["lastMutation"] | null>(null);
+  const revisionRef = useRef(0);
   const saveStateRef = useRef<(silent?: boolean) => Promise<void>>(async () => undefined);
   const saveInFlightRef = useRef<Promise<void> | null>(null);
   const savedSignatureRef = useRef<string | null>(null);
@@ -195,11 +210,19 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   // aborts a main-process loadURL when beforeunload prevents the unload, which
   // is why blocking here would make the Home button appear to do nothing.
   const allowUnloadRef = useRef(false);
+  const notifySession = (dirty: boolean) => {
+    if (projectId) {
+      void window.openVideoCraft.editor.setSessionState({ projectId, dirty }).catch(() => undefined);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
     savedSignatureRef.current = null;
     dirtyRef.current = false;
+    revisionRef.current = 0;
+    setRevision(0);
+    setLastAgentEdit(null);
 
     if (!projectId) {
       setIsReady(true);
@@ -216,7 +239,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         }
 
         setProject(loadedProject);
+        notifySession(false);
         if (savedState) {
+          revisionRef.current = savedState.revision;
+          setRevision(savedState.revision);
+          setLastAgentEdit(savedState.lastMutation.source === "agent" ? savedState.lastMutation : null);
           const restored = applySavedState(savedState, {
             knownTimelineItemIdsRef,
             setActiveBackgroundCategory,
@@ -236,9 +263,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             setScreenAspectRatio,
             setScreenPosition,
             setSpeedEffects,
+            setTransitions,
             setSubtitleLanguage,
             setSubtitleStyle,
             setSubtitles,
+            setTextOverlays,
             setTimelineSegments,
             setTrimRange,
             setVideoCornerStyle,
@@ -270,9 +299,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
               setScreenAspectRatio,
               setScreenPosition,
               setSpeedEffects,
+              setTransitions,
               setSubtitleLanguage,
               setSubtitleStyle,
               setSubtitles,
+              setTextOverlays,
               setTimelineSegments,
               setTrimRange,
               setVideoCornerStyle,
@@ -316,9 +347,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setScreenAspectRatio,
     setScreenPosition,
     setSpeedEffects,
+    setTransitions,
     setSubtitleLanguage,
     setSubtitleStyle,
     setSubtitles,
+    setTextOverlays,
     setTimelineSegments,
     setTrimRange,
     setVideoCornerStyle,
@@ -348,9 +381,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         screenAspectRatio,
         screenPosition,
         speedEffects,
+        transitions,
         subtitleLanguage,
         subtitleStyle,
         subtitles,
+        textOverlays,
         timelineSegments,
         trimRange,
         videoCornerStyle,
@@ -373,9 +408,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       screenAspectRatio,
       screenPosition,
       speedEffects,
+      transitions,
       subtitleLanguage,
       subtitleStyle,
       subtitles,
+      textOverlays,
       timelineSegments,
       trimRange,
       videoCornerStyle,
@@ -424,11 +461,16 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
 
         const result = await window.openVideoCraft.editor.saveProjectState({
           projectId: activeProject.id,
+          baseRevision: revisionRef.current,
           state: snapshotBeingSaved,
           imports: importsBeingSaved
         });
 
+        revisionRef.current = result.revision;
+        setRevision(result.revision);
+        setLastAgentEdit(result.lastMutation.source === "agent" ? result.lastMutation : null);
         setImportedMedia(result.imports.map(toEditorMediaItem));
+        notifySession(false);
         savedSignatureRef.current = signatureBeingSaved;
         dirtyRef.current = latestSignatureRef.current !== signatureBeingSaved;
         saved = true;
@@ -460,6 +502,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     }
 
     dirtyRef.current = savedSignatureRef.current !== persistenceSignature;
+    notifySession(dirtyRef.current);
     if (!dirtyRef.current) return undefined;
 
     const timer = window.setTimeout(() => {
@@ -467,6 +510,80 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     }, 1500);
     return () => window.clearTimeout(timer);
   }, [isReady, persistenceSignature]);
+
+  useEffect(() => {
+    if (!projectId || !isReady) return undefined;
+    const refresh = window.setInterval(() => notifySession(dirtyRef.current), 5_000);
+    return () => {
+      window.clearInterval(refresh);
+      void window.openVideoCraft.editor.setSessionState({ projectId, dirty: false }).catch(() => undefined);
+    };
+  // projectId/isReady own the session lifecycle; notifySession reads refs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, isReady]);
+
+  useEffect(() => {
+    if (!projectId) return undefined;
+    return window.openVideoCraft.editor.onProjectStateChanged((external) => {
+      if (external.revision <= revisionRef.current) return;
+      if (dirtyRef.current) {
+        setError("An AI edit arrived while this project had unsaved local changes. Save or reload before applying more AI edits.");
+        return;
+      }
+      const restored = applySavedState(external, {
+        knownTimelineItemIdsRef,
+        setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
+        setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
+        setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
+        setMasterVolume, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
+        setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTextOverlays, setTimelineSegments, setTrimRange,
+        setVideoCornerStyle, setZoomEffects
+      });
+      if (!restored) {
+        setError("The external AI edit produced an unsupported editor state.");
+        return;
+      }
+      revisionRef.current = external.revision;
+      setRevision(external.revision);
+      setLastAgentEdit(external.lastMutation.source === "agent" ? external.lastMutation : null);
+      const externalItems = external.imports.map(toEditorMediaItem);
+      savedSignatureRef.current = JSON.stringify({ snapshot: external.state, imports: toEditorProjectImports(externalItems) });
+      dirtyRef.current = false;
+      notifySession(false);
+      if (external.lastMutation.summary) setExportMessage(external.lastMutation.summary);
+    });
+  }, [
+    knownTimelineItemIdsRef, projectId, setActiveBackgroundCategory, setAudioLevels,
+    setBackgroundAudioIds, setBackgroundStyle, setCameraBorderStyle, setCameraContentTransform,
+    setCameraFrame, setCameraPosition, setCameraShape, setCameraSize, setCustomBackgroundImportId,
+    setError, setExportMessage, setImportedMedia, setLayoutMode, setMasterVolume,
+    setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions, setSubtitleLanguage,
+    setSubtitleStyle, setSubtitles, setTimelineSegments, setTrimRange, setVideoCornerStyle,
+    setTextOverlays,
+    setZoomEffects
+  ]);
+
+  const undoLastAgentEdit = async () => {
+    if (!projectId || !lastAgentEdit?.editId) return;
+    const restored = await window.openVideoCraft.editor.undoAgentEdit({
+      projectId, baseRevision: revisionRef.current, editId: lastAgentEdit.editId
+    });
+    if (!applySavedState(restored, {
+      knownTimelineItemIdsRef,
+      setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
+      setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
+      setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
+      setMasterVolume, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
+      setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTimelineSegments, setTrimRange,
+      setTextOverlays,
+      setVideoCornerStyle, setZoomEffects
+    })) throw new Error("The AI checkpoint could not be restored.");
+    revisionRef.current = restored.revision;
+    setRevision(restored.revision);
+    setLastAgentEdit(null);
+    dirtyRef.current = false;
+    setExportMessage("AI edit undone");
+  };
 
   useEffect(() => {
     function guardUnsavedChanges(event: BeforeUnloadEvent) {
@@ -496,8 +613,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     },
     hasUnsavedChanges: () => dirtyRef.current,
     isReady,
+    lastAgentEdit,
+    revision,
     saving,
-    saveState
+    saveState,
+    undoLastAgentEdit
   };
 }
 
@@ -531,9 +651,11 @@ function createRestoreActions(actions: RestoreActionParams) {
     setScreenAspectRatio: actions.setScreenAspectRatio,
     setScreenPosition: actions.setScreenPosition,
     setSpeedEffects: actions.setSpeedEffects,
+    setTransitions: actions.setTransitions,
     setSubtitleLanguage: actions.setSubtitleLanguage,
     setSubtitleStyle: actions.setSubtitleStyle,
     setSubtitles: actions.setSubtitles,
+    setTextOverlays: actions.setTextOverlays,
     setTimelineSegments: actions.setTimelineSegments,
     setTrimRange: actions.setTrimRange,
     setVideoCornerStyle: actions.setVideoCornerStyle,

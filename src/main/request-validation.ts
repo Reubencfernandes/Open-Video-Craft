@@ -11,6 +11,7 @@ import type {
   SaveEditorProjectStateRequest,
   StartRecordingRequest
 } from "../shared/types";
+import { validateEditorStateSnapshot } from "../shared/editor-domain";
 
 export function assertStartRecordingRequest(
   value: unknown
@@ -35,6 +36,9 @@ export function assertSaveEditorProjectStateRequest(
     !value ||
     typeof value !== "object" ||
     typeof (value as Partial<SaveEditorProjectStateRequest>).projectId !== "string" ||
+    !Number.isInteger((value as Partial<SaveEditorProjectStateRequest>).baseRevision) ||
+    ((value as Partial<SaveEditorProjectStateRequest>).baseRevision ?? -1) < 0 ||
+    !validateEditorStateSnapshot((value as Partial<SaveEditorProjectStateRequest>).state) ||
     !Array.isArray((value as Partial<SaveEditorProjectStateRequest>).imports)
   ) {
     throw new Error("Invalid editor save request.");
@@ -73,7 +77,8 @@ export function assertExportVideoRequest(value: unknown): asserts value is Expor
       Number.isFinite(subtitle.start) &&
       Number.isFinite(subtitle.end) &&
       subtitle.end >= subtitle.start
-    )
+    ) ||
+    (request.subtitleMode !== undefined && !["burn-in", "sidecar", "none"].includes(request.subtitleMode))
   ) {
     throw new Error("Invalid video export request.");
   }

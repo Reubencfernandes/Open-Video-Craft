@@ -57,7 +57,9 @@ type EffectDrag = {
 };
 
 type UseTimelineDragInteractionsParams = {
+  beginPlaybackInteraction: () => void;
   currentTimeRef: MutableRefObject<number>;
+  endPlaybackInteraction: () => void;
   getTimelineTimeFromClientX: (clientX: number) => number | null;
   mediaDurationById: Map<string, number>;
   scheduleTimelinePlaybackSync: (segments: TimelineSegment[]) => void;
@@ -89,7 +91,9 @@ type UseTimelineDragInteractionsParams = {
 
 export function useTimelineDragInteractions(params: UseTimelineDragInteractionsParams) {
   const {
+    beginPlaybackInteraction,
     currentTimeRef,
+    endPlaybackInteraction,
     getTimelineTimeFromClientX,
     mediaDurationById,
     scheduleTimelinePlaybackSync,
@@ -198,8 +202,12 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       edge,
       originalSegments: timelineSegments
     };
+    beginPlaybackInteraction();
     setSelectedTimelineSegmentId(segmentId);
-    timelineBodyRef.current?.setPointerCapture(event.pointerId);
+    // Capture on the edge that actually received pointerdown. Capturing on an
+    // ancestor is inconsistent across Chromium input types and was causing
+    // trim drags to stop as soon as the pointer left the narrow handle.
+    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function updateTimelineClipTrim(clientX: number) {
@@ -216,6 +224,8 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       }
       return next;
     });
+    // Keep the preview on the trim boundary while the edge is dragged.
+    seek(drag.edge === "start" ? time : Math.max(0, time - 1 / 30));
   }
 
   // Trims mutate live during the drag; push a single undo entry at the end.
@@ -258,6 +268,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       moved: false,
       originalSegments: timelineSegments
     };
+    beginPlaybackInteraction();
     setSelectedTimelineSegmentId(segmentId);
     // Clips can cover the whole lane, so a click on a clip must still move the
     // playhead; a real drag only starts after the move threshold.
@@ -340,6 +351,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       origEnd: effect.end,
       moved: false
     };
+    beginPlaybackInteraction();
     setSelectedZoomId(id);
     if (mode === "move") {
       seek(time);
@@ -419,6 +431,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       origEnd: effect.end,
       moved: false
     };
+    beginPlaybackInteraction();
     setSelectedSpeedId(id);
     if (mode === "move") {
       seek(time);
@@ -495,6 +508,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       original: subtitle,
       moved: false
     };
+    beginPlaybackInteraction();
     setSelectedSubtitleId(id);
     setActiveTool("subtitles");
     if (mode === "move") {
@@ -560,7 +574,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   // (trim / zoom / speed / subtitle / move) and otherwise scrub the playhead.
   // ---------------------------------------------------------------------------
 
-  function beginTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
+  function beginTimelineScrub(event: ReactPointerEvent<HTMLElement>) {
     if (anyClipDragActive()) {
       return;
     }
@@ -571,13 +585,14 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     }
 
     setTimelineContextMenu(null);
+    beginPlaybackInteraction();
     timelineDragRef.current = true;
     setScrubbingTimeline(true);
     event.currentTarget.setPointerCapture(event.pointerId);
     seekTimelinePointer(event.clientX);
   }
 
-  function moveTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
+  function moveTimelineScrub(event: ReactPointerEvent<HTMLElement>) {
     // While a clip/effect is being dragged, suppress the clip reflow transition
     // so it follows the pointer exactly (the transition animates drops instead).
     if (anyClipDragActive()) {
@@ -616,7 +631,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     seekTimelinePointer(event.clientX);
   }
 
-  function endTimelineScrub(event: ReactPointerEvent<HTMLDivElement>) {
+  function endTimelineScrub(event: ReactPointerEvent<HTMLElement>) {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -630,6 +645,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     timelineBodyRef.current?.removeAttribute("data-interacting");
     timelineDragRef.current = false;
     setScrubbingTimeline(false);
+    endPlaybackInteraction();
   }
 
   return {

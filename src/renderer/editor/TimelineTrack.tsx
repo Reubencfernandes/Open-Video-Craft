@@ -33,6 +33,7 @@ export function TimelineTrack(props: {
 
   return (
     <div
+      data-timeline-track={props.label}
       className={cx(
         "grid grid-cols-[var(--timeline-label-width)_minmax(0,1fr)] items-stretch gap-[var(--timeline-track-gap)]",
         Boolean(props.controls) && "gap-y-2"

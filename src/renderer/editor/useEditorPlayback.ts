@@ -7,8 +7,11 @@ import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { AudioMeter } from "./audio-meter";
 import { canDriftSeek } from "./media-utils";
+import { resolveNextTimelineTime } from "./playback-clock";
 import {
+  getSafeMediaSeekTarget,
   getMediaTimeForTimelineTime,
+  isMediaTimePlayable,
   type PlaybackSyncReason,
   shouldSeekPrimaryVideo,
   shouldSeekSecondaryMedia
@@ -61,6 +64,8 @@ type UseEditorPlaybackResult = {
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
   cameraRef: MutableRefObject<HTMLVideoElement | null>;
   currentTimeRef: MutableRefObject<number>;
+  beginPlaybackInteraction: () => void;
+  endPlaybackInteraction: () => void;
   getAudioLevel: () => number;
   mainVideoRef: MutableRefObject<HTMLVideoElement | null>;
   playingRef: MutableRefObject<boolean>;
@@ -115,10 +120,13 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const pendingCameraSeekKeyRef = useRef<string | null>(null);
   const secondaryDriftSeekTimesRef = useRef<Map<string, number>>(new Map());
   const playbackAttemptTokenRef = useRef(0);
+  const pendingPlayElementsRef = useRef(new WeakSet<HTMLMediaElement>());
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<AudioLevelState>({});
   const timelineDurationRef = useRef(0);
   const audioMeterRef = useRef<AudioMeter | null>(null);
+  const playbackInteractionRef = useRef(false);
+  const resumeAfterInteractionRef = useRef(false);
 
   function getAudioMeter(): AudioMeter {
     audioMeterRef.current ??= new AudioMeter();
@@ -298,20 +306,25 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   function getNextPlaybackTime(dt: number): number {
     const clockClip = findVideoClipAtTime(currentTimeRef.current);
     const videoEl = getPrimaryPlaybackVideoElement();
-    // Seeking or buffering a compressed screen recording can take a moment.
-    // Freeze the authoritative timeline until Chromium has a future frame,
-    // rather than racing ahead or treating normal decoder latency as failure.
-    if (
-      clockClip?.item.kind === "video" &&
-      videoEl &&
-      (videoEl.seeking ||
-        videoEl.paused ||
-        videoEl.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
-    ) {
-      return currentTimeRef.current;
-    }
+    const videoClock =
+      clockClip?.item.kind === "video" && videoEl
+        ? {
+            clip: clockClip,
+            mediaTime: videoEl.currentTime,
+            ended: videoEl.ended,
+            ready:
+              !videoEl.seeking &&
+              !videoEl.paused &&
+              videoEl.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+          }
+        : null;
 
-    return currentTimeRef.current + dt * getPlaybackRate(currentTimeRef.current);
+    return resolveNextTimelineTime({
+      currentTime: currentTimeRef.current,
+      elapsedSeconds: dt,
+      playbackRate: getPlaybackRate(currentTimeRef.current),
+      videoClock
+    });
   }
 
   function getPlaybackRate(time: number): number {
@@ -332,8 +345,19 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   }
 
   function playMediaElement(element: HTMLMediaElement, label: string) {
+    if (pendingPlayElementsRef.current.has(element)) {
+      return;
+    }
+
     const token = playbackAttemptTokenRef.current;
-    void element.play().catch((playError: unknown) => {
+    pendingPlayElementsRef.current.add(element);
+    void element.play().then(() => {
+      pendingPlayElementsRef.current.delete(element);
+      if (token !== playbackAttemptTokenRef.current || !playingRef.current) {
+        element.pause();
+      }
+    }).catch((playError: unknown) => {
+      pendingPlayElementsRef.current.delete(element);
       if (token !== playbackAttemptTokenRef.current || !playingRef.current) {
         return;
       }
@@ -404,7 +428,12 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       input.element.volume = connected ? 1 : input.volume;
     }
     input.element.playbackRate = getPlaybackRate(input.timelineTime);
-    if (input.isPlaying && input.element.paused) {
+    if (
+      input.isPlaying &&
+      input.element.paused &&
+      !input.element.seeking &&
+      !input.element.ended
+    ) {
       playMediaElement(input.element, input.label);
     } else if (!input.isPlaying && !input.element.paused) {
       input.element.pause();
@@ -424,6 +453,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     useEngine: boolean;
   }) {
     const desired = getMediaTimeForTimelineTime(input.clip, input.timelineTime);
+    const seekTarget = getSafeMediaSeekTarget(desired, input.element.duration);
+    const playable = isMediaTimePlayable(desired, input.element.duration);
     const now = performance.now();
     const lastSeekAt = secondaryDriftSeekTimesRef.current.get(input.syncKey) ?? null;
     const shouldSeek = shouldSeekSecondaryMedia({
@@ -433,12 +464,12 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       canSeek:
         input.reason === "tick" ? canDriftSeek(input.element) : canSetMediaTime(input.element),
       currentMediaTime: input.element.currentTime,
-      desiredMediaTime: desired,
+      desiredMediaTime: seekTarget,
       nowMs: now,
       lastSeekAtMs: lastSeekAt
     });
 
-    if (shouldSeek && trySetMediaTime(input.element, desired)) {
+    if (shouldSeek && trySetMediaTime(input.element, seekTarget)) {
       secondaryDriftSeekTimesRef.current.set(input.syncKey, now);
     }
 
@@ -448,9 +479,15 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       input.element.volume = input.volume;
     }
     input.element.playbackRate = getPlaybackRate(input.timelineTime);
-    if (input.isPlaying && input.element.paused) {
+    if (
+      input.isPlaying &&
+      playable &&
+      input.element.paused &&
+      !input.element.seeking &&
+      !input.element.ended
+    ) {
       playMediaElement(input.element, input.label);
-    } else if (!input.isPlaying && !input.element.paused) {
+    } else if ((!input.isPlaying || !playable) && !input.element.paused) {
       input.element.pause();
     }
   }
@@ -586,6 +623,33 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     syncMediaToTime(startAt, true, "play-start");
   }
 
+  /** Pause the playback clock while a pointer gesture owns timeline time. */
+  function beginPlaybackInteraction() {
+    if (playbackInteractionRef.current) {
+      return;
+    }
+
+    playbackInteractionRef.current = true;
+    resumeAfterInteractionRef.current = playingRef.current;
+    if (playingRef.current) {
+      stopPlayback("pause");
+    }
+  }
+
+  /** Resume only when the timeline was playing before the gesture began. */
+  function endPlaybackInteraction() {
+    if (!playbackInteractionRef.current) {
+      return;
+    }
+
+    playbackInteractionRef.current = false;
+    const shouldResume = resumeAfterInteractionRef.current;
+    resumeAfterInteractionRef.current = false;
+    if (shouldResume) {
+      togglePlayback();
+    }
+  }
+
   function seek(value: number) {
     const duration = timelineDurationRef.current || timelineDuration;
     const nextTime = Math.max(0, Math.min(value, duration || value));
@@ -633,8 +697,10 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
   return {
     audioElsRef,
+    beginPlaybackInteraction,
     cameraRef,
     currentTimeRef,
+    endPlaybackInteraction,
     getAudioLevel: () => getAudioMeterLevel(),
     mainVideoRef,
     playingRef,

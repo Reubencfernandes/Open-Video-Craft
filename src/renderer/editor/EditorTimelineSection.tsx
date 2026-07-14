@@ -10,8 +10,10 @@ import type {
 import { Timeline } from "./Timeline";
 import type {
   EditorTool,
+  ClipTransition,
   SpeedEffect,
   SubtitleSegment,
+  TextOverlay,
   TimelineContextMenu,
   TimelineMediaClip,
   ZoomEffect
@@ -41,13 +43,17 @@ export function EditorTimelineSection(props: {
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
+  transitions: ClipTransition[];
   subtitles: SubtitleSegment[];
+  textOverlays: TextOverlay[];
   selectedSegmentId: string | null;
   selectedZoomId: string | null;
   selectedSpeedId: string | null;
   selectedSubtitleId: string | null;
+  selectedTextOverlayId: string | null;
   contextMenu: TimelineContextMenu;
   canSplitAtContextMenu: boolean;
+  canSplitAtPlayhead: boolean;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
   onUndo: () => void;
@@ -57,7 +63,9 @@ export function EditorTimelineSection(props: {
   onSelectClip: (clip: TimelineMediaClip) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
+  onSelectTransition: (transition: ClipTransition) => void;
   onSelectSubtitle: (subtitleId: string) => void;
+  onSelectTextOverlay: (overlay: TextOverlay) => void;
   onTrimPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     segmentId: string,
@@ -79,9 +87,9 @@ export function EditorTimelineSection(props: {
     id: string,
     mode: "move" | "start" | "end"
   ) => void;
-  onBodyPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onBodyPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
-  onBodyPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onBodyPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onBodyPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onBodyPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
   onBodyContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onBodyDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onBodyDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
@@ -116,13 +124,17 @@ export function EditorTimelineSection(props: {
       audioLevels={props.audioLevels}
       zoomEffects={props.zoomEffects}
       speedEffects={props.speedEffects}
+      transitions={props.transitions}
       subtitles={props.subtitles}
+      textOverlays={props.textOverlays}
       selectedSegmentId={props.selectedSegmentId}
       selectedZoomId={props.selectedZoomId}
       selectedSpeedId={props.selectedSpeedId}
       selectedSubtitleId={props.selectedSubtitleId}
+      selectedTextOverlayId={props.selectedTextOverlayId}
       contextMenu={props.contextMenu}
       canSplitAtContextMenu={props.canSplitAtContextMenu}
+      canSplitAtPlayhead={props.canSplitAtPlayhead}
       onTogglePlayback={props.onTogglePlayback}
       onSeekFrame={props.onSeekFrame}
       onUndo={props.onUndo}
@@ -132,7 +144,9 @@ export function EditorTimelineSection(props: {
       onSelectClip={props.onSelectClip}
       onSelectZoom={props.onSelectZoom}
       onSelectSpeed={props.onSelectSpeed}
+      onSelectTransition={props.onSelectTransition}
       onSelectSubtitle={props.onSelectSubtitle}
+      onSelectTextOverlay={props.onSelectTextOverlay}
       onTrimPointerDown={props.onTrimPointerDown}
       onMovePointerDown={props.onMovePointerDown}
       onZoomDragPointerDown={props.onZoomDragPointerDown}
