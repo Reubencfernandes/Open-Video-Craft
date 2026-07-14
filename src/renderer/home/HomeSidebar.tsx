@@ -18,13 +18,13 @@ export function HomeSidebar(props: {
   onOpenChangelog: () => void;
 }) {
   return (
-    <aside className="flex min-h-0 min-w-0 items-center gap-2 overflow-x-auto rounded-2xl bg-[#08090a]/96 p-2 shadow-[0_24px_70px_rgb(0_0_0_/_0.32)] md:flex-col md:overflow-x-hidden xl:items-stretch xl:p-4">
+    <aside className="flex min-h-0 min-w-0 items-center gap-2 overflow-x-auto rounded-2xl bg-[#0b0b0d] p-2 md:flex-col md:overflow-x-hidden xl:items-stretch xl:p-4">
       <div className="flex shrink-0 items-center gap-3 p-1 xl:px-3 xl:py-2">
         <img className="size-9 rounded-xl object-contain" src={appLogo} alt="" />
         <strong className="hidden text-lg font-semibold tracking-[-0.02em] text-white xl:block">Open Video Craft</strong>
       </div>
 
-      <button className="inline-flex size-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-white/[0.055] text-sm font-medium text-white hover:bg-white/[0.09] disabled:opacity-45 md:mt-4 md:size-11 xl:mt-5 xl:min-h-12 xl:w-full" type="button" title="New Project" disabled={props.disabled} onClick={props.onNewProject}>
+      <button className="inline-flex size-10 shrink-0 items-center justify-center gap-2 rounded-xl bg-white text-sm font-bold text-black transition hover:bg-neutral-200 disabled:opacity-45 md:mt-4 md:size-11 xl:mt-5 xl:min-h-12 xl:w-full" type="button" title="New Project" disabled={props.disabled} onClick={props.onNewProject}>
         <Plus size={17} /> <span className="hidden xl:inline">New Project</span>
       </button>
 
@@ -34,8 +34,8 @@ export function HomeSidebar(props: {
 
       <div className="hidden px-2 text-sm text-slate-500 xl:mt-7 xl:block">Tools</div>
       <nav className="flex gap-1 md:mt-3 md:grid md:w-full" aria-label="Creation tools">
-        <button className={toolLinkClassName} title="Record" type="button" disabled={props.disabled} onClick={props.onRecord}><Video className="text-rose-400" size={18} /> <span className="hidden xl:inline">Record</span></button>
-        <button className={toolLinkClassName} title="Video Editor" type="button" disabled={props.disabled} onClick={props.onOpenEditor}><Clapperboard className="text-amber-400" size={18} /> <span className="hidden xl:inline">Video Editor</span></button>
+        <button className={toolLinkClassName} title="Record" type="button" disabled={props.disabled} onClick={props.onRecord}><Video size={18} /> <span className="hidden xl:inline">Record</span></button>
+        <button className={toolLinkClassName} title="Video Editor" type="button" disabled={props.disabled} onClick={props.onOpenEditor}><Clapperboard size={18} /> <span className="hidden xl:inline">Video Editor</span></button>
       </nav>
 
       <div className="ml-auto shrink-0 md:mt-auto md:ml-0 md:w-full md:pt-4 xl:pt-6">

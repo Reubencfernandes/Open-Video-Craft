@@ -140,9 +140,11 @@ export function EditorPreviewPanel(props: {
           {activeTransition ? (
             <span className="pointer-events-none absolute inset-0 z-0 bg-black" aria-hidden="true" />
           ) : null}
+          {/* bg-black only while a transition is compositing: outside of one,
+              the frame's Style background must stay visible around the video. */}
           {previewItem ? (
             <div
-              className="absolute inset-0 overflow-hidden bg-black"
+              className={`absolute inset-0 overflow-hidden ${activeTransition ? "bg-black" : ""}`}
               style={activeTransition && primaryRole
                 ? getPreviewTransitionLayerStyle(
                     activeTransition.transition.type,

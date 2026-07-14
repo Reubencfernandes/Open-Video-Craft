@@ -25,5 +25,5 @@ export function ProjectArtwork(props: { name: string; index: number; duration: s
 function ProjectThumbnail({ url }: { url: string }) {
   const isImage = url.startsWith("data:image") || /\.(png|jpe?g|webp)(?:$|\?)/i.test(url);
   const { thumbnailUrl } = useMediaThumbnail({ url, kind: isImage ? "image" : "video" });
-  return thumbnailUrl ? <img className="absolute inset-0 size-full object-cover" src={thumbnailUrl} alt="" /> : <span className="relative grid size-10 place-items-center rounded-xl bg-black/25 text-amber-200"><Film size={20} /></span>;
+  return thumbnailUrl ? <img className="absolute inset-0 size-full object-cover" src={thumbnailUrl} alt="" /> : <span className="relative grid size-10 place-items-center rounded-xl bg-black/25 text-neutral-300"><Film size={20} /></span>;
 }
