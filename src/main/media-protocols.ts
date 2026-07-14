@@ -2,6 +2,11 @@
  * Custom `ovc-media://` (project files) and `ovc-import://` (imported files)
  * protocols. Adds CORS headers so renderer fetch()/canvas reads work, and
  * forwards Range headers so media elements can seek.
+ *
+ * SECURITY INVARIANT: `ovc-import://` may serve an absolute path only after
+ * that path was registered under an opaque UUID by the native file dialog or
+ * a preload-verified OS drag/drop File. Never add a renderer IPC that directly
+ * inserts arbitrary paths into `importedMediaCache`.
  */
 import { protocol } from "electron";
 import { createReadStream } from "node:fs";

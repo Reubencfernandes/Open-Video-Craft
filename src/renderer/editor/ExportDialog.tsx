@@ -2,7 +2,12 @@
  * Export modal: format and resolution selection.
  */
 import { Download, X } from "lucide-react";
-import type { ExportResolution, ExportSubtitleMode, ExportVideoFormat } from "../../shared/types";
+import type {
+  ExportProgress,
+  ExportResolution,
+  ExportSubtitleMode,
+  ExportVideoFormat
+} from "../../shared/types";
 
 const exportFormats: ExportVideoFormat[] = ["mp4", "webm", "mov"];
 const exportResolutions: ExportResolution[] = ["source", "720p", "1080p", "1440p"];
@@ -13,8 +18,10 @@ export function ExportDialog(props: {
   exportResolution: ExportResolution;
   exportSubtitleMode: ExportSubtitleMode;
   exporting: boolean;
+  exportProgress: ExportProgress | null;
   hasSubtitles: boolean;
   onClose: () => void;
+  onCancelExport: () => void;
   onExport: () => void;
   onFormatChange: (format: ExportVideoFormat) => void;
   onResolutionChange: (resolution: ExportResolution) => void;
@@ -26,7 +33,7 @@ export function ExportDialog(props: {
       role="presentation"
     >
       <section
-        className="grid w-[min(92vw,380px)] gap-5 rounded-2xl border border-amber-300/20 bg-[radial-gradient(circle_at_top_right,rgb(245_158_11_/_0.12),transparent_42%),#12110f] p-5 text-white shadow-[0_28px_90px_rgb(0_0_0_/_0.62)]"
+        className="grid w-[min(92vw,380px)] gap-5 rounded-2xl border border-white/10 bg-[#161618] p-5 text-white shadow-[0_28px_90px_rgb(0_0_0_/_0.62)]"
         role="dialog"
         aria-modal="true"
         aria-label="Export video"
@@ -88,19 +95,33 @@ export function ExportDialog(props: {
           <strong className="text-white">What this export includes</strong>
           <span>Timeline cuts, reordered clips, transitions, gaps, resolution, and mixed project/imported audio.</span>
           <span>{props.hasSubtitles ? "Choose burned-in, sidecar, or disabled subtitles above." : "No subtitles are currently present."}</span>
-          <span className="text-amber-200">Visual layout/backgrounds, camera compositing, zoom/speed effects, and advanced subtitle styles remain preview-only.</span>
+          <span>Zoom, speed effects, text animations, and subtitle burn-in are included.</span>
+          <span className="text-neutral-400">Visual layout/backgrounds, camera compositing, and advanced subtitle styles remain preview-only.</span>
         </div>
+        {props.exporting ? (
+          <div className="grid gap-2 text-xs font-bold text-slate-300" aria-live="polite">
+            <div className="flex items-center justify-between gap-3">
+              <span>{props.exportProgress?.message ?? "Preparing export…"}</span>
+              <span>{Math.round(props.exportProgress?.percent ?? 0)}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-white transition-[width] duration-200"
+                style={{ width: `${props.exportProgress?.percent ?? 0}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
         <div className="flex items-center justify-between gap-3">
           <button
             className="inline-flex min-h-[2.15rem] items-center justify-center rounded-lg border border-white/10 bg-white/[0.06] px-3 text-white disabled:cursor-not-allowed disabled:opacity-55"
             type="button"
-            onClick={props.onClose}
-            disabled={props.exporting}
+            onClick={props.exporting ? props.onCancelExport : props.onClose}
           >
-            Cancel
+            {props.exporting ? "Cancel export" : "Cancel"}
           </button>
           <button
-            className="inline-flex min-h-[2.15rem] items-center justify-center gap-2 rounded-lg border border-white/10 bg-[#e7f7ff] px-3 font-extrabold text-[#071018] disabled:cursor-not-allowed disabled:opacity-55"
+            className="inline-flex min-h-[2.15rem] items-center justify-center gap-2 rounded-lg bg-white px-3 font-extrabold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-55"
             type="button"
             onClick={props.onExport}
             disabled={props.exporting}

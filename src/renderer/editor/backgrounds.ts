@@ -2,23 +2,27 @@
  * Background style catalog for the Style tool.
  */
 import type { BackgroundStyle } from "./types";
+import realWorld1 from "../assets/backgrounds/real-world-1.svg";
+import realWorld2 from "../assets/backgrounds/real-world-2.svg";
+import realWorld3 from "../assets/backgrounds/real-world-3.svg";
+import realWorld4 from "../assets/backgrounds/real-world-4.svg";
+import realWorld5 from "../assets/backgrounds/real-world-5.svg";
+import realWorld6 from "../assets/backgrounds/real-world-6.svg";
+
+function localScene(url: string, shade = "rgb(0 0 0 / 0.34)"): string {
+  return `linear-gradient(135deg, rgb(0 0 0 / 0.08), ${shade}), url("${url}")`;
+}
 
 // Single source of truth for the built-in composition backgrounds. The Style
 // panel swatches and the preview frame both render from this map, so the
 // thumbnail always shows exactly what gets applied.
 export const previewBackgrounds: Record<BackgroundStyle, string> = {
-  "real-world-1":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1542051841857-5f90071e7989?q=80&w=1170&auto=format&fit=crop")',
-  "real-world-2":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1759681770982-313332e7f42c?q=80&w=1075&auto=format&fit=crop")',
-  "real-world-3":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.08), rgb(0 0 0 / 0.34)), url("https://images.unsplash.com/photo-1567597714138-3bdc30f4f493?q=80&w=1170&auto=format&fit=crop")',
-  "real-world-4":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1635776062360-af423602aff3?q=80&w=1332&auto=format&fit=crop")',
-  "real-world-5":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?q=80&w=1332&auto=format&fit=crop")',
-  "real-world-6":
-    'linear-gradient(135deg, rgb(0 0 0 / 0.04), rgb(0 0 0 / 0.2)), url("https://images.unsplash.com/photo-1554034483-04fda0d3507b?q=80&w=1170&auto=format&fit=crop")',
+  "real-world-1": localScene(realWorld1),
+  "real-world-2": localScene(realWorld2),
+  "real-world-3": localScene(realWorld3),
+  "real-world-4": localScene(realWorld4, "rgb(0 0 0 / 0.2)"),
+  "real-world-5": localScene(realWorld5, "rgb(0 0 0 / 0.2)"),
+  "real-world-6": localScene(realWorld6, "rgb(0 0 0 / 0.2)"),
   "gradient-1": "linear-gradient(135deg, #8b5cf6, #ec4899)",
   "gradient-2": "linear-gradient(135deg, #06b6d4, #14b8a6)",
   "gradient-3": "linear-gradient(135deg, #f59e0b, #7c2d12)",

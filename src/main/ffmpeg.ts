@@ -6,8 +6,19 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
+import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import type { ExportResolution, ExportVideoFormat } from "../shared/types";
+import {
+  calculateExportPercent,
+  calculateExportTimeoutMs,
+  parseFfmpegProgressSeconds
+} from "./ffmpeg-progress";
+
+export interface ExportProcessControl {
+  signal?: AbortSignal;
+  onProgress?: (percent: number, message?: string) => void;
+}
 
 interface ExportVideoJob {
   videoPath: string;
@@ -191,9 +202,30 @@ export async function convertWebmAudioToWav(inputPath: string, outputPath: strin
   return bytes;
 }
 
-export async function exportVideo(job: ExportVideoJob): Promise<number> {
+export async function exportVideo(
+  job: ExportVideoJob,
+  control: ExportProcessControl = {}
+): Promise<number> {
   const outputDuration =
     job.trimEnd && job.trimEnd > job.trimStart ? job.trimEnd - job.trimStart : null;
+  const durationSeconds = outputDuration ?? (await probeMediaDurationMs(job.videoPath) ?? 0) / 1000;
+
+  if (canStreamCopy(job)) {
+    await runProcess(resolveFfmpegPath(), [
+      "-y",
+      "-i",
+      job.videoPath,
+      "-map",
+      "0",
+      "-c",
+      "copy",
+      "-movflags",
+      "+faststart",
+      job.outputPath
+    ], { ...control, durationSeconds });
+    return (await fs.stat(job.outputPath)).size;
+  }
+
   const args: string[] = ["-y"];
 
   addInput(args, job.videoPath, job.trimStart);
@@ -248,15 +280,21 @@ export async function exportVideo(job: ExportVideoJob): Promise<number> {
     args.push("-vf", videoFilter);
   }
 
-  args.push(...createCodecArgs(job.format), job.outputPath);
-  await runProcess(resolveFfmpegPath(), args);
+  args.push(...await createCodecArgs(job.format), job.outputPath);
+  await runProcess(resolveFfmpegPath(), args, {
+    ...control,
+    durationSeconds
+  });
 
   const outputStats = await fs.stat(job.outputPath);
   return outputStats.size;
 }
 
 /** Render the saved timeline, including reordered clips, gaps and delayed audio. */
-export async function exportTimelineComposition(job: TimelineCompositionJob): Promise<number> {
+export async function exportTimelineComposition(
+  job: TimelineCompositionJob,
+  control: ExportProcessControl = {}
+): Promise<number> {
   const videoSegments = [...job.videoSegments].sort((a, b) => a.start - b.start);
   if (videoSegments.length === 0) throw new Error("The timeline has no video clips to export.");
   const timelineEnd = videoSegments.reduce((max, item) => Math.max(max, item.end), 0);
@@ -366,8 +404,11 @@ export async function exportTimelineComposition(job: TimelineCompositionJob): Pr
     (total, region) => total + (region.end - region.start) / region.rate,
     0
   ) || sourceDuration;
-  args.push(...createCodecArgs(job.format), "-t", formatFfmpegNumber(Math.max(0.1, outputDuration)), job.outputPath);
-  await runProcess(resolveFfmpegPath(), args);
+  args.push(...await createCodecArgs(job.format), "-t", formatFfmpegNumber(Math.max(0.1, outputDuration)), job.outputPath);
+  await runProcess(resolveFfmpegPath(), args, {
+    ...control,
+    durationSeconds: outputDuration
+  });
   return (await fs.stat(job.outputPath)).size;
 }
 
@@ -636,6 +677,27 @@ export async function mediaHasAudio(filePath: string): Promise<boolean> {
   }
 }
 
+/** Read the duration FFmpeg reports after a recording container is remuxed. */
+export async function probeMediaDurationMs(filePath: string): Promise<number | null> {
+  let output = "";
+  try {
+    output = await runProcessCapture(resolveFfmpegPath(), ["-i", filePath]);
+  } catch (error) {
+    output = error instanceof Error ? error.message : String(error);
+  }
+  return parseFfmpegDurationMs(output);
+}
+
+export function parseFfmpegDurationMs(output: string): number | null {
+  const match = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/iu.exec(output);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = Number(match[3]);
+  const durationMs = ((hours * 60 + minutes) * 60 + seconds) * 1000;
+  return Number.isFinite(durationMs) && durationMs >= 0 ? Math.round(durationMs) : null;
+}
+
 function addInput(args: string[], inputPath: string, trimStart: number): void {
   if (trimStart > 0) {
     args.push("-ss", formatFfmpegNumber(trimStart));
@@ -672,7 +734,7 @@ function getResolutionDimensions(resolution: ExportResolution): [number, number]
   }
 }
 
-function createCodecArgs(format: ExportVideoFormat): string[] {
+async function createCodecArgs(format: ExportVideoFormat): Promise<string[]> {
   if (format === "webm") {
     return [
       "-c:v",
@@ -688,13 +750,12 @@ function createCodecArgs(format: ExportVideoFormat): string[] {
     ];
   }
 
+  const hardwareEncoder = await getWorkingH264Encoder();
+  const videoArgs = hardwareEncoder
+    ? ["-c:v", hardwareEncoder, "-b:v", "8M"]
+    : ["-c:v", "libx264", "-preset", "medium", "-crf", "20"];
   return [
-    "-c:v",
-    "libx264",
-    "-preset",
-    "medium",
-    "-crf",
-    "20",
+    ...videoArgs,
     "-pix_fmt",
     "yuv420p",
     "-c:a",
@@ -704,6 +765,56 @@ function createCodecArgs(format: ExportVideoFormat): string[] {
     "-movflags",
     "+faststart"
   ];
+}
+
+function canStreamCopy(job: ExportVideoJob): boolean {
+  const sourceExtension = path.extname(job.videoPath).toLowerCase();
+  return (
+    (job.format === "mp4" || job.format === "mov") &&
+    (sourceExtension === ".mp4" || sourceExtension === ".mov") &&
+    job.resolution === "source" &&
+    job.trimStart === 0 &&
+    job.trimEnd === null &&
+    job.audioTracks.length === 0 &&
+    job.preserveSourceAudio &&
+    job.sourceAudioVolume === 1
+  );
+}
+
+let workingH264Encoder: Promise<string | null> | null = null;
+
+async function getWorkingH264Encoder(): Promise<string | null> {
+  workingH264Encoder ??= probeWorkingH264Encoder();
+  return workingH264Encoder;
+}
+
+async function probeWorkingH264Encoder(): Promise<string | null> {
+  const candidates = process.platform === "darwin"
+    ? ["h264_videotoolbox"]
+    : process.platform === "win32"
+      ? ["h264_nvenc", "h264_qsv", "h264_amf"]
+      : [];
+  for (const encoder of candidates) {
+    try {
+      await runProcess(resolveFfmpegPath(), [
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=black:s=64x64:d=0.05",
+        "-frames:v",
+        "1",
+        "-c:v",
+        encoder,
+        "-f",
+        "null",
+        "-"
+      ]);
+      return encoder;
+    } catch {
+      // Try the next hardware backend, then fall back to libx264.
+    }
+  }
+  return null;
 }
 
 function clampVolume(volume: number): number {
@@ -740,34 +851,96 @@ const activeProcesses = new Set<ReturnType<typeof spawn>>();
 // so a long or corrupt job cannot grow an unbounded string in memory.
 const maxStderrChars = 16_384;
 
-function runProcess(command: string, args: string[]): Promise<void> {
+type RunProcessOptions = ExportProcessControl & { durationSeconds?: number };
+
+function runProcess(
+  command: string,
+  args: string[],
+  options: RunProcessOptions = {}
+): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new Error("Export cancelled."));
+      return;
+    }
+    const progressArgs = options.onProgress && options.durationSeconds
+      ? ["-progress", "pipe:1", "-nostats"]
+      : [];
     // -hide_banner + -loglevel error keep stderr to genuine failures instead of
     // the per-frame stats spam that otherwise floods the captured buffer.
-    const child = spawn(command, ["-hide_banner", "-loglevel", "error", ...args], {
+    const child = spawn(command, ["-hide_banner", "-loglevel", "error", ...progressArgs, ...args], {
       windowsHide: true
     });
     activeProcesses.add(child);
 
     let stderr = "";
+    let stdoutRemainder = "";
+    let settled = false;
+    let lastPercent = 0;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      activeProcesses.delete(child);
+      options.signal?.removeEventListener("abort", abort);
+      if (timeout) clearTimeout(timeout);
+      if (error) reject(error); else resolve();
+    };
+    const abort = () => {
+      child.kill("SIGKILL");
+      finish(new Error("Export cancelled."));
+    };
+    const timeoutMs = options.durationSeconds
+      ? calculateExportTimeoutMs(options.durationSeconds)
+      : null;
+    const timeout = timeoutMs
+      ? setTimeout(() => {
+          child.kill("SIGKILL");
+          finish(new Error("Export timed out before FFmpeg completed."));
+        }, timeoutMs)
+      : null;
+
+    options.signal?.addEventListener("abort", abort, { once: true });
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdoutRemainder += chunk.toString();
+      const lines = stdoutRemainder.split(/\r?\n/u);
+      stdoutRemainder = lines.pop() ?? "";
+      for (const line of lines) {
+        const separator = line.indexOf("=");
+        if (separator < 1 || !options.durationSeconds) continue;
+        const key = line.slice(0, separator);
+        const value = line.slice(separator + 1);
+        if (key === "progress" && value === "end") {
+          lastPercent = 100;
+          options.onProgress?.(100, "Finalizing export…");
+          continue;
+        }
+        const elapsed = parseFfmpegProgressSeconds(key, value);
+        if (elapsed === null) continue;
+        const percent = calculateExportPercent(elapsed, options.durationSeconds);
+        if (percent >= lastPercent + 0.25) {
+          lastPercent = percent;
+          options.onProgress?.(percent, "Exporting video…");
+        }
+      }
+    });
 
     child.stderr.on("data", (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-maxStderrChars);
     });
 
     child.on("error", (error: Error & { code?: string }) => {
-      activeProcesses.delete(child);
       const reason = error.code ? `${error.code}: ${error.message}` : error.message;
-      reject(new Error(`Failed to start FFmpeg at "${command}". ${reason}`));
+      finish(new Error(`Failed to start FFmpeg at "${command}". ${reason}`));
     });
     child.on("close", (code) => {
-      activeProcesses.delete(child);
       if (code === 0) {
-        resolve();
+        if (lastPercent < 100) options.onProgress?.(100, "Finalizing export…");
+        finish();
         return;
       }
 
-      reject(new Error(`FFmpeg exited with code ${code ?? "unknown"}: ${stderr}`));
+      finish(new Error(`FFmpeg exited with code ${code ?? "unknown"}: ${stderr}`));
     });
   });
 }

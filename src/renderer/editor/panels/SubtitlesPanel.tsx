@@ -46,6 +46,9 @@ export function SubtitlesPanel(props: {
         <Captions className="shrink-0" size={16} />
         <span className="truncate">Add subtitle</span>
       </button>
+      <p className="text-[0.68rem] leading-4 text-slate-500">
+        First use downloads the on-device speech model and requires an internet connection. Transcription then runs in a background worker.
+      </p>
       <button
         className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
         type="button"

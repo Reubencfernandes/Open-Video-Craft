@@ -110,7 +110,7 @@ export function LayoutPanel(props: {
                 <button
                   className={`grid min-h-[5.2rem] gap-2 rounded-lg border p-2 text-left text-xs font-extrabold ${
                     props.layoutMode === preset.id
-                      ? "border-amber-300 bg-amber-400/10 text-white shadow-[0_0_0_2px_rgb(34_211_238_/_0.18)]"
+                      ? "border-white bg-white/[0.1] text-white"
                       : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
                   }`}
                   type="button"
@@ -122,7 +122,7 @@ export function LayoutPanel(props: {
                     <i className="absolute inset-[18%_14%] rounded-sm bg-slate-300/80" />
                     {preset.id !== "screen-only" ? (
                       <b
-                        className={`absolute rounded-full bg-amber-300 ${
+                        className={`absolute rounded-full bg-white ${
                           preset.id === "camera-only"
                             ? "inset-[22%] rounded-md"
                             : preset.id === "presenter"
@@ -228,7 +228,7 @@ export function LayoutPanel(props: {
                 <button
                   className={`rounded-md ${
                     props.cameraPosition === position
-                      ? "bg-amber-300"
+                      ? "bg-white"
                       : "bg-white/10 hover:bg-white/20"
                   }`}
                   type="button"

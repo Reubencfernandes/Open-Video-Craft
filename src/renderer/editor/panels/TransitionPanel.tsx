@@ -1,24 +1,26 @@
 import { Blend, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ClipTransition, ClipTransitionType, TimelineMediaClip } from "../types";
-
-const transitionOptions: Array<{ type: ClipTransitionType; label: string }> = [
-  { type: "crossfade", label: "Crossfade" },
-  { type: "fade-black", label: "Fade black" },
-  { type: "slide-left", label: "Slide left" },
-  { type: "wipe-left", label: "Wipe left" }
-];
-
-type Boundary = { key: string; from: TimelineMediaClip; to: TimelineMediaClip };
+import { transitionDragType } from "../types";
+import {
+  getMaxTransitionDuration,
+  getTimelineTransitionBoundaries,
+  getTransitionBoundaryKey,
+  transitionOptions
+} from "../transition-utils";
 
 /** Controls the transition centered on one adjacent video-clip cut. */
 export function TransitionPanel(props: {
   videoClips: TimelineMediaClip[];
   transitions: ClipTransition[];
+  selectedTransitionId: string | null;
   onSetTransition: (input: Omit<ClipTransition, "id">) => void;
   onRemoveTransition: (fromSegmentId: string, toSegmentId: string) => void;
 }) {
-  const boundaries = useMemo(() => getBoundaries(props.videoClips), [props.videoClips]);
+  const boundaries = useMemo(
+    () => getTimelineTransitionBoundaries(props.videoClips),
+    [props.videoClips]
+  );
   const [selectedKey, setSelectedKey] = useState("");
   const boundary = boundaries.find((item) => item.key === selectedKey) ?? boundaries[0] ?? null;
   const existing = boundary ? props.transitions.find((item) =>
@@ -31,8 +33,16 @@ export function TransitionPanel(props: {
     if (!boundary) return;
     setSelectedKey(boundary.key);
     setType(existing?.type ?? "crossfade");
-    setDuration(existing?.duration ?? Math.min(0.6, maxDuration(boundary)));
+    setDuration(existing?.duration ?? Math.min(0.6, getMaxTransitionDuration(boundary)));
   }, [boundary?.key, existing?.id, existing?.type, existing?.duration]);
+
+  // Run after the boundary defaults above so a marker click always wins on
+  // first mount and opens the exact cut the user selected.
+  useEffect(() => {
+    const selected = props.transitions.find((item) => item.id === props.selectedTransitionId);
+    if (!selected) return;
+    setSelectedKey(getTransitionBoundaryKey(selected.fromSegmentId, selected.toSegmentId));
+  }, [props.selectedTransitionId, props.transitions]);
 
   if (!boundary) {
     return (
@@ -43,13 +53,17 @@ export function TransitionPanel(props: {
     );
   }
 
-  const limit = maxDuration(boundary);
+  const limit = getMaxTransitionDuration(boundary);
   return (
     <div className="grid gap-4">
+      <p className="m-0 text-xs leading-relaxed text-slate-400">
+        Drag a transition onto a cut in the timeline, or select a cut and apply it here.
+      </p>
+
       <label className="grid gap-1.5 text-xs text-slate-400">
         Cut
         <select
-          className="h-9 rounded border border-white/10 bg-[#11151b] px-2 text-xs text-white outline-none focus:border-[#c9ad73]"
+          className="h-9 rounded-lg border border-white/10 bg-[#101012] px-2 text-xs text-white outline-none focus:border-white/40"
           value={boundary.key}
           onChange={(event) => setSelectedKey(event.target.value)}
         >
@@ -66,14 +80,23 @@ export function TransitionPanel(props: {
           <button
             key={option.type}
             type="button"
+            draggable
+            title={`Drag ${option.label} onto a video cut`}
             className={`rounded-lg border px-3 py-3 text-left text-xs font-semibold transition ${
               type === option.type
-                ? "border-[#c9ad73] bg-[#c9ad73]/10 text-[#e7cf9b]"
+                ? "border-white bg-white/[0.1] text-white"
                 : "border-white/10 bg-black/10 text-slate-300 hover:bg-white/5"
             }`}
             onClick={() => setType(option.type)}
+            onDragStart={(event) => {
+              setType(option.type);
+              event.dataTransfer.setData(transitionDragType, option.type);
+              event.dataTransfer.effectAllowed = "copy";
+            }}
           >
-            {option.label}
+            <span className="flex items-center gap-2">
+              <Blend size={14} /> {option.label}
+            </span>
           </button>
         ))}
       </div>
@@ -87,13 +110,13 @@ export function TransitionPanel(props: {
           step={0.1}
           value={Math.min(duration, limit)}
           onChange={(event) => setDuration(Number(event.target.value))}
-          className="accent-[#c9ad73]"
+          className="accent-white"
         />
       </label>
 
       <button
         type="button"
-        className="inline-flex h-9 items-center justify-center gap-2 rounded bg-[#c9ad73] px-3 text-xs font-bold text-[#17130c]"
+        className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-white px-3 text-xs font-bold text-black transition hover:bg-neutral-200"
         onClick={() => props.onSetTransition({
           fromSegmentId: boundary.from.id,
           toSegmentId: boundary.to.id,
@@ -115,18 +138,4 @@ export function TransitionPanel(props: {
       ) : null}
     </div>
   );
-}
-
-function getBoundaries(clips: TimelineMediaClip[]): Boundary[] {
-  const ordered = [...clips].sort((a, b) => a.start - b.start);
-  return ordered.slice(0, -1).flatMap((from, index) => {
-    const to = ordered[index + 1];
-    return Math.abs(from.start + from.duration - to.start) <= 0.05
-      ? [{ key: `${from.id}\u0000${to.id}`, from, to }]
-      : [];
-  });
-}
-
-function maxDuration(boundary: Boundary): number {
-  return Math.max(0.1, Math.min(2, (boundary.from.duration - 0.1) * 2, (boundary.to.duration - 0.1) * 2));
 }

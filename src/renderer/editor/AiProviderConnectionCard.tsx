@@ -30,7 +30,7 @@ export function AiProviderConnectionCard(props: {
       </div>
 
       <button
-        className="h-8 w-full rounded bg-[#c9ad73] px-3 text-xs font-bold text-[#17130c] disabled:cursor-not-allowed disabled:opacity-45"
+        className="h-8 w-full rounded-lg bg-white px-3 text-xs font-bold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-45"
         type="button"
         disabled={connectionDisabled}
         onClick={() => void props.onConfigure(provider.provider, provider.configured)}

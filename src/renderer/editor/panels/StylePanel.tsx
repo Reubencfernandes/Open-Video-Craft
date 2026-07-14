@@ -81,7 +81,7 @@ export function StylePanel(props: {
             <button
               className={`grid gap-2 rounded-lg border p-2 text-left text-xs font-extrabold ${
                 props.backgroundStyle === option.id
-                  ? "border-amber-300 bg-amber-400/10 text-white"
+                  ? "border-white bg-white/[0.1] text-white"
                   : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
               }`}
               type="button"
@@ -103,7 +103,7 @@ export function StylePanel(props: {
       <button
         className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 text-sm font-extrabold ${
           props.backgroundStyle === "custom"
-            ? "border-amber-300 bg-amber-400/10 text-white"
+            ? "border-white bg-white/[0.1] text-white"
             : "border-white/10 bg-white/[0.06] text-white hover:bg-white/10"
         }`}
         type="button"

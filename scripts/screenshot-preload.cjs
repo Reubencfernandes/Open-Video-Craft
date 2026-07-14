@@ -251,6 +251,9 @@ const api = {
     setSessionState: async () => true,
     undoAgentEdit: async () => demoEditorState,
     onProjectStateChanged: () => () => undefined,
+    onExportProgress: () => () => undefined,
+    cancelExport: async () => true,
+    getPathForFile: () => null,
     exportVideo: async () => null
   },
   overlays: {

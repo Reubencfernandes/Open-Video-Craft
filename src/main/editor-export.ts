@@ -7,11 +7,13 @@
  * this module stays decoupled from the main-process globals.
  */
 import path from "node:path";
+import { promises as fs } from "node:fs";
 import type { BrowserWindow } from "electron";
 import { chooseExportPath as showExportPathDialog } from "./file-dialogs";
 import { exportVideo } from "./ffmpeg";
 import { exportEditorProjectToPath } from "./composition-export";
 import type { ProjectStore } from "./project-store";
+import type { ExportJobControl } from "./export-jobs";
 import { writeSubtitleSidecar } from "./subtitle-export";
 import type { ExportVideoRequest, ExportVideoResult } from "../shared/types";
 
@@ -19,6 +21,7 @@ export interface EditorExportContext {
   projectStore: ProjectStore;
   importedMediaCache: Map<string, string>;
   getDialogParentWindow: () => BrowserWindow | null;
+  control?: ExportJobControl;
 }
 
 type ExportSource = {
@@ -42,6 +45,22 @@ export async function exportEditorVideo(
     return null;
   }
 
+  try {
+    const result = await exportEditorVideoToPath(request, context, source, outputPath);
+    context.control?.onProgress(100, "Export complete.");
+    return result;
+  } catch (error) {
+    await fs.rm(outputPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function exportEditorVideoToPath(
+  request: ExportVideoRequest,
+  context: EditorExportContext,
+  source: ExportSource,
+  outputPath: string
+): Promise<ExportVideoResult> {
   if (request.source.kind === "project") {
     const document = await context.projectStore.readEditorState(request.source.projectId);
     if (document?.state.timelineSegments.some((segment) => segment.track === "video")) {
@@ -55,7 +74,8 @@ export async function exportEditorVideo(
         resolution: request.resolution,
         subtitleMode: request.subtitleMode ?? "burn-in",
         trimStart: request.trimStart,
-        trimEnd: request.trimEnd
+        trimEnd: request.trimEnd,
+        control: context.control
       });
     }
   }
@@ -80,7 +100,7 @@ export async function exportEditorVideo(
       request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
     sourceAudioVolume: request.volume,
     preserveSourceAudio: source.preserveSourceAudio
-  });
+  }, context.control);
   const subtitlePath = await writeSubtitleSidecar(outputPath, request);
 
   return {

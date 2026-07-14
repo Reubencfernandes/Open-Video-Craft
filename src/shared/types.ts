@@ -347,6 +347,8 @@ export type ExportResolution = "source" | "720p" | "1080p" | "1440p";
 export type ExportSubtitleMode = "burn-in" | "sidecar" | "none";
 
 export interface ExportVideoRequest {
+  /** Renderer-generated UUID used for progress events and cancellation. */
+  jobId?: string;
   source:
     | {
         kind: "project";
@@ -371,4 +373,10 @@ export interface ExportVideoResult {
   path: string;
   bytesWritten: number;
   subtitlePath: string | null;
+}
+
+export interface ExportProgress {
+  jobId: string;
+  percent: number;
+  message: string;
 }

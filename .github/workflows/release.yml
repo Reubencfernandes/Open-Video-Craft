@@ -61,8 +61,8 @@ jobs:
 
       - name: Build installers
         env:
-          CSC_LINK: ${{ matrix.name == 'macOS' && secrets.CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.name == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
+          CSC_LINK: ${{ matrix.name == 'macOS' && secrets.CSC_LINK || secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'macOS' && secrets.CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
           CSC_NAME: ${{ matrix.name == 'macOS' && secrets.CSC_NAME || '' }}
           APPLE_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
@@ -71,6 +71,25 @@ jobs:
           APPLE_API_KEY_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
           APPLE_API_ISSUER: ${{ matrix.name == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
         run: npm run ${{ matrix.npm_script }} -- ${{ matrix.builder_args }}
+
+      - name: Verify Windows signatures when configured
+        if: matrix.name == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_CONFIGURED: ${{ secrets.WINDOWS_CSC_LINK != '' }}
+        run: |
+          if ($env:WINDOWS_SIGNING_CONFIGURED -ne 'true') {
+            Write-Warning 'WINDOWS_CSC_LINK is not configured; Windows artifacts are unsigned.'
+            exit 0
+          }
+          $installers = Get-ChildItem -Path release -Filter *.exe -Recurse
+          if ($installers.Count -eq 0) { throw 'No Windows installers were produced.' }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature $installer.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "Invalid signature for $($installer.Name): $($signature.Status)"
+            }
+          }
 
       - name: Verify macOS update archive
         if: matrix.name == 'macOS'

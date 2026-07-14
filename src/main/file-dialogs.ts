@@ -8,9 +8,13 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
   ExportVideoRequest,
-  ImportedMediaFile,
-  ImportedMediaKind
+  ImportedMediaFile
 } from "../shared/types";
+import {
+  getImportedMediaKind,
+  getSupportedMediaExtension,
+  supportedMediaExtensions
+} from "./media-import";
 
 export async function chooseBaseDirectory(
   parentWindow: Electron.BrowserWindow | null
@@ -50,23 +54,7 @@ export async function importMediaFiles(
     filters: [
       {
         name: "Media",
-        extensions: [
-          "mp4",
-          "mov",
-          "mkv",
-          "webm",
-          "avi",
-          "mp3",
-          "wav",
-          "m4a",
-          "aac",
-          "ogg",
-          "png",
-          "jpg",
-          "jpeg",
-          "webp",
-          "gif"
-        ]
+        extensions: [...supportedMediaExtensions]
       },
       { name: "All Files", extensions: ["*"] }
     ]
@@ -79,21 +67,22 @@ export async function importMediaFiles(
     return [];
   }
 
-  return result.filePaths.map((filePath) => describeImportedFile(filePath, registerImport));
+  return collectSupportedImports(result.filePaths, registerImport, parentWindow);
 }
 
 /**
  * Import media from an explicit set of file paths (e.g. an OS drag-and-drop
  * onto the media panel) rather than the open dialog. Directories and paths that
  * can't be stat'd as regular files are skipped so a stray drop can't register a
- * bogus source; unsupported file types still flow through and are rejected by
- * the renderer's own partitioning, matching the "All Files" dialog behaviour.
+ * bogus source. Unsupported paths are rejected before registration so they can
+ * never reach project persistence and trigger an endless autosave failure.
  */
 export async function importMediaFromPaths(
   filePaths: string[],
-  registerImport: (id: string, filePath: string) => void
+  registerImport: (id: string, filePath: string) => void,
+  parentWindow: Electron.BrowserWindow | null = null
 ): Promise<ImportedMediaFile[]> {
-  const imported: ImportedMediaFile[] = [];
+  const regularFiles: string[] = [];
 
   for (const filePath of filePaths) {
     try {
@@ -105,19 +94,23 @@ export async function importMediaFromPaths(
       continue;
     }
 
-    imported.push(describeImportedFile(filePath, registerImport));
+    regularFiles.push(filePath);
   }
 
-  return imported;
+  return collectSupportedImports(regularFiles, registerImport, parentWindow);
 }
 
 function describeImportedFile(
   filePath: string,
   registerImport: (id: string, filePath: string) => void
-): ImportedMediaFile {
+): ImportedMediaFile | null {
+  const extension = getSupportedMediaExtension(filePath);
+  if (!extension) {
+    return null;
+  }
+
   const id = randomUUID();
   registerImport(id, filePath);
-  const extension = path.extname(filePath).replace(/^\./, "").toLowerCase();
 
   return {
     id,
@@ -127,6 +120,45 @@ function describeImportedFile(
     kind: getImportedMediaKind(extension),
     extension
   };
+}
+
+async function collectSupportedImports(
+  filePaths: string[],
+  registerImport: (id: string, filePath: string) => void,
+  parentWindow: Electron.BrowserWindow | null
+): Promise<ImportedMediaFile[]> {
+  const imported: ImportedMediaFile[] = [];
+  const rejectedNames: string[] = [];
+
+  for (const filePath of filePaths) {
+    const item = describeImportedFile(filePath, registerImport);
+    if (item) {
+      imported.push(item);
+    } else {
+      rejectedNames.push(path.basename(filePath));
+    }
+  }
+
+  if (rejectedNames.length > 0) {
+    const shown = rejectedNames.slice(0, 6).map((name) => `• ${name}`).join("\n");
+    const remaining = rejectedNames.length - Math.min(6, rejectedNames.length);
+    const options: Electron.MessageBoxOptions = {
+      type: "warning",
+      buttons: ["OK"],
+      title: "Unsupported media",
+      message: rejectedNames.length === 1
+        ? "This file cannot be imported."
+        : `${rejectedNames.length} files cannot be imported.`,
+      detail: `${shown}${remaining > 0 ? `\n• …and ${remaining} more` : ""}\n\nChoose a supported video, audio, or image file with a standard extension.`
+    };
+    if (parentWindow) {
+      await dialog.showMessageBox(parentWindow, options);
+    } else {
+      await dialog.showMessageBox(options);
+    }
+  }
+
+  return imported;
 }
 
 export async function chooseExportPath(
@@ -204,18 +236,6 @@ function createExportDialogOptions(
       { name: "Video", extensions: ["mp4", "webm", "mov"] }
     ]
   };
-}
-
-function getImportedMediaKind(extension: string): ImportedMediaKind {
-  if (["mp3", "wav", "m4a", "aac", "ogg"].includes(extension)) {
-    return "audio";
-  }
-
-  if (["png", "jpg", "jpeg", "webp", "gif"].includes(extension)) {
-    return "image";
-  }
-
-  return "video";
 }
 
 function slugForFileName(value: string): string {

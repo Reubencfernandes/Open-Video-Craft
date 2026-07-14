@@ -22,10 +22,10 @@ const mediaFrameClassName =
   "absolute inset-0 size-full border-0 bg-transparent transition-[transform] duration-[45ms] ease-[cubic-bezier(0.2,0,0.2,1)] will-change-transform";
 
 const editOverlayClassName =
-  "group absolute z-[3] box-border cursor-grab touch-none border border-transparent bg-transparent shadow-none transition-[border-color,background-color,box-shadow] hover:border-amber-300/90 hover:bg-emerald-500/10 hover:shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
+  "group absolute z-[3] box-border cursor-grab touch-none border border-transparent bg-transparent shadow-none transition-[border-color,background-color,box-shadow] hover:border-white/80 hover:bg-emerald-500/10 hover:shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
 
 const handleBaseClassName =
-  "absolute z-[1] size-3 rounded-full border-2 border-white bg-amber-300 opacity-0 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)] transition-opacity group-hover:opacity-100";
+  "absolute z-[1] size-3 rounded-full border-2 border-white bg-neutral-200 opacity-0 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)] transition-opacity group-hover:opacity-100";
 
 const handleClassByMode: Record<ScreenLayoutDragMode, string> = {
   move: "",

@@ -191,6 +191,30 @@ export function RecorderController() {
   }, []);
 
   useEffect(() => {
+    const disposeSuspend = window.openVideoCraft.events.onPowerSuspend(() => {
+      const current = stateRef.current;
+      if (current === "recording") {
+        pauseRecording();
+        setErrorMessage(
+          "Recording was paused because the computer went to sleep. Review it, then resume when ready."
+        );
+      } else if (current === "preparing" || current === "countdown") {
+        abortStartupRef.current = true;
+        setErrorMessage("Recording setup was cancelled because the computer went to sleep.");
+      }
+    });
+    const disposeResume = window.openVideoCraft.events.onPowerResume(() => {
+      if (stateRef.current === "paused") {
+        setErrorMessage("The computer resumed. Recording remains paused until you choose Resume.");
+      }
+    });
+    return () => {
+      disposeSuspend();
+      disposeResume();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!selectedSourceId) {
       return;
     }
@@ -558,7 +582,7 @@ export function RecorderController() {
       );
       setProject(preparedProject);
       projectRef.current = preparedProject;
-      setElapsedMs(durationMs);
+      setElapsedMs(preparedProject.durationMs ?? durationMs);
       setState("complete");
       await window.openVideoCraft.windows.openEditor(preparedProject.id);
       await refreshSources();

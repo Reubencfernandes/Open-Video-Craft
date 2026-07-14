@@ -1,5 +1,6 @@
 /** Controls for adding, styling, positioning, and timing freeform text. */
-import { Plus, Trash2, Type } from "lucide-react";
+import { GripVertical, Trash2, Type } from "lucide-react";
+import { textDragType } from "../types";
 import type { TextAnimation, TextOverlay } from "../types";
 
 const animationOptions: Array<{ value: TextAnimation; label: string }> = [
@@ -12,7 +13,6 @@ const animationOptions: Array<{ value: TextAnimation; label: string }> = [
 export function TextPanel(props: {
   overlays: TextOverlay[];
   selectedOverlay: TextOverlay | null;
-  onAdd: () => void;
   onSelect: (id: string) => void;
   onUpdate: (id: string, updates: Partial<TextOverlay>) => void;
   onRemove: (id: string) => void;
@@ -21,13 +21,24 @@ export function TextPanel(props: {
 
   return (
     <div className="grid min-h-0 content-start gap-3 overflow-auto">
-      <button
-        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10"
-        type="button"
-        onClick={props.onAdd}
+      {/* Text is placed by dropping this tile onto the timeline's Text track,
+          matching how media assets are added. */}
+      <div
+        className="grid cursor-grab justify-items-center gap-1 rounded-lg border border-dashed border-white/15 bg-white/[0.055] px-3 py-3 text-center active:cursor-grabbing hover:bg-white/10"
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.setData(textDragType, "new");
+          event.dataTransfer.effectAllowed = "copy";
+        }}
       >
-        <Plus size={16} /> Add text
-      </button>
+        <span className="inline-flex items-center gap-2 text-sm font-bold text-white">
+          <GripVertical size={16} className="text-slate-500" />
+          <Type size={16} className="text-sky-300" /> Text
+        </span>
+        <span className="text-[0.68rem] font-semibold text-slate-400">
+          Drag onto the timeline to add
+        </span>
+      </div>
 
       <div className="grid gap-1.5">
         {props.overlays.map((overlay) => (
@@ -52,7 +63,7 @@ export function TextPanel(props: {
 
       {!selected ? (
         <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-xs leading-5 text-slate-500">
-          Add or select a text layer to edit it.
+          Drag the text tile onto the timeline, or select a text layer to edit it.
         </div>
       ) : (
         <div className="grid gap-3 border-t border-white/10 pt-3">

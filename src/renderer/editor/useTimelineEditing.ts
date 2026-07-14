@@ -29,7 +29,7 @@ import {
 } from "./timeline-utils";
 import { splitTimelineSegments } from "./timeline-split";
 import { createId } from "./utils";
-import { mediaDragType } from "./types";
+import { mediaDragType, textDragType } from "./types";
 import type {
   EditorMediaItem,
   TimelineContextMenu,
@@ -44,6 +44,7 @@ type UseTimelineEditingParams = {
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
   mediaById: Map<string, EditorMediaItem>;
   mediaDurationById: Map<string, number>;
+  onDropNewTextOverlay: (time: number) => void;
   scheduleTimelinePlaybackSync: (segments: TimelineSegment[]) => void;
   seek: (time: number) => void;
   selectedItemId: string | null;
@@ -72,6 +73,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     knownTimelineItemIdsRef,
     mediaById,
     mediaDurationById,
+    onDropNewTextOverlay,
     scheduleTimelinePlaybackSync,
     seek,
     selectedItemId,
@@ -296,17 +298,31 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
   // ---------------------------------------------------------------------------
 
   function handleTimelineDragOver(event: ReactDragEvent<HTMLDivElement>) {
-    if (event.dataTransfer.types.includes(mediaDragType)) {
+    if (
+      event.dataTransfer.types.includes(mediaDragType) ||
+      event.dataTransfer.types.includes(textDragType)
+    ) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "copy";
     }
   }
 
   function handleTimelineDrop(event: ReactDragEvent<HTMLDivElement>) {
+    const dropTime = getTimelineTimeFromClientX(event.clientX);
+    if (dropTime === null) {
+      return;
+    }
+
+    // A drag from the text panel creates a new text overlay at the drop time.
+    if (event.dataTransfer.types.includes(textDragType)) {
+      event.preventDefault();
+      onDropNewTextOverlay(dropTime);
+      return;
+    }
+
     const itemId = event.dataTransfer.getData(mediaDragType);
     const item = itemId ? mediaById.get(itemId) : null;
-    const dropTime = getTimelineTimeFromClientX(event.clientX);
-    if (!item || dropTime === null) {
+    if (!item) {
       return;
     }
 

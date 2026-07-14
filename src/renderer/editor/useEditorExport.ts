@@ -1,13 +1,14 @@
 /**
  * Export dialog state and the renderer side of export requests.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   Dispatch,
   SetStateAction
 } from "react";
 import type {
   ExportResolution,
+  ExportProgress,
   ExportSubtitleMode,
   ExportVideoFormat,
   ExportVideoRequest,
@@ -49,6 +50,12 @@ export function useEditorExport(params: UseEditorExportParams) {
   const [exportSubtitleMode, setExportSubtitleMode] = useState<ExportSubtitleMode>("burn-in");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+  const activeExportJobIdRef = useRef<string | null>(null);
+
+  useEffect(() => window.openVideoCraft.editor.onExportProgress((progress) => {
+    if (progress.jobId === activeExportJobIdRef.current) setExportProgress(progress);
+  }), []);
 
   function getExportSource(): ExportVideoRequest["source"] | null {
     if (selectedItem?.origin === "imported" && selectedItem.kind === "video") {
@@ -85,10 +92,14 @@ export function useEditorExport(params: UseEditorExportParams) {
     setError(null);
     setExportMessage(null);
     setExporting(true);
+    const jobId = crypto.randomUUID();
+    activeExportJobIdRef.current = jobId;
+    setExportProgress({ jobId, percent: 0, message: "Preparing export…" });
 
     try {
       await params.beforeExport();
       const result = await window.openVideoCraft.editor.exportVideo({
+        jobId,
         source,
         format: exportFormat,
         resolution: exportResolution,
@@ -109,15 +120,26 @@ export function useEditorExport(params: UseEditorExportParams) {
       setError(exportError instanceof Error ? exportError.message : String(exportError));
     } finally {
       setExporting(false);
+      activeExportJobIdRef.current = null;
+      setExportProgress(null);
     }
+  }
+
+  async function cancelExport() {
+    const jobId = activeExportJobIdRef.current;
+    if (!jobId) return;
+    setExportProgress((current) => current ? { ...current, message: "Cancelling export…" } : current);
+    await window.openVideoCraft.editor.cancelExport(jobId);
   }
 
   return {
     canExport: Boolean(getExportSource()),
+    cancelExport,
     closeExportDialog,
     exportCurrentVideo,
     exportDialogOpen,
     exportFormat,
+    exportProgress,
     exporting,
     exportResolution,
     exportSubtitleMode,

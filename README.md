@@ -181,6 +181,12 @@ these notarization credential groups:
 - `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
 - `APPLE_KEYCHAIN_PROFILE` (optionally `APPLE_KEYCHAIN`)
 
+Windows release signing is enabled automatically when the repository contains
+`WINDOWS_CSC_LINK` (a base64 certificate or secure certificate URL) and
+`WINDOWS_CSC_KEY_PASSWORD` secrets. The release workflow verifies every `.exe`
+signature when configured; without those external credentials it emits an
+explicit warning and the Windows artifacts remain unsigned.
+
 `verify:mac-release` validates the updater ZIP: `latest-mac.yml` checksum,
 Developer ID team, designated requirement, strict signature, and the stapled
 notarization ticket. Ad-hoc builds (`npm run dist:mac:adhoc`) are for local

@@ -2,7 +2,11 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { exportTimelineComposition, mediaHasAudio } from "./ffmpeg";
-import type { TimelineCompositionAudioSegment, TimelineCompositionVideoSegment } from "./ffmpeg";
+import type {
+  ExportProcessControl,
+  TimelineCompositionAudioSegment,
+  TimelineCompositionVideoSegment
+} from "./ffmpeg";
 import { writeSubtitleSidecar } from "./subtitle-export";
 import type {
   EditorProjectStateFile,
@@ -26,6 +30,7 @@ export async function exportEditorProjectToPath(input: {
   subtitleMode?: ExportSubtitleMode;
   trimStart?: number;
   trimEnd?: number | null;
+  control?: ExportProcessControl;
 }): Promise<ExportVideoResult> {
   validateClipTransitions(
     input.document.state.timelineSegments,
@@ -91,6 +96,7 @@ export async function exportEditorProjectToPath(input: {
   };
   const subtitlePath = subtitleMode === "none" ? null : await writeSubtitleSidecar(input.outputPath, subtitleRequest);
   let bytesWritten: number;
+  let exportCompleted = false;
   try {
     bytesWritten = await exportTimelineComposition({
       videoSegments, audioSegments, outputPath: input.outputPath, format: input.format,
@@ -100,9 +106,12 @@ export async function exportEditorProjectToPath(input: {
       zoomEffects: input.document.state.zoomEffects,
       speedEffects: input.document.state.speedEffects,
       textOverlays: exportTextOverlays
-    });
+    }, input.control);
+    exportCompleted = true;
   } finally {
-    if (subtitleMode === "burn-in" && subtitlePath) await fs.rm(subtitlePath, { force: true }).catch(() => undefined);
+    if (subtitlePath && (subtitleMode === "burn-in" || !exportCompleted)) {
+      await fs.rm(subtitlePath, { force: true }).catch(() => undefined);
+    }
   }
   return { path: input.outputPath, bytesWritten, subtitlePath: subtitleMode === "sidecar" ? subtitlePath : null };
 }

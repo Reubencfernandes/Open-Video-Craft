@@ -19,8 +19,8 @@ import { useEffect, useRef, useState } from "react";
 import type {
   ProjectView
 } from "../shared/types";
-import { ExportDialog } from "./editor/ExportDialog";
 import { AiConnectionDialog } from "./editor/AiConnectionDialog";
+import { ExportDialog } from "./editor/ExportDialog";
 import { EditorNotifications } from "./editor/EditorNotifications";
 import { UpdateNotification } from "./notifications/UpdateNotification";
 import { EditorPreviewPanel } from "./editor/EditorPreviewPanel";
@@ -124,6 +124,7 @@ export function EditorView() {
   const [zoomPreviewTime, setZoomPreviewTime] = useState<number | null>(null);
   const [speedEffects, setSpeedEffects] = useState<SpeedEffect[]>([]);
   const [transitions, setTransitions] = useState<ClipTransition[]>([]);
+  const [selectedTransitionId, setSelectedTransitionId] = useState<string | null>(null);
   const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
   const [selectedSubtitleId, setSelectedSubtitleId] = useState<string | null>(null);
@@ -136,7 +137,6 @@ export function EditorView() {
   const [selectedTimelineSegmentId, setSelectedTimelineSegmentId] = useState<string | null>(null);
   const [timelineContextMenu, setTimelineContextMenu] = useState<TimelineContextMenu>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
-  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [scrubbingTimeline, setScrubbingTimeline] = useState(false);
@@ -144,6 +144,7 @@ export function EditorView() {
   const [duration, setDuration] = useState(0);
   const [timelineViewDuration, setTimelineViewDuration] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const { updateStatus, installUpdate } = useAppUpdateStatus();
 
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
@@ -154,7 +155,6 @@ export function EditorView() {
     isReady: isEditorStateReady,
     lastAgentEdit,
     revision,
-    saving,
     saveState,
     undoLastAgentEdit
   } = useEditorPersistence({
@@ -241,6 +241,12 @@ export function EditorView() {
     });
   }, [timelineSegments]);
 
+  useEffect(() => {
+    setSelectedTransitionId((current) =>
+      current && transitions.some((transition) => transition.id === current) ? current : null
+    );
+  }, [transitions]);
+
   // ---------------------------------------------------------------------------
   // Derived data: media library, timeline clips, playback geometry.
   // ---------------------------------------------------------------------------
@@ -316,21 +322,22 @@ export function EditorView() {
     zoomPreviewTime
   });
 
-  function addTextOverlay() {
-    const start = Math.min(currentTime, Math.max(0, timelineDuration - 0.1));
+  /** Creates a text overlay where the panel's text tile was dropped on the
+   * timeline. Animation is opt-in: new text starts with none. */
+  function addTextOverlayAt(dropTime: number) {
+    const start = clampNumber(dropTime, 0, Math.max(0, timelineDuration - 0.2));
     const nextOverlay: TextOverlay = {
       id: createId("text"),
       start,
-      end: Math.min(timelineDuration, start + 3),
+      end: Math.max(start + 0.2, Math.min(timelineDuration, start + 3)),
       text: "Your text",
       x: 50,
       y: 50,
       size: 64,
       color: "#ffffff",
       weight: 700,
-      animation: "fade"
+      animation: "none"
     };
-    nextOverlay.end = Math.max(start + 0.2, nextOverlay.end);
     setTextOverlays((current) => [...current, nextOverlay]);
     setSelectedTextOverlayId(nextOverlay.id);
     setActiveTool("text");
@@ -456,10 +463,12 @@ export function EditorView() {
 
   const {
     canExport,
+    cancelExport,
     closeExportDialog,
     exportCurrentVideo,
     exportDialogOpen,
     exportFormat,
+    exportProgress,
     exporting,
     exportResolution,
     exportSubtitleMode,
@@ -511,6 +520,7 @@ export function EditorView() {
     addZoomEffect,
     beginSpeedClipDrag,
     beginSubtitleClipDrag,
+    beginTextOverlayClipDrag,
     beginTimelineClipMove,
     beginTimelineClipTrim,
     beginTimelineScrub,
@@ -548,6 +558,7 @@ export function EditorView() {
     knownTimelineItemIdsRef,
     mediaById,
     mediaDurationById,
+    onDropNewTextOverlay: addTextOverlayAt,
     openExportDialog,
     playingRef,
     scheduleTimelinePlaybackSync,
@@ -565,6 +576,7 @@ export function EditorView() {
     setSelectedItemId,
     setSelectedSpeedId,
     setSelectedSubtitleId,
+    setSelectedTextOverlayId,
     setSelectedTimelineSegmentId,
     setSelectedZoomId,
     setSpeedEffects,
@@ -578,6 +590,7 @@ export function EditorView() {
     speedEffects,
     subtitles,
     syncMediaToTime,
+    textOverlays,
     timelineBodyRef,
     timelineDuration,
     timelineEditableItems,
@@ -585,6 +598,7 @@ export function EditorView() {
     timelineSegments,
     togglePlayback: () => void togglePlayback(),
     updateMediaDuration,
+    updateTextOverlay,
     zoomEffects
   });
 
@@ -628,10 +642,43 @@ export function EditorView() {
     }
   };
 
+  const setClipTransition = (input: Omit<ClipTransition, "id">) => {
+    const transitionId = `${input.fromSegmentId}:${input.toSegmentId}:transition`;
+    setTransitions((current) => {
+      const next = [
+        ...current.filter((item) =>
+          item.fromSegmentId !== input.fromSegmentId ||
+          item.toSegmentId !== input.toSegmentId
+        ),
+        { ...input, id: transitionId }
+      ];
+      try {
+        validateClipTransitions(timelineSegments, next);
+        setSelectedTransitionId(transitionId);
+        setError(null);
+        return next;
+      } catch (transitionError) {
+        setError(
+          transitionError instanceof Error
+            ? transitionError.message
+            : String(transitionError)
+        );
+        return current;
+      }
+    });
+  };
+
+  const removeClipTransition = (fromSegmentId: string, toSegmentId: string) => {
+    setTransitions((current) => current.filter((item) =>
+      item.fromSegmentId !== fromSegmentId || item.toSegmentId !== toSegmentId
+    ));
+    setSelectedTransitionId(null);
+  };
+
   return (
-    <main className="editor-app grid h-dvh min-h-0 overflow-hidden bg-[#0a0a0c] p-0 text-[#f7f7f8]">
+    <main className="editor-app grid h-dvh min-h-0 overflow-hidden bg-[#0b0b0d] p-0 text-[#f5f5f6]">
       <section
-        className="editor-shell grid h-dvh w-full min-h-0 min-w-0 overflow-hidden bg-[#0a0a0c]"
+        className="editor-shell grid h-dvh w-full min-h-0 min-w-0 overflow-hidden bg-[#0b0b0d]"
         style={{
           gridTemplateRows: timelineVisible
             ? `auto minmax(0, 1fr) ${timelinePanelHeight}px`
@@ -642,12 +689,11 @@ export function EditorView() {
           projectName={displayProjectName}
           exporting={exporting}
           canExport={canExport}
-          saving={saving}
           onBackHome={() => void leaveToHome()}
           onRename={renameProject}
-          onSave={saveState}
           onOpenExport={openExportDialog}
           onOpenAi={() => setAiDialogOpen(true)}
+          onSave={() => void saveState(true)}
         />
 
         <AiConnectionDialog
@@ -661,11 +707,13 @@ export function EditorView() {
         {exportDialogOpen ? (
           <ExportDialog
             exportFormat={exportFormat}
+            exportProgress={exportProgress}
             exportResolution={exportResolution}
             exportSubtitleMode={exportSubtitleMode}
             exporting={exporting}
             hasSubtitles={hasSubtitles}
             onClose={closeExportDialog}
+            onCancelExport={() => void cancelExport()}
             onExport={() => void exportCurrentVideo()}
             onFormatChange={setExportFormat}
             onResolutionChange={setExportResolution}
@@ -680,10 +728,10 @@ export function EditorView() {
           ref={workspaceRef}
           style={workspaceStyle}
         >
-          <div className="editor-library relative flex min-h-0 min-w-0 overflow-hidden border-r border-white/[0.08] bg-[#1a1e25]">
+          <div className="editor-library relative flex min-h-0 min-w-0 overflow-hidden bg-[#0b0b0d]">
             <ToolRail activeTool={activeTool} onToolChange={setActiveTool} />
 
-            <aside className="editor-library-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2.5">
+            <aside className="editor-library-panel my-1.5 mr-1 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-[#161618] p-2.5">
               {activeTool === "media" ? (
               <MediaPanel
                 activeTab={activePanel}
@@ -717,6 +765,7 @@ export function EditorView() {
             selectedZoomEffect={selectedZoomEffect}
             selectedSpeedEffect={selectedSpeedEffect}
             transitions={transitions}
+            selectedTransitionId={selectedTransitionId}
             videoClips={videoTimelineClips}
             sttDownloadProgress={sttDownloadProgress}
             sttStatus={sttStatus}
@@ -758,35 +807,13 @@ export function EditorView() {
             onAddSpeed={addSpeedEffect}
             onUpdateSpeed={updateSpeedEffect}
             onRemoveSpeed={removeSpeedEffect}
-            onSetTransition={(input) => {
-              setTransitions((current) => {
-                const next = [
-                  ...current.filter((item) =>
-                    item.fromSegmentId !== input.fromSegmentId || item.toSegmentId !== input.toSegmentId
-                  ),
-                  { ...input, id: `${input.fromSegmentId}:${input.toSegmentId}:transition` }
-                ];
-                try {
-                  validateClipTransitions(timelineSegments, next);
-                  setError(null);
-                  return next;
-                } catch (transitionError) {
-                  setError(transitionError instanceof Error ? transitionError.message : String(transitionError));
-                  return current;
-                }
-              });
-            }}
-            onRemoveTransition={(fromSegmentId, toSegmentId) =>
-              setTransitions((current) => current.filter((item) =>
-                item.fromSegmentId !== fromSegmentId || item.toSegmentId !== toSegmentId
-              ))
-            }
+            onSetTransition={setClipTransition}
+            onRemoveTransition={removeClipTransition}
             onAddSubtitle={addSubtitle}
             onGenerateSubtitles={() => void generateSubtitles()}
             onSubtitleStyleChange={setSubtitleStyle}
             onUpdateSubtitle={updateSubtitle}
             onSelectSubtitle={setSelectedSubtitleId}
-            onAddTextOverlay={addTextOverlay}
             onSelectTextOverlay={setSelectedTextOverlayId}
             onUpdateTextOverlay={updateTextOverlay}
             onRemoveTextOverlay={removeTextOverlay}
@@ -815,6 +842,7 @@ export function EditorView() {
             previewZoom={previewZoom}
             previewItem={previewItem}
             videoTimelineClips={videoTimelineClips}
+            transitions={transitions}
             audioTimelineClips={audioTimelineClips}
             isProjectCompositionSelected={isProjectCompositionSelected}
             projectCamera={projectCamera}
@@ -833,6 +861,11 @@ export function EditorView() {
             playing={playing}
             currentFrame={currentFrame}
             totalFrames={totalFrames}
+            renderDuration={timelineRenderDuration}
+            masterVolume={masterVolume}
+            onMasterVolumeChange={setMasterVolume}
+            onOpenAudioTool={() => setActiveTool("audio")}
+            onOpenExport={openExportDialog}
             onTogglePlayback={() => void togglePlayback()}
             onSeekFrame={seekFrame}
             mainVideoRef={mainVideoRef}
@@ -923,7 +956,18 @@ export function EditorView() {
             setActiveTool("speed");
             seek((effect.start + effect.end) / 2);
           }}
-          onSelectTransition={() => setActiveTool("transitions")}
+          onSelectTransition={(transition) => {
+            setSelectedTransitionId(transition.id);
+            setActiveTool("transitions");
+            const from = videoTimelineClips.find(
+              (clip) => clip.id === transition.fromSegmentId
+            );
+            if (from) seek(from.start + from.duration);
+          }}
+          onDropTransition={(transition) => {
+            setClipTransition(transition);
+            setActiveTool("transitions");
+          }}
           onSelectSubtitle={(subtitleId) => {
             setSelectedSubtitleId(subtitleId);
             setActiveTool("subtitles");
@@ -942,6 +986,7 @@ export function EditorView() {
           onZoomDragPointerDown={beginZoomClipDrag}
           onSpeedDragPointerDown={beginSpeedClipDrag}
           onSubtitleDragPointerDown={beginSubtitleClipDrag}
+          onTextOverlayDragPointerDown={beginTextOverlayClipDrag}
           onBodyPointerDown={beginTimelineScrub}
           onBodyPointerMove={moveTimelineScrub}
           onBodyPointerUp={endTimelineScrub}

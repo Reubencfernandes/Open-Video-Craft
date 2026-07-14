@@ -53,4 +53,20 @@ describe("ProjectLibrary", () => {
     await expect(library.remove(project.id)).resolves.toBe(true);
     await expect(library.listRecent()).resolves.toEqual([]);
   });
+
+  it("caps the recent list and refreshes get without scanning unrelated projects", async () => {
+    const store = new ProjectStore({ appVersion: "2.0.0" });
+    const library = new ProjectLibrary(path.join(tmpDir, "user-data", "projects.json"), 2);
+    const first = await store.createProject({ name: "First", baseDirectory: tmpDir });
+    const second = await store.createProject({ name: "Second", baseDirectory: tmpDir });
+    const third = await store.createProject({ name: "Third", baseDirectory: tmpDir });
+
+    await library.upsert(first);
+    await library.upsert(second);
+    await library.upsert(third);
+
+    await expect(library.listRecent()).resolves.toHaveLength(2);
+    await fs.writeFile(path.join(second.rootPath, "project.json"), "not json");
+    await expect(library.get(third.id)).resolves.toMatchObject({ id: third.id, available: true });
+  });
 });

@@ -64,6 +64,7 @@ export function EditorTimelineSection(props: {
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
   onSelectTransition: (transition: ClipTransition) => void;
+  onDropTransition: (transition: Omit<ClipTransition, "id">) => void;
   onSelectSubtitle: (subtitleId: string) => void;
   onSelectTextOverlay: (overlay: TextOverlay) => void;
   onTrimPointerDown: (
@@ -83,6 +84,11 @@ export function EditorTimelineSection(props: {
     mode: "move" | "start" | "end"
   ) => void;
   onSubtitleDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
+  onTextOverlayDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     id: string,
     mode: "move" | "start" | "end"
@@ -145,6 +151,7 @@ export function EditorTimelineSection(props: {
       onSelectZoom={props.onSelectZoom}
       onSelectSpeed={props.onSelectSpeed}
       onSelectTransition={props.onSelectTransition}
+      onDropTransition={props.onDropTransition}
       onSelectSubtitle={props.onSelectSubtitle}
       onSelectTextOverlay={props.onSelectTextOverlay}
       onTrimPointerDown={props.onTrimPointerDown}
@@ -152,6 +159,7 @@ export function EditorTimelineSection(props: {
       onZoomDragPointerDown={props.onZoomDragPointerDown}
       onSpeedDragPointerDown={props.onSpeedDragPointerDown}
       onSubtitleDragPointerDown={props.onSubtitleDragPointerDown}
+      onTextOverlayDragPointerDown={props.onTextOverlayDragPointerDown}
       onBodyPointerDown={props.onBodyPointerDown}
       onBodyPointerMove={props.onBodyPointerMove}
       onBodyPointerUp={props.onBodyPointerUp}

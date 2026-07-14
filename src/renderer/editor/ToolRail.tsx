@@ -10,15 +10,15 @@ export function ToolRail(props: {
 }) {
   return (
     <aside
-      className="editor-tool-rail grid w-[4.5rem] flex-none content-start justify-items-stretch overflow-auto bg-[#1c2028]"
+      className="editor-tool-rail grid w-20 flex-none content-start justify-items-stretch gap-1 overflow-auto bg-[#0b0b0d] px-1.5 py-2"
       aria-label="Editor tools"
     >
       {editorTools.map((tool) => (
         <button
-          className={`flex min-h-14 w-full min-w-0 flex-col items-center justify-center gap-1 px-1 text-center text-[10px] font-medium leading-tight transition ${
+          className={`flex min-h-[3.4rem] w-full min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[10px] font-medium leading-tight transition ${
             props.activeTool === tool.id
-              ? "bg-white/[0.065] text-white"
-              : "bg-transparent text-slate-400 hover:bg-white/[0.035] hover:text-white"
+              ? "bg-white/[0.12] text-white"
+              : "bg-transparent text-neutral-400 hover:bg-white/[0.06] hover:text-white"
           }`}
           type="button"
           title={tool.label}

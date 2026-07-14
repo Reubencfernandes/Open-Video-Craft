@@ -256,7 +256,8 @@ export class ProjectStore {
 
   async completeAudio(
     projectId: string,
-    wavBytes: { mic: number; system: number }
+    wavBytes: { mic: number; system: number },
+    mediaDurationMs: number | null = null
   ): Promise<ProjectView> {
     return this.runProjectOperation(projectId, async () => {
       const record = this.getRecord(projectId);
@@ -286,6 +287,9 @@ export class ProjectStore {
         ...record.file,
         updatedAt: now,
         status: "complete",
+        durationMs: mediaDurationMs === null
+          ? record.file.durationMs
+          : sanitizeDurationMs(mediaDurationMs),
         error: null
       };
 

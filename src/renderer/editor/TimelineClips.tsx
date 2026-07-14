@@ -2,7 +2,7 @@
  * Clip components for every lane (media, zoom, speed, subtitle) and the
  * cubic-Bézier audio waveform.
  */
-import { Blend, Pilcrow, Type, ZoomIn } from "lucide-react";
+import { Blend, Captions, Music2, Type, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
@@ -30,7 +30,7 @@ export function TimelineTransitionMarker(props: {
   return (
     <button
       type="button"
-      className="absolute top-[0.3rem] z-[3] grid h-[1.4rem] min-w-5 place-items-center overflow-hidden rounded border border-cyan-200/60 bg-cyan-500/75 text-white shadow-lg hover:bg-cyan-400"
+      className="absolute top-[0.45rem] z-[3] grid h-[1.6rem] min-w-6 place-items-center overflow-hidden rounded-md border border-white/25 bg-[#2563eb] text-white shadow-lg hover:bg-[#3b82f6]"
       title={`${transitionLabel(props.transition.type)} (${props.transition.duration.toFixed(1)}s)`}
       style={createTimelineClipStyle(
         Math.max(0, props.cutTime - props.transition.duration / 2),
@@ -42,6 +42,35 @@ export function TimelineTransitionMarker(props: {
     >
       <Blend size={12} />
     </button>
+  );
+}
+
+/** Drag-only guide rendered at every eligible cut while a transition is held. */
+export function TimelineTransitionDropTarget(props: {
+  cutTime: number;
+  timelineDuration: number;
+  active: boolean;
+}) {
+  const left = props.timelineDuration > 0
+    ? `${Math.max(0, Math.min(100, (props.cutTime / props.timelineDuration) * 100))}%`
+    : "0%";
+
+  return (
+    <span
+      aria-hidden="true"
+      className={`pointer-events-none absolute inset-y-0 z-[6] w-0.5 -translate-x-1/2 transition ${
+        props.active
+          ? "bg-cyan-200 shadow-[0_0_0_4px_rgb(34_211_238_/_0.2),0_0_14px_rgb(34_211_238_/_0.8)]"
+          : "bg-cyan-400/35"
+      }`}
+      style={{ left }}
+    >
+      {props.active ? (
+        <span className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-cyan-300 px-1.5 py-0.5 text-[0.58rem] font-bold text-slate-950 shadow-lg">
+          Drop transition
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -60,17 +89,10 @@ function transitionLabel(type: ClipTransition["type"]): string {
  * differs by lane.
  */
 const clipBaseClassName =
-  "group absolute top-[0.15rem] z-[1] inline-flex h-[1.7rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-sm border border-black/40 px-2 text-left text-[0.64rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
+  "group absolute top-[0.15rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
 
-/** Inset outlines match their lane instead of using one unrelated selection color. */
-const selectedOutlineClassName = {
-  video: "outline outline-2 -outline-offset-2 outline-amber-400",
-  audio: "outline outline-2 -outline-offset-2 outline-emerald-400",
-  zoom: "outline outline-2 -outline-offset-2 outline-purple-400",
-  speed: "outline outline-2 -outline-offset-2 outline-lime-400",
-  subtitle: "outline outline-2 -outline-offset-2 outline-rose-400",
-  text: "outline outline-2 -outline-offset-2 outline-sky-400"
-} as const;
+/** Every selected clip gets the same white inset outline, like the reference. */
+const selectedOutlineClassName = "outline outline-2 -outline-offset-2 outline-white";
 
 /** Widened hit areas on both clip edges used to start a trim drag; a white
  * pill handle fades in on hover, matching the reference design. */
@@ -125,17 +147,17 @@ export function TimelineClip(props: {
   const { frames } = useMediaFilmstrip(item);
   const fillClassName =
     item.kind === "audio"
-      ? "bg-[#17543a]"
+      ? "bg-[#1d4ed8]"
       : item.kind === "image"
-        ? "bg-[#6b4522]"
-        : "bg-[#242527]";
+        ? "bg-[#2a2a2e]"
+        : "bg-[#222226]";
 
   return (
     <button
       className={cx(
         clipBaseClassName,
         fillClassName,
-        props.selected && selectedOutlineClassName[item.kind === "audio" ? "audio" : "video"]
+        props.selected && selectedOutlineClassName
       )}
       type="button"
       data-segment-id={props.clip.id}
@@ -151,6 +173,9 @@ export function TimelineClip(props: {
           volume={props.audioLevel?.volume ?? 100}
           muted={props.audioLevel?.muted ?? false}
         />
+      ) : null}
+      {item.kind === "audio" ? (
+        <Music2 className="relative z-[2] flex-none" size={13} />
       ) : null}
       <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
       <ClipTrimEdges
@@ -176,7 +201,7 @@ export function TimelineZoomClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#5b3287]", props.selected && selectedOutlineClassName.zoom)}
+      className={cx(clipBaseClassName, "bg-[#7c3aed]", props.selected && selectedOutlineClassName)}
       type="button"
       data-zoom-effect-id={props.effect.id}
       title={`Zoom (${props.effect.speed})`}
@@ -211,7 +236,7 @@ export function TimelineSpeedClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#3f6212]", props.selected && selectedOutlineClassName.speed)}
+      className={cx(clipBaseClassName, "bg-[#5b21b6]", props.selected && selectedOutlineClassName)}
       type="button"
       data-speed-effect-id={props.effect.id}
       title={`Speed ${props.effect.rate}x`}
@@ -247,7 +272,7 @@ export function TimelineSubtitleClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#7f2945]", props.selected && selectedOutlineClassName.subtitle)}
+      className={cx(clipBaseClassName, "bg-[#15803d]", props.selected && selectedOutlineClassName)}
       type="button"
       data-subtitle-id={props.subtitle.id}
       title={props.subtitle.text}
@@ -259,7 +284,7 @@ export function TimelineSubtitleClip(props: {
       onClick={props.onSelect}
       onPointerDown={(event) => props.onDragPointerDown(event, props.subtitle.id, "move")}
     >
-      <Type className="relative z-[2] flex-none" size={13} />
+      <Captions className="relative z-[2] flex-none" size={14} />
       <strong className="relative z-[2] min-w-0 truncate">{props.subtitle.text}</strong>
       <ClipTrimEdges
         onTrimPointerDown={(event, edge) => props.onDragPointerDown(event, props.subtitle.id, edge)}
@@ -268,16 +293,22 @@ export function TimelineSubtitleClip(props: {
   );
 }
 
-/** A freeform text layer on the shared timeline. */
+/** A freeform text layer on the shared timeline. Drag the body to move it;
+ * drag either edge to change when it appears/disappears. */
 export function TimelineTextClip(props: {
   overlay: TextOverlay;
   duration: number;
   selected: boolean;
   onSelect: () => void;
+  onDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#075985]", props.selected && selectedOutlineClassName.text)}
+      className={cx(clipBaseClassName, "bg-[#0e7490]", props.selected && selectedOutlineClassName)}
       type="button"
       data-text-overlay-clip-id={props.overlay.id}
       title={props.overlay.text}
@@ -287,9 +318,13 @@ export function TimelineTextClip(props: {
         props.duration
       )}
       onClick={props.onSelect}
+      onPointerDown={(event) => props.onDragPointerDown(event, props.overlay.id, "move")}
     >
-      <Pilcrow className="relative z-[2] flex-none" size={13} />
+      <Type className="relative z-[2] flex-none" size={13} />
       <strong className="relative z-[2] min-w-0 truncate">{props.overlay.text || "Text"}</strong>
+      <ClipTrimEdges
+        onTrimPointerDown={(event, edge) => props.onDragPointerDown(event, props.overlay.id, edge)}
+      />
     </button>
   );
 }

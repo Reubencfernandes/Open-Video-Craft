@@ -27,6 +27,7 @@ import type {
   EditorTool,
   SpeedEffect,
   SubtitleSegment,
+  TextOverlay,
   TimelineContextMenu,
   TimelineSegment,
   ZoomEffect
@@ -47,6 +48,7 @@ type UseTimelineControllerParams = {
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
   mediaById: Map<string, EditorMediaItem>;
   mediaDurationById: Map<string, number>;
+  onDropNewTextOverlay: (time: number) => void;
   openExportDialog: () => void;
   playingRef: MutableRefObject<boolean>;
   scheduleTimelinePlaybackSync: (segments: TimelineSegment[]) => void;
@@ -64,6 +66,7 @@ type UseTimelineControllerParams = {
   setSelectedItemId: Dispatch<SetStateAction<string | null>>;
   setSelectedSpeedId: Dispatch<SetStateAction<string | null>>;
   setSelectedSubtitleId: Dispatch<SetStateAction<string | null>>;
+  setSelectedTextOverlayId: Dispatch<SetStateAction<string | null>>;
   setSelectedTimelineSegmentId: Dispatch<SetStateAction<string | null>>;
   setSelectedZoomId: Dispatch<SetStateAction<string | null>>;
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
@@ -77,6 +80,7 @@ type UseTimelineControllerParams = {
   speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
   syncMediaToTime: (time: number, isPlaying: boolean, reason?: PlaybackSyncReason) => void;
+  textOverlays: TextOverlay[];
   timelineBodyRef: RefObject<HTMLDivElement | null>;
   timelineDuration: number;
   timelineEditableItems: EditorMediaItem[];
@@ -84,6 +88,7 @@ type UseTimelineControllerParams = {
   timelineSegments: TimelineSegment[];
   togglePlayback: () => void;
   updateMediaDuration: (itemId: string, duration: number | null) => void;
+  updateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
   zoomEffects: ZoomEffect[];
 };
 
@@ -96,6 +101,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     knownTimelineItemIdsRef: params.knownTimelineItemIdsRef,
     mediaById: params.mediaById,
     mediaDurationById: params.mediaDurationById,
+    onDropNewTextOverlay: params.onDropNewTextOverlay,
     scheduleTimelinePlaybackSync: params.scheduleTimelinePlaybackSync,
     seek: params.seek,
     selectedItemId: params.selectedItemId,
@@ -157,6 +163,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setSelectedItemId: params.setSelectedItemId,
     setSelectedSpeedId: params.setSelectedSpeedId,
     setSelectedSubtitleId: params.setSelectedSubtitleId,
+    setSelectedTextOverlayId: params.setSelectedTextOverlayId,
     setSelectedTimelineSegmentId: params.setSelectedTimelineSegmentId,
     setSelectedZoomId: params.setSelectedZoomId,
     setSubtitles: params.setSubtitles,
@@ -166,12 +173,14 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setTimelineUndoStack: editing.setTimelineUndoStack,
     speedEffects: params.speedEffects,
     subtitles: params.subtitles,
+    textOverlays: params.textOverlays,
     timelineBodyRef: params.timelineBodyRef,
     timelineDuration: params.timelineDuration,
     timelineRenderDuration: params.timelineRenderDuration,
     timelineSegments: params.timelineSegments,
     updateSpeedEffect: effects.updateSpeedEffect,
     updateSubtitle: effects.updateSubtitle,
+    updateTextOverlay: params.updateTextOverlay,
     updateZoomEffect: effects.updateZoomEffect,
     zoomEffects: params.zoomEffects
   });
@@ -217,6 +226,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     addZoomEffect: effects.addZoomEffect,
     beginSpeedClipDrag: drags.beginSpeedClipDrag,
     beginSubtitleClipDrag: drags.beginSubtitleClipDrag,
+    beginTextOverlayClipDrag: drags.beginTextOverlayClipDrag,
     beginTimelineClipMove: drags.beginTimelineClipMove,
     beginTimelineClipTrim: drags.beginTimelineClipTrim,
     beginTimelineScrub: drags.beginTimelineScrub,

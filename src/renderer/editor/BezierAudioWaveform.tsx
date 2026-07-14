@@ -44,9 +44,9 @@ export const BezierAudioWaveform = memo(function BezierAudioWaveform(props: {
       >
         <defs>
           <linearGradient id={`audio-wave-${props.id}`} x1="0" x2="1">
-            <stop offset="0" stopColor="#d1fae5" stopOpacity="0.55" />
-            <stop offset="0.5" stopColor="#fef3c7" stopOpacity="0.92" />
-            <stop offset="1" stopColor="#6ee7b7" stopOpacity="0.6" />
+            <stop offset="0" stopColor="#bfdbfe" stopOpacity="0.55" />
+            <stop offset="0.5" stopColor="#ffffff" stopOpacity="0.92" />
+            <stop offset="1" stopColor="#93c5fd" stopOpacity="0.6" />
           </linearGradient>
         </defs>
         <path

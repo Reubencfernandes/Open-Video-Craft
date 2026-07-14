@@ -10,73 +10,13 @@ import { useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { decodeAudioTo16kMono } from "./media-utils";
 import {
-  addLanguageToWhisperWordChunks,
   createSubtitleSegmentsFromWhisperOutput,
   getWhisperOutputLanguage,
-  isMissingWhisperAttentionError,
-  whisperTranscriptionModel
 } from "./subtitle-transcription";
-import type { WhisperTranscriptionOutput } from "./subtitle-transcription";
+import { transcribeAudioInWorker } from "./subtitle-transcription-client";
 import type { EditorMediaItem, SubtitleSegment } from "./types";
 
 export type SttStatus = "idle" | "loading" | "transcribing" | "done" | "error";
-
-type Transcriber = (input: Float32Array, options: Record<string, unknown>) => Promise<WhisperTranscriptionOutput>;
-let cachedTranscriber: Promise<Transcriber> | null = null;
-
-type ModelDownloadProgress = {
-  status?: string;
-  file?: string;
-  loaded?: number;
-  total?: number;
-};
-
-/**
- * transformers.js fires a progress event per model file, each with its own
- * loaded/total bytes. Summing bytes across files gives one honest percentage;
- * a monotonic guard keeps it from visibly dropping when a new file's totals
- * join the sum mid-download.
- */
-function createDownloadProgressReporter(onProgress: (value: number) => void) {
-  const bytesByFile = new Map<string, { loaded: number; total: number }>();
-  let lastShown = 0;
-
-  return (event: unknown) => {
-    if (!event || typeof event !== "object") {
-      return;
-    }
-
-    const { status, file, loaded, total } = event as ModelDownloadProgress;
-    if (!file) {
-      return;
-    }
-
-    if (status === "progress" && typeof loaded === "number" && typeof total === "number" && total > 0) {
-      bytesByFile.set(file, { loaded, total });
-    } else if (status === "done") {
-      const entry = bytesByFile.get(file);
-      if (entry) {
-        bytesByFile.set(file, { loaded: entry.total, total: entry.total });
-      }
-    } else {
-      return;
-    }
-
-    let loadedBytes = 0;
-    let totalBytes = 0;
-    for (const entry of bytesByFile.values()) {
-      loadedBytes += entry.loaded;
-      totalBytes += entry.total;
-    }
-    if (totalBytes <= 0) {
-      return;
-    }
-
-    const percentage = Math.max(0, Math.min(100, (loadedBytes / totalBytes) * 100));
-    lastShown = Math.max(lastShown, percentage);
-    onProgress(lastShown);
-  };
-}
 
 type UseSubtitleGenerationParams = {
   allMedia: EditorMediaItem[];
@@ -114,61 +54,16 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
     setSttStatus("loading");
 
     try {
-      const transformers = await import("@huggingface/transformers");
-      transformers.env.allowLocalModels = false;
-      // The ONNX wasm runtime is bundled next to index.html (see vite.config.ts).
-      // Without this, transformers.js fetches it from the jsdelivr CDN, which the
-      // renderer CSP blocks -> "no available backend". Point it at our origin and
-      // stay single-threaded (file:// isn't cross-origin isolated for SAB).
-      const wasmBackend = transformers.env.backends?.onnx?.wasm;
-      if (wasmBackend) {
-        wasmBackend.wasmPaths = new URL(".", document.baseURI).href;
-        wasmBackend.numThreads = 1;
-      }
-
       const audio = await decodeAudioTo16kMono(source.url);
-      cachedTranscriber ??= transformers.pipeline(
-        "automatic-speech-recognition",
-        whisperTranscriptionModel,
-        {
-          // The model downloads as several files, each reporting its own 0-100%.
-          // Track bytes across files for one true percentage, and never let the
-          // shown value drop (new files joining would otherwise make it jump back).
-          progress_callback: createDownloadProgressReporter(setSttDownloadProgress)
+      const output = await transcribeAudioInWorker({
+        audio,
+        wasmBaseUrl: new URL(".", document.baseURI).href,
+        onProgress: setSttDownloadProgress,
+        onTranscribing: () => {
+          setSttDownloadProgress(null);
+          setSttStatus("transcribing");
         }
-      ).then((pipeline) => {
-        const transcriber = pipeline as unknown as Transcriber;
-        addLanguageToWhisperWordChunks(transcriber);
-        return transcriber;
-      }).catch((error) => {
-        cachedTranscriber = null;
-        throw error;
       });
-      const transcriber = await cachedTranscriber;
-      setSttDownloadProgress(null);
-      setSttStatus("transcribing");
-
-      let output: WhisperTranscriptionOutput;
-      try {
-        output = await transcriber(audio, {
-          return_timestamps: "word",
-          chunk_length_s: 30,
-          stride_length_s: 5
-        });
-      } catch (timestampError) {
-        if (!isMissingWhisperAttentionError(timestampError)) {
-          throw timestampError;
-        }
-
-        // Older cached exports may not expose decoder attention tensors. They
-        // can still produce Whisper segment timestamps, so gracefully retain
-        // working subtitles instead of failing the whole transcription.
-        output = await transcriber(audio, {
-          return_timestamps: true,
-          chunk_length_s: 30,
-          stride_length_s: 5
-        });
-      }
 
       const segments = createSubtitleSegmentsFromWhisperOutput(output);
 

@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -34,6 +34,13 @@
     "productName": "Open Video Craft",
     "copyright": "Copyright (c) 2026 Reuben Chagas Fernandes",
     "asar": true,
+    "electronFuses": {
+      "runAsNode": true,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",
       "node_modules/onnxruntime-node/**/*"
@@ -114,6 +121,7 @@
     }
   },
   "devDependencies": {
+    "@electron/fuses": "^2.1.3",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

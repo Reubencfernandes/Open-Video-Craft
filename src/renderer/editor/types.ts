@@ -116,3 +116,5 @@ export type TimelineTrimDrag = {
 
 export const frameRate = 30;
 export const mediaDragType = "application/x-ovc-media-id";
+export const textDragType = "application/x-ovc-new-text";
+export const transitionDragType = "application/x-ovc-transition";

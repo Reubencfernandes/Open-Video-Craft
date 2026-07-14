@@ -97,7 +97,7 @@ function AudioSourceRow(props: {
         </button>
       </div>
       <input
-        className="w-full accent-amber-500"
+        className="w-full accent-white"
         type="range"
         min={minVolumeDb}
         max={maxVolumeDb}

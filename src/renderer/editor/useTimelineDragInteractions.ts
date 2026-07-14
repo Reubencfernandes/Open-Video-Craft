@@ -38,6 +38,7 @@ import type {
   EditorTool,
   SpeedEffect,
   SubtitleSegment,
+  TextOverlay,
   TimelineContextMenu,
   TimelineSegment,
   TimelineTrimDrag,
@@ -70,6 +71,7 @@ type UseTimelineDragInteractionsParams = {
   setSelectedItemId: Dispatch<SetStateAction<string | null>>;
   setSelectedSpeedId: Dispatch<SetStateAction<string | null>>;
   setSelectedSubtitleId: Dispatch<SetStateAction<string | null>>;
+  setSelectedTextOverlayId: Dispatch<SetStateAction<string | null>>;
   setSelectedTimelineSegmentId: Dispatch<SetStateAction<string | null>>;
   setSelectedZoomId: Dispatch<SetStateAction<string | null>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
@@ -79,12 +81,14 @@ type UseTimelineDragInteractionsParams = {
   setTimelineUndoStack: Dispatch<SetStateAction<TimelineSegment[][]>>;
   speedEffects: SpeedEffect[];
   subtitles: SubtitleSegment[];
+  textOverlays: TextOverlay[];
   timelineBodyRef: RefObject<HTMLDivElement | null>;
   timelineDuration: number;
   timelineRenderDuration: number;
   timelineSegments: TimelineSegment[];
   updateSpeedEffect: (id: string, updates: Partial<SpeedEffect>) => void;
   updateSubtitle: (id: string, updates: Partial<SubtitleSegment>) => void;
+  updateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
   updateZoomEffect: (id: string, updates: Partial<ZoomEffect>) => void;
   zoomEffects: ZoomEffect[];
 };
@@ -104,6 +108,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     setSelectedItemId,
     setSelectedSpeedId,
     setSelectedSubtitleId,
+    setSelectedTextOverlayId,
     setSelectedTimelineSegmentId,
     setSelectedZoomId,
     setSubtitles,
@@ -113,12 +118,14 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     setTimelineUndoStack,
     speedEffects,
     subtitles,
+    textOverlays,
     timelineBodyRef,
     timelineDuration,
     timelineRenderDuration,
     timelineSegments,
     updateSpeedEffect,
     updateSubtitle,
+    updateTextOverlay,
     updateZoomEffect,
     zoomEffects
   } = params;
@@ -142,6 +149,12 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     original: SubtitleSegment;
     moved: boolean;
   } | null>(null);
+  const textOverlayDragRef = useRef<{
+    mode: EffectDragMode;
+    pointerStartTime: number;
+    original: TextOverlay;
+    moved: boolean;
+  } | null>(null);
 
   function anyClipDragActive(): boolean {
     return Boolean(
@@ -149,7 +162,8 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
         timelineMoveDragRef.current ||
         zoomDragRef.current ||
         speedDragRef.current ||
-        subtitleDragRef.current
+        subtitleDragRef.current ||
+        textOverlayDragRef.current
     );
   }
 
@@ -570,6 +584,76 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   }
 
   // ---------------------------------------------------------------------------
+  // Text overlay clip drag (move keeps the overlay's duration; edges retime it).
+  // ---------------------------------------------------------------------------
+
+  function beginTextOverlayClipDrag(
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: EffectDragMode
+  ) {
+    if (mode !== "move") {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    const time = getTimelineTimeFromClientX(event.clientX);
+    const overlay = textOverlays.find((item) => item.id === id);
+    if (time === null || !overlay) {
+      return;
+    }
+
+    textOverlayDragRef.current = {
+      mode,
+      pointerStartTime: time,
+      original: overlay,
+      moved: false
+    };
+    beginPlaybackInteraction();
+    setSelectedTextOverlayId(id);
+    setActiveTool("text");
+    if (mode === "move") {
+      seek(time);
+    }
+    timelineBodyRef.current?.setPointerCapture(event.pointerId);
+  }
+
+  function updateTextOverlayClipDrag(clientX: number) {
+    const drag = textOverlayDragRef.current;
+    const time = getTimelineTimeFromClientX(clientX);
+    if (!drag || time === null) {
+      return;
+    }
+
+    const original = drag.original;
+    const minDuration = 0.2;
+
+    if (drag.mode === "move") {
+      const delta = time - drag.pointerStartTime;
+      if (!drag.moved && Math.abs(delta) < 0.02) {
+        return;
+      }
+      drag.moved = true;
+      const start = Math.max(0, original.start + delta);
+      updateTextOverlay(original.id, { start, end: original.end + (start - original.start) });
+      return;
+    }
+
+    if (drag.mode === "start") {
+      const start = clampNumber(time, 0, original.end - minDuration);
+      updateTextOverlay(original.id, { start });
+      return;
+    }
+
+    const end = Math.max(original.start + minDuration, time);
+    updateTextOverlay(original.id, { end });
+  }
+
+  function finishTextOverlayClipDrag() {
+    textOverlayDragRef.current = null;
+  }
+
+  // ---------------------------------------------------------------------------
   // Timeline body pointer handlers: dispatch to whichever drag is active
   // (trim / zoom / speed / subtitle / move) and otherwise scrub the playhead.
   // ---------------------------------------------------------------------------
@@ -619,6 +703,11 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       return;
     }
 
+    if (textOverlayDragRef.current) {
+      updateTextOverlayClipDrag(event.clientX);
+      return;
+    }
+
     if (timelineMoveDragRef.current) {
       updateTimelineClipMove(event.clientX);
       return;
@@ -641,6 +730,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     finishZoomClipDrag();
     finishSpeedClipDrag();
     finishSubtitleClipDrag();
+    finishTextOverlayClipDrag();
     // Re-enable clip reflow animation so the drop settles smoothly.
     timelineBodyRef.current?.removeAttribute("data-interacting");
     timelineDragRef.current = false;
@@ -651,6 +741,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   return {
     beginSpeedClipDrag,
     beginSubtitleClipDrag,
+    beginTextOverlayClipDrag,
     beginTimelineClipMove,
     beginTimelineClipTrim,
     beginTimelineScrub,

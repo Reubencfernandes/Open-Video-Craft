@@ -50,6 +50,7 @@ export function EditorToolPanel(props: {
   selectedZoomEffect: ZoomEffect | null;
   selectedSpeedEffect: SpeedEffect | null;
   transitions: ClipTransition[];
+  selectedTransitionId: string | null;
   videoClips: TimelineMediaClip[];
   sttStatus: "idle" | "loading" | "transcribing" | "done" | "error";
   sttDownloadProgress: number | null;
@@ -90,7 +91,6 @@ export function EditorToolPanel(props: {
   onSubtitleStyleChange: (style: SubtitleStyle) => void;
   onUpdateSubtitle: (id: string, updates: Partial<SubtitleSegment>) => void;
   onSelectSubtitle: (subtitleId: string | null) => void;
-  onAddTextOverlay: () => void;
   onSelectTextOverlay: (id: string) => void;
   onUpdateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
   onRemoveTextOverlay: (id: string) => void;
@@ -163,6 +163,7 @@ export function EditorToolPanel(props: {
         <TransitionPanel
           videoClips={props.videoClips}
           transitions={props.transitions}
+          selectedTransitionId={props.selectedTransitionId}
           onSetTransition={props.onSetTransition}
           onRemoveTransition={props.onRemoveTransition}
         />
@@ -189,7 +190,6 @@ export function EditorToolPanel(props: {
         <TextPanel
           overlays={props.textOverlays}
           selectedOverlay={props.selectedTextOverlay}
-          onAdd={props.onAddTextOverlay}
           onSelect={props.onSelectTextOverlay}
           onUpdate={props.onUpdateTextOverlay}
           onRemove={props.onRemoveTextOverlay}

@@ -3,7 +3,8 @@
  * playhead, and the track lanes. Purely presentational; all interaction state
  * lives in EditorView's hooks.
  */
-import { AudioLines, Film, Pilcrow, Type, ZoomIn } from "lucide-react";
+import { AudioLines, Captions, Film, Type, ZoomIn } from "lucide-react";
+import { useMemo, useState } from "react";
 import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
@@ -23,11 +24,18 @@ import {
   TimelineSpeedClip,
   TimelineSubtitleClip,
   TimelineTextClip,
+  TimelineTransitionDropTarget,
   TimelineTransitionMarker,
   TimelineZoomClip
 } from "./TimelineClips";
 import { TimelineTrack } from "./TimelineTrack";
 import { SpeedIcon } from "./SpeedIcon";
+import {
+  getMaxTransitionDuration,
+  getNearestTransitionBoundary,
+  getTimelineTransitionBoundaries,
+  isClipTransitionType
+} from "./transition-utils";
 import type {
   EditorTool,
   ClipTransition,
@@ -39,47 +47,7 @@ import type {
   TimelineTrimEdge,
   ZoomEffect
 } from "./types";
-
-const playheadColorByTool: Record<EditorTool, string> = {
-  media: "#f59e0b",
-  layout: "#f59e0b",
-  audio: "#34d399",
-  zoom: "#c084fc",
-  speed: "#a3e635",
-  transitions: "#22d3ee",
-  subtitles: "#fb7185",
-  text: "#38bdf8",
-  style: "#f59e0b"
-};
-
-function getPlayheadColor(props: {
-  activeTool: EditorTool;
-  selectedSegmentId: string | null;
-  selectedZoomId: string | null;
-  selectedSpeedId: string | null;
-  selectedSubtitleId: string | null;
-  videoClips: TimelineMediaClip[];
-  audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
-}): string {
-  if (props.selectedZoomId) return playheadColorByTool.zoom;
-  if (props.selectedSpeedId) return playheadColorByTool.speed;
-  if (props.selectedSubtitleId) return playheadColorByTool.subtitles;
-  if (
-    props.selectedSegmentId &&
-    props.audioTracks.some((track) =>
-      track.clips.some((clip) => clip.id === props.selectedSegmentId)
-    )
-  ) {
-    return playheadColorByTool.audio;
-  }
-  if (
-    props.selectedSegmentId &&
-    props.videoClips.some((clip) => clip.id === props.selectedSegmentId)
-  ) {
-    return playheadColorByTool.media;
-  }
-  return playheadColorByTool[props.activeTool];
-}
+import { transitionDragType } from "./types";
 
 /**
  * The bottom timeline panel: transport toolbar, ruler, playhead and the track
@@ -136,6 +104,7 @@ export function Timeline(props: {
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
   onSelectTransition: (transition: ClipTransition) => void;
+  onDropTransition: (transition: Omit<ClipTransition, "id">) => void;
   onSelectSubtitle: (subtitleId: string) => void;
   onSelectTextOverlay: (overlay: TextOverlay) => void;
   onTrimPointerDown: (
@@ -159,6 +128,11 @@ export function Timeline(props: {
     id: string,
     mode: "move" | "start" | "end"
   ) => void;
+  onTextOverlayDragPointerDown: (
+    event: ReactPointerEvent<HTMLElement>,
+    id: string,
+    mode: "move" | "start" | "end"
+  ) => void;
   onBodyPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onBodyPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onBodyPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -168,8 +142,54 @@ export function Timeline(props: {
   onContextMenuSplit: () => void;
   onContextMenuDelete: () => void;
 }) {
+  const transitionBoundaries = useMemo(
+    () => getTimelineTransitionBoundaries(props.videoClips),
+    [props.videoClips]
+  );
+  const [transitionDropKey, setTransitionDropKey] = useState<string | null>(null);
+
+  function getTransitionBoundaryAtClientX(clientX: number) {
+    const lane = props.bodyRef.current?.querySelector<HTMLElement>(".track-lane");
+    if (!lane || lane.clientWidth <= 0) return null;
+    const bounds = lane.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
+    return getNearestTransitionBoundary(transitionBoundaries, ratio * props.renderDuration);
+  }
+
+  function handleBodyDragOver(event: ReactDragEvent<HTMLDivElement>) {
+    if (!event.dataTransfer.types.includes(transitionDragType)) {
+      props.onBodyDragOver(event);
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setTransitionDropKey(getTransitionBoundaryAtClientX(event.clientX)?.key ?? null);
+  }
+
+  function handleBodyDrop(event: ReactDragEvent<HTMLDivElement>) {
+    if (!event.dataTransfer.types.includes(transitionDragType)) {
+      props.onBodyDrop(event);
+      return;
+    }
+    event.preventDefault();
+    const type = event.dataTransfer.getData(transitionDragType);
+    const boundary = getTransitionBoundaryAtClientX(event.clientX);
+    setTransitionDropKey(null);
+    if (!boundary || !isClipTransitionType(type)) return;
+    const existing = props.transitions.find((transition) =>
+      transition.fromSegmentId === boundary.from.id &&
+      transition.toSegmentId === boundary.to.id
+    );
+    props.onDropTransition({
+      fromSegmentId: boundary.from.id,
+      toSegmentId: boundary.to.id,
+      type,
+      duration: Math.min(existing?.duration ?? 0.6, getMaxTransitionDuration(boundary))
+    });
+  }
+
   return (
-    <section className="editor-timeline relative grid h-full min-h-0 min-w-0 content-start gap-1 overflow-auto border-t border-white/[0.1] bg-[#171b22] px-2 pb-2 pt-3 [--timeline-body-pad:0.25rem] [--timeline-label-width:118px] [--timeline-track-gap:0.35rem]">
+    <section className="editor-timeline relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0b0b0d] px-2 pt-2 [--timeline-body-pad:0.25rem] [--timeline-label-width:140px] [--timeline-track-gap:0.4rem]">
       <button
         className="group absolute left-0 right-0 top-0 z-30 grid h-4 cursor-row-resize place-items-center border-0 bg-transparent p-0"
         type="button"
@@ -181,29 +201,12 @@ export function Timeline(props: {
         onPointerCancel={props.onResizePointerUp}
         onDoubleClick={props.onResizeDoubleClick}
       >
-        <span className="h-px w-24 bg-white/[0.15] transition group-hover:bg-[#c9ad73]" />
+        <span className="h-px w-24 bg-white/[0.15] transition group-hover:bg-white/60" />
       </button>
-
-      <TimelineToolbar
-        currentFrame={props.currentFrame}
-        totalFrames={props.totalFrames}
-        currentTime={props.currentTime}
-        renderDuration={props.renderDuration}
-        timelineZoom={props.timelineZoom}
-        canSplit={props.canSplitAtPlayhead}
-        canDelete={props.selectedSegmentId !== null}
-        onUndo={props.onUndo}
-        onRedo={props.onRedo}
-        onSplit={props.onSplitAtPlayhead}
-        onDelete={props.onDeleteSelected}
-        onZoomIn={props.onZoomIn}
-        onZoomOut={props.onZoomOut}
-        onZoomReset={props.onZoomReset}
-      />
 
       {/* Horizontal-zoom viewport: the ruler and track body grow past 100% and
           scroll together so the time axis can be zoomed in like a real NLE. */}
-      <div className="grid min-w-0 content-start gap-1 overflow-x-auto overflow-y-hidden">
+      <div className="min-h-0 flex-1 overflow-auto pt-1">
         <div
           className="grid min-w-full content-start gap-1"
           style={{ width: `${props.timelineZoom * 100}%` }}
@@ -233,19 +236,24 @@ export function Timeline(props: {
             onPointerUp={props.onBodyPointerUp}
             onPointerCancel={props.onBodyPointerUp}
             onContextMenu={props.onBodyContextMenu}
-            onDragOver={props.onBodyDragOver}
-            onDrop={props.onBodyDrop}
+            onDragOver={handleBodyDragOver}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setTransitionDropKey(null);
+              }
+            }}
+            onDrop={handleBodyDrop}
           >
         <TimelinePlayhead
           playheadPercent={props.playheadPercent}
           currentTime={props.currentTime}
-          color={getPlayheadColor(props)}
+          color="#ffffff"
           onPointerDown={props.onBodyPointerDown}
           onPointerMove={props.onBodyPointerMove}
           onPointerUp={props.onBodyPointerUp}
         />
 
-        <TimelineTrack label="Video 1" accent="amber" icon={<Film size={14} />}>
+        <TimelineTrack label="Video 1" icon={<Film size={14} />}>
           {props.videoClips.map((clip) => (
             <TimelineClip
               key={clip.id}
@@ -259,6 +267,14 @@ export function Timeline(props: {
               onInteractionPointerUp={props.onBodyPointerUp}
             />
           ))}
+          {transitionDropKey ? transitionBoundaries.map((boundary) => (
+            <TimelineTransitionDropTarget
+              key={boundary.key}
+              cutTime={boundary.cutTime}
+              timelineDuration={props.renderDuration}
+              active={transitionDropKey === boundary.key}
+            />
+          )) : null}
           {props.transitions.map((transition) => {
             const from = props.videoClips.find((clip) => clip.id === transition.fromSegmentId);
             return from ? (
@@ -273,7 +289,7 @@ export function Timeline(props: {
           })}
         </TimelineTrack>
 
-        <TimelineTrack label="Zoom" accent="purple" icon={<ZoomIn size={14} />}>
+        <TimelineTrack label="Zoom" icon={<ZoomIn size={14} />}>
           {getOrderedZoomTimingItems(props.zoomEffects).map((effect) => (
             <TimelineZoomClip
               key={effect.id}
@@ -286,7 +302,7 @@ export function Timeline(props: {
           ))}
         </TimelineTrack>
 
-        <TimelineTrack label="Speed" accent="lime" icon={<SpeedIcon size={14} />}>
+        <TimelineTrack label="Speed" icon={<SpeedIcon size={14} />}>
           {getOrderedZoomTimingItems(props.speedEffects).map((effect) => (
             <TimelineSpeedClip
               key={effect.id}
@@ -299,11 +315,36 @@ export function Timeline(props: {
           ))}
         </TimelineTrack>
 
+        <TimelineTrack label="Subtitles" icon={<Captions size={14} />}>
+          {props.subtitles.map((subtitle) => (
+            <TimelineSubtitleClip
+              key={subtitle.id}
+              subtitle={subtitle}
+              duration={props.renderDuration}
+              selected={props.selectedSubtitleId === subtitle.id}
+              onSelect={() => props.onSelectSubtitle(subtitle.id)}
+              onDragPointerDown={props.onSubtitleDragPointerDown}
+            />
+          ))}
+        </TimelineTrack>
+
+        <TimelineTrack label="Text" icon={<Type size={14} />}>
+          {props.textOverlays.map((overlay) => (
+            <TimelineTextClip
+              key={overlay.id}
+              overlay={overlay}
+              duration={props.renderDuration}
+              selected={props.selectedTextOverlayId === overlay.id}
+              onSelect={() => props.onSelectTextOverlay(overlay)}
+              onDragPointerDown={props.onTextOverlayDragPointerDown}
+            />
+          ))}
+        </TimelineTrack>
+
         {props.audioTracks.map((track) => (
               <TimelineTrack
                 key={track.lane}
                 label={`Audio ${track.lane + 1}`}
-                accent="green"
                 icon={<AudioLines size={14} />}
               >
                 {track.clips.map((clip) => (
@@ -322,34 +363,22 @@ export function Timeline(props: {
                 ))}
               </TimelineTrack>
             ))}
-
-        <TimelineTrack label="Subtitles" accent="rose" icon={<Type size={14} />}>
-          {props.subtitles.map((subtitle) => (
-            <TimelineSubtitleClip
-              key={subtitle.id}
-              subtitle={subtitle}
-              duration={props.renderDuration}
-              selected={props.selectedSubtitleId === subtitle.id}
-              onSelect={() => props.onSelectSubtitle(subtitle.id)}
-              onDragPointerDown={props.onSubtitleDragPointerDown}
-            />
-          ))}
-        </TimelineTrack>
-
-        <TimelineTrack label="Text" accent="purple" icon={<Pilcrow size={14} />}>
-          {props.textOverlays.map((overlay) => (
-            <TimelineTextClip
-              key={overlay.id}
-              overlay={overlay}
-              duration={props.renderDuration}
-              selected={props.selectedTextOverlayId === overlay.id}
-              onSelect={() => props.onSelectTextOverlay(overlay)}
-            />
-          ))}
-        </TimelineTrack>
           </div>
         </div>
       </div>
+
+      <TimelineToolbar
+        timelineZoom={props.timelineZoom}
+        canSplit={props.canSplitAtPlayhead}
+        canDelete={props.selectedSegmentId !== null}
+        onUndo={props.onUndo}
+        onRedo={props.onRedo}
+        onSplit={props.onSplitAtPlayhead}
+        onDelete={props.onDeleteSelected}
+        onZoomIn={props.onZoomIn}
+        onZoomOut={props.onZoomOut}
+        onZoomReset={props.onZoomReset}
+      />
 
       {props.contextMenu ? (
         <TimelineContextMenuView

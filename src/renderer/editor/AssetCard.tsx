@@ -1,5 +1,6 @@
 /**
- * Asset grid card with drag support and a decoded video thumbnail.
+ * Asset grid card with drag support, a decoded video thumbnail, and a
+ * duration badge.
  */
 import { AudioLines, Film, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -7,6 +8,13 @@ import type { DragEvent as ReactDragEvent } from "react";
 import { cx } from "../classNames";
 import { useMediaThumbnail } from "./thumbnail-cache";
 import type { EditorMediaItem } from "./types";
+
+/** Compact "0:11" badge format used on media tiles. */
+function formatTileDuration(seconds: number): string {
+  const rounded = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(rounded / 60);
+  return `${minutes}:${String(rounded % 60).padStart(2, "0")}`;
+}
 
 export function AssetCard(props: {
   item: EditorMediaItem;
@@ -28,8 +36,8 @@ export function AssetCard(props: {
       >
         <div
           className={cx(
-            "grid aspect-video w-full place-items-center overflow-hidden rounded-sm border border-white/[0.08] bg-[#11141a] text-slate-400 [&>img]:h-full [&>img]:w-full [&>img]:object-cover",
-            props.selected && "border-[#c9ad73] shadow-[0_0_0_1px_rgb(201_173_115_/_0.35)]"
+            "relative grid aspect-video w-full place-items-center overflow-hidden rounded-lg border bg-[#0d0d0f] text-neutral-500 [&>img]:h-full [&>img]:w-full [&>img]:object-cover",
+            props.selected ? "border-white shadow-[0_0_0_1px_rgb(255_255_255_/_0.9)]" : "border-white/[0.07]"
           )}
         >
           {props.item.kind === "video" ? (
@@ -39,15 +47,22 @@ export function AssetCard(props: {
           ) : (
             <AudioLines size={18} />
           )}
+          {props.item.duration !== null && props.item.kind !== "image" ? (
+            <span className="absolute bottom-1 left-1 rounded bg-black/75 px-1.5 py-0.5 text-[0.62rem] font-semibold tabular-nums text-white">
+              {formatTileDuration(props.item.duration)}
+            </span>
+          ) : null}
         </div>
-        <strong className="truncate text-[0.68rem] font-semibold">{props.item.name}</strong>
-        <span className="truncate text-[0.6rem] text-slate-500">
+        <strong className="truncate text-[0.7rem] font-semibold text-neutral-100">
+          {props.item.name}
+        </strong>
+        <span className="truncate text-[0.62rem] capitalize text-neutral-500">
           {props.item.origin === "project" ? "Recording" : props.item.kind}
         </span>
       </button>
       {props.onRemove ? (
         <button
-          className="absolute right-1.5 top-1.5 grid size-[1.65rem] cursor-pointer place-items-center rounded-[7px] border border-white/[0.14] bg-slate-950/80 text-red-400 hover:bg-red-950/90 hover:text-white"
+          className="absolute right-1.5 top-1.5 grid size-[1.65rem] cursor-pointer place-items-center rounded-lg border border-white/[0.14] bg-black/80 text-neutral-300 opacity-0 transition hover:bg-red-950/90 hover:text-white group-hover:opacity-100"
           type="button"
           onClick={props.onRemove}
           title="Remove imported media"

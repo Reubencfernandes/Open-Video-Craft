@@ -44,18 +44,18 @@ export function AiConnectionDialog(props: {
       <section className="w-full max-w-2xl overflow-hidden rounded-xl border border-white/10 bg-[#171a21] shadow-2xl">
         <header className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="flex items-center gap-3">
-            <span className="grid size-9 place-items-center rounded-lg bg-amber-300/10 text-amber-200"><Bot size={19} /></span>
+            <span className="grid size-9 place-items-center rounded-lg bg-white/[0.08] text-neutral-200"><Bot size={19} /></span>
             <div><h2 className="text-sm font-bold text-white">AI video editing</h2><p className="text-xs text-slate-400">Project revision {props.revision}</p></div>
           </div>
           <button className="grid size-8 place-items-center rounded text-slate-400 hover:bg-white/10 hover:text-white" onClick={props.onClose} type="button"><X size={17} /></button>
         </header>
 
         <div className="grid gap-4 p-5">
-          <div className="rounded-lg border border-amber-300/15 bg-amber-300/[0.05] p-3 text-xs leading-5 text-slate-300">
+          <div className="rounded-lg border border-white/10 bg-white/[0.04] p-3 text-xs leading-5 text-slate-300">
             Analysis runs on this computer. When an AI client requests project context, timeline metadata, transcripts, and requested contact-sheet images are sent to that client and handled under its provider’s data policy. Raw video is never exposed automatically.
           </div>
           <label className="flex items-start gap-2.5 text-xs text-slate-300">
-            <input className="mt-0.5 accent-amber-300" type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} />
+            <input className="mt-0.5 accent-white" type="checkbox" checked={privacyAccepted} onChange={(event) => setPrivacyAccepted(event.target.checked)} />
             <span>I understand and want to allow connected AI clients to request derived project context.</span>
           </label>
 

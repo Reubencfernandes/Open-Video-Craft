@@ -13,6 +13,7 @@ import type {
   DesktopPermissionStatus,
   ExportVideoRequest,
   ExportVideoResult,
+  ExportProgress,
   EditorProjectStateView,
   EditorSessionStateRequest,
   FailRecordingRequest,
@@ -29,6 +30,11 @@ import type {
   UndoAgentEditRequest,
   WriteChunkRequest
 } from "../shared/types";
+
+// Drag/drop paths are granted only when Electron resolves a real File object.
+// The renderer cannot register an arbitrary absolute path by calling the IPC
+// method directly; each grant is single-use and consumed by importMediaPaths.
+const grantedDroppedMediaPaths = new Set<string>();
 
 const api = {
   ai: {
@@ -120,11 +126,21 @@ const api = {
   },
   editor: {
     importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media"),
-    importMediaPaths: (filePaths: string[]): Promise<ImportedMediaFile[]> =>
-      ipcRenderer.invoke("editor:import-media-paths", filePaths),
+    importMediaPaths: (filePaths: string[]): Promise<ImportedMediaFile[]> => {
+      const grantedPaths = filePaths.filter((filePath) => {
+        const granted = grantedDroppedMediaPaths.has(filePath);
+        if (granted) grantedDroppedMediaPaths.delete(filePath);
+        return granted;
+      });
+      return ipcRenderer.invoke("editor:import-media-paths", grantedPaths);
+    },
     // Resolve an OS drag-and-dropped File to its absolute path (File.path was
     // removed in modern Electron, so the renderer must ask the preload bridge).
-    getPathForFile: (file: File): string => webUtils.getPathForFile(file),
+    getPathForFile: (file: File): string => {
+      const filePath = webUtils.getPathForFile(file);
+      if (filePath) grantedDroppedMediaPaths.add(filePath);
+      return filePath;
+    },
     removeImportedMedia: (importId: string): Promise<boolean> =>
       ipcRenderer.invoke("editor:remove-imported-media", importId),
     loadProjectState: (projectId: string): Promise<EditorProjectStateView | null> =>
@@ -141,7 +157,14 @@ const api = {
       return () => ipcRenderer.removeListener("editor:project-state-changed", listener);
     },
     exportVideo: (request: ExportVideoRequest): Promise<ExportVideoResult | null> =>
-      ipcRenderer.invoke("editor:export-video", request)
+      ipcRenderer.invoke("editor:export-video", request),
+    cancelExport: (jobId: string): Promise<boolean> =>
+      ipcRenderer.invoke("editor:cancel-export", jobId),
+    onExportProgress: (callback: (progress: ExportProgress) => void): (() => void) => {
+      const listener = (_event: unknown, progress: ExportProgress) => callback(progress);
+      ipcRenderer.on("editor:export-progress", listener);
+      return () => ipcRenderer.removeListener("editor:export-progress", listener);
+    }
   },
   overlays: {
     showSourceBorder: (sourceId: string): Promise<SourceOverlayResult> =>
@@ -153,6 +176,16 @@ const api = {
       const listener = () => callback();
       ipcRenderer.on("recording:global-stop", listener);
       return () => ipcRenderer.removeListener("recording:global-stop", listener);
+    },
+    onPowerSuspend: (callback: () => void): (() => void) => {
+      const listener = () => callback();
+      ipcRenderer.on("recording:power-suspend", listener);
+      return () => ipcRenderer.removeListener("recording:power-suspend", listener);
+    },
+    onPowerResume: (callback: () => void): (() => void) => {
+      const listener = () => callback();
+      ipcRenderer.on("recording:power-resume", listener);
+      return () => ipcRenderer.removeListener("recording:power-resume", listener);
     }
   }
 };

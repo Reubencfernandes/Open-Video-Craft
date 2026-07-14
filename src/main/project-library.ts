@@ -22,8 +22,15 @@ interface ProjectLibraryFile {
 
 export class ProjectLibrary {
   private operationQueue: Promise<unknown> = Promise.resolve();
+  private readonly refreshCache = new Map<
+    string,
+    { mtimeMs: number; size: number; entry: ProjectLibraryEntry }
+  >();
 
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly recentLimit = 100
+  ) {}
 
   async listRecent(): Promise<ProjectLibraryEntry[]> {
     return this.enqueue(() => this.listRecentUnlocked());
@@ -34,7 +41,7 @@ export class ProjectLibrary {
     const refreshedProjects = await Promise.all(
       file.projects.map((entry) => this.refreshEntry(entry))
     );
-    const projects = sortEntries(dedupeEntries(refreshedProjects));
+    const projects = sortEntries(dedupeEntries(refreshedProjects)).slice(0, this.recentLimit);
 
     if (!areEntriesEqual(file.projects, projects)) {
       await this.writeFile({ schemaVersion: 1, projects });
@@ -45,8 +52,18 @@ export class ProjectLibrary {
 
   async get(projectId: string): Promise<ProjectLibraryEntry | null> {
     return this.enqueue(async () => {
-      const projects = await this.listRecentUnlocked();
-      return projects.find((entry) => entry.id === projectId) ?? null;
+      const file = await this.readFile();
+      const existing = file.projects.find((entry) => entry.id === projectId);
+      if (!existing) return null;
+
+      const refreshed = await this.refreshEntry(existing);
+      if (!areEntriesEqual([existing], [refreshed])) {
+        await this.writeFile({
+          schemaVersion: 1,
+          projects: file.projects.map((entry) => entry.id === projectId ? refreshed : entry)
+        });
+      }
+      return refreshed;
     });
   }
 
@@ -87,10 +104,25 @@ export class ProjectLibrary {
   }
 
   private async refreshEntry(entry: ProjectLibraryEntry): Promise<ProjectLibraryEntry> {
+    const projectFilePath = path.join(entry.rootPath, "project.json");
     try {
+      const stats = await fs.stat(projectFilePath);
+      const cacheKey = path.resolve(entry.rootPath);
+      const cached = this.refreshCache.get(cacheKey);
+      if (cached && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
+        return cached.entry;
+      }
+
       const file = await readProjectFile(entry.rootPath);
-      return createProjectLibraryEntry(entry.rootPath, file, true);
+      const refreshed = createProjectLibraryEntry(entry.rootPath, file, true);
+      this.refreshCache.set(cacheKey, {
+        mtimeMs: stats.mtimeMs,
+        size: stats.size,
+        entry: refreshed
+      });
+      return refreshed;
     } catch {
+      this.refreshCache.delete(path.resolve(entry.rootPath));
       return {
         ...entry,
         available: false

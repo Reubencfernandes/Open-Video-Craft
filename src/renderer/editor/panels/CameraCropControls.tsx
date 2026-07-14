@@ -18,7 +18,7 @@ export function CameraCropControls(props: {
           <button
             className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-extrabold ${
               props.transform.mirrored
-                ? "bg-amber-300 text-[#111827]"
+                ? "bg-white text-black"
                 : "bg-white/[0.06] text-slate-200 hover:bg-white/10 hover:text-white"
             }`}
             type="button"

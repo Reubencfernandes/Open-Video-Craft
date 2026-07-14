@@ -10,6 +10,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  powerMonitor,
   protocol,
   screen as electronScreen,
   shell,
@@ -44,8 +45,14 @@ import {
   importMediaFiles as showImportMediaDialog,
   importMediaFromPaths
 } from "./file-dialogs";
-import { convertWebmAudioToWav, killActiveFfmpegProcesses, remuxWebm } from "./ffmpeg";
+import {
+  convertWebmAudioToWav,
+  killActiveFfmpegProcesses,
+  probeMediaDurationMs,
+  remuxWebm
+} from "./ffmpeg";
 import { exportEditorVideo } from "./editor-export";
+import { ExportJobRegistry } from "./export-jobs";
 import {
   assertExportVideoRequest,
   assertSaveEditorProjectStateRequest,
@@ -53,6 +60,7 @@ import {
 } from "./request-validation";
 import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
+import { assertProjectDeletionTarget } from "./project-deletion";
 import { setEditorSessionState, undoAgentEdit } from "./editor-document-store";
 import { writeJsonFileAtomic } from "./project-file";
 import { createMediaUrl, ProjectStore } from "./project-store";
@@ -113,6 +121,7 @@ const projectStore = new ProjectStore({
 
 const sourceCache = new Map<string, Electron.DesktopCapturerSource>();
 const importedMediaCache = new Map<string, string>();
+const exportJobs = new ExportJobRegistry();
 // Base directories the user explicitly granted through the folder picker. A
 // project can only be created under one of these, so a compromised renderer
 // can't smuggle an arbitrary write path into projects:create.
@@ -126,6 +135,7 @@ let recorderWindow: BrowserWindow | null = null;
 let activeRecordingProjectId: string | null = null;
 let displayOverlayWindows: BrowserWindow[] = [];
 let activeDisplayOverlaySourceId: string | null = null;
+let activeDisplayOverlayDisplayId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
 let aiConnectionManager: AiConnectionManager | null = null;
@@ -507,6 +517,7 @@ async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult
   // creating a border larger than the selected display.
   displayOverlayWindows = await createDisplayOverlayWindows(display);
   activeDisplayOverlaySourceId = sourceId;
+  activeDisplayOverlayDisplayId = source.display_id || String(display.id);
 
   return {
     shown: true,
@@ -608,6 +619,7 @@ async function closeDisplayOverlay(): Promise<void> {
   const strips = displayOverlayWindows;
   displayOverlayWindows = [];
   activeDisplayOverlaySourceId = null;
+  activeDisplayOverlayDisplayId = null;
 
   for (const strip of strips) {
     if (!strip.isDestroyed()) {
@@ -667,11 +679,36 @@ function getDisplayForSource(source: Electron.DesktopCapturerSource): Electron.D
 
 function refreshDisplayOverlay(): void {
   const sourceId = activeDisplayOverlaySourceId;
+  const displayId = activeDisplayOverlayDisplayId;
   if (!sourceId) {
     return;
   }
 
-  void enqueueOverlayOp(() => showDisplayOverlay(sourceId));
+  void enqueueOverlayOp(async () => {
+    const refreshedSource = sourceCache.get(sourceId) ??
+      [...sourceCache.values()].find((source) =>
+        source.id.startsWith("screen:") &&
+        Boolean(displayId) &&
+        source.display_id === displayId
+      );
+    if (refreshedSource) {
+      await showDisplayOverlay(refreshedSource.id);
+      return;
+    }
+
+    // A source-list refresh can replace capture-source ids. Display ids are
+    // stable across those refreshes, so keep the border attached directly to
+    // the connected display until the next source list supplies a new id.
+    const display = displayId
+      ? electronScreen.getAllDisplays().find((item) => String(item.id) === displayId) ?? null
+      : null;
+    await closeDisplayOverlay();
+    if (display) {
+      displayOverlayWindows = await createDisplayOverlayWindows(display);
+      activeDisplayOverlaySourceId = sourceId;
+      activeDisplayOverlayDisplayId = displayId;
+    }
+  });
 }
 
 async function setActiveEditorProject(projectId: string): Promise<void> {
@@ -720,6 +757,15 @@ function registerDisplayOverlayRefreshHandlers(): void {
   electronScreen.on("display-metrics-changed", refreshDisplayOverlay);
 }
 
+function registerRecordingPowerHandlers(): void {
+  powerMonitor.on("suspend", () => {
+    recorderWindow?.webContents.send("recording:power-suspend");
+  });
+  powerMonitor.on("resume", () => {
+    recorderWindow?.webContents.send("recording:power-resume");
+  });
+}
+
 function registerIpc(): void {
   registerAppStatusIpc();
 
@@ -747,7 +793,12 @@ function registerIpc(): void {
     return true;
   });
   ipcMain.handle("editor:undo-agent-edit", async (_event, request: UndoAgentEditRequest): Promise<EditorProjectStateView> => {
-    if (!request || typeof request.projectId !== "string" || !Number.isInteger(request.baseRevision) || typeof request.editId !== "string") {
+    if (
+      !request ||
+      typeof request.projectId !== "string" ||
+      !Number.isInteger(request.baseRevision) ||
+      !isUuid(request.editId)
+    ) {
       throw new Error("Invalid AI undo request.");
     }
     const project = projectStore.getProject(request.projectId);
@@ -764,7 +815,7 @@ function registerIpc(): void {
     const sources = await listDesktopCapturerSources();
 
     sourceCache.clear();
-    return sources.map((source) => {
+    const summaries: SourceSummary[] = sources.map((source) => {
       sourceCache.set(source.id, source);
 
       return {
@@ -776,6 +827,14 @@ function registerIpc(): void {
         appIcon: null
       };
     });
+    if (activeDisplayOverlayDisplayId) {
+      const replacement = sources.find((source) =>
+        source.id.startsWith("screen:") &&
+        source.display_id === activeDisplayOverlayDisplayId
+      );
+      if (replacement) activeDisplayOverlaySourceId = replacement.id;
+    }
+    return summaries;
   });
 
   ipcMain.handle("permissions:get-status", (): DesktopPermissionStatus => {
@@ -907,9 +966,11 @@ function registerIpc(): void {
         return [];
       }
       const paths = filePaths.filter((value): value is string => typeof value === "string");
-      return importMediaFromPaths(paths, (id, filePath) => {
-        importedMediaCache.set(id, filePath);
-      });
+      return importMediaFromPaths(
+        paths,
+        (id, filePath) => importedMediaCache.set(id, filePath),
+        getDialogParentWindow()
+      );
     }
   );
 
@@ -946,15 +1007,28 @@ function registerIpc(): void {
 
   ipcMain.handle(
     "editor:export-video",
-    async (_event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
+    async (event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
       assertExportVideoRequest(request);
-      return exportEditorVideo(request, {
-        projectStore,
-        importedMediaCache,
-        getDialogParentWindow
+      const jobId = request.jobId as string;
+      const control = exportJobs.begin(jobId, (progress) => {
+        if (!event.sender.isDestroyed()) event.sender.send("editor:export-progress", progress);
       });
+      try {
+        control.onProgress(0, "Preparing export…");
+        return await exportEditorVideo(request, {
+          projectStore,
+          importedMediaCache,
+          getDialogParentWindow,
+          control
+        });
+      } finally {
+        exportJobs.finish(jobId);
+      }
     }
   );
+  ipcMain.handle("editor:cancel-export", (_event, jobId: unknown): boolean => {
+    return isUuid(jobId) ? exportJobs.cancel(jobId) : false;
+  });
 
   ipcMain.handle("overlays:show-source-border", (_event, sourceId: string) => {
     return enqueueOverlayOp(() => showDisplayOverlay(sourceId));
@@ -1042,12 +1116,17 @@ function registerIpc(): void {
       return false;
     }
 
-    // Prefer the OS Trash so an accidental delete stays recoverable; only fall
-    // back to a permanent removal when the folder cannot be trashed.
+    // Re-read project.json immediately before deletion. The recent-projects
+    // index is user-writable and must never be trusted as an arbitrary rm path.
+    await assertProjectDeletionTarget(entry.rootPath, projectId);
+
+    // Never fall back to recursive permanent deletion. A Trash failure is
+    // recoverable and should be surfaced to the user instead of escalating.
     try {
       await shell.trashItem(entry.rootPath);
-    } catch {
-      await fs.rm(entry.rootPath, { recursive: true, force: true }).catch(() => undefined);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not move the project to the Trash. ${detail}`);
     }
 
     projectStore.forgetProject(projectId);
@@ -1157,11 +1236,19 @@ function registerIpc(): void {
   ipcMain.handle("ffmpeg:prepare-audio", async (_event, projectId: string) => {
     // Rewrite the recorded video containers with duration + seek cues so the
     // editor can seek them. A failed remux keeps the raw recording playable.
+    const recordedVideoPaths: string[] = [];
     for (const track of ["screen", "camera"] as const) {
       const mediaPath = projectStore.getMediaPath(projectId, track);
       if (mediaPath) {
         await remuxWebm(mediaPath).catch(() => undefined);
+        recordedVideoPaths.push(mediaPath);
       }
+    }
+
+    let mediaDurationMs: number | null = null;
+    for (const mediaPath of recordedVideoPaths) {
+      mediaDurationMs = await probeMediaDurationMs(mediaPath);
+      if (mediaDurationMs !== null) break;
     }
 
     const micInputPath = projectStore.getMicWebmPath(projectId);
@@ -1177,7 +1264,7 @@ function registerIpc(): void {
     const project = await projectStore.completeAudio(projectId, {
       mic: micBytes,
       system: systemBytes
-    });
+    }, mediaDurationMs);
     await getProjectLibrary().upsert(project);
     return project;
   });
@@ -1185,6 +1272,11 @@ function registerIpc(): void {
 
 function assertAiProvider(value: unknown): asserts value is AiProvider {
   if (value !== "codex" && value !== "claude") throw new Error("Unknown AI provider.");
+}
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 }
 
 async function getProjectForEditor(projectId: string): Promise<ProjectView> {
@@ -1341,6 +1433,7 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
   registerCustomMediaProtocol({ projectStore, importedMediaCache });
   registerIpc();
   registerDisplayOverlayRefreshHandlers();
+  registerRecordingPowerHandlers();
   await createWindow();
   startAutoUpdates();
 
