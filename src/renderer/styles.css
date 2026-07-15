@@ -173,6 +173,13 @@ select,
   box-shadow: none;
 }
 
+/* The stage is a size container so the preview frame can size itself to fit
+   both axes (see previewClassName). Without this, the frame's width is only
+   bounded horizontally and a short window clips the top/bottom of the frame. */
+.editor-preview-stage {
+  container-type: size;
+}
+
 .editor-preview-frame {
   container-type: size;
 }

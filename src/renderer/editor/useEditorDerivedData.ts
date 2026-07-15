@@ -318,8 +318,11 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     backgroundPosition: "center",
     backgroundSize: "cover"
   } as CSSProperties;
+  // Size the 16:9 frame to the largest that fits the stage in BOTH axes (the
+  // stage is a size container), so a short/narrow window never clips the
+  // preview. Zoom scales that fit; >100% overflows into the scrollable stage.
   const previewClassName =
-    "relative w-[min(100%,calc(940px*var(--preview-zoom,1)))] flex-none aspect-video overflow-hidden bg-[#030405] shadow-[0_18px_60px_rgb(0_0_0_/_0.58)] ring-1 ring-black/80";
+    "relative w-[calc(min(100cqw,177.7778cqh)*var(--preview-zoom,1))] flex-none aspect-video overflow-hidden bg-[#030405] shadow-[0_18px_60px_rgb(0_0_0_/_0.58)] ring-1 ring-black/80";
   // Keep the shared time axis visible while switching tools. Effects and
   // subtitles must not disappear just because Layout or Style is selected.
   const timelineVisible = true;

@@ -103,6 +103,10 @@ export function EditorPreviewPanel(props: {
   const secondaryClip = activeTransition
     ? primaryRole === "outgoing" ? activeTransition.to : activeTransition.from
     : null;
+  // Only "fade through black" wants a solid black backdrop. Crossfade, slide,
+  // and wipe must composite over the frame's Style background so it stays
+  // visible around a scaled screen instead of being replaced by black.
+  const blackBackdrop = activeTransition?.transition.type === "fade-black";
   const previewFrameStyle = {
     ...props.previewFrameStyle,
     "--preview-zoom": props.previewZoom
@@ -137,14 +141,12 @@ export function EditorPreviewPanel(props: {
 
       <div className="editor-preview-stage flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto bg-black p-4">
         <div className={`editor-preview-frame ${props.previewClassName}`} style={previewFrameStyle}>
-          {activeTransition ? (
+          {blackBackdrop ? (
             <span className="pointer-events-none absolute inset-0 z-0 bg-black" aria-hidden="true" />
           ) : null}
-          {/* bg-black only while a transition is compositing: outside of one,
-              the frame's Style background must stay visible around the video. */}
           {previewItem ? (
             <div
-              className={`absolute inset-0 overflow-hidden ${activeTransition ? "bg-black" : ""}`}
+              className={`absolute inset-0 overflow-hidden ${blackBackdrop ? "bg-black" : ""}`}
               style={activeTransition && primaryRole
                 ? getPreviewTransitionLayerStyle(
                     activeTransition.transition.type,
@@ -200,6 +202,7 @@ export function EditorPreviewPanel(props: {
               cameraStyle={props.cameraStyle}
               cameraVideoStyle={props.cameraVideoStyle}
               previewQuality={previewQuality}
+              opaqueBackdrop={blackBackdrop}
             />
           ) : null}
           <TextOverlayLayer

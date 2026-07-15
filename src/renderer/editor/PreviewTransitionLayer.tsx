@@ -25,6 +25,9 @@ export function PreviewTransitionLayer(props: {
   cameraStyle: CSSProperties | null;
   cameraVideoStyle: CSSProperties;
   previewQuality: PreviewQuality;
+  /** Fade-through-black needs a solid black backdrop; other transitions must
+   * composite over the frame's Style background instead. */
+  opaqueBackdrop: boolean;
 }) {
   const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const cameraRef = useRef<HTMLVideoElement | null>(null);
@@ -72,7 +75,7 @@ export function PreviewTransitionLayer(props: {
   const item = props.clip.item;
   return (
     <div
-      className="pointer-events-none absolute inset-0 overflow-hidden bg-black"
+      className={`pointer-events-none absolute inset-0 overflow-hidden ${props.opaqueBackdrop ? "bg-black" : ""}`}
       style={getPreviewTransitionLayerStyle(props.type, props.progress, props.role)}
       aria-hidden="true"
     >
