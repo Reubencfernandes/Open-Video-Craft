@@ -13,12 +13,12 @@ const iso = (minutesAgo) => new Date(now.getTime() - minutesAgo * 60_000).toISOS
 
 const demoAssetBase = "http://127.0.0.1:5173/demo-assets";
 
-const appInfo = { version: "1.3.1", isPackaged: true, platform: "darwin" };
+const appInfo = { version: "2.1.0", isPackaged: true, platform: "darwin" };
 
 const updateStatus = {
   state: "not-available",
-  currentVersion: "1.3.1",
-  latestVersion: "1.3.1",
+  currentVersion: "2.1.0",
+  latestVersion: "2.1.0",
   message: "You're up to date.",
   checkedAt: iso(4),
   downloadProgress: null,

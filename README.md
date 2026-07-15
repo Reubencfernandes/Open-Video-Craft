@@ -30,15 +30,15 @@ Open Video Craft is a desktop screen studio in two parts:
 Everything runs locally. Even the speech-to-text subtitles use an on-device
 Whisper model — your recordings never leave your machine.
 
-## Screenshots — v1.3.1
+## Screenshots — v2.1.0
 
 | Launcher | Floating recorder |
 | :---: | :---: |
 | ![Launcher with recent projects](docs/screenshots/launcher.png) | ![Floating recorder controller](docs/screenshots/recorder.png) |
 
-| Layout tool | Timeline & subtitles |
+| Editor workspace | Timeline & subtitles |
 | :---: | :---: |
-| ![Editor layout presets and live preview](docs/screenshots/editor.png) | ![Timeline with clips and subtitle lane](docs/screenshots/editor-timeline.png) |
+| ![Editor with the media library, preview, and multi-lane timeline](docs/screenshots/editor.png) | ![Timeline with clips and subtitle lane](docs/screenshots/editor-timeline.png) |
 
 ## Features
 
