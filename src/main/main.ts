@@ -248,6 +248,13 @@ async function createRecorderWindow(): Promise<void> {
     frame: false,
     resizable: false,
     transparent: true,
+    // A transparent window in native fullscreen renders as a broken opaque
+    // surface (macOS especially), and this window floats above everything —
+    // fullscreen must be impossible. Opening the recorder from a fullscreen
+    // launcher Space or a window-tiling shortcut could otherwise trigger it.
+    fullscreenable: false,
+    fullscreen: false,
+    maximizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     // Created hidden and revealed on `ready-to-show`, so the transparent window
@@ -265,6 +272,21 @@ async function createRecorderWindow(): Promise<void> {
 
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
   recorderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Belt and braces: if the OS still forces the window into fullscreen or a
+  // maximize despite the flags above, bounce straight back to the floating
+  // size instead of leaving a glitched transparent surface over the screen.
+  recorderWindow.on("enter-full-screen", () => {
+    if (recorderWindow && !recorderWindow.isDestroyed()) {
+      recorderWindow.setFullScreen(false);
+      recorderWindow.setSize(recorderWindowSize.expanded.width, recorderWindowSize.expanded.height);
+    }
+  });
+  recorderWindow.on("maximize", () => {
+    if (recorderWindow && !recorderWindow.isDestroyed()) {
+      recorderWindow.unmaximize();
+      recorderWindow.setSize(recorderWindowSize.expanded.width, recorderWindowSize.expanded.height);
+    }
+  });
   recorderWindow.once("ready-to-show", () => {
     if (recorderWindow && !recorderWindow.isDestroyed()) {
       recorderWindow.show();
