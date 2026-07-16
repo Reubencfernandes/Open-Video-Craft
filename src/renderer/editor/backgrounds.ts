@@ -2,9 +2,9 @@
  * Background style catalog for the Style tool.
  */
 import type { BackgroundStyle } from "./types";
-import realWorld1 from "../assets/backgrounds/real-world-1.svg";
-import realWorld2 from "../assets/backgrounds/real-world-2.svg";
-import realWorld3 from "../assets/backgrounds/real-world-3.svg";
+import sceneSkyline from "../assets/backgrounds/scene-skyline.jpg";
+import sceneCityscape from "../assets/backgrounds/scene-cityscape.jpg";
+import sceneCoast from "../assets/backgrounds/scene-coast.jpg";
 import realWorld4 from "../assets/backgrounds/real-world-4.svg";
 import realWorld5 from "../assets/backgrounds/real-world-5.svg";
 import realWorld6 from "../assets/backgrounds/real-world-6.svg";
@@ -17,9 +17,9 @@ function localScene(url: string, shade = "rgb(0 0 0 / 0.34)"): string {
 // panel swatches and the preview frame both render from this map, so the
 // thumbnail always shows exactly what gets applied.
 export const previewBackgrounds: Record<BackgroundStyle, string> = {
-  "real-world-1": localScene(realWorld1),
-  "real-world-2": localScene(realWorld2),
-  "real-world-3": localScene(realWorld3),
+  "real-world-1": localScene(sceneSkyline),
+  "real-world-2": localScene(sceneCityscape),
+  "real-world-3": localScene(sceneCoast),
   "real-world-4": localScene(realWorld4, "rgb(0 0 0 / 0.2)"),
   "real-world-5": localScene(realWorld5, "rgb(0 0 0 / 0.2)"),
   "real-world-6": localScene(realWorld6, "rgb(0 0 0 / 0.2)"),

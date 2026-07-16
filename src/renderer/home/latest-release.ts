@@ -1,13 +1,13 @@
 /** Single source for the homepage changelog dialog and release badge. */
 export const latestRelease = {
-  version: "1.5.0",
-  title: "Zoom curve editor, UI polish, speech-to-text fix",
+  version: "2.1.1",
+  title: "Redesigned editor, homepage, and Style backgrounds",
   changes: [
-    "Edit the custom zoom curve by dragging its control points directly on the curve, with a live preview and a cubic-bezier readout.",
-    "Recolored the zoom, subtitle, and audio tool accents from amber to purple to match the timeline.",
-    "Subtitle styles are now a clean 2×2 grid, and the Speed panel drops the redundant Start/End inputs.",
-    "Removed the non-functional notifications bell and the decorative project-card menu icon on the home screen.",
-    "Fixed speech-to-text failing with “no available backend”: the ONNX runtime is now bundled and loaded locally instead of from a blocked CDN.",
-    "The Whisper model download progress no longer jumps up and drops back — it is aggregated across files into one steady percentage."
+    "Redesigned the editor around a neutral black theme: new top bar with AI, Projects, Save, and Export; a tile-style tool rail; and a media panel with filter pills, search, and duration badges.",
+    "Rebuilt the timeline with a white playhead, taller rounded clips, neutral track headers, and a bottom edit strip.",
+    "Refreshed the homepage to match the editor, with a white New Project button and neutral accents.",
+    "New photographic Style backgrounds — Skyline, Cityscape, and Coast — bundled for offline use.",
+    "Fixed Style backgrounds disappearing during transitions: only fade-through-black uses a black backdrop now, so your background stays visible through crossfades, slides, and wipes.",
+    "The preview now scales to fit the window in both directions, so a short or narrow window no longer clips the top or bottom of the frame."
   ]
 } as const;

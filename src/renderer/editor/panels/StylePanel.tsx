@@ -24,9 +24,9 @@ const backgroundCategories: Array<{
     id: "image",
     label: "Image",
     options: [
-      { id: "real-world-1", label: "Desk" },
-      { id: "real-world-2", label: "Studio" },
-      { id: "real-world-3", label: "Nature" },
+      { id: "real-world-1", label: "Skyline" },
+      { id: "real-world-2", label: "Cityscape" },
+      { id: "real-world-3", label: "Coast" },
       { id: "real-world-4", label: "Violet Haze" },
       { id: "real-world-5", label: "Teal Wave" },
       { id: "real-world-6", label: "Ember Glow" }
