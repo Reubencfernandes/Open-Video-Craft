@@ -91,7 +91,7 @@ export function MediaPanel(props: {
         </button>
       </div>
 
-      <div className="flex flex-none items-center gap-1 px-0.5">
+      <div className="flex flex-none items-center gap-1 overflow-x-auto px-0.5">
         {mediaTabs.map((tab) => (
           <button
             className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1.5 text-[0.7rem] font-semibold transition ${

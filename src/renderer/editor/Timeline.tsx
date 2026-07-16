@@ -3,7 +3,6 @@
  * playhead, and the track lanes. Purely presentational; all interaction state
  * lives in EditorView's hooks.
  */
-import { AudioLines, Captions, Film, Type, ZoomIn } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
   DragEvent as ReactDragEvent,
@@ -12,24 +11,13 @@ import type {
   RefObject
 } from "react";
 import { cx } from "../classNames";
-import { getOrderedZoomTimingItems } from "../zoom-timing";
 import {
   TimelineContextMenuView,
   TimelinePlayhead,
   TimelineRuler,
   TimelineToolbar
 } from "./TimelineChrome";
-import {
-  TimelineClip,
-  TimelineSpeedClip,
-  TimelineSubtitleClip,
-  TimelineTextClip,
-  TimelineTransitionDropTarget,
-  TimelineTransitionMarker,
-  TimelineZoomClip
-} from "./TimelineClips";
-import { TimelineTrack } from "./TimelineTrack";
-import { SpeedIcon } from "./SpeedIcon";
+import { TimelineTracks } from "./TimelineTracks";
 import {
   getMaxTransitionDuration,
   getNearestTransitionBoundary,
@@ -44,6 +32,7 @@ import type {
   TextOverlay,
   TimelineContextMenu,
   TimelineMediaClip,
+  TimelineRangeSelection,
   TimelineTrimEdge,
   ZoomEffect
 } from "./types";
@@ -85,8 +74,11 @@ export function Timeline(props: {
   speedEffects: SpeedEffect[];
   transitions: ClipTransition[];
   subtitles: SubtitleSegment[];
+  subtitleProcessing?: boolean;
   textOverlays: TextOverlay[];
   selectedSegmentId: string | null;
+  selectedSegmentIds: string[];
+  rangeSelection: TimelineRangeSelection | null;
   selectedZoomId: string | null;
   selectedSpeedId: string | null;
   selectedSubtitleId: string | null;
@@ -100,7 +92,7 @@ export function Timeline(props: {
   onRedo: () => void;
   onSplitAtPlayhead: () => void;
   onDeleteSelected: () => void;
-  onSelectClip: (clip: TimelineMediaClip) => void;
+  onSelectClip: (clip: TimelineMediaClip, additive: boolean) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
   onSelectTransition: (transition: ClipTransition) => void;
@@ -227,7 +219,7 @@ export function Timeline(props: {
               touch-none keeps pointer capture stable during drags. */}
           <div
             className={cx(
-              "relative grid min-h-[10rem] cursor-pointer select-none content-start gap-1 overflow-visible px-[var(--timeline-body-pad)] pb-2 pt-2 touch-none",
+              "relative grid min-h-[10rem] cursor-crosshair select-none content-start gap-1 overflow-visible px-[var(--timeline-body-pad)] pb-2 pt-2 touch-none",
               props.scrubbing && "cursor-ew-resize"
             )}
             ref={props.bodyRef}
@@ -253,116 +245,40 @@ export function Timeline(props: {
           onPointerUp={props.onBodyPointerUp}
         />
 
-        <TimelineTrack label="Video 1" icon={<Film size={14} />}>
-          {props.videoClips.map((clip) => (
-            <TimelineClip
-              key={clip.id}
-              clip={clip}
-              timelineDuration={props.renderDuration}
-              selected={props.selectedSegmentId === clip.id}
-              onSelect={() => props.onSelectClip(clip)}
-              onTrimPointerDown={props.onTrimPointerDown}
-              onMovePointerDown={props.onMovePointerDown}
-              onInteractionPointerMove={props.onBodyPointerMove}
-              onInteractionPointerUp={props.onBodyPointerUp}
-            />
-          ))}
-          {transitionDropKey ? transitionBoundaries.map((boundary) => (
-            <TimelineTransitionDropTarget
-              key={boundary.key}
-              cutTime={boundary.cutTime}
-              timelineDuration={props.renderDuration}
-              active={transitionDropKey === boundary.key}
-            />
-          )) : null}
-          {props.transitions.map((transition) => {
-            const from = props.videoClips.find((clip) => clip.id === transition.fromSegmentId);
-            return from ? (
-              <TimelineTransitionMarker
-                key={transition.id}
-                transition={transition}
-                cutTime={from.start + from.duration}
-                timelineDuration={props.renderDuration}
-                onSelect={() => props.onSelectTransition(transition)}
-              />
-            ) : null;
-          })}
-        </TimelineTrack>
-
-        <TimelineTrack label="Zoom" icon={<ZoomIn size={14} />}>
-          {getOrderedZoomTimingItems(props.zoomEffects).map((effect) => (
-            <TimelineZoomClip
-              key={effect.id}
-              effect={effect}
-              duration={props.renderDuration}
-              selected={props.selectedZoomId === effect.id}
-              onSelect={() => props.onSelectZoom(effect)}
-              onDragPointerDown={props.onZoomDragPointerDown}
-            />
-          ))}
-        </TimelineTrack>
-
-        <TimelineTrack label="Speed" icon={<SpeedIcon size={14} />}>
-          {getOrderedZoomTimingItems(props.speedEffects).map((effect) => (
-            <TimelineSpeedClip
-              key={effect.id}
-              effect={effect}
-              duration={props.renderDuration}
-              selected={props.selectedSpeedId === effect.id}
-              onSelect={() => props.onSelectSpeed(effect)}
-              onDragPointerDown={props.onSpeedDragPointerDown}
-            />
-          ))}
-        </TimelineTrack>
-
-        <TimelineTrack label="Subtitles" icon={<Captions size={14} />}>
-          {props.subtitles.map((subtitle) => (
-            <TimelineSubtitleClip
-              key={subtitle.id}
-              subtitle={subtitle}
-              duration={props.renderDuration}
-              selected={props.selectedSubtitleId === subtitle.id}
-              onSelect={() => props.onSelectSubtitle(subtitle.id)}
-              onDragPointerDown={props.onSubtitleDragPointerDown}
-            />
-          ))}
-        </TimelineTrack>
-
-        <TimelineTrack label="Text" icon={<Type size={14} />}>
-          {props.textOverlays.map((overlay) => (
-            <TimelineTextClip
-              key={overlay.id}
-              overlay={overlay}
-              duration={props.renderDuration}
-              selected={props.selectedTextOverlayId === overlay.id}
-              onSelect={() => props.onSelectTextOverlay(overlay)}
-              onDragPointerDown={props.onTextOverlayDragPointerDown}
-            />
-          ))}
-        </TimelineTrack>
-
-        {props.audioTracks.map((track) => (
-              <TimelineTrack
-                key={track.lane}
-                label={`Audio ${track.lane + 1}`}
-                icon={<AudioLines size={14} />}
-              >
-                {track.clips.map((clip) => (
-                  <TimelineClip
-                    key={clip.id}
-                    clip={clip}
-                    audioLevel={props.audioLevels[clip.item.id]}
-                    timelineDuration={props.renderDuration}
-                    selected={props.selectedSegmentId === clip.id}
-                    onSelect={() => props.onSelectClip(clip)}
-                    onTrimPointerDown={props.onTrimPointerDown}
-                    onMovePointerDown={props.onMovePointerDown}
-                    onInteractionPointerMove={props.onBodyPointerMove}
-                    onInteractionPointerUp={props.onBodyPointerUp}
-                  />
-                ))}
-              </TimelineTrack>
-            ))}
+        <TimelineTracks
+          renderDuration={props.renderDuration}
+          videoClips={props.videoClips}
+          audioTracks={props.audioTracks}
+          audioLevels={props.audioLevels}
+          zoomEffects={props.zoomEffects}
+          speedEffects={props.speedEffects}
+          transitions={props.transitions}
+          transitionBoundaries={transitionBoundaries}
+          transitionDropKey={transitionDropKey}
+          subtitles={props.subtitles}
+          subtitleProcessing={props.subtitleProcessing}
+          textOverlays={props.textOverlays}
+          selectedSegmentIds={props.selectedSegmentIds}
+          rangeSelection={props.rangeSelection}
+          selectedZoomId={props.selectedZoomId}
+          selectedSpeedId={props.selectedSpeedId}
+          selectedSubtitleId={props.selectedSubtitleId}
+          selectedTextOverlayId={props.selectedTextOverlayId}
+          onSelectClip={props.onSelectClip}
+          onSelectZoom={props.onSelectZoom}
+          onSelectSpeed={props.onSelectSpeed}
+          onSelectTransition={props.onSelectTransition}
+          onSelectSubtitle={props.onSelectSubtitle}
+          onSelectTextOverlay={props.onSelectTextOverlay}
+          onTrimPointerDown={props.onTrimPointerDown}
+          onMovePointerDown={props.onMovePointerDown}
+          onZoomDragPointerDown={props.onZoomDragPointerDown}
+          onSpeedDragPointerDown={props.onSpeedDragPointerDown}
+          onSubtitleDragPointerDown={props.onSubtitleDragPointerDown}
+          onTextOverlayDragPointerDown={props.onTextOverlayDragPointerDown}
+          onInteractionPointerMove={props.onBodyPointerMove}
+          onInteractionPointerUp={props.onBodyPointerUp}
+        />
           </div>
         </div>
       </div>
@@ -370,7 +286,7 @@ export function Timeline(props: {
       <TimelineToolbar
         timelineZoom={props.timelineZoom}
         canSplit={props.canSplitAtPlayhead}
-        canDelete={props.selectedSegmentId !== null}
+        canDelete={props.selectedSegmentIds.length > 0}
         onUndo={props.onUndo}
         onRedo={props.onRedo}
         onSplit={props.onSplitAtPlayhead}

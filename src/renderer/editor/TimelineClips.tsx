@@ -2,7 +2,7 @@
  * Clip components for every lane (media, zoom, speed, subtitle) and the
  * cubic-Bézier audio waveform.
  */
-import { Blend, Captions, Music2, Type, ZoomIn } from "lucide-react";
+import { Blend, Captions, Music2, Type, WandSparkles, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
@@ -94,6 +94,21 @@ const clipBaseClassName =
 /** Every selected clip gets the same white inset outline, like the reference. */
 const selectedOutlineClassName = "outline outline-2 -outline-offset-2 outline-white";
 
+/** Timeline feedback shown while on-device subtitle generation is working. */
+export function TimelineSubtitleShimmer() {
+  return (
+    <div
+      className="timeline-subtitle-shimmer pointer-events-none absolute inset-[0.15rem] z-0 inline-flex h-[2.2rem] items-center justify-end gap-2 overflow-hidden rounded-md bg-emerald-500/10 px-3 text-right text-[0.68rem] font-semibold text-emerald-100 ring-1 ring-inset ring-emerald-300/25"
+      data-subtitle-processing
+      role="status"
+      aria-label="Generating subtitles"
+    >
+      <WandSparkles className="relative z-[1] shrink-0" size={14} />
+      <span className="relative z-[1] truncate">Generating subtitles…</span>
+    </div>
+  );
+}
+
 /** Widened hit areas on both clip edges used to start a trim drag; a white
  * pill handle fades in on hover, matching the reference design. */
 function ClipTrimEdges(props: {
@@ -133,7 +148,7 @@ export function TimelineClip(props: {
   timelineDuration: number;
   selected: boolean;
   audioLevel?: { volume: number; muted: boolean };
-  onSelect: () => void;
+  onSelect: (additive: boolean) => void;
   onTrimPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     segmentId: string,
@@ -162,7 +177,9 @@ export function TimelineClip(props: {
       type="button"
       data-segment-id={props.clip.id}
       style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
-      onClick={props.onSelect}
+      onClick={(event) =>
+        props.onSelect(event.metaKey || event.ctrlKey || event.shiftKey)
+      }
       onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
     >
       {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}

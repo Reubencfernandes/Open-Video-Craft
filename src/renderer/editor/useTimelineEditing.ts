@@ -33,6 +33,7 @@ import { mediaDragType, textDragType } from "./types";
 import type {
   EditorMediaItem,
   TimelineContextMenu,
+  TimelineRangeSelection,
   TimelineSegment
 } from "./types";
 
@@ -50,10 +51,13 @@ type UseTimelineEditingParams = {
   selectedItemId: string | null;
   selectedTimelineItemId: string | null;
   selectedTimelineSegmentId: string | null;
+  selectedTimelineSegmentIds: string[];
   allMedia: EditorMediaItem[];
   setSelectedItemId: Dispatch<SetStateAction<string | null>>;
   setSelectedTimelineSegmentId: Dispatch<SetStateAction<string | null>>;
+  setSelectedTimelineSegmentIds: Dispatch<SetStateAction<string[]>>;
   setTimelineContextMenu: Dispatch<SetStateAction<TimelineContextMenu>>;
+  setTimelineRangeSelection: Dispatch<SetStateAction<TimelineRangeSelection | null>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setTimelineViewDuration: Dispatch<SetStateAction<number>>;
   setTrimRange: Dispatch<SetStateAction<{ start: number; end: number }>>;
@@ -79,10 +83,13 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     selectedItemId,
     selectedTimelineItemId,
     selectedTimelineSegmentId,
+    selectedTimelineSegmentIds,
     allMedia,
     setSelectedItemId,
     setSelectedTimelineSegmentId,
+    setSelectedTimelineSegmentIds,
     setTimelineContextMenu,
+    setTimelineRangeSelection,
     setTimelineSegments,
     setTimelineViewDuration,
     setTrimRange,
@@ -243,6 +250,8 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     scheduleTimelinePlaybackSync(previous);
     setTimelineSegments(previous);
     setSelectedTimelineSegmentId(null);
+    setSelectedTimelineSegmentIds([]);
+    setTimelineRangeSelection(null);
   }
 
   function redoTimelineEdit() {
@@ -256,6 +265,8 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     scheduleTimelinePlaybackSync(next);
     setTimelineSegments(next);
     setSelectedTimelineSegmentId(null);
+    setSelectedTimelineSegmentIds([]);
+    setTimelineRangeSelection(null);
   }
 
   // ---------------------------------------------------------------------------
@@ -271,25 +282,53 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     audioElement?.pause();
     commitTimelineSegments((segments) => segments.filter((segment) => segment.id !== segmentId));
     setSelectedTimelineSegmentId((current) => (current === segmentId ? null : current));
+    setSelectedTimelineSegmentIds((current) => current.filter((id) => id !== segmentId));
+    setTimelineRangeSelection(null);
     setTimelineContextMenu(null);
   }
 
   function deleteSelectedTimelineSegment() {
-    deleteTimelineSegment(selectedTimelineSegmentId);
+    const ids = selectedTimelineSegmentIds.length > 0
+      ? selectedTimelineSegmentIds
+      : selectedTimelineSegmentId
+        ? [selectedTimelineSegmentId]
+        : [];
+    if (ids.length === 0) {
+      return;
+    }
+
+    const selectedIds = new Set(ids);
+    for (const id of selectedIds) {
+      audioElsRef.current.get(id)?.pause();
+    }
+    commitTimelineSegments((segments) =>
+      segments.filter((segment) => !selectedIds.has(segment.id))
+    );
+    setSelectedTimelineSegmentId(null);
+    setSelectedTimelineSegmentIds([]);
+    setTimelineRangeSelection(null);
+    setTimelineContextMenu(null);
   }
 
   function splitTimelineSegment(segmentId: string | null, time: number) {
-    const result = splitTimelineSegments(timelineSegments, segmentId, time);
+    const result = splitTimelineSegments(
+      timelineSegments,
+      segmentId,
+      time,
+      (sourceId) => `${sourceId}-split-${createId("clip")}`
+    );
     if (!result) {
       setTimelineContextMenu(null);
       return;
     }
 
     commitTimelineSegments(() => result.segments);
-    // Keep the original half selected and preview it from its beginning. This
-    // avoids the split action unexpectedly leaving playback on the right half.
-    setSelectedTimelineSegmentId(result.left.id);
-    window.queueMicrotask(() => seek(result.left.start));
+    // Select the newly created right half so the cut is immediately visible
+    // and keep the preview parked exactly on the new edit point.
+    setSelectedTimelineSegmentId(result.right.id);
+    setSelectedTimelineSegmentIds([result.right.id]);
+    setTimelineRangeSelection(null);
+    window.queueMicrotask(() => seek(result.splitTime));
     setTimelineContextMenu(null);
   }
 
@@ -365,6 +404,8 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     });
     setSelectedItemId(item.id);
     setSelectedTimelineSegmentId(segmentId);
+    setSelectedTimelineSegmentIds([segmentId]);
+    setTimelineRangeSelection(null);
   }
 
   return {

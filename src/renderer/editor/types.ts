@@ -78,6 +78,12 @@ export type TimelineContextMenu = {
   segmentId: string | null;
 } | null;
 
+/** Time span painted by a mouse range-selection gesture on the timeline. */
+export type TimelineRangeSelection = {
+  start: number;
+  end: number;
+};
+
 export type ScreenLayoutDragMode = "move" | "resize-nw" | "resize-ne" | "resize-sw" | "resize-se";
 
 export type ScreenLayoutDrag = {

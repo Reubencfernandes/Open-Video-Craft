@@ -83,7 +83,12 @@ describe("timeline trim handles", () => {
 });
 
 describe("persistent effect lanes", () => {
-  function renderTimeline(input?: { empty?: boolean; activeTool?: "media" | "style" }) {
+  function renderTimeline(input?: {
+    empty?: boolean;
+    activeTool?: "media" | "style";
+    processing?: boolean;
+    rangeSelection?: { start: number; end: number } | null;
+  }) {
     const host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -132,11 +137,14 @@ describe("persistent effect lanes", () => {
         end: 15,
         text: "Always visible"
       }],
+      subtitleProcessing: input?.processing ?? false,
       textOverlays: input?.empty ? [] : [{
         id: "text-1", start: 2, end: 6, text: "Title", x: 50, y: 25,
         size: 64, color: "#ffffff", weight: 700, animation: "pop"
       }],
       selectedSegmentId: null,
+      selectedSegmentIds: [],
+      rangeSelection: input?.rangeSelection ?? null,
       selectedZoomId: null,
       selectedSpeedId: null,
       selectedSubtitleId: null,
@@ -203,5 +211,15 @@ describe("persistent effect lanes", () => {
     expect(host.querySelector('[data-timeline-track="Speed"]')).not.toBeNull();
     expect(host.querySelector('[data-timeline-track="Subtitles"]')).not.toBeNull();
     expect(host.querySelector('[data-timeline-track="Text"]')).not.toBeNull();
+  });
+
+  it("shows timeline feedback while subtitles are processing", () => {
+    const host = renderTimeline({ empty: true, processing: true });
+    expect(host.querySelector("[data-subtitle-processing]")).not.toBeNull();
+  });
+
+  it("paints a marked timeline time range", () => {
+    const host = renderTimeline({ rangeSelection: { start: 4, end: 8 } });
+    expect(host.querySelector("[data-timeline-range-selection]")).not.toBeNull();
   });
 });

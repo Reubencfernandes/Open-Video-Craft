@@ -39,6 +39,13 @@ export function getScreenFrameForAspectRatio(
   aspectRatio: ScreenAspectRatio
 ): PercentFrame {
   const bounds = getScreenFrameBounds(layoutMode);
+  // The filled-screen preset must use the composition bounds themselves.
+  // Fitting an aspect-ratio frame inside the regular inset bounds only made
+  // object-fit crop the video inside a smaller rectangle, which looked the
+  // same as the normal bubble preset.
+  if (layoutMode === "bubble-fill") {
+    return bounds;
+  }
   return fitFrameInBounds(bounds, getScreenAspectRatioValue(aspectRatio));
 }
 
@@ -107,6 +114,8 @@ export function createCameraFrameFromPixels(
 
 function getScreenFrameBounds(layoutMode: LayoutMode): PercentFrame {
   switch (layoutMode) {
+    case "bubble-fill":
+      return { x: 0, y: 0, width: 100, height: 100 };
     case "presenter":
       return { x: 6, y: 15, width: 60, height: 62 };
     case "side-overlap":

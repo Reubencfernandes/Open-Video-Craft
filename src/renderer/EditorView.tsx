@@ -68,6 +68,7 @@ import type {
   SubtitleStyle,
   TextOverlay,
   TimelineContextMenu,
+  TimelineRangeSelection,
   TimelineSegment,
   VideoCornerStyle,
   ZoomEffect
@@ -135,6 +136,9 @@ export function EditorView() {
   const [trimRange, setTrimRange] = useState({ start: 0, end: 0 });
   const [timelineSegments, setTimelineSegments] = useState<TimelineSegment[]>([]);
   const [selectedTimelineSegmentId, setSelectedTimelineSegmentId] = useState<string | null>(null);
+  const [selectedTimelineSegmentIds, setSelectedTimelineSegmentIds] = useState<string[]>([]);
+  const [timelineRangeSelection, setTimelineRangeSelection] =
+    useState<TimelineRangeSelection | null>(null);
   const [timelineContextMenu, setTimelineContextMenu] = useState<TimelineContextMenu>(null);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -246,6 +250,31 @@ export function EditorView() {
       current && transitions.some((transition) => transition.id === current) ? current : null
     );
   }, [transitions]);
+
+  // Most editor paths still identify one primary clip. Keep the new range
+  // selection in sync when an older single-selection path (paste, import,
+  // undo, etc.) changes that primary id.
+  useEffect(() => {
+    if (!selectedTimelineSegmentId) {
+      setSelectedTimelineSegmentIds([]);
+      return;
+    }
+    setSelectedTimelineSegmentIds((current) => {
+      if (current.includes(selectedTimelineSegmentId)) {
+        return current;
+      }
+      setTimelineRangeSelection(null);
+      return [selectedTimelineSegmentId];
+    });
+  }, [selectedTimelineSegmentId]);
+
+  useEffect(() => {
+    const availableIds = new Set(timelineSegments.map((segment) => segment.id));
+    setSelectedTimelineSegmentIds((current) => {
+      const next = current.filter((id) => availableIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [timelineSegments]);
 
   // ---------------------------------------------------------------------------
   // Derived data: media library, timeline clips, playback geometry.
@@ -568,6 +597,7 @@ export function EditorView() {
     selectedSpeedId,
     selectedTimelineItemId,
     selectedTimelineSegmentId,
+    selectedTimelineSegmentIds,
     selectedZoomId,
     setActiveTool,
     setError,
@@ -578,11 +608,13 @@ export function EditorView() {
     setSelectedSubtitleId,
     setSelectedTextOverlayId,
     setSelectedTimelineSegmentId,
+    setSelectedTimelineSegmentIds,
     setSelectedZoomId,
     setSpeedEffects,
     setSubtitleLanguage,
     setSubtitles,
     setTimelineContextMenu,
+    setTimelineRangeSelection,
     setTimelineSegments,
     setTimelineViewDuration,
     setTrimRange,
@@ -593,6 +625,7 @@ export function EditorView() {
     textOverlays,
     timelineBodyRef,
     timelineDuration,
+    timelineRangeSelection,
     timelineEditableItems,
     timelineRenderDuration,
     timelineSegments,
@@ -864,8 +897,6 @@ export function EditorView() {
             renderDuration={timelineRenderDuration}
             masterVolume={masterVolume}
             onMasterVolumeChange={setMasterVolume}
-            onOpenAudioTool={() => setActiveTool("audio")}
-            onOpenExport={openExportDialog}
             onTogglePlayback={() => void togglePlayback()}
             onSeekFrame={seekFrame}
             mainVideoRef={mainVideoRef}
@@ -919,8 +950,11 @@ export function EditorView() {
           speedEffects={speedEffects}
           transitions={transitions}
           subtitles={subtitles}
+          subtitleProcessing={sttStatus === "loading" || sttStatus === "transcribing"}
           textOverlays={textOverlays}
           selectedSegmentId={selectedTimelineSegmentId}
+          selectedSegmentIds={selectedTimelineSegmentIds}
+          rangeSelection={timelineRangeSelection}
           selectedZoomId={selectedZoomEffect?.id ?? null}
           selectedSpeedId={selectedSpeedEffect?.id ?? null}
           selectedSubtitleId={selectedSubtitle?.id ?? null}
@@ -942,9 +976,25 @@ export function EditorView() {
             splitTimelineSegment(selectedTimelineSegmentId, currentTime)
           }
           onDeleteSelected={deleteSelectedTimelineSegment}
-          onSelectClip={(clip) => {
+          onSelectClip={(clip, additive) => {
             setSelectedItemId(clip.item.id);
-            setSelectedTimelineSegmentId(clip.id);
+            setSelectedTimelineSegmentIds((current) => {
+              if (additive) {
+                const next = current.includes(clip.id)
+                  ? current.filter((id) => id !== clip.id)
+                  : [...current, clip.id];
+                setSelectedTimelineSegmentId(next[0] ?? null);
+                setTimelineRangeSelection(null);
+                return next;
+              }
+              if (current.length > 1 && current.includes(clip.id)) {
+                setSelectedTimelineSegmentId(clip.id);
+                return current;
+              }
+              setSelectedTimelineSegmentId(clip.id);
+              setTimelineRangeSelection(null);
+              return [clip.id];
+            });
           }}
           onSelectZoom={(effect) => {
             setSelectedZoomId(effect.id);

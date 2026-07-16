@@ -27,18 +27,18 @@ const backgroundCategories: Array<{
       { id: "real-world-1", label: "Skyline" },
       { id: "real-world-2", label: "Cityscape" },
       { id: "real-world-3", label: "Coast" },
-      { id: "real-world-4", label: "Violet Haze" },
-      { id: "real-world-5", label: "Teal Wave" },
-      { id: "real-world-6", label: "Ember Glow" }
+      { id: "real-world-4", label: "Florals" },
+      { id: "real-world-5", label: "Chrome" },
+      { id: "real-world-6", label: "Marble" }
     ]
   },
   {
     id: "gradient",
     label: "Gradient",
     options: [
-      { id: "gradient-1", label: "Violet" },
-      { id: "gradient-2", label: "Teal" },
-      { id: "gradient-3", label: "Ember" }
+      { id: "gradient-1", label: "Dawn" },
+      { id: "gradient-2", label: "Silver" },
+      { id: "gradient-3", label: "Ultraviolet" }
     ]
   }
 ];
@@ -74,7 +74,7 @@ export function StylePanel(props: {
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-3">
         {backgroundCategories
           .find((category) => category.id === props.activeCategory)
           ?.options.map((option) => (

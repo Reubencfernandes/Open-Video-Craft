@@ -29,6 +29,7 @@ import type {
   SubtitleSegment,
   TextOverlay,
   TimelineContextMenu,
+  TimelineRangeSelection,
   TimelineSegment,
   ZoomEffect
 } from "./types";
@@ -58,6 +59,7 @@ type UseTimelineControllerParams = {
   selectedSpeedId: string | null;
   selectedTimelineItemId: string | null;
   selectedTimelineSegmentId: string | null;
+  selectedTimelineSegmentIds: string[];
   selectedZoomId: string | null;
   setActiveTool: Dispatch<SetStateAction<EditorTool>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -68,11 +70,13 @@ type UseTimelineControllerParams = {
   setSelectedSubtitleId: Dispatch<SetStateAction<string | null>>;
   setSelectedTextOverlayId: Dispatch<SetStateAction<string | null>>;
   setSelectedTimelineSegmentId: Dispatch<SetStateAction<string | null>>;
+  setSelectedTimelineSegmentIds: Dispatch<SetStateAction<string[]>>;
   setSelectedZoomId: Dispatch<SetStateAction<string | null>>;
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
   setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTimelineContextMenu: Dispatch<SetStateAction<TimelineContextMenu>>;
+  setTimelineRangeSelection: Dispatch<SetStateAction<TimelineRangeSelection | null>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setTimelineViewDuration: Dispatch<SetStateAction<number>>;
   setTrimRange: Dispatch<SetStateAction<{ start: number; end: number }>>;
@@ -83,6 +87,7 @@ type UseTimelineControllerParams = {
   textOverlays: TextOverlay[];
   timelineBodyRef: RefObject<HTMLDivElement | null>;
   timelineDuration: number;
+  timelineRangeSelection: TimelineRangeSelection | null;
   timelineEditableItems: EditorMediaItem[];
   timelineRenderDuration: number;
   timelineSegments: TimelineSegment[];
@@ -107,10 +112,13 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     selectedItemId: params.selectedItemId,
     selectedTimelineItemId: params.selectedTimelineItemId,
     selectedTimelineSegmentId: params.selectedTimelineSegmentId,
+    selectedTimelineSegmentIds: params.selectedTimelineSegmentIds,
     allMedia: params.allMedia,
     setSelectedItemId: params.setSelectedItemId,
     setSelectedTimelineSegmentId: params.setSelectedTimelineSegmentId,
+    setSelectedTimelineSegmentIds: params.setSelectedTimelineSegmentIds,
     setTimelineContextMenu: params.setTimelineContextMenu,
+    setTimelineRangeSelection: params.setTimelineRangeSelection,
     setTimelineSegments: params.setTimelineSegments,
     setTimelineViewDuration: params.setTimelineViewDuration,
     setTrimRange: params.setTrimRange,
@@ -165,17 +173,21 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setSelectedSubtitleId: params.setSelectedSubtitleId,
     setSelectedTextOverlayId: params.setSelectedTextOverlayId,
     setSelectedTimelineSegmentId: params.setSelectedTimelineSegmentId,
+    setSelectedTimelineSegmentIds: params.setSelectedTimelineSegmentIds,
     setSelectedZoomId: params.setSelectedZoomId,
     setSubtitles: params.setSubtitles,
     setTimelineContextMenu: params.setTimelineContextMenu,
+    setTimelineRangeSelection: params.setTimelineRangeSelection,
     setTimelineRedoStack: editing.setTimelineRedoStack,
     setTimelineSegments: params.setTimelineSegments,
     setTimelineUndoStack: editing.setTimelineUndoStack,
     speedEffects: params.speedEffects,
+    selectedTimelineSegmentIds: params.selectedTimelineSegmentIds,
     subtitles: params.subtitles,
     textOverlays: params.textOverlays,
     timelineBodyRef: params.timelineBodyRef,
     timelineDuration: params.timelineDuration,
+    timelineRangeSelection: params.timelineRangeSelection,
     timelineRenderDuration: params.timelineRenderDuration,
     timelineSegments: params.timelineSegments,
     updateSpeedEffect: effects.updateSpeedEffect,

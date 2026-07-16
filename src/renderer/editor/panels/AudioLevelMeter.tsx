@@ -37,7 +37,7 @@ export function AudioLevelMeter(props: { getLevel: () => number; active: boolean
   const percent = peakToMeterPercent(peak);
 
   return (
-    <div className="grid gap-1.5">
+    <div>
       <div className="relative h-3 w-full overflow-hidden rounded-full bg-white/[0.06]">
         <div className="absolute inset-0 opacity-25" style={{ background: meterGradient }} />
         <div
@@ -46,11 +46,6 @@ export function AudioLevelMeter(props: { getLevel: () => number; active: boolean
         />
         <span className="absolute inset-y-0 w-px bg-black/60" style={{ left: `${amberPercent}%` }} />
         <span className="absolute inset-y-0 w-px bg-black/60" style={{ left: `${redPercent}%` }} />
-      </div>
-      <div className="grid grid-cols-3 text-[0.58rem] font-semibold text-slate-600">
-        <span>Safe</span>
-        <span className="text-center text-amber-500/80">Hot</span>
-        <span className="text-right text-red-400/80">Clip</span>
       </div>
     </div>
   );

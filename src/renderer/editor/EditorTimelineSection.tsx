@@ -16,6 +16,7 @@ import type {
   TextOverlay,
   TimelineContextMenu,
   TimelineMediaClip,
+  TimelineRangeSelection,
   ZoomEffect
 } from "./types";
 
@@ -45,8 +46,11 @@ export function EditorTimelineSection(props: {
   speedEffects: SpeedEffect[];
   transitions: ClipTransition[];
   subtitles: SubtitleSegment[];
+  subtitleProcessing: boolean;
   textOverlays: TextOverlay[];
   selectedSegmentId: string | null;
+  selectedSegmentIds: string[];
+  rangeSelection: TimelineRangeSelection | null;
   selectedZoomId: string | null;
   selectedSpeedId: string | null;
   selectedSubtitleId: string | null;
@@ -60,7 +64,7 @@ export function EditorTimelineSection(props: {
   onRedo: () => void;
   onSplitAtPlayhead: () => void;
   onDeleteSelected: () => void;
-  onSelectClip: (clip: TimelineMediaClip) => void;
+  onSelectClip: (clip: TimelineMediaClip, additive: boolean) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
   onSelectSpeed: (effect: SpeedEffect) => void;
   onSelectTransition: (transition: ClipTransition) => void;
@@ -132,8 +136,11 @@ export function EditorTimelineSection(props: {
       speedEffects={props.speedEffects}
       transitions={props.transitions}
       subtitles={props.subtitles}
+      subtitleProcessing={props.subtitleProcessing}
       textOverlays={props.textOverlays}
       selectedSegmentId={props.selectedSegmentId}
+      selectedSegmentIds={props.selectedSegmentIds}
+      rangeSelection={props.rangeSelection}
       selectedZoomId={props.selectedZoomId}
       selectedSpeedId={props.selectedSpeedId}
       selectedSubtitleId={props.selectedSubtitleId}

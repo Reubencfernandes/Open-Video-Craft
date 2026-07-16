@@ -75,7 +75,7 @@ export function TransitionPanel(props: {
         </select>
       </label>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
         {transitionOptions.map((option) => (
           <button
             key={option.type}

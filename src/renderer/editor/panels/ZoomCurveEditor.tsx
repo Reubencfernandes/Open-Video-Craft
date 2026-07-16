@@ -81,7 +81,7 @@ export function ZoomCurveEditor(props: {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
         {easingPresets.map((preset) => (
           <CurveButton
             key={preset.id}
@@ -93,7 +93,7 @@ export function ZoomCurveEditor(props: {
         ))}
         <CurveButton
           active={easing === "custom"}
-          className="col-span-2"
+          className="col-span-full"
           label="Custom curve"
           bezier={bezier}
           onClick={() => changeAndPreview({ easing: "custom", bezier })}

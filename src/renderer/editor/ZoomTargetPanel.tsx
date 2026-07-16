@@ -1,7 +1,7 @@
 /**
  * Preview overlay for picking a zoom effect's focal point.
  */
-import { AudioLines, ZoomIn } from "lucide-react";
+import { AudioLines, Crosshair, ZoomIn } from "lucide-react";
 import { useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { clampNumber } from "./utils";
@@ -76,13 +76,16 @@ export function ZoomTargetPanel(props: {
           </div>
         )}
         {effect ? (
-          <i
-            className="pointer-events-none absolute size-6 rounded-full border-[3px] border-red-400 shadow-[0_0_0_2px_rgb(255_255_255_/_0.82),0_0_18px_rgb(255_93_93_/_0.55)] -translate-x-1/2 -translate-y-1/2"
+          <span
+            className="pointer-events-none absolute grid size-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/90 bg-black/65 text-rose-300 shadow-[0_0_0_3px_rgb(244_63_94_/_0.28),0_6px_18px_rgb(0_0_0_/_0.55)]"
             style={{
               left: `${effect.targetX}%`,
               top: `${effect.targetY}%`
             }}
-          />
+          >
+            <Crosshair size={18} strokeWidth={2.25} />
+            <i className="absolute size-1.5 rounded-full bg-white shadow-[0_0_8px_rgb(251_113_133)]" />
+          </span>
         ) : null}
       </button>
       <label className="grid gap-2 text-xs font-extrabold text-slate-400">

@@ -20,7 +20,7 @@ import {
 } from "../zoom-timing";
 import type { PlaybackSyncReason } from "./playback-sync";
 import { defaultSpeedRate, speedMinDurationSeconds } from "./speed-utils";
-import { createId } from "./utils";
+import { clampNumber, createId } from "./utils";
 import type { EditorTool, SpeedEffect, SubtitleSegment, ZoomEffect } from "./types";
 
 type UseEditorEffectsParams = {
@@ -180,7 +180,21 @@ export function useEditorEffects(params: UseEditorEffectsParams) {
     // the overlay falls back to spreading words evenly across the window.
     const nextUpdates = "text" in updates ? { ...updates, words: undefined } : updates;
     setSubtitles((current) =>
-      current.map((subtitle) => (subtitle.id === id ? { ...subtitle, ...nextUpdates } : subtitle))
+      current.map((subtitle) => {
+        if (subtitle.id !== id) {
+          return subtitle;
+        }
+
+        const requestedStart = Number.isFinite(nextUpdates.start)
+          ? nextUpdates.start ?? subtitle.start
+          : subtitle.start;
+        const start = clampNumber(requestedStart, 0, Math.max(0, subtitle.end - 0.1));
+        const requestedEnd = Number.isFinite(nextUpdates.end)
+          ? nextUpdates.end ?? subtitle.end
+          : subtitle.end;
+        const end = Math.max(start + 0.1, requestedEnd);
+        return { ...subtitle, ...nextUpdates, start, end };
+      })
     );
   }
 

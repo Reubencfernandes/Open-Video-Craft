@@ -36,7 +36,7 @@ export function ZoomPanel(props: {
         <>
           <div className="grid gap-2">
             <span className="text-xs font-extrabold text-slate-400">Zoom speed</span>
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
               {(["slow", "medium", "fast"] as ZoomSpeed[]).map((speed) => (
                 <button
                   className={`rounded-md px-2 py-2 text-xs font-extrabold ${

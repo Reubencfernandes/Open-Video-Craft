@@ -168,8 +168,6 @@ select,
 }
 
 .editor-preview:fullscreen .editor-preview-frame {
-  width: min(100%, calc(177.777vh - 6.222rem));
-  max-height: calc(100vh - 3.5rem);
   box-shadow: none;
 }
 
@@ -184,10 +182,38 @@ select,
   container-type: size;
 }
 
+.editor-library-panel {
+  container-name: editor-library-panel;
+  container-type: inline-size;
+}
+
+.timeline-subtitle-shimmer::before {
+  position: absolute;
+  inset: 0;
+  width: 45%;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.2), transparent);
+  transform: translateX(-120%);
+  animation: timeline-subtitle-shimmer 1.15s ease-in-out infinite;
+}
+
+@keyframes timeline-subtitle-shimmer {
+  to {
+    transform: translateX(330%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timeline-subtitle-shimmer::before {
+    animation: none;
+    transform: translateX(120%);
+  }
+}
+
 @media (max-width: 1199px) {
   .editor-workspace {
     grid-template-columns:
-      var(--editor-library-width, minmax(240px, 290px))
+      var(--editor-library-width, minmax(280px, 320px))
       minmax(280px, 1fr);
   }
 
@@ -223,7 +249,7 @@ select,
 
   .editor-workspace {
     grid-template-columns:
-      var(--editor-library-width, minmax(200px, 240px))
+      var(--editor-library-width, minmax(260px, 300px))
       minmax(250px, 1fr);
   }
 

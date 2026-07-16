@@ -8,7 +8,6 @@ import type {
   PointerEvent as ReactPointerEvent,
   RefObject
 } from "react";
-import { AudioLines, Share } from "lucide-react";
 import { PreviewContent } from "./PreviewContent";
 import { PreviewLayoutGrid } from "./PreviewLayoutGrid";
 import { PreviewQualityControl } from "./PreviewQualityControl";
@@ -62,8 +61,6 @@ export function EditorPreviewPanel(props: {
   renderDuration: number;
   masterVolume: number;
   onMasterVolumeChange: (volume: number) => void;
-  onOpenAudioTool: () => void;
-  onOpenExport: () => void;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
   mainVideoRef: RefObject<HTMLVideoElement | null>;
@@ -117,26 +114,8 @@ export function EditorPreviewPanel(props: {
       className="editor-preview order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#0b0b0d]"
       ref={previewPanelRef}
     >
-      <div className="editor-preview-header flex h-11 flex-none items-center justify-between gap-2 px-3">
+      <div className="editor-preview-header flex h-11 flex-none items-center px-3">
         <PreviewQualityControl quality={previewQuality} onChange={setPreviewQuality} />
-        <div className="inline-flex items-center gap-1">
-          <button
-            className="grid size-8 place-items-center rounded-lg text-neutral-400 transition hover:bg-white/[0.08] hover:text-white"
-            type="button"
-            title="Audio mixer"
-            onClick={props.onOpenAudioTool}
-          >
-            <AudioLines size={16} />
-          </button>
-          <button
-            className="grid size-8 place-items-center rounded-lg text-neutral-400 transition hover:bg-white/[0.08] hover:text-white"
-            type="button"
-            title="Export video"
-            onClick={props.onOpenExport}
-          >
-            <Share size={15} />
-          </button>
-        </div>
       </div>
 
       <div className="editor-preview-stage flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto bg-black p-4">

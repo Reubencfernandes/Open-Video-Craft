@@ -155,6 +155,24 @@ export function findTimelineSegmentAtTime(
   );
 }
 
+/** Media clips touched by a timeline range-selection gesture. */
+export function getTimelineSegmentIdsInRange(
+  segments: TimelineSegment[],
+  start: number,
+  end: number
+): string[] {
+  const low = Math.max(0, Math.min(start, end));
+  const high = Math.max(low, Math.max(start, end));
+  if (high - low < 1e-6) {
+    return [];
+  }
+
+  return segments
+    .filter((segment) => segment.end > low && segment.start < high)
+    .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id))
+    .map((segment) => segment.id);
+}
+
 export function canSplitTimelineSegment(segment: TimelineSegment, time: number): boolean {
   return time > segment.start + 0.1 && time < segment.end - 0.1;
 }
@@ -183,7 +201,15 @@ export function findSplittableTimelineSegment(
     ? segments.find((segment) => segment.id === selectedSegmentId) ?? null
     : null;
   if (selected && canSplitTimelineSegment(selected, time)) return selected;
-  const underPlayhead = findTimelineSegmentAtTime(segments, time);
+  // A video editor's split command should blade the picture track before an
+  // overlapping music/voice clip when there is no valid selected clip.
+  const underPlayhead =
+    segments.find(
+      (segment) =>
+        segment.track === "video" &&
+        time >= segment.start &&
+        time <= segment.end
+    ) ?? findTimelineSegmentAtTime(segments, time);
   return underPlayhead && canSplitTimelineSegment(underPlayhead, time) ? underPlayhead : null;
 }
 
@@ -283,6 +309,97 @@ export function moveTimelineSegment(
       ? { ...item, lane: item.track === "audio" ? nextLane : 0, start: nextStart, end: nextEnd }
       : item
   );
+}
+
+/**
+ * Move a media-clip selection as one rigid group. The shared delta preserves
+ * spacing and source offsets, snaps any selected edge to nearby cuts/playhead,
+ * and prevents selected video clips from overlapping unselected video clips.
+ */
+export function moveTimelineSegmentGroup(
+  segments: TimelineSegment[],
+  segmentIds: readonly string[],
+  rawDelta: number,
+  timelineDuration: number,
+  extraSnapTargets: number[] = []
+): TimelineSegment[] {
+  const selectedIds = new Set(segmentIds);
+  const selected = segments.filter((segment) => selectedIds.has(segment.id));
+  if (selected.length === 0) {
+    return segments;
+  }
+
+  const minimumStart = selected.reduce((min, segment) => Math.min(min, segment.start), Infinity);
+  let delta = Math.max(-minimumStart, rawDelta);
+  const snapThreshold = Math.max(0.08, timelineDuration * 0.01);
+  const targets = [
+    0,
+    ...extraSnapTargets,
+    ...segments
+      .filter((segment) => !selectedIds.has(segment.id))
+      .flatMap((segment) => [segment.start, segment.end])
+  ];
+
+  let closestAdjustment = Number.POSITIVE_INFINITY;
+  for (const segment of selected) {
+    for (const edge of [segment.start, segment.end]) {
+      for (const target of targets) {
+        const adjustment = target - (edge + delta);
+        if (
+          Math.abs(adjustment) <= snapThreshold &&
+          Math.abs(adjustment) < Math.abs(closestAdjustment)
+        ) {
+          closestAdjustment = adjustment;
+        }
+      }
+    }
+  }
+  if (Number.isFinite(closestAdjustment)) {
+    delta = Math.max(-minimumStart, delta + closestAdjustment);
+  }
+
+  const selectedVideo = selected.filter((segment) => segment.track === "video");
+  const otherVideo = segments.filter(
+    (segment) => segment.track === "video" && !selectedIds.has(segment.id)
+  );
+  const isValidVideoDelta = (candidate: number) =>
+    selectedVideo.every((moving) =>
+      otherVideo.every(
+        (other) =>
+          !rangesOverlap(
+            moving.start + candidate,
+            moving.end + candidate,
+            other.start,
+            other.end
+          )
+      )
+    );
+
+  if (!isValidVideoDelta(delta)) {
+    const candidates = [
+      -minimumStart,
+      ...selectedVideo.flatMap((moving) =>
+        otherVideo.flatMap((other) => [
+          other.start - moving.end,
+          other.end - moving.start
+        ])
+      )
+    ]
+      .filter((candidate) => candidate >= -minimumStart && isValidVideoDelta(candidate))
+      .sort((first, second) => Math.abs(first - delta) - Math.abs(second - delta));
+
+    if (candidates.length === 0) {
+      return segments;
+    }
+    delta = candidates[0];
+  }
+
+  const moved = segments.map((segment) =>
+    selectedIds.has(segment.id)
+      ? { ...segment, start: segment.start + delta, end: segment.end + delta }
+      : segment
+  );
+  return normalizeAudioLanes(moved);
 }
 
 // Video clips live on a single lane, so a drag must never create an overlap:

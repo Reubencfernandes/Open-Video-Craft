@@ -52,7 +52,7 @@ export function AudioPanel(props: {
           />
         ))}
         {props.audioSources.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-sm font-bold text-slate-400">
+          <div className="rounded-lg bg-white/[0.025] p-4 text-center text-sm font-bold text-slate-400">
             Record with a mic or add music to control audio
           </div>
         ) : null}
@@ -71,7 +71,7 @@ function AudioSourceRow(props: {
   return (
     <div
       className={cx(
-        "grid gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3",
+        "grid gap-2 rounded-lg bg-white/[0.04] p-3",
         props.level.muted && "opacity-60"
       )}
     >
@@ -88,7 +88,7 @@ function AudioSourceRow(props: {
           {formatDb(props.level.volume)}
         </output>
         <button
-          className="grid size-8 place-items-center rounded-md border border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/10"
+          className="grid size-8 place-items-center rounded-md bg-white/[0.06] text-slate-200 hover:bg-white/10"
           type="button"
           title={props.level.muted ? "Unmute" : "Mute"}
           onClick={() => props.onSetLevel({ muted: !props.level.muted })}
@@ -97,7 +97,7 @@ function AudioSourceRow(props: {
         </button>
       </div>
       <input
-        className="w-full accent-white"
+        className="w-full accent-[#1d4ed8]"
         type="range"
         min={minVolumeDb}
         max={maxVolumeDb}

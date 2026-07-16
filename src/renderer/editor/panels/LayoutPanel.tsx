@@ -105,7 +105,7 @@ export function LayoutPanel(props: {
         {layoutPresetGroups.map((group) => (
           <section className="grid gap-2" key={group.title}>
             <h3 className="m-0 text-xs font-extrabold text-slate-400">{group.title}</h3>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
               {group.presets.map((preset) => (
                 <button
                   className={`grid min-h-[5.2rem] gap-2 rounded-lg border p-2 text-left text-xs font-extrabold ${
@@ -154,7 +154,7 @@ export function LayoutPanel(props: {
             {props.screenAspectEnabled ? (
               <div className="grid gap-2">
                 <span className="text-xs font-extrabold text-slate-400">Screen ratio</span>
-                <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
                   {screenAspectOptions.map((aspectRatio) => (
                     <button
                       className={`rounded-md px-2 py-2 text-xs font-extrabold ${
@@ -177,7 +177,7 @@ export function LayoutPanel(props: {
 
         <div className="grid gap-2">
           <span className="text-xs font-extrabold text-slate-400">Camera style</span>
-          <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
             {(["circle", "rounded", "square"] as CameraShape[]).map((shape) => (
               <button
                 className={`grid h-10 place-items-center rounded-md ${
@@ -202,7 +202,7 @@ export function LayoutPanel(props: {
 
         <div className="grid gap-2">
           <span className="text-xs font-extrabold text-slate-400">Camera border</span>
-          <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
             {(["none", "light", "accent"] as CameraBorderStyle[]).map((border) => (
               <button
                 className={`rounded-md px-2 py-2 text-xs font-extrabold ${
@@ -220,7 +220,7 @@ export function LayoutPanel(props: {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-3">
           <div className="grid gap-2">
             <span className="text-xs font-extrabold text-slate-400">Position</span>
             <div className="grid aspect-square grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">

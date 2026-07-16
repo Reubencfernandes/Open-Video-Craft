@@ -24,7 +24,7 @@ export function DbSlider(props: {
         </output>
       </span>
       <input
-        className="w-full accent-violet-400"
+        className="w-full accent-[#1d4ed8]"
         type="range"
         min={minVolumeDb}
         max={maxVolumeDb}

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { moveTimelineSegment } from "../src/renderer/editor/timeline-utils";
+import {
+  getTimelineSegmentIdsInRange,
+  moveTimelineSegment,
+  moveTimelineSegmentGroup
+} from "../src/renderer/editor/timeline-utils";
 import type { TimelineSegment } from "../src/renderer/editor/types";
 
 function videoSegment(id: string, start: number, end: number): TimelineSegment {
@@ -49,5 +53,35 @@ describe("moveTimelineSegment", () => {
     const moved = moveTimelineSegment(segments, "a", 5.05, 20, [5]);
     const a = segmentById(moved, "a");
     expect(a.start).toBeCloseTo(5);
+  });
+});
+
+describe("timeline range selection", () => {
+  it("selects every clip touched by the marked time range", () => {
+    const segments = [
+      videoSegment("a", 0, 3),
+      videoSegment("b", 4, 7),
+      videoSegment("c", 8, 10)
+    ];
+    expect(getTimelineSegmentIdsInRange(segments, 2, 8)).toEqual(["a", "b"]);
+    expect(getTimelineSegmentIdsInRange(segments, 8, 2)).toEqual(["a", "b"]);
+  });
+
+  it("moves a selected group with its spacing intact", () => {
+    const segments = [videoSegment("a", 0, 2), videoSegment("b", 3, 5)];
+    const moved = moveTimelineSegmentGroup(segments, ["a", "b"], 4, 20);
+    expect(segmentById(moved, "a")).toMatchObject({ start: 4, end: 6 });
+    expect(segmentById(moved, "b")).toMatchObject({ start: 7, end: 9 });
+  });
+
+  it("stops a selected group at an unselected video clip", () => {
+    const segments = [
+      videoSegment("a", 0, 2),
+      videoSegment("b", 2, 4),
+      videoSegment("blocker", 7, 10)
+    ];
+    const moved = moveTimelineSegmentGroup(segments, ["a", "b"], 5, 20);
+    expect(segmentById(moved, "a").start).toBeCloseTo(3);
+    expect(segmentById(moved, "b").end).toBeCloseTo(7);
   });
 });

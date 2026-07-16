@@ -11,9 +11,12 @@ const storageKey = "ovc-editor-workspace-panel-widths";
 const maximumPanelWidth = 520;
 
 function getMinimumWidths(workspaceWidth: number) {
-  if (workspaceWidth <= 900) return { library: 150, preview: 250 };
-  if (workspaceWidth <= 1199) return { library: 170, preview: 280 };
-  return { library: 190, preview: 320 };
+  // The library width includes the fixed 80px tool rail. Keeping the whole
+  // column below ~260px leaves too little room for form fields and caused
+  // labels, number inputs, and button grids to overlap when resized.
+  if (workspaceWidth <= 900) return { library: 260, preview: 250 };
+  if (workspaceWidth <= 1199) return { library: 280, preview: 280 };
+  return { library: 300, preview: 320 };
 }
 
 function readStoredWidth(): number | null {

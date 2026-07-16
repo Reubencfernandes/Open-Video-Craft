@@ -45,6 +45,20 @@ describe("timeline trim and split geometry", () => {
     expect(target?.id).toBe("second");
   });
 
+  it("prefers the video clip over overlapping audio at the playhead", () => {
+    const audio: TimelineSegment = {
+      id: "music",
+      itemId: "audio-a",
+      track: "audio",
+      lane: 0,
+      start: 0,
+      end: 10,
+      sourceStart: 0
+    };
+    const target = findSplittableTimelineSegment([audio, ...videoSegments], null, 2.5);
+    expect(target?.id).toBe("first");
+  });
+
   it("does not split at a clip boundary", () => {
     expect(findSplittableTimelineSegment(videoSegments, "first", 5)).toBeNull();
   });

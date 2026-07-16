@@ -236,7 +236,11 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
         }
       : {}),
     borderRadius:
-      videoCornerStyle === "flat" ? 0 : videoCornerStyle === "round" ? 22 : 8,
+      videoCornerStyle === "flat" ? 0 : videoCornerStyle === "round" ? 32 : 12,
+    clipPath:
+      videoCornerStyle === "flat"
+        ? "none"
+        : `inset(0 round ${videoCornerStyle === "round" ? 32 : 12}px)`,
     objectFit: layoutMode === "bubble-fill" || layoutMode === "side-by-side" ? "cover" : "contain",
     transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
       3

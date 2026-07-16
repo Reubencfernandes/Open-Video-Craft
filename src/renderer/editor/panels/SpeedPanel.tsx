@@ -29,7 +29,7 @@ export function SpeedPanel(props: {
         <>
           <div className="grid gap-2">
             <span className="text-xs font-extrabold text-slate-400">Playback speed</span>
-            <div className="grid grid-cols-5 gap-1 rounded-lg bg-white/[0.05] p-1">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(2.5rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
               {speedRates.map((rate) => (
                 <button
                   className={`rounded-md px-2 py-2 text-xs font-extrabold ${

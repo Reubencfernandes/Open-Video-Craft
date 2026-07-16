@@ -76,7 +76,7 @@ export function TextPanel(props: {
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
             <NumberField label="Start" value={selected.start} onChange={(start) => props.onUpdate(selected.id, { start })} />
             <NumberField label="End" value={selected.end} onChange={(end) => props.onUpdate(selected.id, { end })} />
           </div>
@@ -96,7 +96,7 @@ export function TextPanel(props: {
           <RangeField label="Vertical" value={selected.y} min={0} max={100} suffix="%" onChange={(y) => props.onUpdate(selected.id, { y })} />
           <RangeField label="Size" value={selected.size} min={12} max={160} suffix="px" onChange={(size) => props.onUpdate(selected.id, { size })} />
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
             <label className="grid gap-1.5 text-[0.68rem] font-semibold text-slate-400">
               Color
               <input

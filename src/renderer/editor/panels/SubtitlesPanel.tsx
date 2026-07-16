@@ -3,6 +3,7 @@
  * text/timing editing.
  */
 import { Captions, WandSparkles } from "lucide-react";
+import { formatSeconds } from "../utils";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 
 /** State of the on-device Whisper speech-to-text pipeline. */
@@ -76,7 +77,7 @@ export function SubtitlesPanel(props: {
       </div>
       <div className="grid gap-2">
         <span className="text-xs font-bold text-slate-400">Subtitle style</span>
-        <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-white/[0.06] p-1.5">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(6rem,1fr))] gap-1.5 rounded-lg border border-white/[0.06] p-1.5">
           {subtitleStyleOptions.map((option) => (
             <button
               className={`min-h-9 whitespace-nowrap rounded-md px-2 text-center text-xs font-bold transition ${
@@ -100,11 +101,11 @@ export function SubtitlesPanel(props: {
             value={selected.text}
             onChange={(event) => props.onUpdateSubtitle(selected.id, { text: event.target.value })}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-3">
             <label className="grid gap-1 text-xs font-extrabold text-slate-400">
               <span>Start</span>
               <input
-                className="h-9 rounded-md border border-white/10 bg-black/20 px-2 text-white"
+                className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 text-white"
                 type="number"
                 min={0}
                 step={0.1}
@@ -117,7 +118,7 @@ export function SubtitlesPanel(props: {
             <label className="grid gap-1 text-xs font-extrabold text-slate-400">
               <span>End</span>
               <input
-                className="h-9 rounded-md border border-white/10 bg-black/20 px-2 text-white"
+                className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 text-white"
                 type="number"
                 min={selected.start + 0.1}
                 step={0.1}
@@ -137,7 +138,7 @@ export function SubtitlesPanel(props: {
       <div className="grid gap-2">
         {props.subtitles.map((subtitle) => (
           <button
-            className={`inline-flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold ${
+            className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold ${
               selected?.id === subtitle.id
                 ? "border-violet-400 bg-violet-400/10 text-white"
                 : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
@@ -146,8 +147,11 @@ export function SubtitlesPanel(props: {
             key={subtitle.id}
             onClick={() => props.onSelectSubtitle(subtitle.id)}
           >
-            <Captions size={15} />
+            <Captions className="shrink-0" size={15} />
             <span className="truncate">{subtitle.text}</span>
+            <span className="whitespace-nowrap text-[0.62rem] font-semibold tabular-nums text-slate-500">
+              {formatSeconds(subtitle.start)}–{formatSeconds(subtitle.end)}
+            </span>
           </button>
         ))}
       </div>

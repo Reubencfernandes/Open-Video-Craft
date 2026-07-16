@@ -208,10 +208,19 @@ function ScreenEditOverlay(props: {
     return null;
   }
 
+  // The media uses clip-path so corner choices visibly clip both video and
+  // low-quality canvas previews. Keep the edit surface unclipped so its resize
+  // handles remain reachable just outside the frame.
+  const overlayStyle = {
+    ...props.style,
+    clipPath: undefined,
+    overflow: "visible"
+  } satisfies CSSProperties;
+
   return (
     <div
       className={`${mediaFrameClassName} ${editOverlayClassName}`}
-      style={props.style}
+      style={overlayStyle}
       aria-hidden="true"
       data-screen-edit-overlay
       onPointerDown={(event) => props.onPointerDown(event, "move")}
