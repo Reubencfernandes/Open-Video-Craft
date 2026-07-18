@@ -235,10 +235,16 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
           height: `${activeScreenFrame.height}%`
         }
       : {}),
+    // A filled screen is edge-to-edge: rounded corners would punch holes into
+    // the canvas edges, so corner styling only applies to non-fill layouts.
     borderRadius:
-      videoCornerStyle === "flat" ? 0 : videoCornerStyle === "round" ? 32 : 12,
+      layoutMode === "bubble-fill" || videoCornerStyle === "flat"
+        ? 0
+        : videoCornerStyle === "round"
+          ? 32
+          : 12,
     clipPath:
-      videoCornerStyle === "flat"
+      layoutMode === "bubble-fill" || videoCornerStyle === "flat"
         ? "none"
         : `inset(0 round ${videoCornerStyle === "round" ? 32 : 12}px)`,
     objectFit: layoutMode === "bubble-fill" || layoutMode === "side-by-side" ? "cover" : "contain",

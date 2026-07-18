@@ -2,12 +2,14 @@
  * The left-rail tool catalog (order, labels, icons, rail artwork).
  */
 import {
+  AudioLines,
   Blend,
   FolderOpen,
   LayoutTemplate,
   Layers3,
   Music2,
   Pilcrow,
+  Sparkles,
   Type,
   ZoomIn
 } from "lucide-react";
@@ -31,5 +33,7 @@ export const editorTools: Array<{
   { id: "text", label: "Text", icon: <Pilcrow size={22} /> },
   { id: "zoom", label: "Zoom", icon: <ZoomIn size={22} /> },
   { id: "speed", label: "Speed", icon: <SpeedIcon size={22} /> },
-  { id: "audio", label: "Audio", icon: <Music2 size={22} /> }
+  { id: "audio", label: "Audio", icon: <Music2 size={22} /> },
+  { id: "music", label: "Music AI", icon: <AudioLines size={22} /> },
+  { id: "assistant", label: "AI", icon: <Sparkles size={22} /> }
 ];

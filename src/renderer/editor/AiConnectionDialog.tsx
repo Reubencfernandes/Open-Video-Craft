@@ -1,9 +1,15 @@
 import { useEffect, useState } from "react";
 import { Bot, X } from "lucide-react";
-import type { AiConnectionStatus, AiProvider } from "../../shared/types";
+import type {
+  AiConnectionStatus,
+  AiProvider,
+  ProviderKeysView,
+  UpdateProviderKeysRequest
+} from "../../shared/types";
 import type { EditorMutation } from "../../shared/editor-domain";
 import { AiLastEditCard } from "./AiLastEditCard";
 import { AiProviderConnectionCard } from "./AiProviderConnectionCard";
+import { ApiKeyCard } from "./ApiKeyCard";
 
 export function AiConnectionDialog(props: {
   open: boolean;
@@ -11,8 +17,10 @@ export function AiConnectionDialog(props: {
   lastAgentEdit: EditorMutation | null;
   onClose: () => void;
   onUndo: () => Promise<void>;
+  onProviderKeysChanged?: () => void;
 }) {
   const [status, setStatus] = useState<AiConnectionStatus | null>(null);
+  const [providerKeys, setProviderKeys] = useState<ProviderKeysView | null>(null);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [busy, setBusy] = useState<AiProvider | "undo" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +31,17 @@ export function AiConnectionDialog(props: {
     void window.openVideoCraft.ai.getStatus().then((next) => {
       setStatus(next); setPrivacyAccepted(next.privacyAccepted);
     }).catch((loadError) => setError(String(loadError)));
+    void window.openVideoCraft.providers.get().then(setProviderKeys).catch(() => undefined);
   }, [props.open]);
+
+  const updateKeys = async (request: UpdateProviderKeysRequest) => {
+    try {
+      setProviderKeys(await window.openVideoCraft.providers.update(request));
+      props.onProviderKeysChanged?.();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : String(updateError));
+    }
+  };
 
   if (!props.open) return null;
 
@@ -69,6 +87,37 @@ export function AiConnectionDialog(props: {
                 onConfigure={configure}
               />
             ))}
+          </div>
+
+          <div className="grid gap-1">
+            <h3 className="text-xs font-bold text-white">Cloud API keys</h3>
+            <p className="text-[0.68rem] leading-4 text-slate-400">
+              Used for the built-in Gemini assistant, Lyria music generation, and cloud
+              transcription. Keys are stored encrypted on this computer
+              {providerKeys?.encryptionAvailable === false ? " (OS keychain unavailable — stored obfuscated only)" : ""} and never shown again.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ApiKeyCard
+              title="Google Gemini"
+              description="Powers the AI assistant chat, Gemini transcription, and Lyria 3 music."
+              hasKey={providerKeys?.hasGeminiKey ?? false}
+              keyUrl="https://aistudio.google.com/apikey"
+              keyUrlLabel="Get a Gemini API key →"
+              disabled={providerKeys === null}
+              onSave={(apiKey) => updateKeys({ geminiApiKey: apiKey })}
+              onClear={() => updateKeys({ geminiApiKey: null })}
+            />
+            <ApiKeyCard
+              title="Cohere"
+              description="Powers Cohere Transcribe for subtitles (14 languages)."
+              hasKey={providerKeys?.hasCohereKey ?? false}
+              keyUrl="https://dashboard.cohere.com/api-keys"
+              keyUrlLabel="Get a Cohere API key →"
+              disabled={providerKeys === null}
+              onSave={(apiKey) => updateKeys({ cohereApiKey: apiKey })}
+              onClear={() => updateKeys({ cohereApiKey: null })}
+            />
           </div>
 
           {props.lastAgentEdit?.editId ? (

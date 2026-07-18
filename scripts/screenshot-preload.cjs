@@ -186,6 +186,46 @@ const api = {
     getInfo: async () => appInfo,
     openExternal: async () => true
   },
+  providers: {
+    get: async () => ({
+      sttProvider: "whisper-local",
+      hasCohereKey: true,
+      hasGeminiKey: true,
+      cohereLanguage: "en",
+      encryptionAvailable: true
+    }),
+    update: async () => api.providers.get()
+  },
+  stt: {
+    transcribe: async () => ({ language: "English", segments: [] }),
+    cancel: async () => true,
+    onProgress: () => () => undefined
+  },
+  music: {
+    getStatus: async () => ({
+      pythonPath: "/usr/local/bin/python3.12",
+      pythonVersion: "3.12",
+      venvReady: true,
+      acestepInstalled: true,
+      checkpointsDownloaded: true,
+      installing: false,
+      generatingJobId: null
+    }),
+    install: async () => api.music.getStatus(),
+    generate: async () => {
+      throw new Error("Music generation is unavailable in the screenshot harness.");
+    },
+    cancel: async () => true,
+    onSetupProgress: () => () => undefined,
+    onGenerateProgress: () => () => undefined
+  },
+  gemini: {
+    send: async () => [],
+    cancel: async () => true,
+    reset: async () => true,
+    getHistory: async () => [],
+    onUpdate: () => () => undefined
+  },
   updates: {
     getStatus: async () => updateStatus,
     check: async () => updateStatus,
@@ -251,6 +291,7 @@ const api = {
     setSessionState: async () => true,
     undoAgentEdit: async () => demoEditorState,
     onProjectStateChanged: () => () => undefined,
+    onFlushRequest: () => () => undefined,
     onExportProgress: () => () => undefined,
     cancelExport: async () => true,
     getPathForFile: () => null,

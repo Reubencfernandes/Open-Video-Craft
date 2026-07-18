@@ -6,10 +6,15 @@
 import type {
   DeviceSelection,
   ExportVideoRequest,
+  GeminiChatSendRequest,
+  MusicGenerateRequest,
   ProjectDevices,
   ProjectSource,
   SaveEditorProjectStateRequest,
-  StartRecordingRequest
+  StartRecordingRequest,
+  SttTranscribeRequest,
+  SttTranscribeSource,
+  UpdateProviderKeysRequest
 } from "../shared/types";
 import { validateEditorStateSnapshot } from "../shared/editor-domain";
 
@@ -164,4 +169,104 @@ function isValidRecordingTracks(value: unknown): value is StartRecordingRequest[
       optionalTrackValid(tracks.mic) &&
       optionalTrackValid(tracks.system)
   );
+}
+
+export function assertUpdateProviderKeysRequest(
+  value: unknown
+): asserts value is UpdateProviderKeysRequest {
+  const request = value as Partial<UpdateProviderKeysRequest> | null;
+  const keyValid = (key: unknown): boolean =>
+    key === undefined || key === null || (typeof key === "string" && key.length <= 512);
+  if (
+    !request ||
+    typeof request !== "object" ||
+    (request.sttProvider !== undefined &&
+      !["whisper-local", "cohere", "gemini"].includes(request.sttProvider)) ||
+    !keyValid(request.cohereApiKey) ||
+    !keyValid(request.geminiApiKey) ||
+    (request.cohereLanguage !== undefined &&
+      !(typeof request.cohereLanguage === "string" && /^[a-z]{2}$/.test(request.cohereLanguage)))
+  ) {
+    throw new Error("Invalid provider keys request.");
+  }
+}
+
+function isValidSttSource(value: unknown): value is SttTranscribeSource {
+  const source = value as Partial<SttTranscribeSource> | null;
+  return Boolean(
+    source &&
+      typeof source === "object" &&
+      typeof source.url === "string" &&
+      /^ovc-(media|import):\/\//.test(source.url) &&
+      Number.isFinite(source.sourceStart) && (source.sourceStart ?? -1) >= 0 &&
+      Number.isFinite(source.duration) && (source.duration ?? 0) > 0 &&
+      Number.isFinite(source.timelineOffset) && (source.timelineOffset ?? -1) >= 0 &&
+      Number.isFinite(source.gain) && (source.gain ?? -1) >= 0 && (source.gain ?? 5) <= 4
+  );
+}
+
+export function assertSttTranscribeRequest(
+  value: unknown
+): asserts value is SttTranscribeRequest {
+  const request = value as Partial<SttTranscribeRequest> | null;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !isUuid(request.requestId) ||
+    !["cohere", "gemini"].includes(request.provider ?? "") ||
+    !Array.isArray(request.sources) ||
+    request.sources.length === 0 ||
+    request.sources.length > 32 ||
+    !request.sources.every(isValidSttSource)
+  ) {
+    throw new Error("Invalid transcription request.");
+  }
+}
+
+export function assertMusicGenerateRequest(
+  value: unknown
+): asserts value is MusicGenerateRequest {
+  const request = value as Partial<MusicGenerateRequest> | null;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !isUuid(request.jobId) ||
+    !["acestep", "lyria-clip", "lyria-pro"].includes(request.engine ?? "") ||
+    typeof request.prompt !== "string" ||
+    request.prompt.trim().length === 0 ||
+    request.prompt.length > 2000 ||
+    typeof request.lyrics !== "string" ||
+    request.lyrics.length > 10000 ||
+    typeof request.durationSeconds !== "number" ||
+    !Number.isFinite(request.durationSeconds) ||
+    request.durationSeconds < 5 ||
+    request.durationSeconds > 240 ||
+    !Number.isInteger(request.inferSteps) ||
+    (request.inferSteps ?? 0) < 10 ||
+    (request.inferSteps ?? 0) > 100 ||
+    typeof request.guidanceScale !== "number" ||
+    !Number.isFinite(request.guidanceScale) ||
+    request.guidanceScale < 1 ||
+    request.guidanceScale > 30 ||
+    !(request.seed === null || (Number.isInteger(request.seed) && (request.seed ?? -1) >= 0))
+  ) {
+    throw new Error("Invalid music generation request.");
+  }
+}
+
+export function assertGeminiChatSendRequest(
+  value: unknown
+): asserts value is GeminiChatSendRequest {
+  const request = value as Partial<GeminiChatSendRequest> | null;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    typeof request.message !== "string" ||
+    request.message.trim().length === 0 ||
+    request.message.length > 8000 ||
+    typeof request.includeVideo !== "boolean"
+  ) {
+    throw new Error("Invalid AI chat request.");
+  }
 }

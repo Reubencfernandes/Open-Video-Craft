@@ -21,18 +21,22 @@ const screenResizeModes = ["resize-nw", "resize-ne", "resize-sw", "resize-se"] a
 const mediaFrameClassName =
   "absolute inset-0 size-full border-0 bg-transparent transition-[transform] duration-[45ms] ease-[cubic-bezier(0.2,0,0.2,1)] will-change-transform";
 
+// Selection chrome for the layout editor. A hairline white border with a dark
+// 1px halo stays readable over any footage (the double-contrast outline pro
+// editors use); no color wash over the video itself. The border and handles
+// stay visible while dragging via group-active.
 const editOverlayClassName =
-  "group absolute z-[3] box-border cursor-grab touch-none border border-transparent bg-transparent shadow-none transition-[border-color,background-color,box-shadow] hover:border-white/80 hover:bg-emerald-500/10 hover:shadow-[0_0_0_1px_rgb(2_6_23_/_0.35),0_14px_34px_rgb(8_47_73_/_0.2)] active:cursor-grabbing";
+  "group absolute z-[3] box-border cursor-grab touch-none border border-transparent bg-transparent shadow-none transition-[border-color,box-shadow] duration-100 hover:border-white/95 hover:shadow-[0_0_0_1px_rgb(2_6_23_/_0.55),inset_0_0_0_1px_rgb(2_6_23_/_0.45)] active:cursor-grabbing active:border-white active:shadow-[0_0_0_1px_rgb(2_6_23_/_0.55),inset_0_0_0_1px_rgb(2_6_23_/_0.45)]";
 
 const handleBaseClassName =
-  "absolute z-[1] size-3 rounded-full border-2 border-white bg-neutral-200 opacity-0 shadow-[0_0_0_1px_rgb(8_47_73_/_0.65),0_8px_18px_rgb(2_6_23_/_0.35)] transition-opacity group-hover:opacity-100";
+  "absolute z-[1] size-2.5 rounded-[2.5px] border border-slate-950/80 bg-white opacity-0 shadow-[0_1px_4px_rgb(2_6_23_/_0.55)] transition-[opacity,transform] duration-100 hover:scale-125 group-hover:opacity-100 group-active:opacity-100";
 
 const handleClassByMode: Record<ScreenLayoutDragMode, string> = {
   move: "",
-  "resize-nw": "-left-1.5 -top-1.5 cursor-nwse-resize",
-  "resize-ne": "-right-1.5 -top-1.5 cursor-nesw-resize",
-  "resize-sw": "-bottom-1.5 -left-1.5 cursor-nesw-resize",
-  "resize-se": "-bottom-1.5 -right-1.5 cursor-nwse-resize"
+  "resize-nw": "-left-[5px] -top-[5px] cursor-nwse-resize",
+  "resize-ne": "-right-[5px] -top-[5px] cursor-nesw-resize",
+  "resize-sw": "-bottom-[5px] -left-[5px] cursor-nesw-resize",
+  "resize-se": "-bottom-[5px] -right-[5px] cursor-nwse-resize"
 };
 
 /**

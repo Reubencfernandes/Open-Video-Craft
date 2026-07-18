@@ -1,8 +1,18 @@
 /**
  * Active-tool content router shown beside the editor tool rail.
  */
+import type {
+  MusicGenerateProgressEvent,
+  MusicSetupStatus,
+  ProviderKeysView,
+  SttProviderId
+} from "../../shared/types";
+import type { GeminiChatMessage } from "../../shared/types";
+import type { MusicGenerationForm, MusicGenerationState } from "./useMusicGeneration";
+import { AssistantPanel } from "./panels/AssistantPanel";
 import { AudioPanel } from "./panels/AudioPanel";
 import { LayoutPanel } from "./panels/LayoutPanel";
+import { MusicPanel } from "./panels/MusicPanel";
 import { SpeedPanel } from "./panels/SpeedPanel";
 import { StylePanel } from "./panels/StylePanel";
 import { SubtitlesPanel } from "./panels/SubtitlesPanel";
@@ -55,6 +65,34 @@ export function EditorToolPanel(props: {
   sttStatus: "idle" | "loading" | "transcribing" | "done" | "error";
   sttDownloadProgress: number | null;
   sttModelLabel: string;
+  sttProvider: SttProviderId;
+  providerKeys: ProviderKeysView | null;
+  onCancelTranscription: () => void;
+  onSttProviderChange: (provider: SttProviderId) => void;
+  onCohereLanguageChange: (language: string) => void;
+  onOpenAiSettings: () => void;
+  musicSetupStatus: MusicSetupStatus | null;
+  musicInstalling: boolean;
+  musicInstallLog: string[];
+  musicGenerationState: MusicGenerationState;
+  musicProgress: MusicGenerateProgressEvent | null;
+  musicLastLyrics: string | null;
+  onMusicInstall: () => void;
+  onMusicGenerate: (form: MusicGenerationForm) => void;
+  onMusicCancel: () => void;
+  assistantProjectId: string | null;
+  assistantMessages: GeminiChatMessage[];
+  assistantSending: boolean;
+  assistantStatusMessage: string | null;
+  assistantError: string | null;
+  assistantIncludeVideo: boolean;
+  assistantVideoConsent: boolean;
+  onAssistantIncludeVideoChange: (value: boolean) => void;
+  onAssistantVideoConsentChange: (value: boolean) => void;
+  onAssistantSend: (message: string) => void;
+  onAssistantCancel: () => void;
+  onAssistantReset: () => void;
+  onAssistantUndoEdit: () => void;
   subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
@@ -169,11 +207,53 @@ export function EditorToolPanel(props: {
         />
       ) : null}
 
+      {props.activeTool === "assistant" ? (
+        <AssistantPanel
+          projectId={props.assistantProjectId}
+          providerKeys={props.providerKeys}
+          messages={props.assistantMessages}
+          sending={props.assistantSending}
+          statusMessage={props.assistantStatusMessage}
+          chatError={props.assistantError}
+          includeVideo={props.assistantIncludeVideo}
+          videoConsent={props.assistantVideoConsent}
+          onIncludeVideoChange={props.onAssistantIncludeVideoChange}
+          onVideoConsentChange={props.onAssistantVideoConsentChange}
+          onSend={props.onAssistantSend}
+          onCancel={props.onAssistantCancel}
+          onReset={props.onAssistantReset}
+          onUndoEdit={props.onAssistantUndoEdit}
+          onOpenAiSettings={props.onOpenAiSettings}
+        />
+      ) : null}
+
+      {props.activeTool === "music" ? (
+        <MusicPanel
+          setupStatus={props.musicSetupStatus}
+          installing={props.musicInstalling}
+          installLog={props.musicInstallLog}
+          generationState={props.musicGenerationState}
+          progress={props.musicProgress}
+          lastLyrics={props.musicLastLyrics}
+          providerKeys={props.providerKeys}
+          onInstall={props.onMusicInstall}
+          onGenerate={props.onMusicGenerate}
+          onCancel={props.onMusicCancel}
+          onOpenAiSettings={props.onOpenAiSettings}
+        />
+      ) : null}
+
       {props.activeTool === "subtitles" ? (
         <SubtitlesPanel
           sttDownloadProgress={props.sttDownloadProgress}
           sttStatus={props.sttStatus}
           sttModelLabel={props.sttModelLabel}
+          sttProvider={props.sttProvider}
+          providerKeys={props.providerKeys}
+          onCancelTranscription={props.onCancelTranscription}
+          onSttProviderChange={props.onSttProviderChange}
+          onCohereLanguageChange={props.onCohereLanguageChange}
+          onOpenAiSettings={props.onOpenAiSettings}
           subtitleLanguage={props.subtitleLanguage}
           subtitleStyle={props.subtitleStyle}
           subtitles={props.subtitles}

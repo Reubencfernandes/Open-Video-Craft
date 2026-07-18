@@ -13,3 +13,4 @@ coverage/
 Thumbs.db
 .DS_Store
 demo-assets/
+__pycache__/

@@ -17,19 +17,40 @@ import type {
   EditorProjectStateView,
   EditorSessionStateRequest,
   FailRecordingRequest,
+  GeminiChatMessage,
+  GeminiChatSendRequest,
+  GeminiChatUpdateEvent,
   ImportedMediaFile,
+  MusicGenerateProgressEvent,
+  MusicGenerateRequest,
+  MusicGenerateResult,
+  MusicSetupProgressEvent,
+  MusicSetupStatus,
   ProjectLibraryEntry,
   ProjectView,
+  ProviderKeysView,
   RenameProjectRequest,
   SaveEditorProjectStateRequest,
   SourceOverlayResult,
   SourceSummary,
   StartRecordingRequest,
   StopRecordingRequest,
+  SttProgressEvent,
+  SttTranscribeRequest,
+  SttTranscribeResult,
+  UpdateProviderKeysRequest,
   UpdateStatus,
   UndoAgentEditRequest,
   WriteChunkRequest
 } from "../shared/types";
+
+function subscribe<Payload>(channel: string) {
+  return (callback: (payload: Payload) => void): (() => void) => {
+    const listener = (_event: unknown, payload: Payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  };
+}
 
 // Drag/drop paths are granted only when Electron resolves a real File object.
 // The renderer cannot register an arbitrary absolute path by calling the IPC
@@ -47,6 +68,37 @@ const api = {
   app: {
     getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
     openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:open-external", url)
+  },
+  providers: {
+    get: (): Promise<ProviderKeysView> => ipcRenderer.invoke("providers:get"),
+    update: (request: UpdateProviderKeysRequest): Promise<ProviderKeysView> =>
+      ipcRenderer.invoke("providers:update", request)
+  },
+  stt: {
+    transcribe: (request: SttTranscribeRequest): Promise<SttTranscribeResult> =>
+      ipcRenderer.invoke("stt:transcribe", request),
+    cancel: (requestId: string): Promise<boolean> => ipcRenderer.invoke("stt:cancel", requestId),
+    onProgress: subscribe<SttProgressEvent>("stt:progress")
+  },
+  music: {
+    getStatus: (): Promise<MusicSetupStatus> => ipcRenderer.invoke("music:get-status"),
+    install: (): Promise<MusicSetupStatus> => ipcRenderer.invoke("music:install"),
+    generate: (request: MusicGenerateRequest): Promise<MusicGenerateResult> =>
+      ipcRenderer.invoke("music:generate", request),
+    cancel: (jobId: string): Promise<boolean> => ipcRenderer.invoke("music:cancel", jobId),
+    onSetupProgress: subscribe<MusicSetupProgressEvent>("music:setup-progress"),
+    onGenerateProgress: subscribe<MusicGenerateProgressEvent>("music:generate-progress")
+  },
+  gemini: {
+    send: (request: GeminiChatSendRequest): Promise<GeminiChatMessage[]> =>
+      ipcRenderer.invoke("gemini:chat-send", request),
+    cancel: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("gemini:chat-cancel", projectId),
+    reset: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("gemini:chat-reset", projectId),
+    getHistory: (projectId: string): Promise<GeminiChatMessage[]> =>
+      ipcRenderer.invoke("gemini:chat-history", projectId),
+    onUpdate: subscribe<GeminiChatUpdateEvent>("gemini:chat-update")
   },
   updates: {
     getStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("updates:get-status"),
@@ -155,6 +207,11 @@ const api = {
       const listener = (_event: unknown, state: EditorProjectStateView) => callback(state);
       ipcRenderer.on("editor:project-state-changed", listener);
       return () => ipcRenderer.removeListener("editor:project-state-changed", listener);
+    },
+    onFlushRequest: (callback: () => void): (() => void) => {
+      const listener = () => callback();
+      ipcRenderer.on("editor:flush-request", listener);
+      return () => ipcRenderer.removeListener("editor:flush-request", listener);
     },
     exportVideo: (request: ExportVideoRequest): Promise<ExportVideoResult | null> =>
       ipcRenderer.invoke("editor:export-video", request),

@@ -2,6 +2,7 @@
  * Whisper transcription glue: model id, word-chunk language patching, and
  * converting Whisper output into subtitle segments.
  */
+import { groupSubtitleWords as groupSubtitleWordsShared } from "../../shared/subtitle-segmentation";
 import type { SubtitleSegment, SubtitleWord } from "./types";
 import { createId } from "./utils";
 
@@ -41,10 +42,6 @@ type WhisperTokenizerWithPrivateHooks = {
 type WhisperPipelineWithTokenizer = {
   tokenizer?: WhisperTokenizerWithPrivateHooks;
 };
-
-const maxWordsPerSubtitle = 7;
-const maxCharactersPerSubtitle = 46;
-const subtitlePauseBreakSeconds = 0.45;
 
 export function addLanguageToWhisperWordChunks(transcriber: unknown): void {
   const tokenizer = (transcriber as WhisperPipelineWithTokenizer).tokenizer;
@@ -122,45 +119,7 @@ function createSubtitleSegmentsFromTimedChunks(chunks: WhisperChunk[]): Subtitle
 }
 
 function groupSubtitleWords(words: SubtitleWord[]): SubtitleSegment[] {
-  const segments: SubtitleSegment[] = [];
-  let group: SubtitleWord[] = [];
-
-  for (const word of words) {
-    const previous = group.at(-1);
-    const nextText = formatSubtitleText([...group, word]);
-    const shouldBreakBeforeWord =
-      group.length > 0 &&
-      (group.length >= maxWordsPerSubtitle ||
-        nextText.length > maxCharactersPerSubtitle ||
-        (previous ? word.start - previous.end > subtitlePauseBreakSeconds : false) ||
-        endsSentence(previous?.text ?? ""));
-
-    if (shouldBreakBeforeWord) {
-      segments.push(createSegmentFromWords(group));
-      group = [];
-    }
-
-    group.push(word);
-  }
-
-  if (group.length > 0) {
-    segments.push(createSegmentFromWords(group));
-  }
-
-  return segments;
-}
-
-function createSegmentFromWords(words: SubtitleWord[]): SubtitleSegment {
-  const firstWord = words[0];
-  const lastWord = words.at(-1) ?? firstWord;
-
-  return {
-    id: createId("subtitle"),
-    start: firstWord.start,
-    end: Math.max(firstWord.start + 0.4, lastWord.end),
-    text: formatSubtitleText(words),
-    words
-  };
+  return groupSubtitleWordsShared(words, createId);
 }
 
 function normalizeWordText(text: string | undefined): string {
@@ -169,19 +128,6 @@ function normalizeWordText(text: string | undefined): string {
 
 function hasInternalWhitespace(text: string): boolean {
   return /\s/.test(text.trim());
-}
-
-function formatSubtitleText(words: SubtitleWord[]): string {
-  return words
-    .map((word) => word.text)
-    .join(" ")
-    .replace(/\s+([,.;:!?)}\]])/g, "$1")
-    .replace(/([([{])\s+/g, "$1")
-    .trim();
-}
-
-function endsSentence(text: string): boolean {
-  return /[.!?]$/.test(text.trim());
 }
 
 function formatLanguageName(language: string): string {

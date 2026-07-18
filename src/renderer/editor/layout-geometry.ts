@@ -116,6 +116,10 @@ function getScreenFrameBounds(layoutMode: LayoutMode): PercentFrame {
   switch (layoutMode) {
     case "bubble-fill":
       return { x: 0, y: 0, width: 100, height: 100 };
+    // "Fit screen": the video floats with a generous margin so the Style
+    // background clearly frames it — visibly different from the filled preset.
+    case "bubble":
+      return { x: 10, y: 9, width: 80, height: 82 };
     case "presenter":
       return { x: 6, y: 15, width: 60, height: 62 };
     case "side-overlap":

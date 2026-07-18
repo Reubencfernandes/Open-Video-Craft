@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -61,6 +61,10 @@
       {
         "from": "src/renderer/assets/app.png",
         "to": "app.png"
+      },
+      {
+        "from": "resources/acestep_generate.py",
+        "to": "acestep_generate.py"
       }
     ],
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",

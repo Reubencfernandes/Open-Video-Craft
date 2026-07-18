@@ -285,6 +285,7 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
     importCustomBackground,
     importMedia,
     importMediaFromPaths,
+    ingestImportedFiles,
     removeImportedMedia,
     selectTimelineItem,
     setAudioLevel,

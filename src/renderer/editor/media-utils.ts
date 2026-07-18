@@ -69,7 +69,9 @@ export function createProjectMedia(project: ProjectView | null): EditorMediaItem
   return items;
 }
 
-export function toEditorMediaItem(file: ImportedMediaFile): EditorMediaItem {
+export function toEditorMediaItem(
+  file: ImportedMediaFile & { duration?: number | null }
+): EditorMediaItem {
   return {
     id: file.id,
     name: file.name,
@@ -77,7 +79,7 @@ export function toEditorMediaItem(file: ImportedMediaFile): EditorMediaItem {
     kind: file.kind,
     origin: "imported",
     track: "imported",
-    duration: null,
+    duration: typeof file.duration === "number" && file.duration > 0 ? file.duration : null,
     importId: file.id,
     extension: file.extension
   };
@@ -353,4 +355,75 @@ export async function decodeAudioTo16kMono(url: string): Promise<Float32Array> {
   } finally {
     void audioContext.close();
   }
+}
+
+export type TimelineAudioMixSource = {
+  url: string;
+  /** Seconds into the media file where this clip begins. */
+  sourceStart: number;
+  /** Seconds of media consumed by this clip. */
+  duration: number;
+  /** Timeline position (seconds) where this clip starts. */
+  timelineOffset: number;
+  /** Linear gain applied when mixing. */
+  gain: number;
+};
+
+/**
+ * Decode several timeline clips and mix them at their timeline positions into
+ * one mono 16 kHz Float32Array for Whisper. Sources that fail to decode (e.g.
+ * a video without an audio track) are skipped; the peak is soft-normalized so
+ * overlapping speakers cannot clip.
+ */
+export async function decodeTimelineAudioMix(
+  sources: TimelineAudioMixSource[]
+): Promise<Float32Array> {
+  const targetRate = 16000;
+  const decoded: Array<{ source: TimelineAudioMixSource; samples: Float32Array }> = [];
+
+  for (const source of sources) {
+    try {
+      const samples = await decodeAudioTo16kMono(source.url);
+      decoded.push({ source, samples });
+    } catch {
+      // No audio track (or an undecodable container) — skip this source.
+    }
+  }
+
+  if (decoded.length === 0) {
+    throw new Error("None of the selected sources contain decodable audio.");
+  }
+
+  const totalSeconds = decoded.reduce(
+    (max, entry) => Math.max(max, entry.source.timelineOffset + entry.source.duration),
+    0
+  );
+  const mix = new Float32Array(Math.max(1, Math.ceil(totalSeconds * targetRate)));
+
+  for (const { source, samples } of decoded) {
+    const from = Math.floor(source.sourceStart * targetRate);
+    const to = Math.min(samples.length, from + Math.ceil(source.duration * targetRate));
+    const offset = Math.floor(source.timelineOffset * targetRate);
+    const gain = Number.isFinite(source.gain) ? Math.max(0, Math.min(4, source.gain)) : 1;
+
+    for (let i = from; i < to; i += 1) {
+      const target = offset + (i - from);
+      if (target >= mix.length) break;
+      mix[target] += samples[i] * gain;
+    }
+  }
+
+  let peak = 0;
+  for (let i = 0; i < mix.length; i += 1) {
+    const magnitude = Math.abs(mix[i]);
+    if (magnitude > peak) peak = magnitude;
+  }
+  if (peak > 1) {
+    const scale = 1 / peak;
+    for (let i = 0; i < mix.length; i += 1) {
+      mix[i] *= scale;
+    }
+  }
+
+  return mix;
 }

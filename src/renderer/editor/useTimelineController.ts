@@ -29,6 +29,7 @@ import type {
   SubtitleSegment,
   TextOverlay,
   TimelineContextMenu,
+  TimelineMediaClip,
   TimelineRangeSelection,
   TimelineSegment,
   ZoomEffect
@@ -39,7 +40,11 @@ type UseTimelineControllerParams = {
   activeTool: EditorTool;
   allMedia: EditorMediaItem[];
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
+  audioLevels: Record<string, { volume: number; muted: boolean }>;
   audioSources: EditorMediaItem[];
+  audioTimelineClips: TimelineMediaClip[];
+  backgroundAudioIds: string[];
+  videoTimelineClips: TimelineMediaClip[];
   beginPlaybackInteraction: () => void;
   currentTime: number;
   currentTimeRef: MutableRefObject<number>;
@@ -149,8 +154,10 @@ export function useTimelineController(params: UseTimelineControllerParams) {
   });
 
   const subtitleGeneration = useSubtitleGeneration({
-    allMedia: params.allMedia,
-    audioSources: params.audioSources,
+    audioClips: params.audioTimelineClips,
+    videoClips: params.videoTimelineClips,
+    audioLevels: params.audioLevels,
+    backgroundAudioIds: params.backgroundAudioIds,
     setError: params.setError,
     setSelectedSubtitleId: params.setSelectedSubtitleId,
     setSubtitleLanguage: params.setSubtitleLanguage,
@@ -246,7 +253,12 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     deleteSelectedTimelineSegment: editing.deleteSelectedTimelineSegment,
     deleteTimelineSegment: editing.deleteTimelineSegment,
     endTimelineScrub: drags.endTimelineScrub,
+    cancelTranscription: subtitleGeneration.cancelTranscription,
     generateSubtitles: subtitleGeneration.generateSubtitles,
+    providerKeys: subtitleGeneration.providerKeys,
+    refreshProviderKeys: subtitleGeneration.refreshProviderKeys,
+    sttProvider: subtitleGeneration.sttProvider,
+    updateProviderSettings: subtitleGeneration.updateProviderSettings,
     handleTimelineDragOver: editing.handleTimelineDragOver,
     handleTimelineDrop: editing.handleTimelineDrop,
     moveTimelineScrub: drags.moveTimelineScrub,

@@ -1,13 +1,13 @@
 /** Single source for the homepage changelog dialog and release badge. */
 export const latestRelease = {
-  version: "2.1.1",
-  title: "Redesigned editor, homepage, and Style backgrounds",
+  version: "2.2.0",
+  title: "AI studio: assistant chat, music generation, and cloud transcription",
   changes: [
-    "Redesigned the editor around a neutral black theme: new top bar with AI, Projects, Save, and Export; a tile-style tool rail; and a media panel with filter pills, search, and duration badges.",
-    "Rebuilt the timeline with a white playhead, taller rounded clips, neutral track headers, and a bottom edit strip.",
-    "Refreshed the homepage to match the editor, with a white New Project button and neutral accents.",
-    "New photographic Style backgrounds — Skyline, Cityscape, and Coast — bundled for offline use.",
-    "Fixed Style backgrounds disappearing during transitions: only fade-through-black uses a black backdrop now, so your background stays visible through crossfades, slides, and wipes.",
-    "The preview now scales to fit the window in both directions, so a short or narrow window no longer clips the top or bottom of the frame."
+    "New AI assistant (Gemini): chat with your project and let it add zooms, speed-ups, subtitles, transitions, or cut content — every edit shows an undo card, and you can optionally let it watch the actual footage.",
+    "New Music AI studio: generate background music locally with ACE-Step (runs on your machine) or in the cloud with Lyria 3 Clip/Pro via your Gemini API key; finished tracks drop straight onto the timeline.",
+    "Cloud transcription: choose Whisper (on-device), Cohere Transcribe (14 languages), or Gemini in the Subtitles panel — bring your own API key, stored encrypted on this computer.",
+    "Subtitles now transcribe every speech source together, so projects with both camera and screen audio caption both voices with timeline-accurate timing.",
+    "Layout presets fixed: “fit screen” now floats the video over your Style background with a proper margin, and “filled screen” is truly edge-to-edge; picking a preset resets manual drags so it always takes effect.",
+    "Polished the layout drag/resize chrome: crisp hairline selection border and square corner handles that stay visible while dragging — no more color wash over the video."
   ]
 } as const;

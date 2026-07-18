@@ -380,3 +380,141 @@ export interface ExportProgress {
   percent: number;
   message: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* Cloud provider keys + speech-to-text                                */
+/* ------------------------------------------------------------------ */
+
+export type SttProviderId = "whisper-local" | "cohere" | "gemini";
+
+/** Renderer-facing view of stored provider credentials. Never contains keys. */
+export interface ProviderKeysView {
+  sttProvider: SttProviderId;
+  hasCohereKey: boolean;
+  hasGeminiKey: boolean;
+  cohereLanguage: string;
+  encryptionAvailable: boolean;
+}
+
+export interface UpdateProviderKeysRequest {
+  sttProvider?: SttProviderId;
+  /** New key to store; null clears the stored key; undefined leaves it. */
+  cohereApiKey?: string | null;
+  geminiApiKey?: string | null;
+  cohereLanguage?: string;
+}
+
+/**
+ * One audible timeline source for cloud transcription. `url` must be an
+ * ovc-media:// or ovc-import:// URL — main re-resolves it through the same
+ * trusted lookups the media protocols use, so arbitrary paths cannot leak in.
+ */
+export interface SttTranscribeSource {
+  url: string;
+  /** Seconds into the media file where playback of this segment begins. */
+  sourceStart: number;
+  /** Seconds of media consumed by this segment. */
+  duration: number;
+  /** Timeline position (seconds) where this segment starts. */
+  timelineOffset: number;
+  /** Linear gain applied when mixing (0..4). */
+  gain: number;
+}
+
+export interface SttTranscribeRequest {
+  requestId: string;
+  provider: Exclude<SttProviderId, "whisper-local">;
+  sources: SttTranscribeSource[];
+}
+
+export interface SttTranscribeResult {
+  language: string | null;
+  segments: Array<{ id: string; start: number; end: number; text: string }>;
+}
+
+export interface SttProgressEvent {
+  requestId: string;
+  phase: "extracting" | "uploading" | "transcribing";
+  percent: number | null;
+  chunkIndex?: number;
+  chunkCount?: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* AI music generation (ACE-Step local + Lyria cloud)                  */
+/* ------------------------------------------------------------------ */
+
+export type MusicEngine = "acestep" | "lyria-clip" | "lyria-pro";
+
+export interface MusicSetupStatus {
+  pythonPath: string | null;
+  pythonVersion: string | null;
+  venvReady: boolean;
+  acestepInstalled: boolean;
+  checkpointsDownloaded: boolean;
+  installing: boolean;
+  generatingJobId: string | null;
+}
+
+export interface MusicSetupProgressEvent {
+  phase: "venv" | "pip";
+  line: string;
+}
+
+export interface MusicGenerateRequest {
+  jobId: string;
+  engine: MusicEngine;
+  prompt: string;
+  lyrics: string;
+  /** Seconds; ACE-Step only (Lyria Clip is fixed 30 s, Pro is prompt-driven). */
+  durationSeconds: number;
+  inferSteps: number;
+  guidanceScale: number;
+  seed: number | null;
+}
+
+export interface MusicGenerateProgressEvent {
+  jobId: string;
+  phase:
+    | "starting"
+    | "downloading-checkpoints"
+    | "loading-model"
+    | "generating"
+    | "saving";
+  percent: number | null;
+  message: string;
+}
+
+export interface MusicGenerateResult extends ImportedMediaFile {
+  duration: number | null;
+  /** Lyrics returned by Lyria alongside the audio, when present. */
+  lyrics: string | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Built-in Gemini editing agent                                       */
+/* ------------------------------------------------------------------ */
+
+export interface GeminiChatSendRequest {
+  projectId: string;
+  message: string;
+  /** Upload project video to Google for multimodal understanding. */
+  includeVideo: boolean;
+}
+
+export type GeminiChatRole = "user" | "assistant";
+
+export interface GeminiChatMessage {
+  id: string;
+  role: GeminiChatRole;
+  text: string;
+  /** Present when this assistant turn applied an edit plan. */
+  editSummary: string | null;
+  editId: string | null;
+}
+
+export interface GeminiChatUpdateEvent {
+  projectId: string;
+  status: "thinking" | "inspecting" | "analyzing" | "applying-edit" | "uploading-video" | "done" | "error";
+  message: string | null;
+}

@@ -12,6 +12,7 @@ import {
   Menu,
   powerMonitor,
   protocol,
+  safeStorage,
   screen as electronScreen,
   shell,
 } from "electron";
@@ -53,11 +54,20 @@ import {
 } from "./ffmpeg";
 import { exportEditorVideo } from "./editor-export";
 import { ExportJobRegistry } from "./export-jobs";
+import { GeminiAgentManager } from "./gemini-agent";
+import { MusicGenerationManager } from "./music-generation";
+import { generateLyria } from "./music-lyria";
+import { ProviderKeysManager } from "./provider-keys";
 import {
   assertExportVideoRequest,
+  assertGeminiChatSendRequest,
+  assertMusicGenerateRequest,
   assertSaveEditorProjectStateRequest,
-  assertStartRecordingRequest
+  assertStartRecordingRequest,
+  assertSttTranscribeRequest,
+  assertUpdateProviderKeysRequest
 } from "./request-validation";
+import { killActiveSttProcesses, transcribeCloud } from "./stt-cloud";
 import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
 import { assertProjectDeletionTarget } from "./project-deletion";
@@ -76,16 +86,26 @@ import type {
   ExportVideoRequest,
   ExportVideoResult,
   FailRecordingRequest,
+  GeminiChatMessage,
+  GeminiChatSendRequest,
   ImportedMediaFile,
+  MusicGenerateProgressEvent,
+  MusicGenerateRequest,
+  MusicGenerateResult,
+  MusicSetupStatus,
   ProjectLibraryEntry,
   ProjectView,
+  ProviderKeysView,
   RenameProjectRequest,
   SaveEditorProjectStateRequest,
   SourceOverlayResult,
   SourceSummary,
   StartRecordingRequest,
   StopRecordingRequest,
+  SttTranscribeRequest,
+  SttTranscribeResult,
   UndoAgentEditRequest,
+  UpdateProviderKeysRequest,
   WriteChunkRequest
 } from "../shared/types";
 
@@ -139,6 +159,11 @@ let activeDisplayOverlayDisplayId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
 let aiConnectionManager: AiConnectionManager | null = null;
+let providerKeysManager: ProviderKeysManager | null = null;
+let musicGenerationManager: MusicGenerationManager | null = null;
+let geminiAgentManager: GeminiAgentManager | null = null;
+const sttJobs = new Map<string, AbortController>();
+const lyriaJobs = new Map<string, AbortController>();
 let editorStateWatcher: ReturnType<typeof watchFs> | null = null;
 let editorStateWatchTimer: NodeJS.Timeout | null = null;
 let watchedEditorProjectId: string | null = null;
@@ -169,6 +194,64 @@ const recorderWindowSize = {
 function getProjectLibrary(): ProjectLibrary {
   projectLibrary ??= new ProjectLibrary(path.join(app.getPath("userData"), "projects.json"));
   return projectLibrary;
+}
+
+function getProviderKeysManager(): ProviderKeysManager {
+  providerKeysManager ??= new ProviderKeysManager({
+    userDataPath: app.getPath("userData"),
+    safeStorage
+  });
+  return providerKeysManager;
+}
+
+/**
+ * Resolves an ovc-media:// / ovc-import:// URL through the same trusted
+ * lookups the media protocols use. Never accepts raw filesystem paths.
+ */
+function resolveMediaUrlToPath(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+    if (parsed.protocol === "ovc-import:" && parsed.hostname === "file") {
+      return segments[0] ? importedMediaCache.get(segments[0]) ?? null : null;
+    }
+    if (parsed.protocol === "ovc-media:" && parsed.hostname === "project") {
+      const [projectId, ...relativePathSegments] = segments;
+      if (!projectId || relativePathSegments.length === 0) return null;
+      return projectStore.resolveProjectFile(projectId, relativePathSegments.join(path.sep));
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getGeminiAgentManager(): GeminiAgentManager {
+  geminiAgentManager ??= new GeminiAgentManager({
+    userDataPath: app.getPath("userData"),
+    getApiKey: () => getProviderKeysManager().getGeminiKey(),
+    onUpdate: (event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send("gemini:chat-update", event);
+      }
+    },
+    requestEditorFlush: () => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send("editor:flush-request");
+      }
+    }
+  });
+  return geminiAgentManager;
+}
+
+function getMusicGenerationManager(): MusicGenerationManager {
+  musicGenerationManager ??= new MusicGenerationManager({
+    userDataPath: app.getPath("userData"),
+    wrapperScriptPath: app.isPackaged
+      ? path.join(process.resourcesPath, "acestep_generate.py")
+      : path.join(app.getAppPath(), "resources", "acestep_generate.py")
+  });
+  return musicGenerationManager;
 }
 
 function getAiConnectionManager(): AiConnectionManager {
@@ -801,6 +884,159 @@ function registerIpc(): void {
   ipcMain.handle("ai:disconnect", (_event, provider: AiProvider): Promise<AiConnectionStatus> => {
     assertAiProvider(provider);
     return getAiConnectionManager().disconnect(provider);
+  });
+
+  ipcMain.handle("providers:get", (): Promise<ProviderKeysView> =>
+    getProviderKeysManager().getView()
+  );
+  ipcMain.handle(
+    "providers:update",
+    (_event, request: UpdateProviderKeysRequest): Promise<ProviderKeysView> => {
+      assertUpdateProviderKeysRequest(request);
+      return getProviderKeysManager().update(request);
+    }
+  );
+
+  ipcMain.handle(
+    "stt:transcribe",
+    async (event, request: SttTranscribeRequest): Promise<SttTranscribeResult> => {
+      assertSttTranscribeRequest(request);
+      const control = new AbortController();
+      sttJobs.set(request.requestId, control);
+      const keys = getProviderKeysManager();
+      try {
+        return await transcribeCloud(request, {
+          resolveSourcePath: resolveMediaUrlToPath,
+          getApiKey: (provider) =>
+            provider === "cohere" ? keys.getCohereKey() : keys.getGeminiKey(),
+          getCohereLanguage: () => keys.getCohereLanguage(),
+          scratchDirectory: path.join(app.getPath("userData"), "stt-tmp"),
+          onProgress: (progress) => {
+            if (!event.sender.isDestroyed()) {
+              event.sender.send("stt:progress", { requestId: request.requestId, ...progress });
+            }
+          },
+          signal: control.signal
+        });
+      } finally {
+        sttJobs.delete(request.requestId);
+      }
+    }
+  );
+  ipcMain.handle("stt:cancel", (_event, requestId: unknown): boolean => {
+    if (typeof requestId !== "string") return false;
+    const control = sttJobs.get(requestId);
+    control?.abort();
+    return Boolean(control);
+  });
+
+  ipcMain.handle("music:get-status", (): Promise<MusicSetupStatus> =>
+    getMusicGenerationManager().getStatus()
+  );
+  ipcMain.handle("music:install", (event): Promise<MusicSetupStatus> =>
+    getMusicGenerationManager().install((progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send("music:setup-progress", progress);
+    })
+  );
+  ipcMain.handle(
+    "music:generate",
+    async (event, request: MusicGenerateRequest): Promise<MusicGenerateResult> => {
+      assertMusicGenerateRequest(request);
+      const sendProgress = (progress: MusicGenerateProgressEvent) => {
+        if (!event.sender.isDestroyed()) event.sender.send("music:generate-progress", progress);
+      };
+
+      let outputPath: string;
+      let extension: string;
+      let lyrics: string | null = null;
+
+      if (request.engine === "acestep") {
+        const generated = await getMusicGenerationManager().generateAceStep(request, sendProgress);
+        outputPath = generated.outputPath;
+        extension = "wav";
+      } else {
+        const apiKey = await getProviderKeysManager().getGeminiKey();
+        if (!apiKey) {
+          throw new Error("No Gemini API key is saved. Add one in the AI settings.");
+        }
+        const control = new AbortController();
+        lyriaJobs.set(request.jobId, control);
+        try {
+          sendProgress({
+            jobId: request.jobId,
+            phase: "generating",
+            percent: null,
+            message: "Composing with Lyria…"
+          });
+          const output = await generateLyria({
+            model: request.engine === "lyria-clip" ? "lyria-3-clip-preview" : "lyria-3-pro-preview",
+            prompt: request.prompt,
+            lyrics: request.lyrics,
+            apiKey,
+            signal: control.signal
+          });
+          extension = output.mimeType.includes("wav") ? "wav" : "mp3";
+          outputPath = path.join(
+            app.getPath("userData"), "acestep", "output", `${request.jobId}.${extension}`
+          );
+          await fs.mkdir(path.dirname(outputPath), { recursive: true });
+          await fs.writeFile(outputPath, output.audio);
+          lyrics = output.lyrics;
+        } finally {
+          lyriaJobs.delete(request.jobId);
+        }
+      }
+
+      sendProgress({
+        jobId: request.jobId,
+        phase: "saving",
+        percent: 100,
+        message: "Adding to timeline…"
+      });
+
+      const durationMs = await probeMediaDurationMs(outputPath).catch(() => null);
+      const importId = request.jobId;
+      importedMediaCache.set(importId, outputPath);
+      const promptSlug = request.prompt.trim().slice(0, 40) || "AI music";
+      return {
+        id: importId,
+        name: `${promptSlug}.${extension}`,
+        path: outputPath,
+        url: `ovc-import://file/${encodeURIComponent(importId)}`,
+        kind: "audio",
+        extension,
+        duration: durationMs === null ? null : durationMs / 1000,
+        lyrics
+      };
+    }
+  );
+  ipcMain.handle("music:cancel", (_event, jobId: unknown): boolean => {
+    if (typeof jobId !== "string") return false;
+    const lyria = lyriaJobs.get(jobId);
+    if (lyria) {
+      lyria.abort();
+      return true;
+    }
+    return getMusicGenerationManager().cancel(jobId);
+  });
+
+  ipcMain.handle(
+    "gemini:chat-send",
+    (_event, request: GeminiChatSendRequest): Promise<GeminiChatMessage[]> => {
+      assertGeminiChatSendRequest(request);
+      return getGeminiAgentManager().send(request);
+    }
+  );
+  ipcMain.handle("gemini:chat-history", (_event, projectId: unknown): GeminiChatMessage[] => {
+    return typeof projectId === "string" ? getGeminiAgentManager().getHistory(projectId) : [];
+  });
+  ipcMain.handle("gemini:chat-cancel", (_event, projectId: unknown): boolean => {
+    return typeof projectId === "string" ? getGeminiAgentManager().cancel(projectId) : false;
+  });
+  ipcMain.handle("gemini:chat-reset", (_event, projectId: unknown): boolean => {
+    if (typeof projectId !== "string") return false;
+    getGeminiAgentManager().reset(projectId);
+    return true;
   });
 
   ipcMain.handle("editor:set-session-state", async (_event, request: EditorSessionStateRequest): Promise<boolean> => {
@@ -1486,6 +1722,8 @@ app.on("will-quit", () => {
   void closeDisplayOverlay();
   closePermissionGuideWindow();
   killActiveFfmpegProcesses();
+  killActiveSttProcesses();
+  musicGenerationManager?.killActiveProcesses();
   globalShortcut.unregisterAll();
 });
 

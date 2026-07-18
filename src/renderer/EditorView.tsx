@@ -34,6 +34,8 @@ import { MediaPanel } from "./editor/panels/MediaPanel";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
 import { useEditorExport } from "./editor/useEditorExport";
 import { useEditorMediaActions } from "./editor/useEditorMediaActions";
+import { useGeminiChat } from "./editor/useGeminiChat";
+import { useMusicGeneration } from "./editor/useMusicGeneration";
 import { useEditorPlayback } from "./editor/useEditorPlayback";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
@@ -463,6 +465,7 @@ export function EditorView() {
     importCustomBackground,
     importMedia,
     importMediaFromPaths,
+    ingestImportedFiles,
     removeImportedMedia,
     selectTimelineItem,
     setAudioLevel,
@@ -489,6 +492,14 @@ export function EditorView() {
     setTimelineSegments,
     timelineSegments
   });
+
+  const musicGeneration = useMusicGeneration({
+    onGenerated: (result) =>
+      void ingestImportedFiles([result], { backgroundAudio: true, selectFirst: false }),
+    setError
+  });
+
+  const geminiChat = useGeminiChat({ projectId: project?.id ?? null });
 
   const {
     canExport,
@@ -557,7 +568,12 @@ export function EditorView() {
     deleteSelectedTimelineSegment,
     deleteTimelineSegment,
     endTimelineScrub,
+    cancelTranscription,
     generateSubtitles,
+    providerKeys,
+    refreshProviderKeys,
+    sttProvider,
+    updateProviderSettings,
     handleTimelineDragOver,
     handleTimelineDrop,
     moveTimelineScrub,
@@ -577,7 +593,11 @@ export function EditorView() {
     activeTool,
     allMedia,
     audioElsRef,
+    audioLevels,
     audioSources,
+    audioTimelineClips,
+    backgroundAudioIds,
+    videoTimelineClips,
     beginPlaybackInteraction,
     currentTime,
     currentTimeRef,
@@ -735,6 +755,7 @@ export function EditorView() {
           lastAgentEdit={lastAgentEdit}
           onClose={() => setAiDialogOpen(false)}
           onUndo={undoLastAgentEdit}
+          onProviderKeysChanged={() => void refreshProviderKeys()}
         />
 
         {exportDialogOpen ? (
@@ -803,6 +824,38 @@ export function EditorView() {
             sttDownloadProgress={sttDownloadProgress}
             sttStatus={sttStatus}
             sttModelLabel={whisperTranscriptionModelLabel}
+            sttProvider={sttProvider}
+            providerKeys={providerKeys}
+            onCancelTranscription={cancelTranscription}
+            onSttProviderChange={(provider) =>
+              void updateProviderSettings({ sttProvider: provider })
+            }
+            onCohereLanguageChange={(language) =>
+              void updateProviderSettings({ cohereLanguage: language })
+            }
+            onOpenAiSettings={() => setAiDialogOpen(true)}
+            musicSetupStatus={musicGeneration.setupStatus}
+            musicInstalling={musicGeneration.installing}
+            musicInstallLog={musicGeneration.installLog}
+            musicGenerationState={musicGeneration.generationState}
+            musicProgress={musicGeneration.progress}
+            musicLastLyrics={musicGeneration.lastLyrics}
+            onMusicInstall={() => void musicGeneration.install()}
+            onMusicGenerate={(form) => void musicGeneration.generate(form)}
+            onMusicCancel={musicGeneration.cancel}
+            assistantProjectId={project?.id ?? null}
+            assistantMessages={geminiChat.messages}
+            assistantSending={geminiChat.sending}
+            assistantStatusMessage={geminiChat.statusMessage}
+            assistantError={geminiChat.chatError}
+            assistantIncludeVideo={geminiChat.includeVideo}
+            assistantVideoConsent={geminiChat.videoConsent}
+            onAssistantIncludeVideoChange={geminiChat.setIncludeVideo}
+            onAssistantVideoConsentChange={geminiChat.setVideoConsent}
+            onAssistantSend={(message) => void geminiChat.send(message)}
+            onAssistantCancel={geminiChat.cancel}
+            onAssistantReset={() => void geminiChat.reset()}
+            onAssistantUndoEdit={() => void undoLastAgentEdit()}
             subtitleLanguage={formatSubtitleLanguage(subtitleLanguage)}
             subtitleStyle={subtitleStyle}
             subtitles={subtitles}
@@ -813,7 +866,12 @@ export function EditorView() {
             backgroundStyle={backgroundStyle}
             videoCornerStyle={videoCornerStyle}
             onSelectItem={selectTimelineItem}
-            onLayoutModeChange={setLayoutMode}
+            onLayoutModeChange={(mode) => {
+              setLayoutMode(mode);
+              // A preset describes a complete look; leftover manual drags or
+              // scaling would keep "fill" from filling and "fit" from fitting.
+              setScreenPosition({ x: 0, y: 0, scale: 100 });
+            }}
             onScreenScaleChange={(scale) =>
               setScreenPosition((current) => ({ ...current, scale }))
             }

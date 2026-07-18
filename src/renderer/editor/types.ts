@@ -41,6 +41,8 @@ export type EditorTool =
   | "media"
   | "layout"
   | "audio"
+  | "music"
+  | "assistant"
   | "zoom"
   | "speed"
   | "transitions"

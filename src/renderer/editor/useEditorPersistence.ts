@@ -522,6 +522,21 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, isReady]);
 
+  // The built-in AI assistant asks for a flush before applying an edit so the
+  // dirty-session guard in the main process can pass.
+  useEffect(() => {
+    if (!projectId || !isReady) return undefined;
+    return window.openVideoCraft.editor.onFlushRequest(() => {
+      if (dirtyRef.current) {
+        void saveStateRef.current(true);
+      } else {
+        notifySession(false);
+      }
+    });
+  // Uses refs; re-subscribing on project changes is enough.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, isReady]);
+
   useEffect(() => {
     if (!projectId) return undefined;
     return window.openVideoCraft.editor.onProjectStateChanged((external) => {
