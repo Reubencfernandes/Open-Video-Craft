@@ -66,9 +66,12 @@ export function isSupportedPythonVersion(version: string): boolean {
 }
 
 export function venvPythonPath(venvDirectory: string, platform: NodeJS.Platform): string {
+  // Join with the separator of the platform being asked about so the result
+  // is deterministic no matter which OS runs this code (or its tests).
+  const joiner = platform === "win32" ? path.win32 : path.posix;
   return platform === "win32"
-    ? path.join(venvDirectory, "Scripts", "python.exe")
-    : path.join(venvDirectory, "bin", "python");
+    ? joiner.join(venvDirectory, "Scripts", "python.exe")
+    : joiner.join(venvDirectory, "bin", "python");
 }
 
 const pythonCandidates = ["python3.12", "python3.11", "python3.10", "python3", "python"];
