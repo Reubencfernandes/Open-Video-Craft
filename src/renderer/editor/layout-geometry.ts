@@ -36,7 +36,8 @@ export function getScreenResizeDirection(mode: ScreenLayoutDragMode): { x: numbe
 
 export function getScreenFrameForAspectRatio(
   layoutMode: LayoutMode,
-  aspectRatio: ScreenAspectRatio
+  aspectRatio: ScreenAspectRatio,
+  intrinsicAspect: number | null = null
 ): PercentFrame {
   const bounds = getScreenFrameBounds(layoutMode);
   // The filled-screen preset must use the composition bounds themselves.
@@ -46,7 +47,10 @@ export function getScreenFrameForAspectRatio(
   if (layoutMode === "bubble-fill") {
     return bounds;
   }
-  return fitFrameInBounds(bounds, getScreenAspectRatioValue(aspectRatio));
+  return fitFrameInBounds(
+    bounds,
+    getScreenAspectRatioValue(aspectRatio, intrinsicAspect)
+  );
 }
 
 export function getCameraFrameFromPreset(
@@ -125,8 +129,18 @@ function getScreenFrameBounds(layoutMode: LayoutMode): PercentFrame {
   }
 }
 
-function getScreenAspectRatioValue(aspectRatio: ScreenAspectRatio): number {
+function getScreenAspectRatioValue(
+  aspectRatio: ScreenAspectRatio,
+  intrinsicAspect: number | null
+): number {
   switch (aspectRatio) {
+    // "auto" sizes the frame to the recording itself so the frame (and the
+    // selection border drawn on it) hugs the visible picture with no
+    // letterbox gap. Falls back to 16:9 until the video metadata is known.
+    case "auto":
+      return intrinsicAspect && Number.isFinite(intrinsicAspect) && intrinsicAspect > 0
+        ? intrinsicAspect
+        : 16 / 9;
     case "16:10":
       return 16 / 10;
     case "4:3":

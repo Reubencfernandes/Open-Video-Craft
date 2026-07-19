@@ -77,6 +77,7 @@ export function EditorPreviewPanel(props: {
   onMediaReady: () => void;
   onDuration: (duration: number | null) => void;
   onMediaDuration: (itemId: string, duration: number | null) => void;
+  onScreenDimensions: (width: number, height: number) => void;
   onPreviewZoomChange: (zoom: number) => void;
   onSubtitleClick: (subtitleId: string) => void;
   onTextOverlayClick: (textOverlayId: string) => void;
@@ -157,6 +158,7 @@ export function EditorPreviewPanel(props: {
                   props.onDuration(nextDuration);
                   props.onMediaDuration(previewItem.id, nextDuration);
                 }}
+                onScreenDimensions={props.onScreenDimensions}
                 onSubtitleClick={props.onSubtitleClick}
               />
             </div>

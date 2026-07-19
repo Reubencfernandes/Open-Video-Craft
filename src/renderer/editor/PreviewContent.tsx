@@ -74,6 +74,8 @@ export function PreviewContent(props: {
   ) => void;
   onMediaReady: () => void;
   onDuration: (duration: number | null) => void;
+  /** Reports the screen video's intrinsic pixel size once metadata loads. */
+  onScreenDimensions?: (width: number, height: number) => void;
   onSubtitleClick: (subtitleId: string) => void;
 }) {
   if (props.item.kind === "image") {
@@ -118,6 +120,10 @@ export function PreviewContent(props: {
               onCanPlay={props.onMediaReady}
               onLoadedMetadata={(event) => {
                 props.onDuration(event.currentTarget.duration);
+                props.onScreenDimensions?.(
+                  event.currentTarget.videoWidth,
+                  event.currentTarget.videoHeight
+                );
                 props.onMediaReady();
               }}
             />
@@ -178,6 +184,10 @@ export function PreviewContent(props: {
         onCanPlay={props.onMediaReady}
         onLoadedMetadata={(event) => {
           props.onDuration(event.currentTarget.duration);
+          props.onScreenDimensions?.(
+            event.currentTarget.videoWidth,
+            event.currentTarget.videoHeight
+          );
           props.onMediaReady();
         }}
       />

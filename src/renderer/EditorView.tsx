@@ -101,7 +101,8 @@ export function EditorView() {
     y: 0,
     scale: 100
   });
-  const [screenAspectRatio, setScreenAspectRatio] = useState<ScreenAspectRatio>("16:9");
+  const [screenAspectRatio, setScreenAspectRatio] = useState<ScreenAspectRatio>("auto");
+  const [screenMediaAspect, setScreenMediaAspect] = useState<number | null>(null);
   const [cameraSize, setCameraSize] = useState(24);
   const [cameraPosition, setCameraPosition] = useState<CameraPosition>("bottom-right");
   const [cameraFrame, setCameraFrame] = useState<CameraFrame>(() =>
@@ -336,6 +337,7 @@ export function EditorView() {
     layoutMode,
     project,
     screenAspectRatio,
+    screenMediaAspect,
     screenPosition,
     selectedItemId,
     selectedSubtitleId,
@@ -967,6 +969,9 @@ export function EditorView() {
             }
             onDuration={updateDuration}
             onMediaDuration={updateMediaDuration}
+            onScreenDimensions={(width, height) =>
+              setScreenMediaAspect(width > 0 && height > 0 ? width / height : null)
+            }
             onPreviewZoomChange={(zoom) => setPreviewZoom(clampNumber(zoom, 0.65, 1.6))}
             onSubtitleClick={(subtitleId) => {
               setSelectedSubtitleId(subtitleId);

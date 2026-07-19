@@ -57,7 +57,7 @@ const cameraSizeOptions = [
   { label: "L", value: 32 }
 ];
 
-const screenAspectOptions: ScreenAspectRatio[] = ["16:9", "16:10", "4:3"];
+const screenAspectOptions: ScreenAspectRatio[] = ["auto", "16:9", "16:10", "4:3"];
 
 const cameraPositionOptions: CameraPosition[] = [
   "top-left",
@@ -166,7 +166,7 @@ export function LayoutPanel(props: {
                       key={aspectRatio}
                       onClick={() => props.onScreenAspectRatioChange(aspectRatio)}
                     >
-                      {aspectRatio}
+                      {aspectRatio === "auto" ? "Auto" : aspectRatio}
                     </button>
                   ))}
                 </div>

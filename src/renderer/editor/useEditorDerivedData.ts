@@ -63,6 +63,8 @@ type UseEditorDerivedDataParams = {
   selectedTextOverlayId: string | null;
   layoutMode: LayoutMode;
   screenAspectRatio: ScreenAspectRatio;
+  /** Intrinsic aspect ratio (w/h) of the screen recording, once known. */
+  screenMediaAspect: number | null;
   screenPosition: ScreenPosition;
   backgroundStyle: BackgroundStyle;
   customBackgroundUrl: string | null;
@@ -97,6 +99,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     selectedTextOverlayId,
     layoutMode,
     screenAspectRatio,
+    screenMediaAspect,
     screenPosition,
     backgroundStyle,
     customBackgroundUrl,
@@ -218,7 +221,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     layoutMode === "presenter" ||
     layoutMode === "side-overlap";
   const screenFrame = screenAspectEnabled
-    ? getScreenFrameForAspectRatio(layoutMode, screenAspectRatio)
+    ? getScreenFrameForAspectRatio(layoutMode, screenAspectRatio, screenMediaAspect)
     : null;
   const sideBySideScreenFrame =
     layoutMode === "side-by-side" ? { x: 40, y: 0, width: 60, height: 100 } : null;

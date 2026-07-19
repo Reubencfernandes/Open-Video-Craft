@@ -25,7 +25,7 @@ export function createDefaultEditorState(): EditorStateSnapshot {
     cameraSize: 24, cameraPosition: "bottom-right", cameraShape: "circle",
     cameraBorderStyle: "light", cameraContentTransform: { x: 0, y: 0, scale: 100, mirrored: false },
     videoCornerStyle: "soft", screenPosition: { x: 0, y: 0, scale: 100 },
-    screenAspectRatio: "16:9", cameraFrame: { x: 72, y: 72, size: 24 },
+    screenAspectRatio: "auto", cameraFrame: { x: 72, y: 72, size: 24 },
     masterVolume: 100, audioLevels: {}, backgroundAudioIds: [],
     customBackgroundImportId: null, trimRange: { start: 0, end: 0 }
   };
@@ -92,7 +92,7 @@ export function validateEditorStateSnapshot(value: unknown): value is EditorStat
     oneOf(value.cameraShape, ["circle", "rounded", "square"]) &&
     oneOf(value.cameraBorderStyle, ["none", "light", "accent"]) &&
     isCameraContentTransform(value.cameraContentTransform) && oneOf(value.videoCornerStyle, ["flat", "soft", "round"]) &&
-    isXYZ(value.screenPosition, ["x", "y", "scale"]) && oneOf(value.screenAspectRatio, ["16:9", "16:10", "4:3"]) &&
+    isXYZ(value.screenPosition, ["x", "y", "scale"]) && oneOf(value.screenAspectRatio, ["auto", "16:9", "16:10", "4:3"]) &&
     isXYZ(value.cameraFrame, ["x", "y", "size"]) && finite(value.masterVolume) && isAudioLevels(value.audioLevels) &&
     isArrayOf(value.backgroundAudioIds, (item): item is string => typeof item === "string") &&
     (value.customBackgroundImportId === null || typeof value.customBackgroundImportId === "string") &&
