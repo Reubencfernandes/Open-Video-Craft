@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  getTimelineLaneIdsBetween,
+  getTimelineRangeSelectionForSegments,
   getTimelineSegmentIdsInRange,
+  isTimelineTimedItemInRange,
   moveTimelineSegment,
   moveTimelineSegmentGroup
 } from "../src/renderer/editor/timeline-utils";
-import type { TimelineSegment } from "../src/renderer/editor/types";
+import type { TimelineLaneId, TimelineSegment } from "../src/renderer/editor/types";
 
 function videoSegment(id: string, start: number, end: number): TimelineSegment {
   return { id, itemId: `item-${id}`, track: "video", lane: 0, start, end, sourceStart: 0 };
+}
+
+function audioSegment(id: string, lane: number, start: number, end: number): TimelineSegment {
+  return { id, itemId: `item-${id}`, track: "audio", lane, start, end, sourceStart: 0 };
 }
 
 function segmentById(segments: TimelineSegment[], id: string): TimelineSegment {
@@ -57,14 +64,73 @@ describe("moveTimelineSegment", () => {
 });
 
 describe("timeline range selection", () => {
-  it("selects every clip touched by the marked time range", () => {
+  it("selects only clips touched by both the marked time and chosen lane", () => {
     const segments = [
       videoSegment("a", 0, 3),
       videoSegment("b", 4, 7),
-      videoSegment("c", 8, 10)
+      videoSegment("c", 8, 10),
+      audioSegment("music-0", 0, 1, 6),
+      audioSegment("music-1", 1, 1, 6)
     ];
-    expect(getTimelineSegmentIdsInRange(segments, 2, 8)).toEqual(["a", "b"]);
-    expect(getTimelineSegmentIdsInRange(segments, 8, 2)).toEqual(["a", "b"]);
+    expect(getTimelineSegmentIdsInRange(segments, 2, 8, ["video"])).toEqual(["a", "b"]);
+    expect(getTimelineSegmentIdsInRange(segments, 8, 2, ["audio:1"])).toEqual(["music-1"]);
+    expect(getTimelineSegmentIdsInRange(segments, 2, 8, ["video", "audio:0"])).toEqual([
+      "a",
+      "music-0",
+      "b"
+    ]);
+  });
+
+  it("does not select unrelated media when the marquee covers only effect lanes", () => {
+    const segments = [videoSegment("video", 0, 10), audioSegment("audio", 0, 0, 10)];
+    expect(getTimelineSegmentIdsInRange(segments, 2, 8, ["zoom", "speed"])).toEqual([]);
+  });
+
+  it("selects timed effects only inside their painted lane and time bounds", () => {
+    const selection = { start: 2, end: 6, laneIds: ["zoom", "text"] as TimelineLaneId[] };
+    expect(isTimelineTimedItemInRange(selection, "zoom", 4, 8)).toBe(true);
+    expect(isTimelineTimedItemInRange(selection, "speed", 4, 8)).toBe(false);
+    expect(isTimelineTimedItemInRange(selection, "text", 6, 9)).toBe(false);
+  });
+
+  it("rebuilds a moved group range from the clips' actual lanes and bounds", () => {
+    const segments = [
+      videoSegment("video", 5, 8),
+      audioSegment("voice", 2, 7, 10),
+      audioSegment("other", 0, 1, 3)
+    ];
+    expect(getTimelineRangeSelectionForSegments(segments, ["video", "voice"])).toEqual({
+      start: 5,
+      end: 10,
+      laneIds: ["video", "audio:2"]
+    });
+  });
+
+  it("builds an inclusive ordered lane range in either drag direction", () => {
+    const lanes: TimelineLaneId[] = [
+      "video",
+      "zoom",
+      "speed",
+      "subtitles",
+      "text",
+      "audio:0",
+      "audio:1"
+    ];
+    expect(getTimelineLaneIdsBetween(lanes, "speed", "audio:1")).toEqual([
+      "speed",
+      "subtitles",
+      "text",
+      "audio:0",
+      "audio:1"
+    ]);
+    expect(getTimelineLaneIdsBetween(lanes, "audio:1", "speed")).toEqual([
+      "speed",
+      "subtitles",
+      "text",
+      "audio:0",
+      "audio:1"
+    ]);
+    expect(getTimelineLaneIdsBetween(lanes, "zoom", "zoom")).toEqual(["zoom"]);
   });
 
   it("moves a selected group with its spacing intact", () => {

@@ -9,6 +9,7 @@ import type {
 } from "react";
 import {
   areTimelineSegmentsEqual,
+  getTimelineRangeSelectionForSegments,
   moveTimelineSegmentGroup,
   trimTimelineSegment
 } from "./timeline-utils";
@@ -161,16 +162,9 @@ export function useTimelineMediaDragInteractions(
         params.scheduleTimelinePlaybackSync(next);
       }
       if (drag.originalRangeSelection) {
-        const originalAnchor = drag.originalSegments.find(
-          (item) => item.id === drag.segmentId
+        params.setTimelineRangeSelection(
+          getTimelineRangeSelectionForSegments(next, drag.segmentIds)
         );
-        const nextAnchor = next.find((item) => item.id === drag.segmentId);
-        const actualDelta =
-          originalAnchor && nextAnchor ? nextAnchor.start - originalAnchor.start : 0;
-        params.setTimelineRangeSelection({
-          start: drag.originalRangeSelection.start + actualDelta,
-          end: drag.originalRangeSelection.end + actualDelta
-        });
       }
       return next;
     });

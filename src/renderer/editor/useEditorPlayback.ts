@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { getEffectiveAudioLevel } from "../../shared/editor-domain";
 import { AudioMeter } from "./audio-meter";
 import { canDriftSeek } from "./media-utils";
 import { resolveNextTimelineTime } from "./playback-clock";
@@ -272,14 +273,18 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       if (!element) {
         continue;
       }
-      const level = audioLevels[clip.item.id] ?? { volume: 100, muted: false };
+      const level = getEffectiveAudioLevel(audioLevels, clip.item.id, clip.lane);
       applyAudioGain(element, level.muted ? 0 : level.volume / 100);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterVolume, audioLevels, audioTimelineClips]);
 
-  function getClipVolume(itemId: string): number {
-    const level = audioLevelsRef.current[itemId] ?? { volume: 100, muted: false };
+  function getClipVolume(clip: TimelineMediaClip): number {
+    const level = getEffectiveAudioLevel(
+      audioLevelsRef.current,
+      clip.item.id,
+      clip.lane
+    );
     if (level.muted) {
       return 0;
     }
@@ -582,7 +587,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
           reason,
           syncKey: clip.id,
           clipChanged: false,
-          volume: getClipVolume(clip.item.id),
+          volume: getClipVolume(clip),
           label: "audio",
           useEngine: true
         });

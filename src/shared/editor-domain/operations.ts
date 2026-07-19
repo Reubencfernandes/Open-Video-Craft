@@ -1,4 +1,5 @@
-import { finite, isSubtitleSegment, validateEditorStateSnapshot } from "./schema";
+import { finite, isSubtitleSegment, isTextOverlay, validateEditorStateSnapshot } from "./schema";
+import { getAudioLaneLevelKey } from "./audio-levels";
 import type {
   EditorEditOperation,
   EditorEditResult,
@@ -111,6 +112,85 @@ export function applyEditorOperations(
         };
         break;
       }
+      case "set_audio_lane": {
+        next.audioLevels[getAudioLaneLevelKey(operation.lane)] = {
+          volume: gainDbToVolume(operation.gainDb),
+          muted: operation.muted
+        };
+        break;
+      }
+      case "set_master_volume":
+        next.masterVolume = operation.volume;
+        break;
+      case "set_background_audio":
+        next.backgroundAudioIds = [...new Set(operation.itemIds)];
+        break;
+      case "set_layout":
+        next.layoutMode = operation.layoutMode;
+        break;
+      case "set_background":
+        next.backgroundStyle = operation.style;
+        next.activeBackgroundCategory = operation.category;
+        next.customBackgroundImportId = operation.style === "custom"
+          ? operation.customImportId ?? next.customBackgroundImportId
+          : null;
+        if (operation.style === "custom" && !next.customBackgroundImportId) {
+          throw new Error("A custom background requires an imported image ID.");
+        }
+        break;
+      case "set_camera":
+        if (operation.size !== undefined) next.cameraSize = operation.size;
+        if (operation.position !== undefined) next.cameraPosition = operation.position;
+        if (operation.shape !== undefined) next.cameraShape = operation.shape;
+        if (operation.borderStyle !== undefined) next.cameraBorderStyle = operation.borderStyle;
+        if (operation.contentTransform !== undefined) next.cameraContentTransform = structuredClone(operation.contentTransform);
+        if (operation.frame !== undefined) next.cameraFrame = structuredClone(operation.frame);
+        break;
+      case "set_screen":
+        if (operation.position !== undefined) next.screenPosition = structuredClone(operation.position);
+        if (operation.aspectRatio !== undefined) next.screenAspectRatio = operation.aspectRatio;
+        if (operation.cornerStyle !== undefined) next.videoCornerStyle = operation.cornerStyle;
+        break;
+      case "set_text_overlay":
+        if (!isTextOverlay(operation.overlay)) throw new Error("Invalid text overlay.");
+        validateEffectRange(operation.overlay, getEditorDuration(next), "Text overlay");
+        next.textOverlays = upsertTimedEffect(next.textOverlays ?? [], structuredClone(operation.overlay));
+        break;
+      case "remove_text_overlay": {
+        const overlays = next.textOverlays ?? [];
+        if (!overlays.some((overlay) => overlay.id === operation.id)) {
+          throw new Error(`Unknown text overlay "${operation.id}".`);
+        }
+        next.textOverlays = overlays.filter((overlay) => overlay.id !== operation.id);
+        break;
+      }
+      case "set_subtitle_preferences":
+        if (operation.language !== undefined) next.subtitleLanguage = operation.language;
+        if (operation.style !== undefined) next.subtitleStyle = operation.style;
+        break;
+      case "set_editor_view":
+        if (operation.previewQuality !== undefined) next.previewQuality = operation.previewQuality;
+        if (operation.timelineZoom !== undefined) next.timelineZoom = operation.timelineZoom;
+        if (operation.previewZoom !== undefined) next.previewZoom = operation.previewZoom;
+        break;
+      case "import_media":
+        next.pendingMediaImport = {
+          requestId: createRuntimeId(),
+          paths: [...operation.paths],
+          placement: operation.placement,
+          timelineStart: operation.timelineStart ?? 0
+        };
+        warnings.push("Media import was queued for the open editor.");
+        break;
+      case "generate_music":
+        next.pendingMusicGeneration = {
+          requestId: createRuntimeId(),
+          engine: operation.engine,
+          prompt: operation.prompt.trim(),
+          lyrics: operation.lyrics ?? ""
+        };
+        warnings.push("Music generation was queued for the open editor.");
+        break;
       case "set_zoom": {
         const effect: ZoomEffect = {
           id: operation.id,
@@ -560,6 +640,10 @@ function isTimelineSegment(value: unknown): value is TimelineSegment {
 
 function requireRange(value: number, min: number, max: number, label: string): void {
   if (!finite(value) || value < min || value > max) throw new Error(`Invalid ${label}.`);
+}
+
+function gainDbToVolume(gainDb: number): number {
+  return Math.round(Math.pow(10, gainDb / 20) * 10000) / 100;
 }
 
 function createRuntimeId(): string {

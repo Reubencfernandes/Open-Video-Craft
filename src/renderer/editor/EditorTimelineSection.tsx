@@ -42,6 +42,10 @@ export function EditorTimelineSection(props: {
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   audioLevels: Record<string, { volume: number; muted: boolean }>;
+  onSetAudioLevel: (
+    itemId: string,
+    patch: Partial<{ volume: number; muted: boolean }>
+  ) => void;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
   transitions: ClipTransition[];
@@ -132,6 +136,7 @@ export function EditorTimelineSection(props: {
       videoClips={props.videoClips}
       audioTracks={props.audioTracks}
       audioLevels={props.audioLevels}
+      onSetAudioLevel={props.onSetAudioLevel}
       zoomEffects={props.zoomEffects}
       speedEffects={props.speedEffects}
       transitions={props.transitions}

@@ -1,10 +1,10 @@
 /**
- * Music AI tool: generate background music with ACE-Step (local) or Lyria 3
- * (Gemini cloud) and drop it straight onto the timeline as background audio.
+ * Music AI tool: generate background music with Lyria 3 through Gemini and
+ * drop it straight onto the timeline as background audio.
  */
 import { useState } from "react";
-import { Download, KeyRound, Loader2, Music4, X } from "lucide-react";
-import type { MusicEngine, MusicSetupStatus, ProviderKeysView } from "../../../shared/types";
+import { KeyRound, Loader2, Music4, X } from "lucide-react";
+import type { MusicEngine, ProviderKeysView } from "../../../shared/types";
 import type {
   MusicGenerationForm,
   MusicGenerationState
@@ -12,11 +12,6 @@ import type {
 import type { MusicGenerateProgressEvent } from "../../../shared/types";
 
 const engineOptions: Array<{ id: MusicEngine; label: string; hint: string }> = [
-  {
-    id: "acestep",
-    label: "ACE-Step (local)",
-    hint: "Runs on this Mac. First use installs Python packages and downloads ~7 GB of model weights."
-  },
   {
     id: "lyria-clip",
     label: "Lyria 3 Clip (cloud)",
@@ -31,43 +26,33 @@ const engineOptions: Array<{ id: MusicEngine; label: string; hint: string }> = [
 
 const phaseLabels: Record<MusicGenerateProgressEvent["phase"], string> = {
   starting: "Starting…",
-  "downloading-checkpoints": "Downloading model (~7 GB, one time)…",
-  "loading-model": "Loading model…",
+  "downloading-checkpoints": "Preparing music…",
+  "loading-model": "Preparing music…",
   generating: "Generating music…",
   saving: "Adding to timeline…"
 };
 
 export function MusicPanel(props: {
-  setupStatus: MusicSetupStatus | null;
-  installing: boolean;
-  installLog: string[];
   generationState: MusicGenerationState;
   progress: MusicGenerateProgressEvent | null;
   lastLyrics: string | null;
   providerKeys: ProviderKeysView | null;
-  onInstall: () => void;
   onGenerate: (form: MusicGenerationForm) => void;
   onCancel: () => void;
   onOpenAiSettings: () => void;
 }) {
-  const [engine, setEngine] = useState<MusicEngine>("acestep");
+  const [engine, setEngine] = useState<MusicEngine>("lyria-clip");
   const [prompt, setPrompt] = useState("");
   const [lyrics, setLyrics] = useState("");
-  const [durationSeconds, setDurationSeconds] = useState(30);
-  const [seedText, setSeedText] = useState("");
 
   const generating = props.generationState === "generating";
-  const status = props.setupStatus;
-  const needsPython = engine === "acestep" && status !== null && status.pythonPath === null;
-  const needsInstall =
-    engine === "acestep" && status !== null && status.pythonPath !== null && !status.acestepInstalled;
-  const needsGeminiKey = engine !== "acestep" && props.providerKeys?.hasGeminiKey === false;
-  const acestepReady = status?.acestepInstalled === true;
+  const providerKeysLoading = props.providerKeys === null;
+  const hasGeminiKey = props.providerKeys?.hasGeminiKey === true;
+  const needsGeminiKey = !providerKeysLoading && !hasGeminiKey;
   const canGenerate =
     prompt.trim().length > 0 &&
     !generating &&
-    !props.installing &&
-    (engine === "acestep" ? acestepReady : !needsGeminiKey);
+    hasGeminiKey;
 
   const selectedEngine = engineOptions.find((option) => option.id === engine);
 
@@ -90,42 +75,8 @@ export function MusicPanel(props: {
       </label>
       <p className="text-[0.68rem] leading-4 text-slate-500">{selectedEngine?.hint}</p>
 
-      {needsPython ? (
-        <div className="grid gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100">
-          <span className="font-bold">Python 3.10–3.12 not found</span>
-          <span>
-            ACE-Step runs on Python. Install Python 3.12 and reopen this panel.
-          </span>
-          <button
-            className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-amber-300/40 px-2 font-bold hover:bg-amber-400/20"
-            type="button"
-            onClick={() => void window.openVideoCraft.app.openExternal("https://www.python.org/downloads/")}
-          >
-            Get Python
-          </button>
-        </div>
-      ) : null}
-
-      {needsInstall ? (
-        <div className="grid gap-2 rounded-lg border border-white/[0.08] p-3 text-xs">
-          <span className="font-bold text-slate-300">
-            One-time setup: install the ACE-Step engine (several GB of Python packages).
-          </span>
-          <button
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.055] px-3 font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
-            type="button"
-            disabled={props.installing}
-            onClick={props.onInstall}
-          >
-            {props.installing ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />}
-            {props.installing ? "Installing…" : "Install ACE-Step"}
-          </button>
-          {props.installing && props.installLog.length > 0 ? (
-            <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-all rounded bg-black/30 p-2 text-[0.6rem] leading-3 text-slate-400">
-              {props.installLog.slice(-8).join("\n")}
-            </pre>
-          ) : null}
-        </div>
+      {providerKeysLoading ? (
+        <p className="text-[0.68rem] leading-4 text-slate-500">Loading Gemini settings…</p>
       ) : null}
 
       {needsGeminiKey ? (
@@ -160,34 +111,6 @@ export function MusicPanel(props: {
         />
       </label>
 
-      {engine === "acestep" ? (
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <label className="grid gap-1 font-extrabold text-slate-400">
-            <span>Duration (s)</span>
-            <input
-              className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 text-white"
-              type="number"
-              min={5}
-              max={240}
-              value={durationSeconds}
-              disabled={generating}
-              onChange={(event) => setDurationSeconds(Number(event.target.value))}
-            />
-          </label>
-          <label className="grid gap-1 font-extrabold text-slate-400">
-            <span>Seed (blank = random)</span>
-            <input
-              className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 text-white"
-              type="number"
-              min={0}
-              value={seedText}
-              disabled={generating}
-              onChange={(event) => setSeedText(event.target.value)}
-            />
-          </label>
-        </div>
-      ) : null}
-
       <button
         className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
         type="button"
@@ -197,10 +120,12 @@ export function MusicPanel(props: {
             engine,
             prompt: prompt.trim(),
             lyrics,
-            durationSeconds: Math.min(240, Math.max(5, durationSeconds || 30)),
+            // These fields remain in the shared request contract for the
+            // legacy local engine; Lyria ignores them.
+            durationSeconds: 30,
             inferSteps: 27,
             guidanceScale: 15,
-            seed: seedText.trim() === "" ? null : Math.max(0, Math.floor(Number(seedText)) || 0)
+            seed: null
           })
         }
       >

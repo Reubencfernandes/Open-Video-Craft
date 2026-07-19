@@ -1,5 +1,5 @@
 /** Persists the preview-quality preference without adding state to EditorView. */
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   readPreviewQuality,
   writePreviewQuality,
@@ -11,10 +11,10 @@ export function usePreviewQuality() {
     readPreviewQuality(window.localStorage)
   );
 
-  function setQuality(nextQuality: PreviewQuality) {
+  const setQuality = useCallback((nextQuality: PreviewQuality) => {
     setQualityState(nextQuality);
     writePreviewQuality(window.localStorage, nextQuality);
-  }
+  }, []);
 
   return { quality, setQuality };
 }

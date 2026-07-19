@@ -40,9 +40,11 @@ export function AssistantPanel(props: {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [props.messages.length, props.statusMessage]);
 
-  const missingKey = props.providerKeys?.hasGeminiKey === false;
+  const providerKeysLoading = props.providerKeys === null;
+  const hasGeminiKey = props.providerKeys?.hasGeminiKey === true;
+  const missingKey = !providerKeysLoading && !hasGeminiKey;
   const canSend =
-    props.projectId !== null && !props.sending && !missingKey && draft.trim().length > 0;
+    props.projectId !== null && !props.sending && hasGeminiKey && draft.trim().length > 0;
 
   const submit = () => {
     if (!canSend) return;
@@ -59,9 +61,13 @@ export function AssistantPanel(props: {
   }
 
   return (
-    <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
-      <div className="grid gap-2">
-        {missingKey ? (
+    <div className="grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 overflow-hidden">
+      <div className="grid min-w-0 gap-2">
+        {providerKeysLoading ? (
+          <p className="flex items-center gap-2 rounded-md bg-white/[0.035] px-2.5 py-2 text-[0.68rem] text-slate-400">
+            <Loader2 className="animate-spin" size={12} /> Loading Gemini settings…
+          </p>
+        ) : missingKey ? (
           <button
             className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 text-xs font-bold text-amber-200 hover:bg-amber-400/20"
             type="button"
@@ -72,7 +78,7 @@ export function AssistantPanel(props: {
         ) : (
           <label className="flex items-start gap-2 text-[0.68rem] leading-4 text-slate-400">
             <input
-              className="mt-0.5 accent-white"
+              className="mt-0.5 accent-violet-400"
               type="checkbox"
               checked={props.includeVideo}
               onChange={(event) => props.onIncludeVideoChange(event.target.checked)}
@@ -86,7 +92,7 @@ export function AssistantPanel(props: {
         {props.includeVideo && !props.videoConsent ? (
           <label className="flex items-start gap-2 rounded-md border border-amber-400/30 bg-amber-400/10 p-2 text-[0.68rem] leading-4 text-amber-100">
             <input
-              className="mt-0.5 accent-white"
+              className="mt-0.5 accent-violet-400"
               type="checkbox"
               checked={props.videoConsent}
               onChange={(event) => props.onVideoConsentChange(event.target.checked)}
@@ -99,7 +105,7 @@ export function AssistantPanel(props: {
         ) : null}
       </div>
 
-      <div className="grid min-h-0 content-start gap-2 overflow-auto pr-1" ref={threadRef}>
+      <div className="grid min-h-0 min-w-0 content-start gap-2 overflow-x-hidden overflow-y-auto pr-1" ref={threadRef}>
         {props.messages.length === 0 ? (
           <div className="grid gap-2">
             <p className="flex items-center gap-2 text-xs font-bold text-slate-400">
@@ -110,7 +116,7 @@ export function AssistantPanel(props: {
                 className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-bold text-slate-300 hover:bg-white/[0.08] hover:text-white"
                 type="button"
                 key={action}
-                disabled={props.sending || missingKey}
+                disabled={props.sending || !hasGeminiKey}
                 onClick={() => props.onSend(action)}
               >
                 {action}
@@ -121,17 +127,17 @@ export function AssistantPanel(props: {
 
         {props.messages.map((message) => (
           <div
-            className={`grid max-w-[92%] gap-1 rounded-lg px-3 py-2 text-xs leading-4 ${
+            className={`grid min-w-0 max-w-[92%] gap-1 overflow-hidden rounded-lg px-3 py-2 text-xs leading-4 ${
               message.role === "user"
                 ? "justify-self-end bg-violet-500/20 text-white"
                 : "justify-self-start border border-white/10 bg-white/[0.04] text-slate-200"
             }`}
             key={message.id}
           >
-            <span className="whitespace-pre-wrap break-words">{message.text}</span>
+            <span className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{message.text}</span>
             {message.editSummary ? (
-              <div className="mt-1 flex items-center justify-between gap-2 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[0.62rem] font-bold text-emerald-200">
-                <span className="min-w-0 truncate">✓ {message.editSummary}</span>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center justify-between gap-1.5 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1 text-[0.62rem] font-bold text-emerald-200">
+                <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">✓ {message.editSummary}</span>
                 <button
                   className="inline-flex shrink-0 items-center gap-1 rounded px-1 hover:bg-white/10"
                   type="button"
@@ -146,9 +152,11 @@ export function AssistantPanel(props: {
         ))}
 
         {props.sending ? (
-          <div className="flex items-center gap-2 justify-self-start rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-300">
+          <div className="flex min-w-0 max-w-full items-center gap-2 justify-self-start rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-slate-300">
             <Loader2 className="animate-spin" size={13} />
-            {props.statusMessage ?? "Working…"}
+            <span className="min-w-0 break-words [overflow-wrap:anywhere]">
+              {props.statusMessage ?? "Working…"}
+            </span>
             <button
               className="ml-1 rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-white"
               type="button"
@@ -161,18 +169,24 @@ export function AssistantPanel(props: {
         ) : null}
 
         {props.chatError ? (
-          <p className="rounded bg-red-500/10 px-3 py-2 text-xs text-red-300">{props.chatError}</p>
+          <p className="rounded bg-rose-500/10 px-3 py-2 text-xs text-rose-300">{props.chatError}</p>
         ) : null}
       </div>
 
-      <div className="grid gap-1.5">
-        <div className="flex items-end gap-2">
+      <div className="grid min-w-0 shrink-0 gap-1.5">
+        <div className="flex min-w-0 items-end gap-2">
           <textarea
-            className="min-h-10 w-full resize-none rounded-lg border border-white/10 bg-black/20 p-2.5 text-xs font-semibold text-white outline-none focus:border-violet-400"
-            placeholder={missingKey ? "Add a Gemini API key first…" : "e.g. delete the part where nothing happens"}
+            className="min-h-10 min-w-0 flex-1 resize-none rounded-lg border border-white/10 bg-black/20 p-2.5 text-xs font-semibold text-white outline-none focus:border-violet-400"
+            placeholder={
+              providerKeysLoading
+                ? "Loading Gemini settings…"
+                : missingKey
+                  ? "Add a Gemini API key first…"
+                  : "e.g. delete the part where nothing happens"
+            }
             rows={2}
             value={draft}
-            disabled={props.sending || missingKey}
+            disabled={props.sending || !hasGeminiKey}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {

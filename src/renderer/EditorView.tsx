@@ -38,6 +38,7 @@ import { useGeminiChat } from "./editor/useGeminiChat";
 import { useMusicGeneration } from "./editor/useMusicGeneration";
 import { useEditorPlayback } from "./editor/useEditorPlayback";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
+import { usePreviewQuality } from "./editor/usePreviewQuality";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
 import { useTimelineController } from "./editor/useTimelineController";
 import { useTimelineViewport } from "./editor/useTimelineViewport";
@@ -51,6 +52,10 @@ import { canSplitTimelineSegmentAt, findSplittableTimelineSegment } from "./edit
 import { clampNumber, createId } from "./editor/utils";
 import { getZoomPreviewTime } from "./editor/zoom-utils";
 import { sanitizeClipTransitions, validateClipTransitions } from "../shared/editor-domain";
+import type {
+  PendingMediaImport,
+  PendingMusicGeneration
+} from "../shared/editor-domain";
 import type {
   BackgroundCategory,
   BackgroundStyle,
@@ -150,7 +155,13 @@ export function EditorView() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [timelineViewDuration, setTimelineViewDuration] = useState(0);
+  const [timelineZoom, setTimelineZoom] = useState(1);
   const [previewZoom, setPreviewZoom] = useState(1);
+  const { quality: previewQuality, setQuality: setPreviewQuality } = usePreviewQuality();
+  const [pendingMediaImport, setPendingMediaImport] =
+    useState<PendingMediaImport | null>(null);
+  const [pendingMusicGeneration, setPendingMusicGeneration] =
+    useState<PendingMusicGeneration | null>(null);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const { updateStatus, installUpdate } = useAppUpdateStatus();
 
@@ -161,7 +172,6 @@ export function EditorView() {
     hasUnsavedChanges,
     isReady: isEditorStateReady,
     lastAgentEdit,
-    revision,
     saveState,
     undoLastAgentEdit
   } = useEditorPersistence({
@@ -180,6 +190,8 @@ export function EditorView() {
     knownTimelineItemIdsRef,
     layoutMode,
     masterVolume,
+    pendingMediaImport,
+    pendingMusicGeneration,
     onProjectCreated: (nextProjectId) => {
       setProjectId(nextProjectId);
       const url = new URL(window.location.href);
@@ -189,6 +201,8 @@ export function EditorView() {
     pendingProjectName,
     project,
     projectId,
+    previewQuality,
+    previewZoom,
     screenAspectRatio,
     screenPosition,
     setActiveBackgroundCategory,
@@ -207,6 +221,10 @@ export function EditorView() {
     setImportedMedia,
     setLayoutMode,
     setMasterVolume,
+    setPendingMediaImport,
+    setPendingMusicGeneration,
+    setPreviewQuality,
+    setPreviewZoom,
     setProject,
     setScreenAspectRatio,
     setScreenPosition,
@@ -217,6 +235,7 @@ export function EditorView() {
     setSubtitles,
     setTextOverlays,
     setTimelineSegments,
+    setTimelineZoom,
     setTrimRange,
     setVideoCornerStyle,
     setZoomEffects,
@@ -227,6 +246,7 @@ export function EditorView() {
     subtitles,
     textOverlays,
     timelineSegments,
+    timelineZoom,
     trimRange,
     videoCornerStyle,
     zoomEffects
@@ -404,7 +424,6 @@ export function EditorView() {
     cameraRef,
     currentTimeRef,
     endPlaybackInteraction,
-    getAudioLevel,
     mainVideoRef,
     playingRef,
     scheduleTimelinePlaybackSync,
@@ -445,12 +464,13 @@ export function EditorView() {
     resetTimelineZoom,
     seekTimelinePointer,
     timelinePanelHeight,
-    timelineZoom,
     zoomTimelineIn,
     zoomTimelineOut
   } = useTimelineViewport({
     renderDuration: timelineRenderDuration,
-    seek
+    seek,
+    timelineZoom,
+    setTimelineZoom
   });
 
   const {
@@ -500,6 +520,42 @@ export function EditorView() {
       void ingestImportedFiles([result], { backgroundAudio: true, selectFirst: false }),
     setError
   });
+
+  const handledMediaImportIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isEditorStateReady || !pendingMediaImport) return;
+    if (handledMediaImportIdsRef.current.has(pendingMediaImport.requestId)) return;
+    handledMediaImportIdsRef.current.add(pendingMediaImport.requestId);
+    const request = pendingMediaImport;
+    setPendingMediaImport(null);
+    void importMediaFromPaths(request.paths, {
+      addToTimeline: request.placement === "timeline",
+      backgroundAudio: request.placement === "background-audio",
+      customBackground: request.placement === "custom-background",
+      selectFirst: request.placement === "media-bin",
+      timelineStart: request.timelineStart
+    }).catch((importError) => {
+      setError(`AI media import failed: ${importError instanceof Error ? importError.message : String(importError)}`);
+    });
+  }, [isEditorStateReady, pendingMediaImport, importMediaFromPaths, setError]);
+
+  const handledMusicGenerationIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isEditorStateReady || !pendingMusicGeneration) return;
+    if (handledMusicGenerationIdsRef.current.has(pendingMusicGeneration.requestId)) return;
+    handledMusicGenerationIdsRef.current.add(pendingMusicGeneration.requestId);
+    const request = pendingMusicGeneration;
+    setPendingMusicGeneration(null);
+    void musicGeneration.generate({
+      engine: request.engine,
+      prompt: request.prompt,
+      lyrics: request.lyrics,
+      durationSeconds: 30,
+      inferSteps: 60,
+      guidanceScale: 15,
+      seed: null
+    });
+  }, [isEditorStateReady, pendingMusicGeneration, musicGeneration]);
 
   const geminiChat = useGeminiChat({ projectId: project?.id ?? null });
 
@@ -635,6 +691,7 @@ export function EditorView() {
     setSpeedEffects,
     setSubtitleLanguage,
     setSubtitles,
+    setTextOverlays,
     setTimelineContextMenu,
     setTimelineRangeSelection,
     setTimelineSegments,
@@ -753,7 +810,6 @@ export function EditorView() {
 
         <AiConnectionDialog
           open={aiDialogOpen}
-          revision={revision}
           lastAgentEdit={lastAgentEdit}
           onClose={() => setAiDialogOpen(false)}
           onUndo={undoLastAgentEdit}
@@ -815,8 +871,6 @@ export function EditorView() {
             masterVolume={masterVolume}
             audioSources={audioSources}
             audioLevels={audioLevels}
-            audioPlaying={playing}
-            getAudioLevel={getAudioLevel}
             previewItem={previewItem}
             selectedZoomEffect={selectedZoomEffect}
             selectedSpeedEffect={selectedSpeedEffect}
@@ -836,13 +890,9 @@ export function EditorView() {
               void updateProviderSettings({ cohereLanguage: language })
             }
             onOpenAiSettings={() => setAiDialogOpen(true)}
-            musicSetupStatus={musicGeneration.setupStatus}
-            musicInstalling={musicGeneration.installing}
-            musicInstallLog={musicGeneration.installLog}
             musicGenerationState={musicGeneration.generationState}
             musicProgress={musicGeneration.progress}
             musicLastLyrics={musicGeneration.lastLyrics}
-            onMusicInstall={() => void musicGeneration.install()}
             onMusicGenerate={(form) => void musicGeneration.generate(form)}
             onMusicCancel={musicGeneration.cancel}
             assistantProjectId={project?.id ?? null}
@@ -932,6 +982,7 @@ export function EditorView() {
           <EditorPreviewPanel
             previewClassName={previewClassName}
             previewFrameStyle={previewFrameStyle}
+            previewQuality={previewQuality}
             previewZoom={previewZoom}
             previewItem={previewItem}
             videoTimelineClips={videoTimelineClips}
@@ -972,6 +1023,7 @@ export function EditorView() {
             onScreenDimensions={(width, height) =>
               setScreenMediaAspect(width > 0 && height > 0 ? width / height : null)
             }
+            onPreviewQualityChange={setPreviewQuality}
             onPreviewZoomChange={(zoom) => setPreviewZoom(clampNumber(zoom, 0.65, 1.6))}
             onSubtitleClick={(subtitleId) => {
               setSelectedSubtitleId(subtitleId);
@@ -1009,6 +1061,7 @@ export function EditorView() {
           videoClips={videoTimelineClips}
           audioTracks={audioTimelineTracks}
           audioLevels={audioLevels}
+          onSetAudioLevel={setAudioLevel}
           zoomEffects={zoomEffects}
           speedEffects={speedEffects}
           transitions={transitions}
@@ -1018,10 +1071,10 @@ export function EditorView() {
           selectedSegmentId={selectedTimelineSegmentId}
           selectedSegmentIds={selectedTimelineSegmentIds}
           rangeSelection={timelineRangeSelection}
-          selectedZoomId={selectedZoomEffect?.id ?? null}
-          selectedSpeedId={selectedSpeedEffect?.id ?? null}
-          selectedSubtitleId={selectedSubtitle?.id ?? null}
-          selectedTextOverlayId={selectedTextOverlay?.id ?? null}
+          selectedZoomId={selectedZoomId}
+          selectedSpeedId={selectedSpeedId}
+          selectedSubtitleId={selectedSubtitleId}
+          selectedTextOverlayId={selectedTextOverlayId}
           contextMenu={timelineContextMenu}
           canSplitAtContextMenu={
             timelineContextMenu

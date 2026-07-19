@@ -10,8 +10,10 @@ const { createDefaultEditorState } = require("../dist-electron/shared/editor-dom
 const root = await mkdtemp(path.join(os.tmpdir(), "ovc-mcp-smoke-"));
 const userData = path.join(root, "user-data");
 const projectRoot = path.join(root, "project");
+const queuedImportPath = path.join(root, "clip.mp4");
 await mkdir(userData, { recursive: true });
 await mkdir(path.join(projectRoot, "media"), { recursive: true });
+await writeFile(queuedImportPath, "smoke-test-placeholder");
 const now = new Date().toISOString();
 const project = {
   schemaVersion: 1, appVersion: "test", id: "mcp-smoke", name: "MCP smoke",
@@ -56,8 +58,14 @@ try {
   }
   const inspect = await client.callTool({ name: "inspect_project", arguments: { projectId: project.id } });
   if (inspect.isError) throw new Error("inspect_project failed");
-  if (inspect.structuredContent?.editCapabilities?.zoom !== true || inspect.structuredContent?.exportCapabilities?.speedEffects !== true) {
-    throw new Error("inspect_project did not advertise end-to-end zoom and speed support");
+  if (
+    inspect.structuredContent?.editCapabilities?.zoom !== true ||
+    inspect.structuredContent?.editCapabilities?.layouts !== true ||
+    inspect.structuredContent?.editCapabilities?.lyriaMusicGeneration !== true ||
+    inspect.structuredContent?.exportCapabilities?.speedEffects !== true ||
+    inspect.structuredContent?.editorState?.layoutMode !== "bubble"
+  ) {
+    throw new Error("inspect_project did not advertise or return the expanded editor state");
   }
   const rejectedScope = await client.callTool({
     name: "apply_edit_plan",
@@ -77,15 +85,29 @@ try {
     arguments: {
       projectId: project.id,
       baseRevision: 1,
-      userRequest: "Add a focused zoom and speed up the demo, then set the export range and transition.",
-      requestedActions: ["zoom", "speed", "export_range", "transitions"],
+      userRequest: "Add effects and update the composition, audio, text, view, media queue, Lyria queue, subtitles, and export range.",
+      requestedActions: [
+        "zoom", "speed", "export_range", "transitions", "layout", "background",
+        "camera", "screen", "text", "audio", "view", "media", "music", "subtitles"
+      ],
       editingBasis: { mode: "direct", reason: "This smoke test provides explicit effect timings." },
       summary: "Set requested effects, range, and transition",
       operations: [
         { type: "set_zoom", id: "zoom-demo", start: 1, end: 3, speed: "fast", easing: "ease-out", scale: 1.8, targetX: 50, targetY: 50 },
         { type: "set_speed", id: "speed-demo", start: 6, end: 8, rate: 2 },
         { type: "set_export_range", start: 1, end: 9 },
-        { type: "set_transition", fromSegmentId: "screen:segment-0", toSegmentId: "screen:segment-1", transition: "crossfade", duration: 0.6 }
+        { type: "set_transition", fromSegmentId: "screen:segment-0", toSegmentId: "screen:segment-1", transition: "crossfade", duration: 0.6 },
+        { type: "set_layout", layoutMode: "side-by-side" },
+        { type: "set_background", style: "gradient-2", category: "gradient" },
+        { type: "set_camera", size: 30, position: "top-right", shape: "rounded", borderStyle: "accent" },
+        { type: "set_screen", position: { x: 5, y: -5, scale: 90 }, aspectRatio: "16:9", cornerStyle: "round" },
+        { type: "set_text_overlay", overlay: { id: "mcp-title", start: 1, end: 3, text: "MCP", x: 50, y: 20, size: 64, color: "#ffffff", weight: 700, animation: "fade" } },
+        { type: "set_audio_lane", lane: 0, gainDb: -6, muted: true },
+        { type: "set_master_volume", volume: 80 },
+        { type: "set_editor_view", previewQuality: "low", timelineZoom: 2, previewZoom: 1.1 },
+        { type: "import_media", paths: [queuedImportPath], placement: "media-bin" },
+        { type: "generate_music", engine: "lyria-clip", prompt: "Soft ambient underscore" },
+        { type: "set_subtitle_preferences", language: "English", style: "boxed" }
       ]
     }
   });
@@ -99,6 +121,14 @@ try {
   }
   if (transitioned.structuredContent?.zoomEffects?.[0]?.id !== "zoom-demo" || transitioned.structuredContent?.speedEffects?.[0]?.rate !== 2) {
     throw new Error("apply_edit_plan did not persist zoom and speed effects");
+  }
+  if (
+    transitioned.structuredContent?.editorState?.layoutMode !== "side-by-side" ||
+    transitioned.structuredContent?.editorState?.textOverlays?.[0]?.id !== "mcp-title" ||
+    transitioned.structuredContent?.editorState?.pendingMediaImport?.paths?.[0] !== queuedImportPath ||
+    transitioned.structuredContent?.editorState?.pendingMusicGeneration?.engine !== "lyria-clip"
+  ) {
+    throw new Error("apply_edit_plan did not persist the expanded editor operations");
   }
   const undone = await client.callTool({
     name: "undo_agent_edit",

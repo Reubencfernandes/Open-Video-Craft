@@ -19,10 +19,10 @@ export class AiConnectionManager {
   }) {}
 
   async getStatus(): Promise<AiConnectionStatus> {
-    const [privacyAccepted, codex, claude] = await Promise.all([
-      this.getPrivacyAccepted(), this.getProviderStatus("codex"), this.getProviderStatus("claude")
+    const [privacyAccepted, claude] = await Promise.all([
+      this.getPrivacyAccepted(), this.getProviderStatus("claude")
     ]);
-    return { privacyAccepted, providers: [codex, claude] };
+    return { privacyAccepted, providers: [claude] };
   }
 
   async configure(provider: AiProvider, privacyAccepted: boolean): Promise<AiConnectionStatus> {

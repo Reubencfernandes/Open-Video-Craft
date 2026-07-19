@@ -2,7 +2,7 @@
  * Compact bottom-right notification shared by launcher and editor errors/status.
  * Error text remains fully visible and can be copied for bug reports.
  */
-import { Check, CheckCircle2, Clipboard, X, XCircle } from "lucide-react";
+import { Check, Clipboard, X, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export type FloatingNotificationKind = "success" | "error";
@@ -17,7 +17,7 @@ export function FloatingNotification(props: {
 }) {
   const [copied, setCopied] = useState(false);
   const isError = props.kind === "error";
-  const StatusIcon = isError ? XCircle : CheckCircle2;
+  const StatusIcon = isError ? XCircle : Check;
 
   // A new message must never inherit the previous card's copied state.
   useEffect(() => setCopied(false), [props.message]);
@@ -29,7 +29,7 @@ export function FloatingNotification(props: {
 
   return (
     <section
-      className={`notification-surface notification-surface--${props.kind} fixed bottom-4 right-4 z-[70] w-[min(27rem,calc(100vw-2rem))] overflow-hidden rounded-2xl px-6 py-5 text-white shadow-[0_20px_55px_rgb(0_0_0_/_0.58)] backdrop-blur-xl`}
+      className="notification-surface fixed bottom-4 right-4 z-[70] w-[min(27rem,calc(100vw-2rem))] overflow-hidden rounded-2xl px-6 py-5 text-white shadow-[0_20px_55px_rgb(0_0_0_/_0.58)] backdrop-blur-xl"
       role={isError ? "alert" : "status"}
       aria-live={isError ? "assertive" : "polite"}
     >
@@ -38,8 +38,8 @@ export function FloatingNotification(props: {
       </button>
 
       <div className="relative flex items-center gap-5 pr-5">
-        <span className={`grid size-9 shrink-0 place-items-center rounded-full border-2 ${isError ? "border-rose-400 text-rose-300" : "border-emerald-400 text-emerald-300"}`}>
-          <StatusIcon size={19} />
+        <span className={`grid size-9 shrink-0 place-items-center ${isError ? "rounded-full border-2 border-rose-400 text-rose-300" : "text-emerald-300"}`}>
+          <StatusIcon size={isError ? 19 : 25} strokeWidth={isError ? 2 : 2.75} />
         </span>
 
         <div className="min-w-0 flex-1">

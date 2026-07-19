@@ -1,6 +1,6 @@
 /**
- * Keyboard helpers: detecting when the user is typing in a text control and
- * blurring focused controls before global shortcuts run.
+ * Keyboard helpers for keeping global editor shortcuts out of focused native
+ * and ARIA controls.
  */
 export function isKeyboardTextTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
@@ -24,13 +24,17 @@ export function isKeyboardTextTarget(target: EventTarget | null): boolean {
   );
 }
 
-export function blurFocusedShortcutControl(): void {
-  const activeElement = document.activeElement;
-  if (
-    activeElement instanceof HTMLElement &&
-    activeElement !== document.body &&
-    activeElement !== document.documentElement
-  ) {
-    activeElement.blur();
+/** Controls that must keep their native Space/arrow/delete key behavior. */
+export function isKeyboardInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
   }
+
+  return Boolean(
+    target.closest(
+      "button, input, select, textarea, a[href], [contenteditable='true'], " +
+      "[role='button'], [role='checkbox'], [role='radio'], [role='switch'], " +
+      "[role='slider'], [role='combobox'], [role='listbox'], [role='menuitem'], [role='tab']"
+    )
+  );
 }

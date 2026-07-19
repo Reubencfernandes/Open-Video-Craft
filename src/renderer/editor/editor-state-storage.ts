@@ -27,11 +27,22 @@ import {
 import type {
   AudioLevelState,
   EditorStateSnapshot,
+  PendingMediaImport,
+  PendingMusicGeneration,
+  PreviewQuality,
   ScreenPositionState,
   TrimRange
 } from "../../shared/editor-domain";
 
-export type { AudioLevelState, EditorStateSnapshot, ScreenPositionState, TrimRange } from "../../shared/editor-domain";
+export type {
+  AudioLevelState,
+  EditorStateSnapshot,
+  PendingMediaImport,
+  PendingMusicGeneration,
+  PreviewQuality,
+  ScreenPositionState,
+  TrimRange
+} from "../../shared/editor-domain";
 
 type CreateEditorStateSnapshotInput = Omit<EditorStateSnapshot, "v">;
 
@@ -50,6 +61,10 @@ type RestoreEditorStateActions = {
   setCustomBackgroundImportId: (value: string | null) => void;
   setLayoutMode: (value: LayoutMode) => void;
   setMasterVolume: (value: number) => void;
+  setPendingMediaImport: (value: PendingMediaImport | null) => void;
+  setPendingMusicGeneration: (value: PendingMusicGeneration | null) => void;
+  setPreviewQuality: (value: PreviewQuality) => void;
+  setPreviewZoom: (value: number) => void;
   setScreenAspectRatio: (value: ScreenAspectRatio) => void;
   setScreenPosition: (value: ScreenPositionState) => void;
   setSpeedEffects: (value: SpeedEffect[]) => void;
@@ -59,6 +74,7 @@ type RestoreEditorStateActions = {
   setSubtitles: (value: SubtitleSegment[]) => void;
   setTextOverlays: (value: TextOverlay[]) => void;
   setTimelineSegments: (value: TimelineSegment[]) => void;
+  setTimelineZoom: (value: number) => void;
   setVideoCornerStyle: (value: VideoCornerStyle) => void;
   setZoomEffects: (value: ZoomEffect[]) => void;
   setTrimRange: (value: TrimRange) => void;
@@ -84,6 +100,9 @@ export function restoreEditorStateSnapshot(
     }
 
     actions.setTimelineSegments(snapshot.timelineSegments);
+    if (snapshot.timelineZoom !== undefined) {
+      actions.setTimelineZoom(snapshot.timelineZoom);
+    }
     for (const segment of snapshot.timelineSegments) {
       actions.addKnownTimelineItemId(segment.itemId);
     }
@@ -107,6 +126,14 @@ export function restoreEditorStateSnapshot(
     actions.setScreenAspectRatio(snapshot.screenAspectRatio);
     actions.setCameraFrame(snapshot.cameraFrame);
     actions.setMasterVolume(snapshot.masterVolume);
+    actions.setPendingMediaImport(snapshot.pendingMediaImport ?? null);
+    actions.setPendingMusicGeneration(snapshot.pendingMusicGeneration ?? null);
+    if (snapshot.previewQuality !== undefined) {
+      actions.setPreviewQuality(snapshot.previewQuality);
+    }
+    if (snapshot.previewZoom !== undefined) {
+      actions.setPreviewZoom(snapshot.previewZoom);
+    }
     actions.setAudioLevels(snapshot.audioLevels);
     actions.setBackgroundAudioIds(snapshot.backgroundAudioIds);
     actions.setCustomBackgroundImportId(snapshot.customBackgroundImportId);

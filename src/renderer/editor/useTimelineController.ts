@@ -10,9 +10,9 @@
  *   - useTimelineClipboard        clip copy/cut/paste
  *   - useEditorShortcuts          global keyboard shortcuts
  *
- * This file contains no behavior of its own — it only routes each hook's
- * outputs into the hooks that need them (undo stacks into drags, commit into
- * clipboard, everything into shortcuts) and re-exports what the JSX uses.
+ * This file routes each hook's outputs into the hooks that need them and owns
+ * the one cross-kind operation: deleting every media/effect/text item touched
+ * by a lane-aware marquee.
  */
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 import type { PlaybackSyncReason } from "./playback-sync";
@@ -22,6 +22,7 @@ import { useSubtitleGeneration } from "./useSubtitleGeneration";
 import { useTimelineClipboard } from "./useTimelineClipboard";
 import { useTimelineDragInteractions } from "./useTimelineDragInteractions";
 import { useTimelineEditing } from "./useTimelineEditing";
+import { isTimelineTimedItemInRange } from "./timeline-utils";
 import type {
   EditorMediaItem,
   EditorTool,
@@ -80,6 +81,7 @@ type UseTimelineControllerParams = {
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
   setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
+  setTextOverlays: Dispatch<SetStateAction<TextOverlay[]>>;
   setTimelineContextMenu: Dispatch<SetStateAction<TimelineContextMenu>>;
   setTimelineRangeSelection: Dispatch<SetStateAction<TimelineRangeSelection | null>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
@@ -218,6 +220,67 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     timelineSegments: params.timelineSegments
   });
 
+  function deleteSelectedTimelineItems() {
+    const selection = params.timelineRangeSelection;
+    if (!selection) {
+      editing.deleteSelectedTimelineSegment();
+      return;
+    }
+
+    const zoomIds = new Set(
+      params.zoomEffects
+        .filter((item) =>
+          isTimelineTimedItemInRange(selection, "zoom", item.start, item.end)
+        )
+        .map((item) => item.id)
+    );
+    const speedIds = new Set(
+      params.speedEffects
+        .filter((item) =>
+          isTimelineTimedItemInRange(selection, "speed", item.start, item.end)
+        )
+        .map((item) => item.id)
+    );
+    const subtitleIds = new Set(
+      params.subtitles
+        .filter((item) =>
+          isTimelineTimedItemInRange(selection, "subtitles", item.start, item.end)
+        )
+        .map((item) => item.id)
+    );
+    const textIds = new Set(
+      params.textOverlays
+        .filter((item) =>
+          isTimelineTimedItemInRange(selection, "text", item.start, item.end)
+        )
+        .map((item) => item.id)
+    );
+
+    if (params.selectedTimelineSegmentIds.length > 0 || params.selectedTimelineSegmentId) {
+      editing.deleteSelectedTimelineSegment();
+    } else {
+      params.setSelectedTimelineSegmentId(null);
+      params.setSelectedTimelineSegmentIds([]);
+      params.setTimelineRangeSelection(null);
+    }
+    if (zoomIds.size > 0) {
+      params.setZoomEffects((current) => current.filter((item) => !zoomIds.has(item.id)));
+    }
+    if (speedIds.size > 0) {
+      params.setSpeedEffects((current) => current.filter((item) => !speedIds.has(item.id)));
+    }
+    if (subtitleIds.size > 0) {
+      params.setSubtitles((current) => current.filter((item) => !subtitleIds.has(item.id)));
+    }
+    if (textIds.size > 0) {
+      params.setTextOverlays((current) => current.filter((item) => !textIds.has(item.id)));
+    }
+    params.setSelectedZoomId(null);
+    params.setSelectedSpeedId(null);
+    params.setSelectedSubtitleId(null);
+    params.setSelectedTextOverlayId(null);
+  }
+
   useEditorShortcuts({
     activeTool: params.activeTool,
     currentTime: params.currentTime,
@@ -225,6 +288,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     selectedTimelineSegmentId: params.selectedTimelineSegmentId,
     selectedZoomId: params.selectedZoomId,
     selectedSpeedId: params.selectedSpeedId,
+    hasTimelineRangeSelection: Boolean(params.timelineRangeSelection),
     seek: params.seek,
     undo: editing.undoTimelineEdit,
     redo: editing.redoTimelineEdit,
@@ -236,7 +300,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     togglePlayback: params.togglePlayback,
     removeZoom: effects.removeZoomEffect,
     removeSpeed: effects.removeSpeedEffect,
-    deleteSelected: editing.deleteSelectedTimelineSegment
+    deleteSelected: deleteSelectedTimelineItems
   });
 
   return {
@@ -250,7 +314,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     beginTimelineClipTrim: drags.beginTimelineClipTrim,
     beginTimelineScrub: drags.beginTimelineScrub,
     beginZoomClipDrag: drags.beginZoomClipDrag,
-    deleteSelectedTimelineSegment: editing.deleteSelectedTimelineSegment,
+    deleteSelectedTimelineSegment: deleteSelectedTimelineItems,
     deleteTimelineSegment: editing.deleteTimelineSegment,
     endTimelineScrub: drags.endTimelineScrub,
     cancelTranscription: subtitleGeneration.cancelTranscription,

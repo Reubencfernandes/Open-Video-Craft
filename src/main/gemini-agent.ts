@@ -47,16 +47,37 @@ const systemInstruction = `You are the AI editing assistant inside Open Video Cr
 
 Rules:
 - Apply only what the user asked for; never add unrelated cleanup, zooms, speed-ups, captions, or transitions.
-- Always call inspect_project before your first edit in a conversation, and run_analysis before content-aware edits (cuts, filler removal, subtitles).
+- Always call inspect_project before your first edit in a conversation, and run_analysis before content-aware edits (cuts, filler removal, generated subtitles). Layout, styling, view, audio-level, import, and music requests do not need analysis.
 - Times are in seconds on the project timeline. Zoom scale is 1–4, targetX/targetY are 0–100 percent. Speed rates are integers 1–5. Transition types: crossfade, fade-black, slide-left, wipe-left (duration 0.1–2 s). Subtitle styles: clean, karaoke, boxed, pop.
+- The complete editor operation types are: remove_ranges, trim_clip, delete_clip, split_clip, move_clip, sequence_clips, set_audio, set_audio_lane, set_master_volume, set_background_audio, set_layout, set_background, set_camera, set_screen, set_text_overlay, remove_text_overlay, set_subtitle_preferences, set_editor_view, import_media, generate_music, set_zoom, remove_zoom, set_speed, remove_speed, set_transition, remove_transition, replace_subtitles, update_subtitle, and set_export_range.
+- set_audio and set_audio_lane use gainDb (-60 to 12) plus muted. set_master_volume uses volume 0–100. set_editor_view accepts previewQuality high/low, timelineZoom 1–10, and previewZoom 0.65–1.6.
+- set_layout uses layoutMode screen-only/camera-only/bubble/bubble-fill/presenter/side-by-side/side-overlap. set_background uses style real-world-1..6, gradient-1..3, animated-1..3, or custom; category is image/gradient/animated and custom also needs customImportId.
+- set_camera may set size 8–60, position on the 3x3 top/middle/bottom-left/center/right grid, shape circle/rounded/square, borderStyle none/light/accent, contentTransform {x,y,scale,mirrored}, and frame {x,y,size}. set_screen may set position {x,y,scale}, aspectRatio auto/16:9/16:10/4:3, and cornerStyle flat/soft/round.
+- set_text_overlay takes overlay {id,start,end,text,x,y,size,color,weight,animation}; x/y are 0–100, color is #RRGGBB, weight is 400/600/700/800, and animation is none/fade/pop/slide-up. remove_text_overlay takes id. set_subtitle_preferences takes optional language and style.
+- import_media accepts paths plus placement media-bin/timeline/background-audio/custom-background and optional timelineStart. generate_music accepts engine lyria-clip/lyria-pro, prompt, and optional lyrics. Use these only when explicitly requested; they are queued for the open editor so local file access and saved provider credentials stay inside the app.
 - apply_edit_plan applies one coherent plan; put every operation for the request in a single call when possible. Segment ids and item ids must come from inspect_project.
 - If a tool reports a revision conflict, call inspect_project again and retry once with the new revision.
-- After editing, tell the user plainly what changed. Keep answers short and concrete.`;
+- After editing, tell the user plainly what changed. Keep answers short and concrete.
+- Never mention internal revision numbers, edit IDs, or checkpoint details in user-facing replies.`;
+
+interface GeminiFunctionCall {
+  id?: string;
+  name: string;
+  args?: Record<string, unknown>;
+}
+
+interface GeminiFunctionResponse {
+  id?: string;
+  name: string;
+  response: Record<string, unknown>;
+}
 
 interface GeminiPart {
   text?: string;
-  functionCall?: { name: string; args?: Record<string, unknown> };
-  functionResponse?: { name: string; response: Record<string, unknown> };
+  /** Opaque Gemini 3 reasoning state that must be replayed with the model turn. */
+  thoughtSignature?: string;
+  functionCall?: GeminiFunctionCall;
+  functionResponse?: GeminiFunctionResponse;
   fileData?: { fileUri: string; mimeType: string };
 }
 
@@ -70,14 +91,15 @@ interface AgentSession {
   messages: GeminiChatMessage[];
   videoFile: { uri: string; mimeType: string; trackPath: string } | null;
   abort: AbortController | null;
-  lastEdit: { editId: string; revision: number } | null;
+  lastEdit: { editId: string; revision: number; summary: string } | null;
+  lastMutation: { sequence: number; recoveryText: string } | null;
 }
 
 const toolDeclarations = [
   {
     name: "inspect_project",
     description:
-      "Read the saved project state: timeline segments (with ids), media, revision, duration, effects, subtitles, audio levels.",
+      "Read the complete saved project/editor state: timeline ids, media, revision, duration, composition/layout, backgrounds, camera/screen controls, text, subtitles, audio, and view settings.",
     parameters: { type: "object", properties: {} }
   },
   {
@@ -89,7 +111,7 @@ const toolDeclarations = [
   {
     name: "apply_edit_plan",
     description:
-      "Apply timeline edit operations to the project. Returns the new revision. Operations is an array of typed objects (remove_ranges, trim_clip, delete_clip, split_clip, move_clip, sequence_clips, set_audio, set_zoom, remove_zoom, set_speed, remove_speed, set_transition, remove_transition, replace_subtitles, update_subtitle, set_export_range).",
+      "Apply one revision-checked editor plan. Supports timeline edits, per-source/lane/master audio, layout/background/camera/screen composition, text overlays, subtitle settings, view quality/zoom, media import, Lyria music generation, effects, transitions, and export range.",
     parameters: {
       type: "object",
       properties: {
@@ -159,6 +181,8 @@ export class GeminiAgentManager {
 
     const control = new AbortController();
     session.abort = control;
+    const mutationSequenceAtStart = session.lastMutation?.sequence ?? 0;
+    let activeUserContent: GeminiContent | null = null;
 
     const update = (status: GeminiChatUpdateEvent["status"], message: string | null = null) =>
       this.input.onUpdate({ projectId: request.projectId, status, message });
@@ -173,7 +197,9 @@ export class GeminiAgentManager {
       }
       userParts.push({ text: request.message });
 
-      session.history.push({ role: "user", parts: userParts });
+      activeUserContent = { role: "user", parts: userParts };
+      session.history.push(activeUserContent);
+      trimHistory(session);
       session.messages.push({
         id: randomUUID(),
         role: "user",
@@ -184,7 +210,7 @@ export class GeminiAgentManager {
 
       update("thinking");
       const { text, editSummary, editId } = await this.runLoop(
-        request.projectId, session, apiKey, control.signal, update
+        request.projectId, session, apiKey, control.signal, request.includeVideo, update
       );
 
       session.messages.push({
@@ -197,6 +223,7 @@ export class GeminiAgentManager {
       update("done");
       return session.messages;
     } catch (error) {
+      recoverHistoryAfterFailure(session, activeUserContent, mutationSequenceAtStart);
       update("error", error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
@@ -207,7 +234,14 @@ export class GeminiAgentManager {
   private getSession(projectId: string): AgentSession {
     let session = this.sessions.get(projectId);
     if (!session) {
-      session = { history: [], messages: [], videoFile: null, abort: null, lastEdit: null };
+      session = {
+        history: [],
+        messages: [],
+        videoFile: null,
+        abort: null,
+        lastEdit: null,
+        lastMutation: null
+      };
       this.sessions.set(projectId, session);
     }
     return session;
@@ -218,13 +252,14 @@ export class GeminiAgentManager {
     session: AgentSession,
     apiKey: string,
     signal: AbortSignal,
+    includeVideo: boolean,
     update: (status: GeminiChatUpdateEvent["status"], message?: string | null) => void
   ): Promise<{ text: string; editSummary: string | null; editId: string | null }> {
     let editSummary: string | null = null;
     let editId: string | null = null;
 
     for (let turn = 0; turn < maxToolTurns; turn += 1) {
-      const parts = await this.generate(session, apiKey, signal);
+      const parts = await this.generate(session, apiKey, signal, includeVideo);
       const functionCalls = parts.filter((part) => part.functionCall);
       const text = parts
         .map((part) => part.text ?? "")
@@ -240,17 +275,18 @@ export class GeminiAgentManager {
 
       const responses: GeminiPart[] = [];
       for (const part of functionCalls) {
-        const call = part.functionCall as { name: string; args?: Record<string, unknown> };
+        const call = part.functionCall as GeminiFunctionCall;
         const outcome = await this.executeTool(projectId, session, call, update);
         if (outcome.appliedEdit) {
           editSummary = outcome.appliedEdit.summary;
           editId = outcome.appliedEdit.editId;
         }
         responses.push({
-          functionResponse: { name: call.name, response: outcome.response }
+          functionResponse: { id: call.id, name: call.name, response: outcome.response }
         });
       }
       session.history.push({ role: "user", parts: responses });
+      trimHistory(session);
     }
 
     return {
@@ -263,15 +299,22 @@ export class GeminiAgentManager {
   private async generate(
     session: AgentSession,
     apiKey: string,
-    signal: AbortSignal
+    signal: AbortSignal,
+    includeVideo: boolean
   ): Promise<GeminiPart[]> {
+    // Keep both the persisted session and this individual request bounded. The
+    // latter is deliberate: older sessions may have been created by a version
+    // that trimmed arbitrary content pairs and left a tool response orphaned.
+    trimHistory(session);
+    const historyWithoutFiles = includeVideo ? session.history : withoutFileData(session.history);
+    const contents = getBoundedHistory(historyWithoutFiles);
     const response = await fetch(`${geminiBase}/v1beta/models/${geminiModel}:generateContent`, {
       method: "POST",
       headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
       signal,
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemInstruction }] },
-        contents: session.history,
+        contents,
         tools: [{ functionDeclarations: toolDeclarations }]
       })
     });
@@ -346,25 +389,19 @@ export class GeminiAgentManager {
           }
 
           const record = await resolveCatalogProject(this.input.userDataPath, projectId);
-          // The editor autosaves ~1.5 s after changes; if it is mid-edit, ask it
-          // to flush and wait briefly so applyAgentEdit's dirty guard passes.
-          if (await hasFreshDirtySession(record.rootPath)) {
-            this.input.requestEditorFlush();
-            const flushDeadline = Date.now() + 5000;
-            while (
-              (await hasFreshDirtySession(record.rootPath)) &&
-              Date.now() < flushDeadline
-            ) {
-              await sleep(300);
-            }
-          }
+          await this.flushEditorIfDirty(record.rootPath);
           const result = await applyAgentEdit({
             rootPath: record.rootPath,
             baseRevision,
             summary,
             operations
           });
-          session.lastEdit = { editId: result.editId, revision: result.document.revision };
+          session.lastEdit = {
+            editId: result.editId,
+            revision: result.document.revision,
+            summary
+          };
+          recordMutation(session, `The requested edit was applied successfully: ${summary}`);
           return {
             response: {
               revision: result.document.revision,
@@ -380,6 +417,7 @@ export class GeminiAgentManager {
           if (!session.lastEdit) {
             return { response: { error: "There is no edit from this conversation to undo." } };
           }
+          const undoneSummary = session.lastEdit.summary;
           const record = await resolveCatalogProject(this.input.userDataPath, projectId);
           const document = await undoAgentEdit({
             rootPath: record.rootPath,
@@ -387,6 +425,7 @@ export class GeminiAgentManager {
             editId: session.lastEdit.editId
           });
           session.lastEdit = null;
+          recordMutation(session, `The previous edit was undone successfully: ${undoneSummary}`);
           return { response: { revision: document.revision, undone: true } };
         }
         default:
@@ -399,11 +438,13 @@ export class GeminiAgentManager {
 
   private async inspectProject(projectId: string): Promise<Record<string, unknown>> {
     const record = await resolveCatalogProject(this.input.userDataPath, projectId);
+    await this.flushEditorIfDirty(record.rootPath);
     const document = await readEditorDocument(record.rootPath);
     return {
       project: { id: record.project.id, name: record.project.name, status: record.project.status },
       revision: document?.revision ?? 0,
       timelineDuration: document ? getEditorDuration(document.state) : 0,
+      editorState: document?.state ?? null,
       timeline: document?.state.timelineSegments ?? [],
       zoomEffects: document?.state.zoomEffects ?? [],
       speedEffects: document?.state.speedEffects ?? [],
@@ -417,6 +458,21 @@ export class GeminiAgentManager {
         id: item.id, name: item.name, kind: item.kind, duration: item.duration
       }))
     };
+  }
+
+  private async flushEditorIfDirty(rootPath: string): Promise<void> {
+    // The renderer autosaves ~1.5 s after changes. Ask it to flush first so
+    // inspection and revision-checked edits both operate on the current state.
+    if (!(await hasFreshDirtySession(rootPath))) return;
+
+    this.input.requestEditorFlush();
+    const flushDeadline = Date.now() + 5000;
+    while (await hasFreshDirtySession(rootPath)) {
+      if (Date.now() >= flushDeadline) {
+        throw new Error("The project still has unsaved changes. Wait for autosave, then retry.");
+      }
+      await sleep(300);
+    }
   }
 
   private async runAnalysis(projectId: string): Promise<Record<string, unknown>> {
@@ -548,11 +604,113 @@ function summarizeAnalysis(analysis: {
 }
 
 function trimHistory(session: AgentSession): void {
-  // Keep the conversation bounded; drop the oldest exchanges but never split
-  // a model turn from its function responses (drop in pairs from the front).
-  while (session.history.length > maxHistoryContents) {
-    session.history.splice(0, 2);
+  session.history = getBoundedHistory(session.history);
+}
+
+/**
+ * Return a suffix made from whole top-level user turns. A turn begins with a
+ * regular user message and includes every model function call, opaque thought
+ * signature, matching user function response, and final model answer that
+ * follows it. Cutting only at these boundaries prevents Gemini from receiving
+ * a functionResponse whose functionCall was discarded.
+ */
+function getBoundedHistory(history: GeminiContent[]): GeminiContent[] {
+  const turns = splitIntoTopLevelUserTurns(history);
+  if (turns.length === 0) return [];
+
+  let firstTurn = turns.length - 1;
+  let contentCount = turns[firstTurn].length;
+  while (
+    firstTurn > 0 &&
+    contentCount + turns[firstTurn - 1].length <= maxHistoryContents
+  ) {
+    firstTurn -= 1;
+    contentCount += turns[firstTurn].length;
   }
+
+  // A single active turn cannot reach the limit with maxToolTurns=8. Should
+  // that invariant ever change, retaining its complete call/response chain is
+  // safer than producing a smaller but invalid Gemini request.
+  return turns.slice(firstTurn).flat();
+}
+
+function splitIntoTopLevelUserTurns(history: GeminiContent[]): GeminiContent[][] {
+  const boundaryIndexes: number[] = [];
+  for (let index = 0; index < history.length; index += 1) {
+    if (!isStandardUserContent(history[index])) continue;
+
+    // In a healthy transcript every later top-level user request follows a
+    // final (non-tool-calling) model answer. Requiring that relationship also
+    // repairs history left by an older arbitrary-pair trimmer: orphan tool
+    // prefixes are skipped until the next trustworthy boundary.
+    if (index === 0 || isFinalModelContent(history[index - 1])) {
+      boundaryIndexes.push(index);
+    }
+  }
+
+  return boundaryIndexes.map((start, boundaryIndex) => {
+    const end = boundaryIndexes[boundaryIndex + 1] ?? history.length;
+    return history.slice(start, end);
+  });
+}
+
+function isStandardUserContent(content: GeminiContent | undefined): boolean {
+  return Boolean(
+    content?.role === "user" &&
+    !content.parts.some((part) => part.functionResponse)
+  );
+}
+
+function isFinalModelContent(content: GeminiContent | undefined): boolean {
+  return Boolean(
+    content?.role === "model" &&
+    !content.parts.some((part) => part.functionCall)
+  );
+}
+
+function recoverHistoryAfterFailure(
+  session: AgentSession,
+  activeUserContent: GeminiContent | null,
+  mutationSequenceAtStart: number
+): void {
+  if (!activeUserContent) return;
+  const turnStart = session.history.indexOf(activeUserContent);
+  if (turnStart < 0) return;
+
+  const mutation = session.lastMutation;
+  if (!mutation || mutation.sequence === mutationSequenceAtStart) {
+    // Nothing irreversible happened, so discard the incomplete request. This
+    // avoids consecutive user messages or a dangling tool response on retry.
+    session.history.splice(turnStart);
+    trimHistory(session);
+    return;
+  }
+
+  // The edit (or undo) is already on disk and must remain visible to Gemini so
+  // retrying cannot silently perform it twice. The call and response are
+  // retained, then a short synthetic completion makes the interrupted turn
+  // valid for the next normal user request without exposing internal ids.
+  if (!isFinalModelContent(session.history.at(-1))) {
+    session.history.push({
+      role: "model",
+      parts: [{ text: mutation.recoveryText }]
+    });
+  }
+  trimHistory(session);
+}
+
+function recordMutation(session: AgentSession, recoveryText: string): void {
+  session.lastMutation = {
+    sequence: (session.lastMutation?.sequence ?? 0) + 1,
+    recoveryText
+  };
+}
+
+function withoutFileData(history: GeminiContent[]): GeminiContent[] {
+  return history.flatMap((content) => {
+    const parts = content.parts.filter((part) => !part.fileData);
+    return parts.length > 0 ? [{ ...content, parts }] : [];
+  });
 }
 
 function sleep(ms: number): Promise<void> {

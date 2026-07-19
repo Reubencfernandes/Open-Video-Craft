@@ -55,7 +55,7 @@ export function TimelineToolbar(props: {
         <button
           className={toolbarButtonClassName}
           type="button"
-          title="Delete selected clip(s)"
+          title="Delete selected timeline items"
           disabled={!props.canDelete}
           onClick={props.onDelete}
         >

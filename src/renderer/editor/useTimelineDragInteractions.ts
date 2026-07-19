@@ -24,6 +24,7 @@ import type {
 } from "react";
 import {
   findTimelineSegmentAtTime,
+  getTimelineLaneIdsBetween,
   getTimelineSegmentIdsInRange
 } from "./timeline-utils";
 import { useTimelineEffectDragInteractions } from "./useTimelineEffectDragInteractions";
@@ -34,6 +35,7 @@ import type {
   SubtitleSegment,
   TextOverlay,
   TimelineContextMenu,
+  TimelineLaneId,
   TimelineRangeSelection,
   TimelineSegment,
   TimelineTrimEdge,
@@ -126,6 +128,8 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   const timelineDragRef = useRef(false);
   const rangeSelectionDragRef = useRef<{
     anchorClientX: number;
+    anchorClientY: number;
+    anchorLaneId: TimelineLaneId;
     anchorTime: number;
     moved: boolean;
   } | null>(null);
@@ -230,25 +234,72 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   // (trim / zoom / speed / subtitle / move) and otherwise scrub the playhead.
   // ---------------------------------------------------------------------------
 
-  function updateTimelineRangeSelection(clientX: number) {
+  function getTimelineLaneEntries() {
+    const body = timelineBodyRef.current;
+    if (!body) return [];
+
+    return [...body.querySelectorAll<HTMLElement>("[data-timeline-lane]")]
+      .map((element) => {
+        const laneId = parseTimelineLaneId(element.dataset.timelineLane);
+        return laneId ? { element, laneId } : null;
+      })
+      .filter(
+        (entry): entry is { element: HTMLElement; laneId: TimelineLaneId } => Boolean(entry)
+      );
+  }
+
+  function getTimelineLaneIdAtClientY(clientY: number): TimelineLaneId | null {
+    const entries = getTimelineLaneEntries();
+    let nearest: { laneId: TimelineLaneId; distance: number } | null = null;
+
+    for (const entry of entries) {
+      const bounds = entry.element.getBoundingClientRect();
+      const distance =
+        clientY < bounds.top
+          ? bounds.top - clientY
+          : clientY > bounds.bottom
+            ? clientY - bounds.bottom
+            : 0;
+      if (!nearest || distance < nearest.distance) {
+        nearest = { laneId: entry.laneId, distance };
+      }
+      if (distance === 0) break;
+    }
+
+    return nearest?.laneId ?? null;
+  }
+
+  function updateTimelineRangeSelection(clientX: number, clientY: number) {
     const drag = rangeSelectionDragRef.current;
     const time = getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) {
+    const currentLaneId = getTimelineLaneIdAtClientY(clientY);
+    if (!drag || time === null || !currentLaneId) {
       return;
     }
 
-    if (!drag.moved && Math.abs(clientX - drag.anchorClientX) < 4) {
+    if (
+      !drag.moved &&
+      Math.hypot(clientX - drag.anchorClientX, clientY - drag.anchorClientY) < 4
+    ) {
       return;
     }
     drag.moved = true;
+    const laneIds = getTimelineLaneIdsBetween(
+      getTimelineLaneEntries().map((entry) => entry.laneId),
+      drag.anchorLaneId,
+      currentLaneId
+    );
+    if (laneIds.length === 0) return;
     const selection = {
       start: Math.min(drag.anchorTime, time),
-      end: Math.max(drag.anchorTime, time)
+      end: Math.max(drag.anchorTime, time),
+      laneIds
     };
     const ids = getTimelineSegmentIdsInRange(
       timelineSegments,
       selection.start,
-      selection.end
+      selection.end,
+      selection.laneIds
     );
     const primary =
       ids
@@ -262,6 +313,13 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     if (primary) {
       setSelectedItemId(primary.itemId);
     }
+  }
+
+  function clearSingularTimedItemSelection() {
+    setSelectedZoomId(null);
+    setSelectedSpeedId(null);
+    setSelectedSubtitleId(null);
+    setSelectedTextOverlayId(null);
   }
 
   function beginTimelineScrub(event: ReactPointerEvent<HTMLElement>) {
@@ -278,16 +336,25 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       return;
     }
 
-    setTimelineContextMenu(null);
-    beginPlaybackInteraction();
     if (event.currentTarget === timelineBodyRef.current) {
-      const time = getTimelineTimeFromClientX(event.clientX);
-      if (time === null) {
-        endPlaybackInteraction();
+      const targetLane = target?.closest<HTMLElement>(".track-lane");
+      const anchorLaneId = parseTimelineLaneId(
+        targetLane?.closest<HTMLElement>("[data-timeline-lane]")?.dataset.timelineLane
+      );
+      if (!targetLane || !anchorLaneId) {
         return;
       }
+      const time = getTimelineTimeFromClientX(event.clientX);
+      if (time === null) {
+        return;
+      }
+      clearSingularTimedItemSelection();
+      setTimelineContextMenu(null);
+      beginPlaybackInteraction();
       rangeSelectionDragRef.current = {
         anchorClientX: event.clientX,
+        anchorClientY: event.clientY,
+        anchorLaneId,
         anchorTime: time,
         moved: false
       };
@@ -295,6 +362,8 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       return;
     }
 
+    setTimelineContextMenu(null);
+    beginPlaybackInteraction();
     timelineDragRef.current = true;
     setScrubbingTimeline(true);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -303,7 +372,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
 
   function moveTimelineScrub(event: ReactPointerEvent<HTMLElement>) {
     if (rangeSelectionDragRef.current) {
-      updateTimelineRangeSelection(event.clientX);
+      updateTimelineRangeSelection(event.clientX, event.clientY);
       return;
     }
 
@@ -367,4 +436,18 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     moveTimelineScrub,
     openTimelineContextMenu
   };
+}
+
+function parseTimelineLaneId(value: string | undefined): TimelineLaneId | null {
+  if (
+    value === "video" ||
+    value === "zoom" ||
+    value === "speed" ||
+    value === "subtitles" ||
+    value === "text" ||
+    (value !== undefined && /^audio:\d+$/.test(value))
+  ) {
+    return value as TimelineLaneId;
+  }
+  return null;
 }

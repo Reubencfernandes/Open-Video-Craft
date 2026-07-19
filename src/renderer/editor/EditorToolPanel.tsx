@@ -3,7 +3,6 @@
  */
 import type {
   MusicGenerateProgressEvent,
-  MusicSetupStatus,
   ProviderKeysView,
   SttProviderId
 } from "../../shared/types";
@@ -54,8 +53,6 @@ export function EditorToolPanel(props: {
   masterVolume: number;
   audioSources: EditorMediaItem[];
   audioLevels: Record<string, { volume: number; muted: boolean }>;
-  audioPlaying: boolean;
-  getAudioLevel: () => number;
   previewItem: EditorMediaItem | null;
   selectedZoomEffect: ZoomEffect | null;
   selectedSpeedEffect: SpeedEffect | null;
@@ -71,13 +68,9 @@ export function EditorToolPanel(props: {
   onSttProviderChange: (provider: SttProviderId) => void;
   onCohereLanguageChange: (language: string) => void;
   onOpenAiSettings: () => void;
-  musicSetupStatus: MusicSetupStatus | null;
-  musicInstalling: boolean;
-  musicInstallLog: string[];
   musicGenerationState: MusicGenerationState;
   musicProgress: MusicGenerateProgressEvent | null;
   musicLastLyrics: string | null;
-  onMusicInstall: () => void;
   onMusicGenerate: (form: MusicGenerationForm) => void;
   onMusicCancel: () => void;
   assistantProjectId: string | null;
@@ -138,7 +131,11 @@ export function EditorToolPanel(props: {
   onCornerStyleChange: (style: VideoCornerStyle) => void;
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-auto transition">
+    <div
+      className={`flex min-h-0 flex-1 flex-col gap-2.5 transition ${
+        props.activeTool === "assistant" ? "overflow-hidden" : "overflow-auto"
+      }`}
+    >
 
       {props.activeTool === "layout" ? (
         <LayoutPanel
@@ -168,8 +165,6 @@ export function EditorToolPanel(props: {
           masterVolume={props.masterVolume}
           audioSources={props.audioSources}
           audioLevels={props.audioLevels}
-          playing={props.audioPlaying}
-          getAudioLevel={props.getAudioLevel}
           onMasterVolumeChange={props.onMasterVolumeChange}
           onAddBackgroundMusic={props.onAddBackgroundMusic}
           onSelectItem={props.onSelectItem}
@@ -229,14 +224,10 @@ export function EditorToolPanel(props: {
 
       {props.activeTool === "music" ? (
         <MusicPanel
-          setupStatus={props.musicSetupStatus}
-          installing={props.musicInstalling}
-          installLog={props.musicInstallLog}
           generationState={props.musicGenerationState}
           progress={props.musicProgress}
           lastLyrics={props.musicLastLyrics}
           providerKeys={props.providerKeys}
-          onInstall={props.onMusicInstall}
           onGenerate={props.onMusicGenerate}
           onCancel={props.onMusicCancel}
           onOpenAiSettings={props.onOpenAiSettings}

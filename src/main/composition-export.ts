@@ -17,7 +17,7 @@ import type {
   ExportVideoResult,
   ProjectFile
 } from "../shared/types";
-import { validateClipTransitions } from "../shared/editor-domain";
+import { getEffectiveAudioLevel, validateClipTransitions } from "../shared/editor-domain";
 import type { TextOverlay } from "../shared/editor-domain";
 
 export async function exportEditorProjectToPath(input: {
@@ -53,8 +53,14 @@ export async function exportEditorProjectToPath(input: {
   for (const segment of input.document.state.timelineSegments) {
     const source = sourceById.get(segment.itemId);
     if (!source) throw new Error(`Timeline media "${segment.itemId}" is unavailable.`);
-    const level = input.document.state.audioLevels[segment.itemId];
-    const volume = level?.muted ? 0 : Math.max(0, (level?.volume ?? 100) / 100) * input.document.state.masterVolume / 100;
+    const level = getEffectiveAudioLevel(
+      input.document.state.audioLevels,
+      segment.itemId,
+      segment.track === "audio" ? segment.lane : null
+    );
+    const volume = level.muted
+      ? 0
+      : Math.max(0, level.volume / 100) * input.document.state.masterVolume / 100;
     if (segment.track === "video") {
       if (source.kind === "audio") throw new Error(`Audio item "${segment.itemId}" cannot appear on the video track.`);
       videoSegments.push({

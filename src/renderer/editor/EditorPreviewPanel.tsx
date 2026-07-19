@@ -18,10 +18,10 @@ import {
 import { PreviewTransportBar } from "./PreviewTransportBar";
 import { TimelineAudioElements } from "./TimelineAudioElements";
 import { TextOverlayLayer } from "./TextOverlayLayer";
-import { usePreviewQuality } from "./usePreviewQuality";
 import { useElementFullscreen } from "./useElementFullscreen";
 import { getActiveTimelineTransition } from "./transition-utils";
 import type { ViewportSnapOverlay } from "./layout-snapping";
+import type { PreviewQuality } from "./preview-quality";
 import type {
   EditorMediaItem,
   ClipTransition,
@@ -36,6 +36,7 @@ import type {
 export function EditorPreviewPanel(props: {
   previewClassName: string;
   previewFrameStyle: CSSProperties;
+  previewQuality: PreviewQuality;
   previewZoom: number;
   previewItem: EditorMediaItem | null;
   videoTimelineClips: TimelineMediaClip[];
@@ -78,12 +79,12 @@ export function EditorPreviewPanel(props: {
   onDuration: (duration: number | null) => void;
   onMediaDuration: (itemId: string, duration: number | null) => void;
   onScreenDimensions: (width: number, height: number) => void;
+  onPreviewQualityChange: (quality: PreviewQuality) => void;
   onPreviewZoomChange: (zoom: number) => void;
   onSubtitleClick: (subtitleId: string) => void;
   onTextOverlayClick: (textOverlayId: string) => void;
   onTextOverlayMove: (textOverlayId: string, x: number, y: number) => void;
 }) {
-  const { quality: previewQuality, setQuality: setPreviewQuality } = usePreviewQuality();
   const {
     elementRef: previewPanelRef,
     fullscreen: previewFullscreen,
@@ -116,7 +117,10 @@ export function EditorPreviewPanel(props: {
       ref={previewPanelRef}
     >
       <div className="editor-preview-header flex h-11 flex-none items-center px-3">
-        <PreviewQualityControl quality={previewQuality} onChange={setPreviewQuality} />
+        <PreviewQualityControl
+          quality={props.previewQuality}
+          onChange={props.onPreviewQualityChange}
+        />
       </div>
 
       <div className="editor-preview-stage flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-auto bg-black p-4">
@@ -148,7 +152,7 @@ export function EditorPreviewPanel(props: {
                 activeSubtitle={props.activeSubtitle}
                 subtitleStyle={props.subtitleStyle}
                 currentTime={props.currentTime}
-                previewQuality={previewQuality}
+                previewQuality={props.previewQuality}
                 mainVideoRef={props.mainVideoRef}
                 cameraRef={props.cameraRef}
                 onScreenEditPointerDown={props.onScreenEditPointerDown}
@@ -182,7 +186,7 @@ export function EditorPreviewPanel(props: {
               screenStyle={props.screenStyle}
               cameraStyle={props.cameraStyle}
               cameraVideoStyle={props.cameraVideoStyle}
-              previewQuality={previewQuality}
+              previewQuality={props.previewQuality}
               opaqueBackdrop={blackBackdrop}
             />
           ) : null}

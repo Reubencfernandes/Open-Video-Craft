@@ -23,7 +23,7 @@ if (!configuredUserDataPath) throw new Error("Open Video Craft MCP requires --us
 const userDataPath: string = configuredUserDataPath;
 
 const server = new McpServer(
-  { name: "open-video-craft", version: "1.1.0" },
+  { name: "open-video-craft", version: "1.2.0" },
   { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
 );
 
@@ -70,7 +70,7 @@ server.registerTool("list_projects", {
 
 server.registerTool("inspect_project", {
   title: "Inspect video project",
-  description: "Read the saved timeline, media inventory, audio levels, subtitles, revision, and V1 export capabilities.",
+  description: "Read the complete saved editor state, media inventory, revision, and export capabilities.",
   inputSchema: { projectId: projectIdSchema }, annotations: { readOnlyHint: true, destructiveHint: false }
 }, async ({ projectId }) => success(await inspectPayload(projectId)));
 
@@ -110,7 +110,8 @@ const operationSchema = sharedOperationSchema;
 
 const editActionValues = [
   "remove_content", "restructure", "audio", "zoom", "speed",
-  "transitions", "subtitles", "export_range"
+  "transitions", "subtitles", "text", "layout", "background", "camera",
+  "screen", "media", "music", "view", "export_range"
 ] as const;
 type EditAction = typeof editActionValues[number];
 const editActionSchema = z.enum(editActionValues);
@@ -129,7 +130,7 @@ const editingBasisSchema = z.discriminatedUnion("mode", [
 
 server.registerTool("apply_edit_plan", {
   title: "Apply video edit plan",
-  description: "Atomically apply only the edits requested by the user, including cuts, clip sequencing, audio, zoom, speed, transitions, subtitles, and export range. Content-aware plans must reference the cached analysis they used. Creates one undo checkpoint.",
+  description: "Atomically apply only the edits requested by the user across timeline, audio, layout, background, camera, screen, text, subtitles, view controls, media import, Lyria music generation, and export range. Content-aware plans must reference the cached analysis they used. Creates one undo checkpoint.",
   inputSchema: {
     projectId: projectIdSchema,
     baseRevision: z.number().int().nonnegative(),
@@ -235,6 +236,7 @@ async function inspectPayload(projectId?: string) {
     revision: document?.revision ?? 0,
     lastMutation: document?.lastMutation ?? null,
     timelineDuration: document ? getEditorDuration(document.state) : 0,
+    editorState: document?.state ?? null,
     timeline: document?.state.timelineSegments ?? [],
     audioLevels: document?.state.audioLevels ?? {},
     zoomEffects: document?.state.zoomEffects ?? [],
@@ -245,12 +247,14 @@ async function inspectPayload(projectId?: string) {
     imports: document?.imports.map(({ relativePath: _relativePath, ...item }) => item) ?? [],
     editCapabilities: {
       removeContent: true, clipSequencing: true, audio: true, zoom: true,
-      speedEffects: true, transitions: true, subtitles: true, exportRange: true
+      speedEffects: true, transitions: true, subtitles: true, textOverlays: true,
+      layouts: true, backgrounds: true, cameraComposition: true, screenComposition: true,
+      mediaImport: true, lyriaMusicGeneration: true, editorView: true, exportRange: true
     },
     exportCapabilities: {
       cuts: true, clipSequencing: true, transitions: true, audioMixing: true, cleanSubtitles: true,
       zoom: true, speedEffects: true,
-      cameraCompositing: false, layouts: false, styledSubtitles: false
+      textOverlays: true, cameraCompositing: false, layouts: false, styledSubtitles: false
     }
   };
 }
@@ -292,6 +296,9 @@ function operationAction(operation: EditorEditOperation): EditAction {
     case "sequence_clips":
       return "restructure";
     case "set_audio":
+    case "set_audio_lane":
+    case "set_master_volume":
+    case "set_background_audio":
       return "audio";
     case "set_zoom":
     case "remove_zoom":
@@ -304,7 +311,25 @@ function operationAction(operation: EditorEditOperation): EditAction {
       return "transitions";
     case "replace_subtitles":
     case "update_subtitle":
+    case "set_subtitle_preferences":
       return "subtitles";
+    case "set_text_overlay":
+    case "remove_text_overlay":
+      return "text";
+    case "set_layout":
+      return "layout";
+    case "set_background":
+      return "background";
+    case "set_camera":
+      return "camera";
+    case "set_screen":
+      return "screen";
+    case "import_media":
+      return "media";
+    case "generate_music":
+      return "music";
+    case "set_editor_view":
+      return "view";
     case "set_export_range":
       return "export_range";
   }

@@ -32,6 +32,9 @@ export type SpeedRate = 1 | 2 | 3 | 4 | 5;
 export type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";
 export type TextAnimation = "none" | "fade" | "pop" | "slide-up";
 export type ClipTransitionType = "crossfade" | "fade-black" | "slide-left" | "wipe-left";
+export type PreviewQuality = "high" | "low";
+export type AgentMediaPlacement = "media-bin" | "timeline" | "background-audio" | "custom-background";
+export type AgentMusicEngine = "lyria-clip" | "lyria-pro";
 
 export interface TimelineSegment {
   id: string;
@@ -100,6 +103,22 @@ export interface CameraContentTransform { x: number; y: number; scale: number; m
 export type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
 export interface TrimRange { start: number; end: number }
 
+/** One-shot renderer command persisted by an AI edit and consumed by the open app. */
+export interface PendingMediaImport {
+  requestId: string;
+  paths: string[];
+  placement: AgentMediaPlacement;
+  timelineStart: number;
+}
+
+/** One-shot Lyria command consumed by the open app so provider keys stay in Electron. */
+export interface PendingMusicGeneration {
+  requestId: string;
+  engine: AgentMusicEngine;
+  prompt: string;
+  lyrics: string;
+}
+
 export interface EditorStateSnapshot {
   v: 2;
   timelineSegments: TimelineSegment[];
@@ -129,6 +148,12 @@ export interface EditorStateSnapshot {
   backgroundAudioIds: string[];
   customBackgroundImportId: string | null;
   trimRange: TrimRange;
+  /** Optional so older schema-v2 projects remain valid without migration. */
+  previewQuality?: PreviewQuality;
+  timelineZoom?: number;
+  previewZoom?: number;
+  pendingMediaImport?: PendingMediaImport | null;
+  pendingMusicGeneration?: PendingMusicGeneration | null;
 }
 
 export interface EditorImportRecord {
@@ -169,6 +194,52 @@ export type EditorEditOperation =
   | { type: "move_clip"; segmentId: string; timelineStart: number; lane?: number }
   | { type: "sequence_clips"; segmentIds: string[]; start: number; gap: number }
   | { type: "set_audio"; itemId: string; gainDb: number; muted: boolean }
+  | { type: "set_audio_lane"; lane: number; gainDb: number; muted: boolean }
+  | { type: "set_master_volume"; volume: number }
+  | { type: "set_background_audio"; itemIds: string[] }
+  | { type: "set_layout"; layoutMode: LayoutMode }
+  | {
+      type: "set_background";
+      style: BackgroundStyle;
+      category: BackgroundCategory;
+      customImportId?: string | null;
+    }
+  | {
+      type: "set_camera";
+      size?: number;
+      position?: CameraPosition;
+      shape?: CameraShape;
+      borderStyle?: CameraBorderStyle;
+      contentTransform?: CameraContentTransform;
+      frame?: CameraFrame;
+    }
+  | {
+      type: "set_screen";
+      position?: ScreenPositionState;
+      aspectRatio?: ScreenAspectRatio;
+      cornerStyle?: VideoCornerStyle;
+    }
+  | { type: "set_text_overlay"; overlay: TextOverlay }
+  | { type: "remove_text_overlay"; id: string }
+  | { type: "set_subtitle_preferences"; language?: string | null; style?: SubtitleStyle }
+  | {
+      type: "set_editor_view";
+      previewQuality?: PreviewQuality;
+      timelineZoom?: number;
+      previewZoom?: number;
+    }
+  | {
+      type: "import_media";
+      paths: string[];
+      placement: AgentMediaPlacement;
+      timelineStart?: number;
+    }
+  | {
+      type: "generate_music";
+      engine: AgentMusicEngine;
+      prompt: string;
+      lyrics?: string;
+    }
   | {
       type: "set_zoom";
       id: string;

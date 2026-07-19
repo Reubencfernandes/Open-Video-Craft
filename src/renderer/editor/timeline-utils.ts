@@ -10,7 +10,9 @@ import type {
   SubtitleSegment,
   TextOverlay,
   TimelineContextMenu,
+  TimelineLaneId,
   TimelineMediaClip,
+  TimelineRangeSelection,
   TimelineSegment,
   TimelineTrackKind,
   TimelineTrimEdge,
@@ -155,11 +157,34 @@ export function findTimelineSegmentAtTime(
   );
 }
 
-/** Media clips touched by a timeline range-selection gesture. */
+/** Semantic lane occupied by a media segment. */
+export function getTimelineSegmentLaneId(segment: TimelineSegment): TimelineLaneId {
+  return segment.track === "video" ? "video" : `audio:${normalizeTimelineLane(segment.lane)}`;
+}
+
+/** Ordered, inclusive lane span between the two ends of a marquee gesture. */
+export function getTimelineLaneIdsBetween(
+  orderedLaneIds: readonly TimelineLaneId[],
+  anchorLaneId: TimelineLaneId,
+  currentLaneId: TimelineLaneId
+): TimelineLaneId[] {
+  const anchorIndex = orderedLaneIds.indexOf(anchorLaneId);
+  const currentIndex = orderedLaneIds.indexOf(currentLaneId);
+  if (anchorIndex < 0 || currentIndex < 0) {
+    return [];
+  }
+
+  const start = Math.min(anchorIndex, currentIndex);
+  const end = Math.max(anchorIndex, currentIndex);
+  return orderedLaneIds.slice(start, end + 1);
+}
+
+/** Media clips touched by both the time and lane bounds of a marquee gesture. */
 export function getTimelineSegmentIdsInRange(
   segments: TimelineSegment[],
   start: number,
-  end: number
+  end: number,
+  laneIds: readonly TimelineLaneId[]
 ): string[] {
   const low = Math.max(0, Math.min(start, end));
   const high = Math.max(low, Math.max(start, end));
@@ -167,10 +192,64 @@ export function getTimelineSegmentIdsInRange(
     return [];
   }
 
+  const selectedLanes = new Set(laneIds);
   return segments
-    .filter((segment) => segment.end > low && segment.start < high)
+    .filter(
+      (segment) =>
+        selectedLanes.has(getTimelineSegmentLaneId(segment)) &&
+        segment.end > low &&
+        segment.start < high
+    )
     .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id))
     .map((segment) => segment.id);
+}
+
+/** True when a timed item is touched by both bounds of a marquee. */
+export function isTimelineTimedItemInRange(
+  selection: { start: number; end: number; laneIds: readonly TimelineLaneId[] } | null,
+  laneId: TimelineLaneId,
+  itemStart: number,
+  itemEnd: number
+): boolean {
+  if (!selection || !selection.laneIds.includes(laneId)) {
+    return false;
+  }
+
+  const low = Math.max(0, Math.min(selection.start, selection.end));
+  const high = Math.max(low, Math.max(selection.start, selection.end));
+  return high - low >= 1e-6 && itemEnd > low && itemStart < high;
+}
+
+/**
+ * Rebuild a marquee from the clips it actually owns after move/reflow. This
+ * intentionally drops intervening paint-only rows and follows lane changes.
+ */
+export function getTimelineRangeSelectionForSegments(
+  segments: TimelineSegment[],
+  segmentIds: readonly string[]
+): TimelineRangeSelection | null {
+  const selectedIds = new Set(segmentIds);
+  const selected = segments.filter((segment) => selectedIds.has(segment.id));
+  if (selected.length === 0) {
+    return null;
+  }
+
+  const laneIds = [...new Set(selected.map(getTimelineSegmentLaneId))].sort(
+    (first, second) => getTimelineLaneSortOrder(first) - getTimelineLaneSortOrder(second)
+  );
+  return {
+    start: Math.min(...selected.map((segment) => segment.start)),
+    end: Math.max(...selected.map((segment) => segment.end)),
+    laneIds
+  };
+}
+
+function getTimelineLaneSortOrder(laneId: TimelineLaneId): number {
+  if (laneId === "video") return -1;
+  if (laneId.startsWith("audio:")) {
+    return Number(laneId.slice("audio:".length));
+  }
+  return Number.MAX_SAFE_INTEGER;
 }
 
 export function canSplitTimelineSegment(segment: TimelineSegment, time: number): boolean {

@@ -16,6 +16,7 @@ import type {
   SttTranscribeSource,
   UpdateProviderKeysRequest
 } from "../../shared/types";
+import { getEffectiveAudioLevel } from "../../shared/editor-domain";
 import { decodeTimelineAudioMix } from "./media-utils";
 import {
   createSubtitleSegmentsFromWhisperOutput,
@@ -59,11 +60,19 @@ export function collectSpeechSources(params: {
     timelineOffset: Math.max(0, clip.start),
     // audioLevels volume is on the editor's 0–100 scale; the mixers expect
     // linear gain.
-    gain: (params.audioLevels[clip.item.id]?.volume ?? 100) / 100
+    gain: getEffectiveAudioLevel(
+      params.audioLevels,
+      clip.item.id,
+      clip.track === "audio" ? clip.lane : null
+    ).volume / 100
   });
 
   const audible = (clip: TimelineMediaClip): boolean =>
-    !(params.audioLevels[clip.item.id]?.muted ?? false) && clip.item.kind !== "image";
+    !getEffectiveAudioLevel(
+      params.audioLevels,
+      clip.item.id,
+      clip.track === "audio" ? clip.lane : null
+    ).muted && clip.item.kind !== "image";
 
   const isBackgroundMusic = (clip: TimelineMediaClip): boolean =>
     params.backgroundAudioIds.includes(clip.item.id) ||

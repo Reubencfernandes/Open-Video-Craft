@@ -6,6 +6,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { ImportedMediaFile } from "../../shared/types";
 import { toEditorMediaItem } from "./media-utils";
 import { areTimelineSegmentsEqual, resolveAudioLane } from "./timeline-utils";
+import { createId } from "./utils";
 import type {
   BackgroundStyle,
   EditorMediaItem,
@@ -15,6 +16,14 @@ import type {
 } from "./types";
 
 type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
+
+type MediaIngestOptions = {
+  addToTimeline?: boolean;
+  backgroundAudio?: boolean;
+  customBackground?: boolean;
+  selectFirst?: boolean;
+  timelineStart?: number;
+};
 
 // Extensions the app can actually decode and play. Files outside this set
 // (including extensionless files, which are common on macOS) are rejected at
@@ -116,7 +125,7 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
   // in the media panel; everything after that mirrors the dialog import path.
   async function importMediaFromPaths(
     filePaths: string[],
-    options: { backgroundAudio?: boolean; selectFirst?: boolean } = {}
+    options: MediaIngestOptions = {}
   ) {
     if (filePaths.length === 0) {
       return;
@@ -127,7 +136,7 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
 
   async function ingestImportedFiles(
     files: Awaited<ReturnType<typeof window.openVideoCraft.editor.importMedia>>,
-    options: { backgroundAudio?: boolean; selectFirst?: boolean } = {}
+    options: MediaIngestOptions = {}
   ) {
     if (files.length === 0) {
       return;
@@ -144,6 +153,17 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
 
     const nextItems = supported.map(toEditorMediaItem);
     setImportedMedia((current) => [...current, ...nextItems]);
+
+    if (options.customBackground) {
+      const backgroundItem = nextItems.find((item) => item.kind === "image");
+      if (!backgroundItem) {
+        setError("Choose an image file for the custom background.");
+        return;
+      }
+      setCustomBackgroundImportId(backgroundItem.id);
+      setCustomBackgroundUrl(backgroundItem.url);
+      setBackgroundStyle("custom");
+    }
 
     if (options.backgroundAudio) {
       const audioItems = nextItems.filter((item) => item.kind === "audio");
@@ -189,6 +209,43 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
         return next;
       });
       setActiveTool("audio");
+    }
+
+    if (options.addToTimeline) {
+      for (const item of nextItems) {
+        knownTimelineItemIdsRef.current.add(item.id);
+      }
+      setTimelineSegments((current) => {
+        const additions: TimelineSegment[] = [];
+        let videoStart = Math.max(0, options.timelineStart ?? 0);
+        for (const item of nextItems) {
+          const track = item.kind === "audio" ? "audio" : "video";
+          const start = track === "audio"
+            ? Math.max(0, options.timelineStart ?? 0)
+            : videoStart;
+          const duration = item.duration && item.duration > 0
+            ? item.duration
+            : item.kind === "image" ? 3 : 1;
+          const end = start + duration;
+          const segmentId = `${item.id}:segment-${createId("ai-import")}`;
+          additions.push({
+            id: segmentId,
+            itemId: item.id,
+            track,
+            lane: track === "audio"
+              ? resolveAudioLane([...current, ...additions], segmentId, start, end, 0)
+              : 0,
+            start,
+            end,
+            sourceStart: 0
+          });
+          if (track === "video") videoStart = end;
+        }
+        const next = [...current, ...additions];
+        scheduleTimelinePlaybackSync(next);
+        return next;
+      });
+      setActiveTool(nextItems.every((item) => item.kind === "audio") ? "audio" : "media");
     }
 
     if (options.selectFirst ?? true) {

@@ -90,6 +90,72 @@ describe("agent edit operations", () => {
     expect(result.state.audioLevels.mic.volume).toBeCloseTo(199.53, 2);
   });
 
+  it("applies composition, audio, text, and editor-view operations", () => {
+    const state = {
+      ...createDefaultEditorState(),
+      timelineSegments: [
+        { id: "video", itemId: "screen", track: "video" as const, lane: 0, start: 0, end: 10, sourceStart: 0 }
+      ],
+      trimRange: { start: 0, end: 10 }
+    };
+    const result = applyEditorOperations(state, [
+      { type: "set_audio_lane", lane: 1, gainDb: -6, muted: true },
+      { type: "set_master_volume", volume: 75 },
+      { type: "set_background_audio", itemIds: ["music", "music"] },
+      { type: "set_layout", layoutMode: "side-by-side" },
+      { type: "set_background", style: "gradient-2", category: "gradient" },
+      { type: "set_camera", size: 32, position: "top-right", shape: "rounded", borderStyle: "accent" },
+      { type: "set_screen", position: { x: 5, y: -4, scale: 92 }, aspectRatio: "16:9", cornerStyle: "round" },
+      {
+        type: "set_text_overlay",
+        overlay: { id: "title", start: 1, end: 3, text: "Demo", x: 50, y: 18, size: 72, color: "#ffcc00", weight: 700, animation: "pop" }
+      },
+      { type: "set_subtitle_preferences", language: "English", style: "boxed" },
+      { type: "set_editor_view", previewQuality: "low", timelineZoom: 3, previewZoom: 1.25 }
+    ]);
+
+    expect(result.state).toMatchObject({
+      masterVolume: 75,
+      backgroundAudioIds: ["music"],
+      layoutMode: "side-by-side",
+      backgroundStyle: "gradient-2",
+      activeBackgroundCategory: "gradient",
+      cameraSize: 32,
+      cameraPosition: "top-right",
+      cameraShape: "rounded",
+      cameraBorderStyle: "accent",
+      screenPosition: { x: 5, y: -4, scale: 92 },
+      screenAspectRatio: "16:9",
+      videoCornerStyle: "round",
+      subtitleLanguage: "English",
+      subtitleStyle: "boxed",
+      previewQuality: "low",
+      timelineZoom: 3,
+      previewZoom: 1.25
+    });
+    expect(result.state.audioLevels["audio-lane:1"]).toMatchObject({ muted: true });
+    expect(result.state.audioLevels["audio-lane:1"].volume).toBeCloseTo(50.12, 2);
+    expect(result.state.textOverlays).toMatchObject([{ id: "title", text: "Demo" }]);
+  });
+
+  it("queues renderer-owned media import and Lyria generation commands", () => {
+    const imported = applyEditorOperations(createDefaultEditorState(), [{
+      type: "import_media", paths: ["/tmp/clip.mp4"], placement: "timeline", timelineStart: 2
+    }]);
+    expect(imported.state.pendingMediaImport).toMatchObject({
+      paths: ["/tmp/clip.mp4"], placement: "timeline", timelineStart: 2
+    });
+    expect(imported.state.pendingMediaImport?.requestId).toBeTruthy();
+
+    const generated = applyEditorOperations(imported.state, [{
+      type: "generate_music", engine: "lyria-pro", prompt: "  ambient underscore  ", lyrics: "instrumental"
+    }]);
+    expect(generated.state.pendingMusicGeneration).toMatchObject({
+      engine: "lyria-pro", prompt: "ambient underscore", lyrics: "instrumental"
+    });
+    expect(generated.warnings).toContain("Music generation was queued for the open editor.");
+  });
+
   it("adds, updates, and removes request-scoped zoom and speed effects", () => {
     const state = {
       ...createDefaultEditorState(),

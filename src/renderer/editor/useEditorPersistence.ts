@@ -16,6 +16,9 @@ import {
 } from "./editor-state-storage";
 import type {
   AudioLevelState,
+  PendingMediaImport,
+  PendingMusicGeneration,
+  PreviewQuality,
   ScreenPositionState,
   TrimRange
 } from "./editor-state-storage";
@@ -56,6 +59,10 @@ type UseEditorPersistenceParams = {
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
   layoutMode: LayoutMode;
   masterVolume: number;
+  pendingMediaImport: PendingMediaImport | null;
+  pendingMusicGeneration: PendingMusicGeneration | null;
+  previewQuality: PreviewQuality;
+  previewZoom: number;
   onProjectCreated: (projectId: string) => void;
   pendingProjectName: string;
   project: ProjectView | null;
@@ -78,6 +85,10 @@ type UseEditorPersistenceParams = {
   setImportedMedia: Dispatch<SetStateAction<EditorMediaItem[]>>;
   setLayoutMode: Dispatch<SetStateAction<LayoutMode>>;
   setMasterVolume: Dispatch<SetStateAction<number>>;
+  setPendingMediaImport: Dispatch<SetStateAction<PendingMediaImport | null>>;
+  setPendingMusicGeneration: Dispatch<SetStateAction<PendingMusicGeneration | null>>;
+  setPreviewQuality: (value: PreviewQuality) => void;
+  setPreviewZoom: Dispatch<SetStateAction<number>>;
   setProject: Dispatch<SetStateAction<ProjectView | null>>;
   setScreenAspectRatio: Dispatch<SetStateAction<ScreenAspectRatio>>;
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
@@ -88,6 +99,7 @@ type UseEditorPersistenceParams = {
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTextOverlays: Dispatch<SetStateAction<TextOverlay[]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
+  setTimelineZoom: Dispatch<SetStateAction<number>>;
   setTrimRange: Dispatch<SetStateAction<TrimRange>>;
   setVideoCornerStyle: Dispatch<SetStateAction<VideoCornerStyle>>;
   setZoomEffects: Dispatch<SetStateAction<ZoomEffect[]>>;
@@ -98,6 +110,7 @@ type UseEditorPersistenceParams = {
   subtitles: SubtitleSegment[];
   textOverlays: TextOverlay[];
   timelineSegments: TimelineSegment[];
+  timelineZoom: number;
   trimRange: TrimRange;
   videoCornerStyle: VideoCornerStyle;
   zoomEffects: ZoomEffect[];
@@ -118,6 +131,10 @@ type RestoreActionParams = {
   setCustomBackgroundImportId: Dispatch<SetStateAction<string | null>>;
   setLayoutMode: Dispatch<SetStateAction<LayoutMode>>;
   setMasterVolume: Dispatch<SetStateAction<number>>;
+  setPendingMediaImport: Dispatch<SetStateAction<PendingMediaImport | null>>;
+  setPendingMusicGeneration: Dispatch<SetStateAction<PendingMusicGeneration | null>>;
+  setPreviewQuality: (value: PreviewQuality) => void;
+  setPreviewZoom: Dispatch<SetStateAction<number>>;
   setScreenAspectRatio: Dispatch<SetStateAction<ScreenAspectRatio>>;
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
@@ -127,10 +144,26 @@ type RestoreActionParams = {
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTextOverlays: Dispatch<SetStateAction<TextOverlay[]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
+  setTimelineZoom: Dispatch<SetStateAction<number>>;
   setTrimRange: Dispatch<SetStateAction<TrimRange>>;
   setVideoCornerStyle: Dispatch<SetStateAction<VideoCornerStyle>>;
   setZoomEffects: Dispatch<SetStateAction<ZoomEffect[]>>;
 };
+
+/**
+ * Settle the cross-process dirty marker after one snapshot finishes saving.
+ * A newer signature means another save is still required, so callers must not
+ * advertise the editor as clean yet.
+ */
+export function settleEditorSessionAfterSave(input: {
+  latestSignature: string | null;
+  savedSignature: string;
+  notifySession: (dirty: boolean) => void;
+}): boolean {
+  const dirty = input.latestSignature !== input.savedSignature;
+  input.notifySession(dirty);
+  return dirty;
+}
 
 export function useEditorPersistence(params: UseEditorPersistenceParams) {
   const {
@@ -149,10 +182,14 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     knownTimelineItemIdsRef,
     layoutMode,
     masterVolume,
+    pendingMediaImport,
+    pendingMusicGeneration,
     onProjectCreated,
     pendingProjectName,
     project,
     projectId,
+    previewQuality,
+    previewZoom,
     screenAspectRatio,
     screenPosition,
     setActiveBackgroundCategory,
@@ -171,6 +208,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setImportedMedia,
     setLayoutMode,
     setMasterVolume,
+    setPendingMediaImport,
+    setPendingMusicGeneration,
+    setPreviewQuality,
+    setPreviewZoom,
     setProject,
     setScreenAspectRatio,
     setScreenPosition,
@@ -181,6 +222,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setSubtitles,
     setTextOverlays,
     setTimelineSegments,
+    setTimelineZoom,
     setTrimRange,
     setVideoCornerStyle,
     setZoomEffects,
@@ -191,6 +233,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     subtitles,
     textOverlays,
     timelineSegments,
+    timelineZoom,
     trimRange,
     videoCornerStyle,
     zoomEffects
@@ -260,6 +303,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             setImportedMedia,
             setLayoutMode,
             setMasterVolume,
+            setPendingMediaImport,
+            setPendingMusicGeneration,
+            setPreviewQuality,
+            setPreviewZoom,
             setScreenAspectRatio,
             setScreenPosition,
             setSpeedEffects,
@@ -269,6 +316,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             setSubtitles,
             setTextOverlays,
             setTimelineSegments,
+            setTimelineZoom,
             setTrimRange,
             setVideoCornerStyle,
             setZoomEffects
@@ -296,6 +344,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
               setCustomBackgroundImportId,
               setLayoutMode,
               setMasterVolume,
+              setPendingMediaImport,
+              setPendingMusicGeneration,
+              setPreviewQuality,
+              setPreviewZoom,
               setScreenAspectRatio,
               setScreenPosition,
               setSpeedEffects,
@@ -305,6 +357,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
               setSubtitles,
               setTextOverlays,
               setTimelineSegments,
+              setTimelineZoom,
               setTrimRange,
               setVideoCornerStyle,
               setZoomEffects
@@ -343,6 +396,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setImportedMedia,
     setLayoutMode,
     setMasterVolume,
+    setPendingMediaImport,
+    setPendingMusicGeneration,
+    setPreviewQuality,
+    setPreviewZoom,
     setProject,
     setScreenAspectRatio,
     setScreenPosition,
@@ -353,6 +410,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setSubtitles,
     setTextOverlays,
     setTimelineSegments,
+    setTimelineZoom,
     setTrimRange,
     setVideoCornerStyle,
     setZoomEffects
@@ -378,6 +436,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         customBackgroundImportId,
         layoutMode,
         masterVolume,
+        pendingMediaImport,
+        pendingMusicGeneration,
+        previewQuality,
+        previewZoom,
         screenAspectRatio,
         screenPosition,
         speedEffects,
@@ -387,6 +449,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         subtitles,
         textOverlays,
         timelineSegments,
+        timelineZoom,
         trimRange,
         videoCornerStyle,
         zoomEffects
@@ -405,6 +468,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       customBackgroundImportId,
       layoutMode,
       masterVolume,
+      pendingMediaImport,
+      pendingMusicGeneration,
+      previewQuality,
+      previewZoom,
       screenAspectRatio,
       screenPosition,
       speedEffects,
@@ -414,6 +481,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       subtitles,
       textOverlays,
       timelineSegments,
+      timelineZoom,
       trimRange,
       videoCornerStyle,
       zoomEffects
@@ -470,9 +538,17 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         setRevision(result.revision);
         setLastAgentEdit(result.lastMutation.source === "agent" ? result.lastMutation : null);
         setImportedMedia(result.imports.map(toEditorMediaItem));
-        notifySession(false);
         savedSignatureRef.current = signatureBeingSaved;
-        dirtyRef.current = latestSignatureRef.current !== signatureBeingSaved;
+        // A save that was already in flight may have persisted an older
+        // snapshot while the user kept editing. Keep the cross-process dirty
+        // marker set until the queued follow-up save writes the newest
+        // signature; otherwise an AI flush can mistake the older save for the
+        // current editor state.
+        dirtyRef.current = settleEditorSessionAfterSave({
+          latestSignature: latestSignatureRef.current,
+          savedSignature: signatureBeingSaved,
+          notifySession
+        });
         saved = true;
         setError(null);
         if (!silent) {
@@ -550,8 +626,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
         setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
         setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
-        setMasterVolume, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
-        setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTextOverlays, setTimelineSegments, setTrimRange,
+        setMasterVolume, setPendingMediaImport, setPendingMusicGeneration, setPreviewQuality,
+        setPreviewZoom, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
+        setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTextOverlays, setTimelineSegments,
+        setTimelineZoom, setTrimRange,
         setVideoCornerStyle, setZoomEffects
       });
       if (!restored) {
@@ -572,8 +650,9 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setBackgroundAudioIds, setBackgroundStyle, setCameraBorderStyle, setCameraContentTransform,
     setCameraFrame, setCameraPosition, setCameraShape, setCameraSize, setCustomBackgroundImportId,
     setError, setExportMessage, setImportedMedia, setLayoutMode, setMasterVolume,
+    setPendingMediaImport, setPendingMusicGeneration, setPreviewQuality, setPreviewZoom,
     setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions, setSubtitleLanguage,
-    setSubtitleStyle, setSubtitles, setTimelineSegments, setTrimRange, setVideoCornerStyle,
+    setSubtitleStyle, setSubtitles, setTimelineSegments, setTimelineZoom, setTrimRange, setVideoCornerStyle,
     setTextOverlays,
     setZoomEffects
   ]);
@@ -588,8 +667,9 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
       setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
       setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
-      setMasterVolume, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
-      setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTimelineSegments, setTrimRange,
+      setMasterVolume, setPendingMediaImport, setPendingMusicGeneration, setPreviewQuality,
+      setPreviewZoom, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
+      setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTimelineSegments, setTimelineZoom, setTrimRange,
       setTextOverlays,
       setVideoCornerStyle, setZoomEffects
     })) throw new Error("The AI checkpoint could not be restored.");
@@ -663,6 +743,10 @@ function createRestoreActions(actions: RestoreActionParams) {
     setCustomBackgroundImportId: actions.setCustomBackgroundImportId,
     setLayoutMode: actions.setLayoutMode,
     setMasterVolume: actions.setMasterVolume,
+    setPendingMediaImport: actions.setPendingMediaImport,
+    setPendingMusicGeneration: actions.setPendingMusicGeneration,
+    setPreviewQuality: actions.setPreviewQuality,
+    setPreviewZoom: actions.setPreviewZoom,
     setScreenAspectRatio: actions.setScreenAspectRatio,
     setScreenPosition: actions.setScreenPosition,
     setSpeedEffects: actions.setSpeedEffects,
@@ -672,6 +756,7 @@ function createRestoreActions(actions: RestoreActionParams) {
     setSubtitles: actions.setSubtitles,
     setTextOverlays: actions.setTextOverlays,
     setTimelineSegments: actions.setTimelineSegments,
+    setTimelineZoom: actions.setTimelineZoom,
     setTrimRange: actions.setTrimRange,
     setVideoCornerStyle: actions.setVideoCornerStyle,
     setZoomEffects: actions.setZoomEffects

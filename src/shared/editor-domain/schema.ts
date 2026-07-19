@@ -27,7 +27,9 @@ export function createDefaultEditorState(): EditorStateSnapshot {
     videoCornerStyle: "soft", screenPosition: { x: 0, y: 0, scale: 100 },
     screenAspectRatio: "auto", cameraFrame: { x: 72, y: 72, size: 24 },
     masterVolume: 100, audioLevels: {}, backgroundAudioIds: [],
-    customBackgroundImportId: null, trimRange: { start: 0, end: 0 }
+    customBackgroundImportId: null, trimRange: { start: 0, end: 0 },
+    previewQuality: "high", timelineZoom: 1, previewZoom: 1,
+    pendingMediaImport: null, pendingMusicGeneration: null
   };
 }
 
@@ -96,7 +98,12 @@ export function validateEditorStateSnapshot(value: unknown): value is EditorStat
     isXYZ(value.cameraFrame, ["x", "y", "size"]) && finite(value.masterVolume) && isAudioLevels(value.audioLevels) &&
     isArrayOf(value.backgroundAudioIds, (item): item is string => typeof item === "string") &&
     (value.customBackgroundImportId === null || typeof value.customBackgroundImportId === "string") &&
-    isRange(value.trimRange);
+    isRange(value.trimRange) &&
+    (value.previewQuality === undefined || oneOf(value.previewQuality, ["high", "low"])) &&
+    (value.timelineZoom === undefined || (finite(value.timelineZoom) && value.timelineZoom >= 1 && value.timelineZoom <= 10)) &&
+    (value.previewZoom === undefined || (finite(value.previewZoom) && value.previewZoom >= 0.65 && value.previewZoom <= 1.6)) &&
+    (value.pendingMediaImport === undefined || value.pendingMediaImport === null || isPendingMediaImport(value.pendingMediaImport)) &&
+    (value.pendingMusicGeneration === undefined || value.pendingMusicGeneration === null || isPendingMusicGeneration(value.pendingMusicGeneration));
 }
 
 export function isSubtitleSegment(value: unknown): value is SubtitleSegment {
@@ -130,6 +137,20 @@ function isEditorImportRecord(value: unknown): value is EditorImportRecord {
   return isRecord(value) && typeof value.id === "string" && typeof value.name === "string" &&
     oneOf(value.kind, ["video", "audio", "image"]) && typeof value.extension === "string" &&
     (value.duration === null || (finite(value.duration) && value.duration >= 0)) && typeof value.relativePath === "string";
+}
+
+function isPendingMediaImport(value: unknown): boolean {
+  return isRecord(value) && typeof value.requestId === "string" && value.requestId.length > 0 &&
+    Array.isArray(value.paths) && value.paths.length > 0 && value.paths.every((item) => typeof item === "string" && item.length > 0) &&
+    oneOf(value.placement, ["media-bin", "timeline", "background-audio", "custom-background"]) &&
+    finite(value.timelineStart) && value.timelineStart >= 0;
+}
+
+function isPendingMusicGeneration(value: unknown): boolean {
+  return isRecord(value) && typeof value.requestId === "string" && value.requestId.length > 0 &&
+    oneOf(value.engine, ["lyria-clip", "lyria-pro"]) &&
+    typeof value.prompt === "string" && value.prompt.trim().length > 0 &&
+    typeof value.lyrics === "string";
 }
 
 function isEditorMutation(value: unknown): value is EditorMutation {

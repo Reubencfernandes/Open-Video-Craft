@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
-import { blurFocusedShortcutControl, isKeyboardTextTarget } from "./keyboard-utils";
+import { isKeyboardInteractiveTarget, isKeyboardTextTarget } from "./keyboard-utils";
 import type { EditorTool } from "./types";
 
 export type EditorShortcutsParams = {
@@ -10,6 +10,7 @@ export type EditorShortcutsParams = {
   selectedTimelineSegmentId: string | null;
   selectedZoomId: string | null;
   selectedSpeedId: string | null;
+  hasTimelineRangeSelection: boolean;
   seek: (time: number) => void;
   undo: () => void;
   redo: () => void;
@@ -44,6 +45,7 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
     function handleKeyDown(event: KeyboardEvent) {
       const p = paramsRef.current;
       const isTyping = isKeyboardTextTarget(event.target);
+      const isInteractive = isKeyboardInteractiveTarget(event.target);
       const accel = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
@@ -93,6 +95,10 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
         return;
       }
 
+      if (isInteractive) {
+        return;
+      }
+
       // Ctrl/Cmd+B blades the selected clip at the playhead.
       if (accel && key === "b") {
         event.preventDefault();
@@ -122,13 +128,17 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
           return;
         }
 
-        blurFocusedShortcutControl();
         p.togglePlayback();
         return;
       }
 
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
+        if (p.selectedTimelineSegmentId || p.hasTimelineRangeSelection) {
+          p.deleteSelected();
+          return;
+        }
+
         if (p.activeTool === "zoom" && p.selectedZoomId) {
           p.removeZoom(p.selectedZoomId);
           return;

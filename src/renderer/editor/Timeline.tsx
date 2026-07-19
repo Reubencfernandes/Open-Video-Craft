@@ -18,6 +18,7 @@ import {
   TimelineToolbar
 } from "./TimelineChrome";
 import { TimelineTracks } from "./TimelineTracks";
+import { isTimelineTimedItemInRange } from "./timeline-utils";
 import {
   getMaxTransitionDuration,
   getNearestTransitionBoundary,
@@ -70,6 +71,10 @@ export function Timeline(props: {
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   audioLevels: Record<string, { volume: number; muted: boolean }>;
+  onSetAudioLevel: (
+    itemId: string,
+    patch: Partial<{ volume: number; muted: boolean }>
+  ) => void;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
   transitions: ClipTransition[];
@@ -139,6 +144,21 @@ export function Timeline(props: {
     [props.videoClips]
   );
   const [transitionDropKey, setTransitionDropKey] = useState<string | null>(null);
+  const rangeTimedItemCount = props.rangeSelection
+    ? props.zoomEffects.filter((item) =>
+        isTimelineTimedItemInRange(props.rangeSelection, "zoom", item.start, item.end)
+      ).length +
+      props.speedEffects.filter((item) =>
+        isTimelineTimedItemInRange(props.rangeSelection, "speed", item.start, item.end)
+      ).length +
+      props.subtitles.filter((item) =>
+        isTimelineTimedItemInRange(props.rangeSelection, "subtitles", item.start, item.end)
+      ).length +
+      props.textOverlays.filter((item) =>
+        isTimelineTimedItemInRange(props.rangeSelection, "text", item.start, item.end)
+      ).length
+    : 0;
+  const rangeSelectionCount = props.selectedSegmentIds.length + rangeTimedItemCount;
 
   function getTransitionBoundaryAtClientX(clientX: number) {
     const lane = props.bodyRef.current?.querySelector<HTMLElement>(".track-lane");
@@ -250,6 +270,7 @@ export function Timeline(props: {
           videoClips={props.videoClips}
           audioTracks={props.audioTracks}
           audioLevels={props.audioLevels}
+          onSetAudioLevel={props.onSetAudioLevel}
           zoomEffects={props.zoomEffects}
           speedEffects={props.speedEffects}
           transitions={props.transitions}
@@ -259,6 +280,8 @@ export function Timeline(props: {
           subtitleProcessing={props.subtitleProcessing}
           textOverlays={props.textOverlays}
           selectedSegmentIds={props.selectedSegmentIds}
+          selectedCount={rangeSelectionCount}
+          selectedNoun={rangeTimedItemCount > 0 ? "item" : "clip"}
           rangeSelection={props.rangeSelection}
           selectedZoomId={props.selectedZoomId}
           selectedSpeedId={props.selectedSpeedId}
@@ -286,7 +309,7 @@ export function Timeline(props: {
       <TimelineToolbar
         timelineZoom={props.timelineZoom}
         canSplit={props.canSplitAtPlayhead}
-        canDelete={props.selectedSegmentIds.length > 0}
+        canDelete={rangeSelectionCount > 0}
         onUndo={props.onUndo}
         onRedo={props.onRedo}
         onSplit={props.onSplitAtPlayhead}

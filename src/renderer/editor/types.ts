@@ -80,10 +80,20 @@ export type TimelineContextMenu = {
   segmentId: string | null;
 } | null;
 
-/** Time span painted by a mouse range-selection gesture on the timeline. */
+/** Stable semantic identity for one visible timeline row. */
+export type TimelineLaneId =
+  | "video"
+  | "zoom"
+  | "speed"
+  | "subtitles"
+  | "text"
+  | `audio:${number}`;
+
+/** Time and lane span painted by a mouse marquee gesture on the timeline. */
 export type TimelineRangeSelection = {
   start: number;
   end: number;
+  laneIds: TimelineLaneId[];
 };
 
 export type ScreenLayoutDragMode = "move" | "resize-nw" | "resize-ne" | "resize-sw" | "resize-se";

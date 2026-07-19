@@ -2,7 +2,6 @@ import { AudioLines, Music2, Volume2, VolumeX } from "lucide-react";
 import { cx } from "../../classNames";
 import { dbToLinearPercent, formatDb, maxVolumeDb, minVolumeDb, percentToSliderDb } from "../audio-utils";
 import type { EditorMediaItem } from "../types";
-import { AudioLevelMeter } from "./AudioLevelMeter";
 import { DbSlider } from "./DbSlider";
 
 export type AudioLevel = { volume: number; muted: boolean };
@@ -16,8 +15,6 @@ export function AudioPanel(props: {
   masterVolume: number;
   audioSources: EditorMediaItem[];
   audioLevels: Record<string, AudioLevel>;
-  playing: boolean;
-  getAudioLevel: () => number;
   onMasterVolumeChange: (volume: number) => void;
   onAddBackgroundMusic: () => void;
   onSelectItem: (itemId: string) => void;
@@ -25,8 +22,6 @@ export function AudioPanel(props: {
 }) {
   return (
     <div className="grid min-h-0 content-start gap-4 overflow-auto">
-      <AudioLevelMeter getLevel={props.getAudioLevel} active={props.playing} />
-
       <DbSlider
         label="Master volume"
         percent={props.masterVolume}
@@ -97,7 +92,7 @@ function AudioSourceRow(props: {
         </button>
       </div>
       <input
-        className="w-full accent-[#1d4ed8]"
+        className="w-full accent-violet-400"
         type="range"
         min={minVolumeDb}
         max={maxVolumeDb}

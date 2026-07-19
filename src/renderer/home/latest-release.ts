@@ -1,14 +1,15 @@
 /** Single source for the homepage changelog dialog and release badge. */
 export const latestRelease = {
-  version: "2.2.1",
-  title: "AI studio: assistant chat, music generation, and cloud transcription",
+  version: "2.3.0",
+  title: "Precise timeline selection and complete AI editing",
   changes: [
-    "The screen frame now sizes itself to the recording's real aspect ratio (new “Auto” screen-ratio default), so the selection border hugs the picture instead of floating in empty space.",
-    "New AI assistant (Gemini): chat with your project and let it add zooms, speed-ups, subtitles, transitions, or cut content — every edit shows an undo card, and you can optionally let it watch the actual footage.",
-    "New Music AI studio: generate background music locally with ACE-Step (runs on your machine) or in the cloud with Lyria 3 Clip/Pro via your Gemini API key; finished tracks drop straight onto the timeline.",
-    "Cloud transcription: choose Whisper (on-device), Cohere Transcribe (14 languages), or Gemini in the Subtitles panel — bring your own API key, stored encrypted on this computer.",
-    "Subtitles now transcribe every speech source together, so projects with both camera and screen audio caption both voices with timeline-accurate timing.",
-    "Layout presets fixed: “filled screen” is now truly edge-to-edge with square corners, “fit screen” matches the Screen-only frame size, and picking a preset resets manual drags so it always takes effect.",
-    "Polished the layout drag/resize chrome: crisp hairline selection border and square corner handles that stay visible while dragging — no more color wash over the video."
+    "Drag across an exact time region and one or more timeline lanes; only clips and timed items inside that rectangle are selected.",
+    "Each audio lane now has its own mute control, with the same lane-aware mix used during preview, transcription, and final export.",
+    "Gemini and Claude Code can now inspect and edit layouts, backgrounds, camera and screen composition, text, subtitles, audio, view settings, media imports, and Lyria music in addition to timeline effects.",
+    "The Gemini assistant is responsive at narrow panel widths, handles long messages safely, and sends edits through the shared validated operation contract.",
+    "Music AI now focuses on Lyria 3 Clip and Pro; the previous local-model setup and controls have been removed from the interface.",
+    "Preview quality and timeline/preview zoom are saved per project and are available to connected AI editors.",
+    "Success notifications use a clean tick without a circular border, and notification surfaces no longer use decorative backgrounds or borders.",
+    "Codex has been removed from the AI connection screen; Claude Code remains available through the bundled MCP server."
   ]
 } as const;

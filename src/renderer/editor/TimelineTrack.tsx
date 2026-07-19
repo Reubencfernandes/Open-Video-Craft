@@ -5,6 +5,7 @@
 import { Eye } from "lucide-react";
 import type { ReactNode } from "react";
 import { cx } from "../classNames";
+import type { TimelineLaneId } from "./types";
 
 /**
  * One horizontal row of the timeline: a fixed-width label column on the left
@@ -16,14 +17,17 @@ import { cx } from "../classNames";
  * time, so it must stay on the lane element even though styling is Tailwind.
  */
 export function TimelineTrack(props: {
+  laneId: TimelineLaneId;
   label: string;
   icon: ReactNode;
   children: ReactNode;
   controls?: ReactNode;
+  labelControl?: ReactNode;
 }) {
   return (
     <div
       data-timeline-track={props.label}
+      data-timeline-lane={props.laneId}
       className={cx(
         "grid grid-cols-[var(--timeline-label-width)_minmax(0,1fr)] items-stretch gap-[var(--timeline-track-gap)]",
         Boolean(props.controls) && "gap-y-2"
@@ -34,9 +38,11 @@ export function TimelineTrack(props: {
           {props.icon}
         </span>
         <span className="min-w-0 flex-1 truncate">{props.label}</span>
-        <span className="inline-flex flex-none items-center pr-0.5 text-neutral-500" aria-hidden="true">
-          <Eye size={13} />
-        </span>
+        {props.labelControl ?? (
+          <span className="inline-flex flex-none items-center pr-0.5 text-neutral-500" aria-hidden="true">
+            <Eye size={13} />
+          </span>
+        )}
       </div>
       <div className="track-lane relative min-h-[2.5rem] overflow-hidden rounded-md bg-white/[0.02]">
         {props.children}

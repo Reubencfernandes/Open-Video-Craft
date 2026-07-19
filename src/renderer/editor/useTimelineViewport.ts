@@ -3,12 +3,14 @@
  * mapping pointer X positions to timeline time.
  */
 import { useEffect, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { Dispatch, PointerEvent as ReactPointerEvent, SetStateAction } from "react";
 import { clampNumber } from "./utils";
 
 type UseTimelineViewportParams = {
   renderDuration: number;
   seek: (time: number) => void;
+  timelineZoom: number;
+  setTimelineZoom: Dispatch<SetStateAction<number>>;
 };
 
 const minTimelineZoom = 1;
@@ -20,9 +22,8 @@ function getDefaultTimelinePanelHeight(): number {
 }
 
 export function useTimelineViewport(params: UseTimelineViewportParams) {
-  const { renderDuration, seek } = params;
+  const { renderDuration, seek, timelineZoom, setTimelineZoom } = params;
   const [timelinePanelHeight, setTimelinePanelHeight] = useState(getDefaultTimelinePanelHeight);
-  const [timelineZoom, setTimelineZoom] = useState(1);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const resizeDragRef = useRef<{
     startClientY: number;

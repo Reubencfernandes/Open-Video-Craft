@@ -6,6 +6,11 @@ import { flushSync } from "react-dom";
 import { TimelinePlayhead } from "../src/renderer/editor/TimelineChrome";
 import { TimelineClip } from "../src/renderer/editor/TimelineClips";
 import { Timeline } from "../src/renderer/editor/Timeline";
+import type {
+  EditorMediaItem,
+  TimelineLaneId,
+  TimelineMediaClip
+} from "../src/renderer/editor/types";
 
 let root: ReturnType<typeof createRoot> | null = null;
 afterEach(() => {
@@ -87,12 +92,64 @@ describe("persistent effect lanes", () => {
     empty?: boolean;
     activeTool?: "media" | "style";
     processing?: boolean;
-    rangeSelection?: { start: number; end: number } | null;
+    rangeSelection?: { start: number; end: number; laneIds: TimelineLaneId[] } | null;
+    audio?: boolean;
+    audioLevels?: Record<string, { volume: number; muted: boolean }>;
+    onSetAudioLevel?: (
+      itemId: string,
+      patch: Partial<{ volume: number; muted: boolean }>
+    ) => void;
   }) {
     const host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
     const handler = vi.fn();
+    const sharedAudioItem: EditorMediaItem = {
+      id: "audio-source-a",
+      name: "Voice",
+      url: "voice.wav",
+      kind: "audio",
+      origin: "imported",
+      track: "imported",
+      duration: 8
+    };
+    const secondAudioItem: EditorMediaItem = {
+      ...sharedAudioItem,
+      id: "audio-source-b",
+      name: "Music",
+      url: "music.wav"
+    };
+    const audioClips: TimelineMediaClip[] = input?.audio
+      ? [
+          {
+            id: "audio-clip-a-1",
+            item: sharedAudioItem,
+            track: "audio",
+            lane: 1,
+            start: 0,
+            duration: 2,
+            sourceStart: 0
+          },
+          {
+            id: "audio-clip-a-2",
+            item: sharedAudioItem,
+            track: "audio",
+            lane: 1,
+            start: 3,
+            duration: 2,
+            sourceStart: 2
+          },
+          {
+            id: "audio-clip-b",
+            item: secondAudioItem,
+            track: "audio",
+            lane: 1,
+            start: 6,
+            duration: 2,
+            sourceStart: 0
+          }
+        ]
+      : [];
 
     flushSync(() => root?.render(createElement(Timeline, {
       bodyRef: createRef<HTMLDivElement>(),
@@ -113,8 +170,9 @@ describe("persistent effect lanes", () => {
       playheadPercent: 0,
       renderDuration: 20,
       videoClips: [],
-      audioTracks: [],
-      audioLevels: {},
+      audioTracks: input?.audio ? [{ lane: 1, clips: audioClips }] : [],
+      audioLevels: input?.audioLevels ?? {},
+      onSetAudioLevel: input?.onSetAudioLevel ?? handler,
       zoomEffects: input?.empty ? [] : [{
         id: "zoom-1",
         start: 4,
@@ -218,8 +276,74 @@ describe("persistent effect lanes", () => {
     expect(host.querySelector("[data-subtitle-processing]")).not.toBeNull();
   });
 
-  it("paints a marked timeline time range", () => {
-    const host = renderTimeline({ rangeSelection: { start: 4, end: 8 } });
-    expect(host.querySelector("[data-timeline-range-selection]")).not.toBeNull();
+  it("paints a marked time range only inside the chosen lanes", () => {
+    const host = renderTimeline({
+      rangeSelection: { start: 4, end: 8, laneIds: ["speed", "subtitles"] }
+    });
+    expect(
+      host.querySelector('[data-timeline-lane="speed"] [data-timeline-range-selection]')
+    ).not.toBeNull();
+    expect(
+      host.querySelector('[data-timeline-lane="subtitles"] [data-timeline-range-selection]')
+    ).not.toBeNull();
+    expect(
+      host.querySelector('[data-timeline-lane="video"] [data-timeline-range-selection]')
+    ).toBeNull();
+    expect(host.querySelectorAll("[data-timeline-range-selection]")).toHaveLength(2);
+    expect(host.querySelector("[data-timeline-range-count]")?.textContent).toBe("1 item");
+    expect(
+      host.querySelector('[data-speed-effect-id="speed-1"]')?.classList.contains("outline")
+    ).toBe(true);
+    expect(
+      host.querySelector('[data-subtitle-id="subtitle-1"]')?.classList.contains("outline")
+    ).toBe(false);
+    expect(
+      host.querySelector<HTMLButtonElement>('button[title="Delete selected timeline items"]')?.disabled
+    ).toBe(false);
+  });
+
+  it("persists mute on the audio lane rather than every reused source", () => {
+    const onSetAudioLevel = vi.fn();
+    const host = renderTimeline({ audio: true, onSetAudioLevel });
+    const button = host.querySelector<HTMLButtonElement>('[data-timeline-audio-mute="1"]');
+
+    expect(button?.getAttribute("aria-label")).toBe("Mute Audio 2");
+    expect(button?.getAttribute("aria-pressed")).toBe("false");
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onSetAudioLevel).toHaveBeenCalledOnce();
+    expect(onSetAudioLevel).toHaveBeenCalledWith("audio-lane:1", { muted: true });
+  });
+
+  it("exposes inherited per-source mute as a mixed lane state", () => {
+    const onSetAudioLevel = vi.fn();
+    const host = renderTimeline({
+      audio: true,
+      audioLevels: {
+        "audio-source-a": { volume: 100, muted: true },
+        "audio-source-b": { volume: 80, muted: false }
+      },
+      onSetAudioLevel
+    });
+    const button = host.querySelector<HTMLButtonElement>('[data-timeline-audio-mute="1"]');
+
+    expect(button?.getAttribute("aria-label")).toBe("Mute Audio 2");
+    expect(button?.getAttribute("aria-pressed")).toBe("mixed");
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onSetAudioLevel).toHaveBeenCalledWith("audio-lane:1", { muted: true });
+  });
+
+  it("offers to unmute a lane muted by its own persisted control", () => {
+    const onSetAudioLevel = vi.fn();
+    const host = renderTimeline({
+      audio: true,
+      audioLevels: { "audio-lane:1": { volume: 100, muted: true } },
+      onSetAudioLevel
+    });
+    const button = host.querySelector<HTMLButtonElement>('[data-timeline-audio-mute="1"]');
+
+    expect(button?.getAttribute("aria-label")).toBe("Unmute Audio 2");
+    expect(button?.getAttribute("aria-pressed")).toBe("true");
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onSetAudioLevel).toHaveBeenCalledWith("audio-lane:1", { muted: false });
   });
 });
