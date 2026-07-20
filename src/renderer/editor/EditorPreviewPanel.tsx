@@ -113,7 +113,7 @@ export function EditorPreviewPanel(props: {
 
   return (
     <section
-      className="editor-preview order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#0b0b0d]"
+      className={`editor-preview order-3 relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#0b0b0d] ${previewFullscreen ? "editor-preview--fullscreen" : ""}`}
       ref={previewPanelRef}
     >
       <div className="editor-preview-header flex h-11 flex-none items-center px-3">

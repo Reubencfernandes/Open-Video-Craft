@@ -97,4 +97,19 @@ describe("useGeminiChat project lifecycle", () => {
 
     expect(gemini.cancel).not.toHaveBeenCalled();
   });
+
+  it("includes the project video automatically with every chat request", async () => {
+    const gemini = installGeminiBridge();
+    await renderProject("project-a");
+
+    await act(async () => {
+      await chatState?.send("Fix the pacing");
+    });
+
+    expect(gemini.send).toHaveBeenCalledWith({
+      projectId: "project-a",
+      message: "Fix the pacing",
+      includeVideo: true
+    });
+  });
 });

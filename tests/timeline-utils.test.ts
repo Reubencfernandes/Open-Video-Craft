@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateTimelineDuration,
   findSplittableTimelineSegment,
   syncTimelineSegments,
   trimTimelineSegment
@@ -97,5 +98,48 @@ describe("timeline trim and split geometry", () => {
 
     expect(synced.find((segment) => segment.id === "first")?.end).toBe(0.5);
     expect(synced.find((segment) => segment.id === "right-half")?.sourceStart).toBe(0.5);
+  });
+});
+
+describe("timeline composition duration", () => {
+  const videoItem: EditorMediaItem = {
+    id: "video",
+    name: "Video",
+    url: "video.webm",
+    kind: "video",
+    origin: "imported",
+    track: "imported",
+    duration: 55
+  };
+  const audioItem: EditorMediaItem = {
+    id: "music",
+    name: "Music",
+    url: "music.mp3",
+    kind: "audio",
+    origin: "imported",
+    track: "imported",
+    duration: 68
+  };
+
+  it("does not leave an empty video tail for audio extending past the last frame", () => {
+    expect(calculateTimelineDuration(
+      [{ id: "video-clip", item: videoItem, track: "video", lane: 0, start: 0, duration: 55, sourceStart: 0 }],
+      [{ id: "music-clip", item: audioItem, track: "audio", lane: 1, start: 0, duration: 68, sourceStart: 0 }],
+      [],
+      [],
+      [],
+      68
+    )).toBe(55);
+  });
+
+  it("uses the audio end when the project has no video clips", () => {
+    expect(calculateTimelineDuration(
+      [],
+      [{ id: "music-clip", item: audioItem, track: "audio", lane: 1, start: 0, duration: 68, sourceStart: 0 }],
+      [],
+      [],
+      [],
+      68
+    )).toBe(68);
   });
 });

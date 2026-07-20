@@ -3,21 +3,18 @@ import { shouldShowSourceSelectionOverlay } from "../src/renderer/recorder/sourc
 import type { FloatingState } from "../src/renderer/recorder/types";
 
 describe("shouldShowSourceSelectionOverlay", () => {
-  it.each(["ready", "preparing", "countdown", "recording", "paused"] as FloatingState[])(
-    "keeps the border visible during %s so the user always sees the recorded screen",
-    (state) => {
-      expect(
-        shouldShowSourceSelectionOverlay({
-          borderOverlayEnabled: true,
-          state,
-          selectedSourceKind: "screen"
-        })
-      ).toBe(true);
-    }
-  );
-
-  it.each(["stopping", "processing", "complete", "failed"] as FloatingState[])(
-    "hides the border once the session is over (%s)",
+  it.each([
+    "ready",
+    "preparing",
+    "countdown",
+    "recording",
+    "paused",
+    "stopping",
+    "processing",
+    "complete",
+    "failed"
+  ] as FloatingState[])(
+    "never covers the selected display with a separate overlay during %s",
     (state) => {
       expect(
         shouldShowSourceSelectionOverlay({

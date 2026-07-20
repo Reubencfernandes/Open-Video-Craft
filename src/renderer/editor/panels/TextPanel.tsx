@@ -1,5 +1,6 @@
 /** Controls for adding, styling, positioning, and timing freeform text. */
 import { GripVertical, Trash2, Type } from "lucide-react";
+import { RangeControl } from "../controls";
 import { textDragType } from "../types";
 import type { TextAnimation, TextOverlay } from "../types";
 
@@ -24,7 +25,7 @@ export function TextPanel(props: {
       {/* Text is placed by dropping this tile onto the timeline's Text track,
           matching how media assets are added. */}
       <div
-        className="grid cursor-grab justify-items-center gap-1 rounded-lg border border-dashed border-white/15 bg-white/[0.055] px-3 py-3 text-center active:cursor-grabbing hover:bg-white/10"
+        className="grid cursor-move justify-items-center gap-1 rounded-lg border border-dashed border-white/15 bg-white/[0.055] px-3 py-3 text-center active:cursor-grabbing hover:bg-white/10"
         draggable
         onDragStart={(event) => {
           event.dataTransfer.setData(textDragType, "new");
@@ -43,13 +44,14 @@ export function TextPanel(props: {
       <div className="grid gap-1.5">
         {props.overlays.map((overlay) => (
           <button
-            className={`flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition ${
+            className={`editor-choice-button flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs ${
               selected?.id === overlay.id
                 ? "bg-sky-400/15 text-white ring-1 ring-sky-300/40"
                 : "bg-white/[0.035] text-slate-400 hover:bg-white/[0.07] hover:text-white"
             }`}
             type="button"
             key={overlay.id}
+            aria-pressed={selected?.id === overlay.id}
             onClick={() => props.onSelect(overlay.id)}
           >
             <Type size={14} className="flex-none text-sky-300" />
@@ -159,9 +161,14 @@ function RangeField(props: {
   onChange: (value: number) => void;
 }) {
   return (
-    <label className="grid gap-1.5 text-[0.68rem] font-semibold text-slate-400">
-      <span className="flex justify-between"><span>{props.label}</span><span>{Math.round(props.value)}{props.suffix}</span></span>
-      <input type="range" min={props.min} max={props.max} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
-    </label>
+    <RangeControl
+      label={props.label}
+      min={props.min}
+      max={props.max}
+      value={props.value}
+      suffix={props.suffix}
+      formatValue={(value) => `${Math.round(value)}${props.suffix}`}
+      onChange={props.onChange}
+    />
   );
 }

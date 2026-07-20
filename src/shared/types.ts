@@ -386,6 +386,7 @@ export interface ExportProgress {
 /* ------------------------------------------------------------------ */
 
 export type SttProviderId = "whisper-local" | "cohere" | "gemini";
+export type ProviderKeyId = "cohere" | "gemini";
 
 /** Renderer-facing view of stored provider credentials. Never contains keys. */
 export interface ProviderKeysView {
@@ -508,6 +509,8 @@ export interface GeminiChatMessage {
   id: string;
   role: GeminiChatRole;
   text: string;
+  /** Unix time used by the chat UI for stable message timestamps. Optional for older sessions. */
+  createdAt?: number;
   /** Present when this assistant turn applied an edit plan. */
   editSummary: string | null;
   editId: string | null;

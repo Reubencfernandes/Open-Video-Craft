@@ -8,13 +8,13 @@ export function AiLastEditCard(props: {
   onUndo: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/15 p-3">
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.035] p-3">
       <div className="min-w-0">
         <p className="text-xs font-semibold text-white">Last AI edit</p>
-        <p className="truncate text-[11px] text-slate-400">{props.mutation.summary ?? props.mutation.editId}</p>
+        <p className="truncate text-[11px] text-neutral-400">{props.mutation.summary ?? props.mutation.editId}</p>
       </div>
       <button
-        className="inline-flex h-8 flex-none items-center gap-1.5 rounded border border-white/10 px-3 text-xs text-slate-200 hover:bg-white/10"
+        className="inline-flex h-8 flex-none items-center gap-1.5 rounded-lg bg-white/[0.05] px-3 text-xs text-neutral-200 transition hover:bg-white/[0.1]"
         type="button"
         disabled={props.disabled}
         onClick={props.onUndo}

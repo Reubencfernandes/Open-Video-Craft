@@ -1,15 +1,11 @@
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import { isKeyboardInteractiveTarget, isKeyboardTextTarget } from "./keyboard-utils";
-import type { EditorTool } from "./types";
 
 export type EditorShortcutsParams = {
-  activeTool: EditorTool;
   currentTime: number;
   currentTimeRef: MutableRefObject<number>;
   selectedTimelineSegmentId: string | null;
-  selectedZoomId: string | null;
-  selectedSpeedId: string | null;
   hasTimelineRangeSelection: boolean;
   seek: (time: number) => void;
   undo: () => void;
@@ -20,8 +16,6 @@ export type EditorShortcutsParams = {
   pasteClip: () => void;
   splitAtPlayhead: (segmentId: string | null, time: number) => void;
   togglePlayback: () => void;
-  removeZoom: (id: string) => void;
-  removeSpeed: (id: string) => void;
   deleteSelected: () => void;
 };
 
@@ -66,6 +60,14 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
       }
 
       if (isTyping) {
+        return;
+      }
+
+      // Timeline regions are rendered as accessible buttons. Delete must still
+      // remove the selected timeline item when one of those buttons has focus.
+      if (event.key === "Delete" || event.key === "Backspace") {
+        event.preventDefault();
+        p.deleteSelected();
         return;
       }
 
@@ -132,25 +134,6 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
         return;
       }
 
-      if (event.key === "Delete" || event.key === "Backspace") {
-        event.preventDefault();
-        if (p.selectedTimelineSegmentId || p.hasTimelineRangeSelection) {
-          p.deleteSelected();
-          return;
-        }
-
-        if (p.activeTool === "zoom" && p.selectedZoomId) {
-          p.removeZoom(p.selectedZoomId);
-          return;
-        }
-
-        if (p.activeTool === "speed" && p.selectedSpeedId) {
-          p.removeSpeed(p.selectedSpeedId);
-          return;
-        }
-
-        p.deleteSelected();
-      }
     }
 
     window.addEventListener("keydown", handleKeyDown);

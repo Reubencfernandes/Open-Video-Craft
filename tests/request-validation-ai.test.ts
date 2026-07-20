@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
+  assertProviderKeyId,
   assertSttTranscribeRequest,
   assertUpdateProviderKeysRequest
 } from "../src/main/request-validation";
@@ -22,6 +23,15 @@ describe("assertUpdateProviderKeysRequest", () => {
     expect(() => assertUpdateProviderKeysRequest({ cohereApiKey: "x".repeat(600) })).toThrow();
     expect(() => assertUpdateProviderKeysRequest({ cohereLanguage: "german" })).toThrow();
     expect(() => assertUpdateProviderKeysRequest(null)).toThrow();
+  });
+});
+
+describe("assertProviderKeyId", () => {
+  it("accepts supported cloud credentials and rejects everything else", () => {
+    expect(() => assertProviderKeyId("gemini")).not.toThrow();
+    expect(() => assertProviderKeyId("cohere")).not.toThrow();
+    expect(() => assertProviderKeyId("openai")).toThrow();
+    expect(() => assertProviderKeyId(null)).toThrow();
   });
 });
 

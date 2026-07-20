@@ -78,10 +78,6 @@ export function EditorToolPanel(props: {
   assistantSending: boolean;
   assistantStatusMessage: string | null;
   assistantError: string | null;
-  assistantIncludeVideo: boolean;
-  assistantVideoConsent: boolean;
-  onAssistantIncludeVideoChange: (value: boolean) => void;
-  onAssistantVideoConsentChange: (value: boolean) => void;
   onAssistantSend: (message: string) => void;
   onAssistantCancel: () => void;
   onAssistantReset: () => void;
@@ -90,6 +86,7 @@ export function EditorToolPanel(props: {
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
   selectedSubtitle: SubtitleSegment | null;
+  currentTime: number;
   textOverlays: TextOverlay[];
   selectedTextOverlay: TextOverlay | null;
   activeBackgroundCategory: BackgroundCategory;
@@ -210,10 +207,6 @@ export function EditorToolPanel(props: {
           sending={props.assistantSending}
           statusMessage={props.assistantStatusMessage}
           chatError={props.assistantError}
-          includeVideo={props.assistantIncludeVideo}
-          videoConsent={props.assistantVideoConsent}
-          onIncludeVideoChange={props.onAssistantIncludeVideoChange}
-          onVideoConsentChange={props.onAssistantVideoConsentChange}
           onSend={props.onAssistantSend}
           onCancel={props.onAssistantCancel}
           onReset={props.onAssistantReset}
@@ -249,6 +242,7 @@ export function EditorToolPanel(props: {
           subtitleStyle={props.subtitleStyle}
           subtitles={props.subtitles}
           selectedSubtitle={props.selectedSubtitle}
+          currentTime={props.currentTime}
           onAddSubtitle={props.onAddSubtitle}
           onGenerateSubtitles={props.onGenerateSubtitles}
           onStyleChange={props.onSubtitleStyleChange}

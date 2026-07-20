@@ -12,8 +12,6 @@ export function useGeminiChat(params: { projectId: string | null }) {
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
-  const [includeVideo, setIncludeVideo] = useState(false);
-  const [videoConsent, setVideoConsent] = useState(false);
   const activeRequestRef = useRef(0);
   const sendingRef = useRef(false);
   const projectIdRef = useRef(projectId);
@@ -26,8 +24,6 @@ export function useGeminiChat(params: { projectId: string | null }) {
     setSending(false);
     setStatusMessage(null);
     setChatError(null);
-    setIncludeVideo(false);
-    setVideoConsent(false);
     if (!projectId) return;
     let cancelled = false;
     void window.openVideoCraft.gemini
@@ -67,14 +63,21 @@ export function useGeminiChat(params: { projectId: string | null }) {
     setChatError(null);
     setMessages((current) => [
       ...current,
-      { id: `pending-${Date.now()}`, role: "user", text: trimmed, editSummary: null, editId: null }
+      {
+        id: `pending-${Date.now()}`,
+        role: "user",
+        text: trimmed,
+        createdAt: Date.now(),
+        editSummary: null,
+        editId: null
+      }
     ]);
 
     try {
       const history = await window.openVideoCraft.gemini.send({
         projectId: requestProjectId,
         message: trimmed,
-        includeVideo: includeVideo && videoConsent
+        includeVideo: true
       });
       if (
         activeRequestRef.current === requestId &&
@@ -131,23 +134,14 @@ export function useGeminiChat(params: { projectId: string | null }) {
     if (activeRequestRef.current !== resetId || projectIdRef.current !== resetProjectId) return;
   }
 
-  function updateIncludeVideo(value: boolean) {
-    setIncludeVideo(value);
-    if (!value) setVideoConsent(false);
-  }
-
   return {
     cancel,
     chatError,
-    includeVideo,
     messages,
     reset,
     send,
     sending,
-    setIncludeVideo: updateIncludeVideo,
-    setVideoConsent,
-    statusMessage,
-    videoConsent
+    statusMessage
   };
 }
 

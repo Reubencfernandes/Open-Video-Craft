@@ -10,9 +10,9 @@
  * existing editor.json fs.watch → editor:project-state-changed path, so the
  * renderer refreshes and the "Undo AI edit" card works unchanged.
  *
- * Optionally ("includeVideo") the primary video track is uploaded to the
- * Gemini Files API so the model can see and hear the actual footage; this is
- * strictly opt-in from the UI.
+ * The built-in chat automatically includes the primary video track through
+ * the Gemini Files API so the model can see and hear the footage it is asked
+ * to edit. Sessions reuse the uploaded file instead of uploading per message.
  */
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
@@ -51,7 +51,7 @@ Rules:
 - Times are in seconds on the project timeline. Zoom scale is 1–4, targetX/targetY are 0–100 percent. Speed rates are integers 1–5. Transition types: crossfade, fade-black, slide-left, wipe-left (duration 0.1–2 s). Subtitle styles: clean, karaoke, boxed, pop.
 - The complete editor operation types are: remove_ranges, trim_clip, delete_clip, split_clip, move_clip, sequence_clips, set_audio, set_audio_lane, set_master_volume, set_background_audio, set_layout, set_background, set_camera, set_screen, set_text_overlay, remove_text_overlay, set_subtitle_preferences, set_editor_view, import_media, generate_music, set_zoom, remove_zoom, set_speed, remove_speed, set_transition, remove_transition, replace_subtitles, update_subtitle, and set_export_range.
 - set_audio and set_audio_lane use gainDb (-60 to 12) plus muted. set_master_volume uses volume 0–100. set_editor_view accepts previewQuality high/low, timelineZoom 1–10, and previewZoom 0.65–1.6.
-- set_layout uses layoutMode screen-only/camera-only/bubble/bubble-fill/presenter/side-by-side/side-overlap. set_background uses style real-world-1..6, gradient-1..3, animated-1..3, or custom; category is image/gradient/animated and custom also needs customImportId.
+- set_layout uses layoutMode screen-only/camera-only/bubble/bubble-fill/presenter/side-by-side/side-overlap. set_background uses style real-world-1..6, gradient-1..3, or custom; category is image/gradient and custom also needs customImportId.
 - set_camera may set size 8–60, position on the 3x3 top/middle/bottom-left/center/right grid, shape circle/rounded/square, borderStyle none/light/accent, contentTransform {x,y,scale,mirrored}, and frame {x,y,size}. set_screen may set position {x,y,scale}, aspectRatio auto/16:9/16:10/4:3, and cornerStyle flat/soft/round.
 - set_text_overlay takes overlay {id,start,end,text,x,y,size,color,weight,animation}; x/y are 0–100, color is #RRGGBB, weight is 400/600/700/800, and animation is none/fade/pop/slide-up. remove_text_overlay takes id. set_subtitle_preferences takes optional language and style.
 - import_media accepts paths plus placement media-bin/timeline/background-audio/custom-background and optional timelineStart. generate_music accepts engine lyria-clip/lyria-pro, prompt, and optional lyrics. Use these only when explicitly requested; they are queued for the open editor so local file access and saved provider credentials stay inside the app.
@@ -204,6 +204,7 @@ export class GeminiAgentManager {
         id: randomUUID(),
         role: "user",
         text: request.message,
+        createdAt: Date.now(),
         editSummary: null,
         editId: null
       });
@@ -217,6 +218,7 @@ export class GeminiAgentManager {
         id: randomUUID(),
         role: "assistant",
         text,
+        createdAt: Date.now(),
         editSummary,
         editId
       });

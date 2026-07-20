@@ -29,24 +29,42 @@ export function RangeControl(props: {
   value: number;
   suffix?: string;
   step?: number;
+  disabled?: boolean;
+  formatValue?: (value: number) => ReactNode;
   onChange: (value: number) => void;
 }) {
+  const range = props.max - props.min;
+  const progress = range > 0
+    ? Math.min(100, Math.max(0, ((props.value - props.min) / range) * 100))
+    : 0;
+
   return (
-    <label className="grid gap-2 text-xs font-extrabold text-slate-400">
-      <span className="flex items-center justify-between gap-3">
+    <label
+      className="group relative flex h-11 min-w-0 cursor-ew-resize items-center overflow-hidden rounded-xl bg-white/[0.055] px-3 text-xs font-bold text-neutral-400 ring-1 ring-inset ring-white/[0.045] transition hover:bg-white/[0.07] focus-within:ring-white/25 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+      data-range-control
+    >
+      <span
+        aria-hidden="true"
+        className="absolute inset-y-0 left-0 rounded-xl bg-gradient-to-r from-white/[0.065] to-white/[0.105] transition-[width,background-color] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] group-hover:from-white/[0.08] group-hover:to-white/[0.12]"
+        data-range-fill
+        data-range-smooth
+        style={{ width: `${progress}%` }}
+      />
+      <span className="pointer-events-none relative z-10 min-w-0 flex-1 truncate pr-3">
         {props.label}
-        <output className="rounded-md bg-white/[0.06] px-2 py-1 text-white tabular-nums">
-          {props.value}
-          {props.suffix}
-        </output>
       </span>
+      <output className="pointer-events-none relative z-10 min-w-[3.5rem] text-right font-extrabold text-white tabular-nums">
+        {props.formatValue ? props.formatValue(props.value) : <>{props.value}{props.suffix}</>}
+      </output>
       <input
-        className="w-full accent-white"
+        aria-label={props.label}
+        className="absolute inset-0 z-20 size-full cursor-ew-resize opacity-0 disabled:cursor-not-allowed"
         type="range"
         min={props.min}
         max={props.max}
         step={props.step ?? 1}
         value={props.value}
+        disabled={props.disabled}
         onChange={(event) => props.onChange(Number(event.target.value))}
       />
     </label>

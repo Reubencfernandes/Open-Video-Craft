@@ -2,6 +2,7 @@
  * Speed tool: add speed regions and edit the selected region's rate/timing.
  */
 import { Trash2 } from "lucide-react";
+import { BubbleActionButton } from "../../BubbleActionButton";
 import { speedRates } from "../speed-utils";
 import { SpeedIcon } from "../SpeedIcon";
 import type { SpeedEffect } from "../types";
@@ -16,14 +17,13 @@ export function SpeedPanel(props: {
 
   return (
     <div className="grid min-h-0 content-start gap-4 overflow-auto">
-      <button
-        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-sm font-extrabold text-white hover:bg-white/10"
-        type="button"
+      <BubbleActionButton
+        className="min-h-11 w-full rounded-xl px-3 text-sm font-extrabold"
         onClick={props.onAddSpeed}
       >
         <SpeedIcon size={16} />
         Add speed section
-      </button>
+      </BubbleActionButton>
 
       {selected ? (
         <>
@@ -32,13 +32,14 @@ export function SpeedPanel(props: {
             <div className="grid grid-cols-[repeat(auto-fit,minmax(2.5rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
               {speedRates.map((rate) => (
                 <button
-                  className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+                  className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
                     selected.rate === rate
                       ? "bg-white text-[#111827]"
                       : "text-slate-300 hover:bg-white/10 hover:text-white"
                   }`}
                   type="button"
                   key={rate}
+                  aria-pressed={selected.rate === rate}
                   onClick={() => props.onUpdateSpeed(selected.id, { rate })}
                 >
                   {rate}x

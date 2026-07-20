@@ -1,4 +1,5 @@
 /** Reusable launcher card for one primary create/open workflow. */
+import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function HomeActionCard(props: {
@@ -10,13 +11,24 @@ export function HomeActionCard(props: {
   onAction: () => void;
 }) {
   return (
-    <article className="flex min-h-[13rem] min-w-0 flex-col items-center px-4 py-5 text-center sm:px-5 xl:min-h-[14rem] xl:py-6">
-      <span className="grid size-11 shrink-0 place-items-center">{props.icon}</span>
-      <h2 className="m-0 mt-2 text-xl font-medium tracking-[-0.02em] text-white">{props.title}</h2>
-      <p className="m-0 mt-2 max-w-[18rem] text-sm leading-6 text-slate-400">{props.description}</p>
-      <button className="mt-auto inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.055] px-4 text-sm font-medium text-slate-100 transition hover:border-white/[0.12] hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-45 sm:w-fit sm:min-w-40 xl:min-w-44 xl:px-5" type="button" disabled={props.disabled} onClick={props.onAction}>
-        {props.actionLabel}
-      </button>
-    </article>
+    <button
+      className="group flex min-h-28 min-w-0 items-center gap-3 rounded-2xl bg-[#19191c] p-4 text-left shadow-[0_10px_26px_rgb(0_0_0_/_0.16)] transition-[background-color,transform] duration-200 hover:-translate-y-0.5 hover:bg-[#1e1e22] disabled:cursor-not-allowed disabled:opacity-45"
+      type="button"
+      disabled={props.disabled}
+      onClick={props.onAction}
+      data-home-action-card
+    >
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[linear-gradient(145deg,#27394d,#1b5c6a)] text-cyan-100 shadow-[inset_0_1px_0_rgb(255_255_255_/_0.08)]">
+        {props.icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <strong className="block truncate text-sm font-semibold text-white">{props.title}</strong>
+        <span className="mt-1 block text-[0.68rem] leading-4 text-neutral-500">{props.description}</span>
+        <span className="mt-2 block text-[0.62rem] font-semibold text-neutral-400 transition-colors group-hover:text-[#ff6ba5]">
+          {props.actionLabel}
+        </span>
+      </span>
+      <ArrowUpRight className="shrink-0 text-neutral-600 transition-[color,transform] group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white" size={15} />
+    </button>
   );
 }

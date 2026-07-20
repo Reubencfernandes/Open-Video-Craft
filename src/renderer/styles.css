@@ -33,6 +33,23 @@ body,
   }
 }
 
+/* Chromium's native keyboard focus ring becomes a thick white/orange frame
+   in the packaged macOS app. Components already provide their own restrained
+   focus state, so suppress only that oversized native outline globally. */
+button:focus,
+button:focus-visible,
+[role="button"]:focus,
+[role="button"]:focus-visible,
+[role="tab"]:focus,
+[role="tab"]:focus-visible,
+[role="slider"]:focus,
+[role="slider"]:focus-visible,
+[role="switch"]:focus,
+[role="switch"]:focus-visible {
+  outline: none !important;
+  -webkit-focus-ring-color: transparent;
+}
+
 select,
 .themed-select {
   appearance: none;
@@ -130,6 +147,238 @@ select,
   }
 }
 
+/* Two identical pixel fields form a seamless belt: the second copy enters
+   from the right while the first exits left, then the loop repeats. */
+.new-project-pixel-viewport {
+  pointer-events: none;
+}
+
+.new-project-pixel-belt {
+  animation: new-project-pixel-belt 5.2s linear infinite;
+  will-change: transform;
+}
+
+.group:not(:disabled):hover .new-project-pixel-belt,
+.group:not(:disabled):focus-visible .new-project-pixel-belt {
+  animation-duration: 2.15s;
+}
+
+.new-project-pixel-pattern-first { left: 0; }
+.new-project-pixel-pattern-second { left: 50%; }
+
+@keyframes new-project-pixel-belt {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+.new-project-bubble {
+  position: absolute;
+  display: block;
+  border-radius: 1px;
+  background: rgb(255 255 255 / 0.58);
+  box-shadow: none;
+  image-rendering: pixelated;
+  opacity: 0.58;
+}
+
+.new-project-bubble::before,
+.new-project-bubble::after {
+  position: absolute;
+  display: block;
+  width: 38%;
+  height: 38%;
+  border-radius: 0;
+  background: inherit;
+  content: "";
+}
+
+.new-project-bubble::before {
+  left: -48%;
+  top: 12%;
+  opacity: 0.72;
+}
+
+.new-project-bubble::after {
+  bottom: -34%;
+  right: -38%;
+  opacity: 0.46;
+}
+
+.new-project-bubble:nth-child(3n + 1) { opacity: 0.32; }
+.new-project-bubble:nth-child(3n + 2) { opacity: 0.68; }
+.new-project-bubble:nth-child(3n) { opacity: 0.48; }
+
+@media (prefers-reduced-motion: reduce) {
+  .new-project-bubble {
+    opacity: 0.52;
+  }
+
+  .new-project-pixel-belt {
+    animation: none;
+    transform: none;
+  }
+}
+
+/* Tool categories are replaced on navigation; give the new panel a short,
+   quiet entrance so the rail and content feel like one continuous control. */
+.editor-tool-panel-switch {
+  animation: editor-tool-panel-enter 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: left center;
+  will-change: opacity, transform;
+}
+
+@keyframes editor-tool-panel-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(8px, 0, 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-tool-panel-switch {
+    animation: none;
+  }
+}
+
+/* Export starts as a compact neon arrow tile. Hover/focus grows the tile over
+   the button while a dotted chevron wave runs forward, matching the reference
+   interaction without introducing a separate image asset. */
+.editor-export-button {
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 180ms ease;
+}
+
+.editor-export-button:not(:disabled):hover,
+.editor-export-button:not(:disabled):focus-visible {
+  border-color: rgb(200 255 25 / 0.7);
+  box-shadow: 0 0 0 1px rgb(200 255 25 / 0.18), 0 9px 22px rgb(0 0 0 / 0.34);
+  transform: translateY(-1px);
+}
+
+.editor-export-button:not(:disabled):active {
+  transform: translateY(0) scale(0.985);
+}
+
+.editor-export-fill {
+  width: 2.25rem;
+  transition: width 420ms cubic-bezier(0.22, 1, 0.36, 1), border-radius 420ms cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: 0.42rem;
+  will-change: width;
+}
+
+.editor-export-button:not(:disabled):hover .editor-export-fill,
+.editor-export-button:not(:disabled):focus-visible .editor-export-fill {
+  width: 100%;
+  border-radius: 0.42rem;
+}
+
+.editor-export-chevron-track {
+  width: 6.8rem;
+}
+
+.editor-export-chevron {
+  opacity: 0;
+}
+
+.editor-export-chevron:first-child {
+  opacity: 0.72;
+}
+
+.editor-export-button:not(:disabled):hover .editor-export-chevron,
+.editor-export-button:not(:disabled):focus-visible .editor-export-chevron {
+  animation: editor-export-chevron-wave 1.15s linear infinite;
+}
+
+.editor-export-chevron-dot {
+  position: absolute;
+  display: block;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 999px;
+  background: #252930;
+}
+
+.editor-export-chevron-dot-1 { left: 0; top: 0; }
+.editor-export-chevron-dot-2 { left: 3px; top: 3px; }
+.editor-export-chevron-dot-3 { left: 6px; top: 6px; }
+.editor-export-chevron-dot-4 { left: 3px; top: 9px; }
+.editor-export-chevron-dot-5 { left: 0; top: 12px; }
+
+.editor-export-label {
+  transition: opacity 180ms ease, transform 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.editor-export-button:not(:disabled):hover .editor-export-label,
+.editor-export-button:not(:disabled):focus-visible .editor-export-label {
+  opacity: 0;
+  transform: translateX(10px);
+}
+
+@keyframes editor-export-chevron-wave {
+  0%, 100% { opacity: 0.18; transform: translateX(-1px) scale(0.88); }
+  42% { opacity: 0.95; transform: translateX(1px) scale(1.08); }
+  72% { opacity: 0.38; transform: translateX(2px) scale(0.96); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-export-button,
+  .editor-export-fill,
+  .editor-export-label {
+    transition: none;
+  }
+
+  .editor-export-chevron {
+    animation: none;
+    opacity: 0.72;
+    transform: none;
+  }
+}
+
+/* Shared motion for segmented controls and selectable editor tiles. */
+.editor-choice-button {
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: background-color, border-color, color, transform;
+}
+
+.editor-choice-button:active {
+  transform: scale(0.975);
+}
+
+.editor-choice-button[aria-pressed="true"] {
+  animation: editor-choice-selected 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.editor-choice-content {
+  animation: editor-choice-content-in 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes editor-choice-selected {
+  0% { transform: scale(0.97); }
+  62% { transform: scale(1.018); }
+  100% { transform: scale(1); }
+}
+
+@keyframes editor-choice-content-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-choice-button {
+    transition: none;
+  }
+
+  .editor-choice-button[aria-pressed="true"],
+  .editor-choice-content {
+    animation: none;
+  }
+}
+
 /* Continuous NLE workspace: tool/library strip, preview monitor, properties.
    Borders separate working regions; the panels intentionally avoid floating
    cards so the interface reads as one professional desktop surface. */
@@ -144,6 +393,25 @@ select,
 }
 
 .editor-preview:fullscreen .editor-preview-frame {
+  box-shadow: none;
+}
+
+/* Chromium can deny the element fullscreen API in some Electron builds.
+   This viewport-sized state is also used while native fullscreen is active,
+   so the preview button remains reliable without changing its layout. */
+.editor-preview--fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  width: 100vw;
+  height: 100vh;
+}
+
+.editor-preview--fullscreen .editor-preview-stage {
+  padding: 0.5rem;
+}
+
+.editor-preview--fullscreen .editor-preview-frame {
   box-shadow: none;
 }
 
@@ -183,6 +451,57 @@ select,
   .timeline-subtitle-shimmer::before {
     animation: none;
     transform: translateX(120%);
+  }
+}
+
+@keyframes recorder-state-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes recorder-ready-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgb(255 59 157 / 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgb(255 59 157 / 0.24));
+  }
+}
+
+@keyframes recorder-recording-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(255 59 157 / 0.34);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(255 59 157 / 0);
+  }
+}
+
+.recorder-state-enter {
+  animation: recorder-state-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.recorder-ready-glow {
+  animation: recorder-ready-glow 2.4s ease-in-out infinite;
+}
+
+.recorder-recording-dot {
+  animation: recorder-recording-dot 1.35s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder-state-enter,
+  .recorder-ready-glow,
+  .recorder-recording-dot {
+    animation: none;
   }
 }
 

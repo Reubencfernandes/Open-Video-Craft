@@ -1,5 +1,6 @@
 /** Zoom tool: create a region, choose its focus, speed, curve, or remove it. */
 import { Trash2, WandSparkles } from "lucide-react";
+import { BubbleActionButton } from "../../BubbleActionButton";
 import { ZoomTargetPanel } from "../ZoomTargetPanel";
 import type { EditorMediaItem, ZoomEffect, ZoomSpeed } from "../types";
 import { ZoomCurveEditor } from "./ZoomCurveEditor";
@@ -16,14 +17,13 @@ export function ZoomPanel(props: {
 
   return (
     <div className="grid min-h-0 content-start gap-4 overflow-auto">
-      <button
-        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-sm font-extrabold text-white hover:bg-white/10"
-        type="button"
+      <BubbleActionButton
+        className="min-h-11 w-full rounded-xl px-3 text-sm font-extrabold"
         onClick={props.onAddZoom}
       >
         <WandSparkles size={16} />
         Add smooth zoom
-      </button>
+      </BubbleActionButton>
 
       <ZoomTargetPanel
         item={props.previewItem}
@@ -39,13 +39,14 @@ export function ZoomPanel(props: {
             <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
               {(["slow", "medium", "fast"] as ZoomSpeed[]).map((speed) => (
                 <button
-                  className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+                  className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
                     selected.speed === speed
                       ? "bg-white text-[#111827]"
                       : "text-slate-300 hover:bg-white/10 hover:text-white"
                   }`}
                   type="button"
                   key={speed}
+                  aria-pressed={selected.speed === speed}
                   onClick={() => props.onUpdateZoom(selected.id, { speed })}
                 >
                   {speed}

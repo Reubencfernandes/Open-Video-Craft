@@ -664,15 +664,19 @@ export function calculateTimelineDuration(
   activeDuration: number,
   textOverlays: TextOverlay[] = []
 ): number {
-  const timelineContentEnd = Math.max(
+  const videoEnd = Math.max(0, ...videoClips.map((clip) => clip.start + clip.duration));
+  const secondaryContentEnd = Math.max(
     0,
-    ...videoClips.map((clip) => clip.start + clip.duration),
     ...audioClips.map((clip) => clip.start + clip.duration),
     ...zoomEffects.map((effect) => effect.end),
     ...speedEffects.map((effect) => effect.end),
     ...subtitles.map((subtitle) => subtitle.end),
     ...textOverlays.map((overlay) => overlay.end)
   );
+  // A video composition ends with its last video frame. Imported music,
+  // subtitles, or effects can otherwise leave an invisible tail after the
+  // user trims the picture. Audio-only projects still use all timed content.
+  const timelineContentEnd = videoClips.length > 0 ? videoEnd : secondaryContentEnd;
 
   return Math.max(timelineContentEnd, timelineContentEnd > 0 ? 0 : activeDuration, 1);
 }

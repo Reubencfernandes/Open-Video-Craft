@@ -93,22 +93,39 @@ export function TimelineToolbar(props: {
   );
 }
 
-/**
- * The time ruler above the tracks. Each of the six segments carries a major
- * tick (::before) plus minor ticks drawn with a repeating gradient along its
- * bottom edge, giving the classic NLE ruler strip.
- */
+/** The time ruler above the tracks, with major ticks spanning 0% through 100%. */
 export function TimelineRuler(props: { duration: number }) {
+  const ticks = createTimelineTicks(props.duration);
+
   return (
-    <div className="grid h-6 grid-cols-6 items-end pl-[calc(var(--timeline-label-width)+var(--timeline-track-gap))] text-[0.62rem] font-medium tabular-nums text-neutral-500">
-      {createTimelineTicks(props.duration).map((tick) => (
-        <span
-          key={tick}
-          className="relative pb-1.5 before:absolute before:bottom-0 before:left-0 before:h-1.5 before:w-px before:bg-white/25 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-1 after:bg-[repeating-linear-gradient(90deg,rgb(255_255_255_/_0.08)_0_1px,transparent_1px_10%)]"
-        >
-          {tick}
-        </span>
-      ))}
+    <div className="h-6 pl-[calc(var(--timeline-label-width)+var(--timeline-track-gap))] text-[0.62rem] font-medium tabular-nums text-neutral-500">
+      <div className="relative h-full">
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-[repeating-linear-gradient(90deg,rgb(255_255_255_/_0.08)_0_1px,transparent_1px_2%)]" />
+        {ticks.map((tick, index) => {
+          const progress = ticks.length <= 1 ? 0 : index / (ticks.length - 1);
+          const labelTransform = index === 0
+            ? "translateX(0)"
+            : index === ticks.length - 1
+              ? "translateX(-100%)"
+              : "translateX(-50%)";
+
+          return (
+            <span
+              key={`${tick}-${index}`}
+              data-timeline-ruler-tick
+              className="absolute bottom-0 h-1.5 w-px bg-white/25"
+              style={{ left: `${progress * 100}%` }}
+            >
+              <span
+                className="absolute bottom-1.5 left-0 whitespace-nowrap pb-0.5"
+                style={{ transform: labelTransform }}
+              >
+                {tick}
+              </span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -41,8 +41,8 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("set_layout"), layoutMode: z.enum(["screen-only", "camera-only", "bubble", "bubble-fill", "presenter", "side-by-side", "side-overlap"]) }),
   z.object({
     type: z.literal("set_background"),
-    style: z.enum(["real-world-1", "real-world-2", "real-world-3", "real-world-4", "real-world-5", "real-world-6", "gradient-1", "gradient-2", "gradient-3", "animated-1", "animated-2", "animated-3", "custom"]),
-    category: z.enum(["animated", "image", "gradient"]),
+    style: z.enum(["real-world-1", "real-world-2", "real-world-3", "real-world-4", "real-world-5", "real-world-6", "gradient-1", "gradient-2", "gradient-3", "custom"]),
+    category: z.enum(["image", "gradient"]),
     customImportId: z.string().nullable().optional()
   }),
   z.object({

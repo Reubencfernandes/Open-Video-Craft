@@ -8,6 +8,7 @@ import type {
   ExportVideoRequest,
   GeminiChatSendRequest,
   MusicGenerateRequest,
+  ProviderKeyId,
   ProjectDevices,
   ProjectSource,
   SaveEditorProjectStateRequest,
@@ -188,6 +189,12 @@ export function assertUpdateProviderKeysRequest(
       !(typeof request.cohereLanguage === "string" && /^[a-z]{2}$/.test(request.cohereLanguage)))
   ) {
     throw new Error("Invalid provider keys request.");
+  }
+}
+
+export function assertProviderKeyId(value: unknown): asserts value is ProviderKeyId {
+  if (value !== "cohere" && value !== "gemini") {
+    throw new Error("Invalid provider key.");
   }
 }
 

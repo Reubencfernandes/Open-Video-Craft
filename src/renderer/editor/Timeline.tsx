@@ -8,7 +8,8 @@ import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
-  RefObject
+  RefObject,
+  WheelEvent as ReactWheelEvent
 } from "react";
 import { cx } from "../classNames";
 import {
@@ -19,6 +20,7 @@ import {
 } from "./TimelineChrome";
 import { TimelineTracks } from "./TimelineTracks";
 import { isTimelineTimedItemInRange } from "./timeline-utils";
+import { formatSeconds } from "./utils";
 import {
   getMaxTransitionDuration,
   getNearestTransitionBoundary,
@@ -59,6 +61,14 @@ export function Timeline(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomWheel: (event: ReactWheelEvent<HTMLElement>) => void;
+  onRulerPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerContract: () => void;
+  onRulerExpand: () => void;
+  onRulerReset: () => void;
   activeTool: EditorTool;
   playing: boolean;
   scrubbing: boolean;
@@ -66,7 +76,9 @@ export function Timeline(props: {
   currentFrame: number;
   totalFrames: number;
   playheadPercent: number;
-  /** Rendered scale (never shrinks when clips are trimmed/deleted). */
+  /** The composition duration (the video end, or timed content for audio-only projects). */
+  contentDuration: number;
+  /** User-controlled visible duration; never smaller than contentDuration. */
   renderDuration: number;
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
@@ -159,6 +171,14 @@ export function Timeline(props: {
       ).length
     : 0;
   const rangeSelectionCount = props.selectedSegmentIds.length + rangeTimedItemCount;
+  const hasSelectedTimelineItem = Boolean(
+    rangeSelectionCount > 0 ||
+      props.selectedSegmentId ||
+      props.selectedZoomId ||
+      props.selectedSpeedId ||
+      props.selectedSubtitleId ||
+      props.selectedTextOverlayId
+  );
 
   function getTransitionBoundaryAtClientX(clientX: number) {
     const lane = props.bodyRef.current?.querySelector<HTMLElement>(".track-lane");
@@ -203,34 +223,54 @@ export function Timeline(props: {
   return (
     <section className="editor-timeline relative flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0b0b0d] px-2 pt-2 [--timeline-body-pad:0.25rem] [--timeline-label-width:140px] [--timeline-track-gap:0.4rem]">
       <button
-        className="group absolute left-0 right-0 top-0 z-30 grid h-4 cursor-row-resize place-items-center border-0 bg-transparent p-0"
+        className="group absolute left-0 right-0 top-0 z-30 grid h-5 cursor-row-resize touch-none place-items-center border-0 bg-transparent p-0 outline-none focus-visible:bg-white/[0.04]"
+        data-timeline-resize-handle
         type="button"
         aria-label="Resize timeline"
-        title="Drag to resize timeline"
+        title="Drag up or down to resize timeline · Double-click to reset"
         onPointerDown={props.onResizePointerDown}
         onPointerMove={props.onResizePointerMove}
         onPointerUp={props.onResizePointerUp}
         onPointerCancel={props.onResizePointerUp}
         onDoubleClick={props.onResizeDoubleClick}
       >
-        <span className="h-px w-24 bg-white/[0.15] transition group-hover:bg-white/60" />
+        <span className="h-1 w-16 rounded-full bg-white/[0.2] shadow-[0_1px_8px_rgb(0_0_0_/_0.35)] transition-all group-hover:w-20 group-hover:bg-white/55 group-active:bg-white/75" />
       </button>
 
       {/* Horizontal-zoom viewport: the ruler and track body grow past 100% and
           scroll together so the time axis can be zoomed in like a real NLE. */}
-      <div className="min-h-0 flex-1 overflow-auto pt-1">
+      <div
+        className="min-h-0 flex-1 overflow-auto pt-1"
+        data-timeline-zoom-viewport
+        title="Ctrl/Cmd + mouse wheel or trackpad pinch to zoom timeline"
+        onWheel={props.onZoomWheel}
+      >
         <div
           className="grid min-w-full content-start gap-1"
           style={{ width: `${props.timelineZoom * 100}%` }}
         >
-          {/* The ruler is a scrub surface too: press or drag on it to move the
-              playhead, same handlers as the timeline body. */}
+          {/* Dragging changes visible duration; horizontal zoom remains a
+              separate concern handled by the toolbar and Ctrl/Cmd + wheel. */}
           <div
-            className={cx("cursor-pointer touch-none", props.scrubbing && "cursor-ew-resize")}
-            onPointerDown={props.onBodyPointerDown}
-            onPointerMove={props.onBodyPointerMove}
-            onPointerUp={props.onBodyPointerUp}
-            onPointerCancel={props.onBodyPointerUp}
+            className="cursor-ew-resize touch-none select-none"
+            title="Drag left to shorten or right to extend visible timeline duration · Double-click to fit content · Click to move the playhead"
+            role="slider"
+            aria-label="Visible timeline duration"
+            aria-valuemin={Math.max(1, Math.ceil(props.contentDuration))}
+            aria-valuemax={Math.ceil(Math.max(props.contentDuration * 10, props.contentDuration + 600))}
+            aria-valuenow={Math.round(props.renderDuration)}
+            aria-valuetext={`${formatSeconds(props.renderDuration)} visible duration`}
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowRight" || event.key === "+") props.onRulerExpand();
+              if (event.key === "ArrowLeft" || event.key === "-") props.onRulerContract();
+              if (event.key === "Home") props.onRulerReset();
+            }}
+            onDoubleClick={props.onRulerReset}
+            onPointerDown={props.onRulerPointerDown}
+            onPointerMove={props.onRulerPointerMove}
+            onPointerUp={props.onRulerPointerUp}
+            onPointerCancel={props.onRulerPointerCancel}
           >
             <TimelineRuler duration={props.renderDuration} />
           </div>
@@ -309,7 +349,7 @@ export function Timeline(props: {
       <TimelineToolbar
         timelineZoom={props.timelineZoom}
         canSplit={props.canSplitAtPlayhead}
-        canDelete={rangeSelectionCount > 0}
+        canDelete={hasSelectedTimelineItem}
         onUndo={props.onUndo}
         onRedo={props.onRedo}
         onSplit={props.onSplitAtPlayhead}

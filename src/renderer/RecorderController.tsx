@@ -35,7 +35,6 @@ import {
   type CameraQuality,
   type ScreenQuality
 } from "./recorder/quality";
-import { shouldShowSourceSelectionOverlay } from "./recorder/source-overlay-state";
 import type {
   DeviceOption,
   FloatingState,
@@ -62,7 +61,6 @@ export function RecorderController() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [project, setProject] = useState<ProjectView | null>(null);
   const [compact, setCompact] = useState(false);
-  const [borderOverlayEnabled, setBorderOverlayEnabled] = useState(true);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
 
   const screenStreamRef = useRef<MediaStream | null>(null);
@@ -86,15 +84,6 @@ export function RecorderController() {
   );
   const selectedCameraLabel = getDeviceLabel(cameras, selectedCameraId, "Camera");
   const canStart = state === "ready" || state === "complete" || state === "failed";
-  // The border overlay windows are opaque and content-protected, so they can
-  // stay visible through the whole recording without showing up in the video.
-  const shouldShowSelectionOverlay = shouldShowSourceSelectionOverlay({
-    borderOverlayEnabled,
-    state,
-    selectedSourceKind: selectedSource?.kind ?? null
-  });
-  const overlaySourceId = shouldShowSelectionOverlay ? selectedSource?.id ?? null : null;
-
   const refreshSources = useCallback(async () => {
     const nextSources = await window.openVideoCraft.sources.list();
     setSources(nextSources);
@@ -224,20 +213,17 @@ export function RecorderController() {
       .catch(() => undefined);
   }, [selectedSourceId]);
 
-  // Single source of truth for the screen border overlay: it is only visible
-  // before capture starts, then hidden so it cannot cover the recorded screen.
+  // Display-sized transparent overlay windows are deliberately not used here.
+  // On some macOS/Windows compositor configurations they can be promoted to an
+  // opaque surface and cover the selected display. Always close a stale overlay
+  // when the controller mounts and when it leaves; the selected source remains
+  // clearly identified inside the recorder window instead.
   useEffect(() => {
-    if (!overlaySourceId) {
-      void window.openVideoCraft.overlays.hideSourceBorder();
-      return;
-    }
-
-    void window.openVideoCraft.overlays.showSourceBorder(overlaySourceId);
-
+    void window.openVideoCraft.overlays.hideSourceBorder();
     return () => {
       void window.openVideoCraft.overlays.hideSourceBorder();
     };
-  }, [overlaySourceId]);
+  }, []);
 
   useEffect(() => {
     if (state !== "recording") {
@@ -755,7 +741,6 @@ export function RecorderController() {
       elapsedMs={elapsedMs}
       errorMessage={errorMessage}
       projectRootPath={project?.rootPath ?? null}
-      borderOverlayEnabled={borderOverlayEnabled}
       systemAudioEnabled={systemAudioEnabled}
       selectedSourceName={selectedSource?.name ?? null}
       baseDirectory={baseDirectory}
@@ -773,7 +758,6 @@ export function RecorderController() {
       onSetCompactMode={(nextCompact) => void setCompactMode(nextCompact)}
       onMinimizeWindow={() => void window.openVideoCraft.windows.minimizeCurrent()}
       onDismissError={() => setErrorMessage(null)}
-      onToggleBorderOverlay={() => setBorderOverlayEnabled((value) => !value)}
       onToggleSystemAudio={() => setSystemAudioEnabled((value) => !value)}
       onClose={() => void window.openVideoCraft.windows.closeCurrent()}
       onStartRecording={() => void startRecording()}

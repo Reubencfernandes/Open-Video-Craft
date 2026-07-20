@@ -27,10 +27,11 @@ Open Video Craft is a desktop screen studio in two parts:
    mixing. FFmpeg exports MP4, WebM, or MOV, and subtitles can be written as a
    synchronized `.srt` sidecar.
 
-Everything runs locally. Even the speech-to-text subtitles use an on-device
-Whisper model — your recordings never leave your machine.
+Recording, editing, Whisper transcription, and export run locally. Optional
+Gemini, Cohere, and Claude Code connections are used only when you explicitly
+invoke their AI features.
 
-## Screenshots — v2.1.0
+## Screenshots — v2.3.1
 
 | Launcher | Floating recorder |
 | :---: | :---: |
@@ -46,8 +47,8 @@ Whisper model — your recordings never leave your machine.
 
 - Floating always-on-top recorder with pause/resume, countdown, and a compact pill mode.
 - Screen, camera, microphone, and **system/desktop audio** as separate tracks.
-- A subtle, click-through border marks the recorded display (and is excluded
-  from the capture itself).
+- The selected display is identified inside the recorder without placing a
+  display-sized overlay over macOS or Windows.
 - Crash-safe: media is written to disk in chunks while you record.
 - Recorder crashes and failed device acquisition recover without wedging the app.
 
@@ -62,14 +63,14 @@ Whisper model — your recordings never leave your machine.
   screen and camera, backgrounds and corner styling.
 - **On-device Whisper subtitles** with word-level karaoke highlighting, plus
   manual subtitle editing and draggable subtitle clips.
-- Audio mixing in **decibels** with a live output level meter; background
-  music drops straight onto the timeline.
+- Per-lane mute and volume controls with the same mix used for preview,
+  transcription, and export; background music drops straight onto the timeline.
 - Debounced autosave, dirty-state close protection, and safe recovery from an
   invalid or unsupported `editor.json`.
 - Export to MP4 / WebM / MOV at source, 720p, 1080p, or 1440p, with microphone,
   system audio, background audio, per-track levels, and optional `.srt` subtitles.
-- Connect Claude Code or Codex through the built-in local MCP server so an AI
-  agent can inspect, cut, sequence, transition, subtitle, mix, undo, and export a project.
+- Connect Claude Code through the built-in local MCP server or Gemini with an
+  API key so an AI agent can inspect and edit the complete project surface.
 
 > **Current export scope:** timeline cuts, reordered clips, clip transitions, intentional gaps,
 > resolution, source/system/microphone/imported audio, gain/mute settings, and
@@ -77,21 +78,20 @@ Whisper model — your recordings never leave your machine.
 > layouts/backgrounds, zoom/speed effects, and advanced subtitle styles remain
 > preview-only. The export dialog shows this before every export.
 
-### AI editing with Claude Code or Codex
+### AI editing with Gemini or Claude Code
 
 For module boundaries, revision/locking behavior, data flow, privacy guarantees,
 and extension guidance, see [AI integration architecture](docs/AI_INTEGRATION.md).
 
-Open a saved project, select **AI** in the editor top bar, acknowledge the
-context-sharing notice, and connect either installed client. Open Video Craft
-registers one user-scoped `open-video-craft` stdio MCP server; it does not ask
-for or store provider API keys.
+Open a saved project and select **AI** in the editor top bar. Gemini uses an API
+key encrypted on this computer, while Claude Code connects through the bundled
+user-scoped `open-video-craft` stdio MCP server.
 
 The agent can analyze speech, silence, and periodic contact-sheet frames
-locally, then commit a complete edit request as one revision with one-click
-rollback. Raw video is never returned through MCP automatically. Timeline
-metadata, transcripts, and contact-sheet images requested by the connected
-client are handled under that provider's data policy.
+locally, then commit a complete edit request as one validated operation plan
+with one-click rollback. Gemini uploads the current video only when you send an
+assistant request. Timeline metadata, transcripts, and contact-sheet images
+requested by a connected provider are handled under that provider's data policy.
 
 ### Keyboard shortcuts
 
@@ -158,10 +158,9 @@ npm run build      # production build
 Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. FFmpeg is
 bundled (`ffmpeg-static`) for remuxing, audio conversion, and export.
 
-The screenshots above are generated from the current renderer, not mocked-up
-artwork: with the dev server
-running, `npx electron scripts/capture-screenshots.cjs` loads each app view
-with a mocked IPC bridge and demo data and saves PNGs to `docs/screenshots/`.
+The editor screenshots above were captured from a real saved project in the
+current desktop app, including its screen recording, camera, subtitles, zoom
+regions, and separate audio lanes.
 
 ## Releases
 

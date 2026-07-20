@@ -14,6 +14,7 @@ import type {
 import { HomeActionCard } from "./home/HomeActionCard";
 import { ChangelogDialog } from "./home/ChangelogDialog";
 import { HomeHeader } from "./home/HomeHeader";
+import { HomeProjectSummary } from "./home/HomeProjectSummary";
 import { HomeSidebar } from "./home/HomeSidebar";
 import { RecentProjectsSection } from "./home/RecentProjectsSection";
 import { latestRelease } from "./home/latest-release";
@@ -168,7 +169,7 @@ export function App() {
     : recentProjects;
 
   return (
-    <main className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-2 overflow-hidden bg-[#0b0b0d] p-2 text-white md:grid-cols-[88px_minmax(0,1fr)] md:grid-rows-1 md:gap-3 md:p-3 xl:grid-cols-[260px_minmax(0,1fr)]">
+    <main className="grid h-dvh min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] gap-2 overflow-hidden bg-[#0c0c0e] p-2 text-white md:grid-cols-[76px_minmax(0,1fr)] md:grid-rows-1 md:gap-3 md:p-3 xl:grid-cols-[220px_minmax(0,1fr)]">
       <HomeSidebar
         disabled={busyAction !== null}
         version={appInfo?.version ?? latestRelease.version}
@@ -181,19 +182,36 @@ export function App() {
         onOpenChangelog={() => setChangelogOpen(true)}
       />
 
-      <section className="min-h-0 min-w-0 overflow-auto rounded-2xl bg-[#111113] px-4 py-5 sm:px-6 md:py-6 xl:px-9 xl:py-8">
-        <div className="grid gap-6 xl:gap-8">
-          <HomeHeader search={projectSearch} onSearchChange={setProjectSearch} />
+      <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-[#121214] shadow-[0_22px_70px_rgb(0_0_0_/_0.2)]">
+        <HomeHeader search={projectSearch} onSearchChange={setProjectSearch} />
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 xl:gap-0">
-            <HomeActionCard icon={<Video className="text-neutral-200" size={27} />} title="Record" description="Record your screen, webcam, or voice with high quality." actionLabel="Start Recording" disabled={busyAction !== null} onAction={() => void openRecorder()} />
-            <HomeActionCard icon={<Clapperboard className="text-neutral-200" size={27} />} title="Edit a Project" description="Open the editor and start creating your next video." actionLabel="Open Editor" disabled={busyAction !== null} onAction={() => void openEditor()} />
-            <HomeActionCard icon={<FolderOpen className="text-neutral-200" size={27} />} title="Open a Project" description="Browse and open any of your saved projects." actionLabel="Browse Projects" disabled={busyAction !== null} onAction={() => void openExistingProject()} />
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-3 sm:px-5 xl:px-6">
+          <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
+            <div className="grid min-w-0 content-start gap-6">
+              <section className="grid gap-3" aria-labelledby="quick-start-title">
+                <div>
+                  <h2 id="quick-start-title" className="m-0 text-base font-semibold text-white">Quick start</h2>
+                  <p className="m-0 mt-1 text-xs text-neutral-500">Choose how you want to begin.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <HomeActionCard icon={<Video size={21} />} title="Record" description="Capture your screen, camera, and voice." actionLabel="Start recording" disabled={busyAction !== null} onAction={() => void openRecorder()} />
+                  <HomeActionCard icon={<Clapperboard size={21} />} title="Video editor" description="Start a new edit from imported media." actionLabel="Open editor" disabled={busyAction !== null} onAction={() => void openEditor()} />
+                  <HomeActionCard icon={<FolderOpen size={21} />} title="Open project" description="Browse an existing project folder." actionLabel="Browse projects" disabled={busyAction !== null} onAction={() => void openExistingProject()} />
+                </div>
+              </section>
+
+              <PermissionOnboarding loading={permissionsLoading} status={permissionStatus} onOpenGuide={openPermissionGuide} onOpenSettings={openPermissionSettings} onRefresh={() => void loadPermissionsStatus()} onRequestMedia={requestMediaPermission} />
+
+              <RecentProjectsSection projects={visibleProjects} loading={recentProjectsLoading} disabled={busyAction !== null} onRefresh={() => void loadRecentProjects()} onOpen={(project) => void openRecentProject(project)} onDelete={(projectId) => void deleteRecentProject(projectId)} />
+            </div>
+
+            <HomeProjectSummary
+              projects={visibleProjects}
+              disabled={busyAction !== null}
+              onOpen={(project) => void openRecentProject(project)}
+              onNewProject={() => void openEditor()}
+            />
           </div>
-
-          <PermissionOnboarding loading={permissionsLoading} status={permissionStatus} onOpenGuide={openPermissionGuide} onOpenSettings={openPermissionSettings} onRefresh={() => void loadPermissionsStatus()} onRequestMedia={requestMediaPermission} />
-
-          <RecentProjectsSection projects={visibleProjects} loading={recentProjectsLoading} disabled={busyAction !== null} onRefresh={() => void loadRecentProjects()} onOpen={(project) => void openRecentProject(project)} onDelete={(projectId) => void deleteRecentProject(projectId)} />
         </div>
       </section>
       {errorMessage ? <FloatingNotification kind="error" title="We are so sorry!" message={errorMessage} onDismiss={() => setErrorMessage(null)} /> : null}

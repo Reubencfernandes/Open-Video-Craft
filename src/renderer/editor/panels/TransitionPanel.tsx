@@ -1,5 +1,6 @@
 import { Blend, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { RangeControl } from "../controls";
 import type { ClipTransition, ClipTransitionType, TimelineMediaClip } from "../types";
 import { transitionDragType } from "../types";
 import {
@@ -82,11 +83,12 @@ export function TransitionPanel(props: {
             type="button"
             draggable
             title={`Drag ${option.label} onto a video cut`}
-            className={`rounded-lg border px-3 py-3 text-left text-xs font-semibold transition ${
+            className={`editor-choice-button rounded-lg border px-3 py-3 text-left text-xs font-semibold ${
               type === option.type
                 ? "border-white bg-white/[0.1] text-white"
                 : "border-white/10 bg-black/10 text-slate-300 hover:bg-white/5"
             }`}
+            aria-pressed={type === option.type}
             onClick={() => setType(option.type)}
             onDragStart={(event) => {
               setType(option.type);
@@ -101,18 +103,15 @@ export function TransitionPanel(props: {
         ))}
       </div>
 
-      <label className="grid gap-2 text-xs text-slate-400">
-        <span className="flex justify-between"><span>Duration</span><strong className="text-white">{duration.toFixed(1)}s</strong></span>
-        <input
-          type="range"
-          min={0.1}
-          max={limit}
-          step={0.1}
-          value={Math.min(duration, limit)}
-          onChange={(event) => setDuration(Number(event.target.value))}
-          className="accent-white"
-        />
-      </label>
+      <RangeControl
+        label="Duration"
+        min={0.1}
+        max={limit}
+        step={0.1}
+        value={Math.min(duration, limit)}
+        formatValue={(value) => `${value.toFixed(1)}s`}
+        onChange={setDuration}
+      />
 
       <button
         type="button"

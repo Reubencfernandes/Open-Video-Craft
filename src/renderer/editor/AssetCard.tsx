@@ -28,7 +28,9 @@ export function AssetCard(props: {
   return (
     <div className="group relative grid min-w-0 gap-1 text-left text-white">
       <button
-        className="grid min-w-0 cursor-pointer gap-1 border-0 bg-transparent p-0 text-left text-inherit"
+        className={`grid min-w-0 gap-1 border-0 bg-transparent p-0 text-left text-inherit ${
+          props.draggable ? "cursor-move active:cursor-grabbing" : "cursor-pointer"
+        }`}
         type="button"
         draggable={props.draggable}
         onClick={props.onSelect}

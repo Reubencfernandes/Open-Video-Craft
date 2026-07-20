@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -146,12 +146,15 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
+    "@lobehub/icons": "^5.14.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "^5.3.0",
     "lucide-react": "^1.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "wavesurfer.js": "^7.12.8",
     "zod": "^4.4.3"
   }

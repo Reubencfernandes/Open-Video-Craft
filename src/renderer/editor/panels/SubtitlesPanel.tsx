@@ -4,6 +4,8 @@
  */
 import { Captions, KeyRound, WandSparkles, X } from "lucide-react";
 import type { ProviderKeysView, SttProviderId } from "../../../shared/types";
+import { BubbleActionButton } from "../../BubbleActionButton";
+import { FloatingSelect } from "../FloatingSelect";
 import { formatSeconds } from "../utils";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 import type { SttStatus } from "../useSubtitleGeneration";
@@ -49,6 +51,7 @@ export function SubtitlesPanel(props: {
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
   selectedSubtitle: SubtitleSegment | null;
+  currentTime: number;
   onAddSubtitle: () => void;
   onGenerateSubtitles: () => void;
   onCancelTranscription: () => void;
@@ -71,14 +74,13 @@ export function SubtitlesPanel(props: {
 
   return (
     <div className="grid min-h-0 content-start gap-3 overflow-auto">
-      <button
-        className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10"
-        type="button"
+      <BubbleActionButton
+        className="min-h-11 w-full rounded-xl px-3 text-sm font-extrabold"
         onClick={props.onAddSubtitle}
       >
         <Captions className="shrink-0" size={16} />
         <span className="truncate">Add subtitle</span>
-      </button>
+      </BubbleActionButton>
       <p className="text-[0.68rem] leading-4 text-slate-500">
         {isCloudProvider
           ? "Cloud transcription sends the project audio to the selected provider using your API key."
@@ -110,37 +112,33 @@ export function SubtitlesPanel(props: {
         </button>
       ) : null}
       <div className="grid gap-2 rounded-lg border border-white/[0.08] p-3 text-xs">
-        <label className="grid gap-1">
+        <div className="grid gap-1">
           <span className="font-bold text-slate-400">Model</span>
-          <select
-            className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 font-semibold text-white outline-none focus:border-violet-400"
+          <FloatingSelect
+            ariaLabel="Model"
             value={props.sttProvider}
             disabled={busy}
-            onChange={(event) => props.onSttProviderChange(event.target.value as SttProviderId)}
-          >
-            {sttProviderOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            options={sttProviderOptions.map((option) => ({
+              value: option.id,
+              label: option.label
+            }))}
+            onChange={props.onSttProviderChange}
+          />
+        </div>
         {props.sttProvider === "cohere" ? (
-          <label className="grid gap-1">
+          <div className="grid gap-1">
             <span className="font-bold text-slate-400">Spoken language</span>
-            <select
-              className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 font-semibold text-white outline-none focus:border-violet-400"
+            <FloatingSelect
+              ariaLabel="Spoken language"
               value={props.providerKeys?.cohereLanguage ?? "en"}
               disabled={busy}
-              onChange={(event) => props.onCohereLanguageChange(event.target.value)}
-            >
-              {cohereLanguageOptions.map((option) => (
-                <option key={option.code} value={option.code}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              options={cohereLanguageOptions.map((option) => ({
+                value: option.code,
+                label: option.label
+              }))}
+              onChange={props.onCohereLanguageChange}
+            />
+          </div>
         ) : null}
         {missingKey ? (
           <button
@@ -162,13 +160,14 @@ export function SubtitlesPanel(props: {
         <div className="grid grid-cols-[repeat(auto-fit,minmax(6rem,1fr))] gap-1.5 rounded-lg border border-white/[0.06] p-1.5">
           {subtitleStyleOptions.map((option) => (
             <button
-              className={`min-h-9 whitespace-nowrap rounded-md px-2 text-center text-xs font-bold transition ${
+              className={`editor-choice-button min-h-9 whitespace-nowrap rounded-md px-2 text-center text-xs font-bold ${
                 props.subtitleStyle === option.id
                   ? "bg-white text-[#111827]"
                   : "bg-white/[0.04] text-slate-300 hover:bg-white/10 hover:text-white"
               }`}
               type="button"
               key={option.id}
+              aria-pressed={props.subtitleStyle === option.id}
               onClick={() => props.onStyleChange(option.id)}
             >
               {option.label}
@@ -217,26 +216,62 @@ export function SubtitlesPanel(props: {
           No subtitles
         </div>
       )}
-      <div className="grid gap-2">
-        {props.subtitles.map((subtitle) => (
-          <button
-            className={`grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-bold ${
-              selected?.id === subtitle.id
-                ? "border-violet-400 bg-violet-400/10 text-white"
-                : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
-            }`}
-            type="button"
-            key={subtitle.id}
-            onClick={() => props.onSelectSubtitle(subtitle.id)}
-          >
-            <Captions className="shrink-0" size={15} />
-            <span className="truncate">{subtitle.text}</span>
-            <span className="whitespace-nowrap text-[0.62rem] font-semibold tabular-nums text-slate-500">
-              {formatSeconds(subtitle.start)}–{formatSeconds(subtitle.end)}
-            </span>
-          </button>
-        ))}
-      </div>
+      {props.subtitles.length ? (
+        <div className="relative grid" data-subtitle-timeline>
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-5 left-[0.4375rem] top-4 w-px bg-white/[0.09]"
+          />
+          {props.subtitles.map((subtitle) => {
+            const isActive =
+              props.currentTime >= subtitle.start && props.currentTime < subtitle.end;
+            const isSelected = selected?.id === subtitle.id;
+
+            return (
+              <div className="relative min-w-0 pb-2 pl-6" key={subtitle.id}>
+                <span
+                  aria-hidden="true"
+                  className={`absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,box-shadow,transform] duration-200 ${
+                    isActive
+                      ? "scale-110 bg-[#ff3b5c] shadow-[0_0_0_3px_rgb(255_59_92_/_0.16),0_0_12px_rgb(255_59_92_/_0.8)]"
+                      : "bg-neutral-600"
+                  }`}
+                />
+                <button
+                  className={`group grid w-full min-w-0 gap-1 rounded-xl px-3 py-2.5 text-left transition-[background-color,color,transform] duration-200 ${
+                    isActive
+                      ? "bg-[#ff3b5c]/[0.11] text-white"
+                      : isSelected
+                        ? "bg-white/[0.075] text-white"
+                        : "bg-transparent text-neutral-400 hover:bg-white/[0.045] hover:text-neutral-200"
+                  }`}
+                  type="button"
+                  aria-current={isActive ? "true" : undefined}
+                  aria-pressed={isSelected}
+                  data-active-subtitle={isActive ? "true" : undefined}
+                  onClick={() => props.onSelectSubtitle(subtitle.id)}
+                >
+                  <span
+                    className={`text-[0.62rem] font-bold uppercase tracking-[0.08em] tabular-nums transition-colors ${
+                      isActive ? "text-[#ff6b82]" : "text-neutral-600 group-hover:text-neutral-500"
+                    }`}
+                  >
+                    {formatSeconds(subtitle.start)} — {formatSeconds(subtitle.end)}
+                  </span>
+                  <span className="whitespace-normal break-words text-[0.82rem] font-semibold leading-5">
+                    {subtitle.text}
+                  </span>
+                  {isActive ? (
+                    <span className="text-[0.58rem] font-bold uppercase tracking-[0.1em] text-[#ff6b82]">
+                      Playing now
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { AudioLines, Music2, Volume2, VolumeX } from "lucide-react";
+import { BubbleActionButton } from "../../BubbleActionButton";
 import { cx } from "../../classNames";
 import { dbToLinearPercent, formatDb, maxVolumeDb, minVolumeDb, percentToSliderDb } from "../audio-utils";
+import { RangeControl } from "../controls";
 import type { EditorMediaItem } from "../types";
 import { DbSlider } from "./DbSlider";
 
@@ -28,14 +30,13 @@ export function AudioPanel(props: {
         onPercentChange={props.onMasterVolumeChange}
       />
 
-      <button
-        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.06] px-3 text-sm font-extrabold text-white hover:bg-white/10"
-        type="button"
+      <BubbleActionButton
+        className="min-h-11 w-full rounded-xl px-3 text-sm font-extrabold"
         onClick={props.onAddBackgroundMusic}
       >
         <Music2 size={16} />
         Add background music
-      </button>
+      </BubbleActionButton>
       <div className="grid gap-3">
         {props.audioSources.map((item) => (
           <AudioSourceRow
@@ -70,7 +71,7 @@ function AudioSourceRow(props: {
         props.level.muted && "opacity-60"
       )}
     >
-      <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <button
           className="inline-flex min-w-0 items-center gap-2 text-left text-sm font-bold text-white"
           type="button"
@@ -79,9 +80,6 @@ function AudioSourceRow(props: {
           <AudioLines size={14} />
           <span className="truncate">{props.item.name}</span>
         </button>
-        <output className="text-xs font-extrabold text-slate-400 tabular-nums">
-          {formatDb(props.level.volume)}
-        </output>
         <button
           className="grid size-8 place-items-center rounded-md bg-white/[0.06] text-slate-200 hover:bg-white/10"
           type="button"
@@ -91,16 +89,14 @@ function AudioSourceRow(props: {
           {props.level.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
         </button>
       </div>
-      <input
-        className="w-full accent-violet-400"
-        type="range"
+      <RangeControl
+        label="Volume"
         min={minVolumeDb}
         max={maxVolumeDb}
         step={1}
         value={percentToSliderDb(props.level.volume)}
-        onChange={(event) =>
-          props.onSetLevel({ volume: dbToLinearPercent(Number(event.target.value)) })
-        }
+        formatValue={() => formatDb(props.level.volume)}
+        onChange={(value) => props.onSetLevel({ volume: dbToLinearPercent(value) })}
       />
     </div>
   );

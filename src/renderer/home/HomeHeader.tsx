@@ -1,21 +1,24 @@
 /** Dashboard greeting and project search. */
-import { Search } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
 
 export function HomeHeader(props: {
   search: string;
   onSearchChange: (value: string) => void;
 }) {
   return (
-    <header className="flex min-w-0 flex-col items-stretch justify-between gap-4 lg:flex-row lg:items-start lg:gap-8">
+    <header className="flex min-w-0 shrink-0 flex-col items-stretch justify-between gap-4 bg-[#121214] px-5 py-4 sm:px-6 lg:flex-row lg:items-center lg:gap-8 xl:px-7">
       <div className="min-w-0">
-        <h1 className="m-0 text-[1.65rem] font-semibold tracking-[-0.03em] text-white">Welcome back! <span aria-hidden="true">👋</span></h1>
-        <p className="m-0 mt-1.5 text-sm text-slate-400">Create, edit and transform your ideas into amazing videos.</p>
+        <h1 className="m-0 text-xl font-semibold tracking-[-0.025em] text-white">Projects</h1>
+        <p className="m-0 mt-1 text-xs text-neutral-500">Create, manage, and continue your video work.</p>
       </div>
-      <div className="flex min-w-0 items-center gap-3">
-        <label className="flex h-11 w-full min-w-0 items-center gap-2 rounded-xl bg-white/[0.06] px-4 text-neutral-500 ring-white/25 focus-within:ring-1 lg:w-[min(30vw,360px)]">
-          <Search size={17} />
-          <input className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-slate-500" type="search" placeholder="Search projects..." value={props.search} onChange={(event) => props.onSearchChange(event.target.value)} />
+      <div className="flex min-w-0 items-center gap-2 lg:w-[min(42vw,34rem)]">
+        <label className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl bg-black/25 px-3.5 text-neutral-600 transition-colors focus-within:bg-black/40 focus-within:text-neutral-300">
+          <Search size={16} />
+          <input className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-neutral-600" type="search" placeholder="Search projects, recordings, and edits…" value={props.search} onChange={(event) => props.onSearchChange(event.target.value)} />
         </label>
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/[0.045] text-neutral-500" title="Project filters">
+          <SlidersHorizontal size={15} />
+        </span>
       </div>
     </header>
   );

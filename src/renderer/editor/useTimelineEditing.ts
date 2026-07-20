@@ -188,9 +188,18 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timelineEditableItems]);
 
-  // Grow (never shrink) the rendered timeline scale as content grows.
+  // Follow the content end in both directions while the ruler is fitted to
+  // the composition. Preserve a deliberate user extension, but never let the
+  // ruler become shorter than the current content.
   useEffect(() => {
-    setTimelineViewDuration((current) => Math.max(current, timelineDuration));
+    const previousTimelineDuration = previousTimelineDurationRef.current;
+    setTimelineViewDuration((current) => {
+      const wasFittedToContent =
+        current <= 0 || Math.abs(current - previousTimelineDuration) < 0.05;
+      return wasFittedToContent
+        ? timelineDuration
+        : Math.max(current, timelineDuration);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timelineDuration]);
 

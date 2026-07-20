@@ -3,7 +3,7 @@
  * Save / Export actions on the right.
  */
 import { useEffect, useRef, useState } from "react";
-import { FolderKanban, Pencil, Save, Sparkles, Upload } from "lucide-react";
+import { FolderKanban, Pencil, Save, Sparkles } from "lucide-react";
 
 const topbarActionClassName =
   "inline-flex h-9 items-center justify-center gap-1.5 rounded-lg px-3 text-[0.78rem] font-semibold text-neutral-200 transition hover:bg-white/[0.08] hover:text-white";
@@ -89,13 +89,31 @@ export function EditorTopbar(props: {
           <span className="editor-action-label">Save</span>
         </button>
         <button
-          className="ml-1.5 inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-white px-4 text-[0.78rem] font-bold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-55"
+          className="editor-export-button group relative ml-1.5 h-9 w-[6.8rem] overflow-hidden rounded-lg border border-white/[0.08] bg-[#20232b] text-[0.78rem] font-bold text-white shadow-[0_6px_16px_rgb(0_0_0_/_0.25)] outline-none disabled:cursor-not-allowed disabled:opacity-55"
           type="button"
+          title="Export video"
+          data-editor-export-button
           disabled={props.exporting || !props.canExport}
           onClick={props.onOpenExport}
         >
-          <Upload size={14} />
-          <span className="editor-action-label">Export</span>
+          <span aria-hidden="true" className="editor-export-fill absolute inset-y-0 left-0 overflow-hidden bg-[#c8ff19]">
+            <span className="editor-export-chevron-track absolute inset-0 flex items-center justify-around px-2">
+              {Array.from({ length: 7 }, (_value, index) => (
+                <span
+                  className="editor-export-chevron relative block h-3.5 w-2.5 flex-none"
+                  key={index}
+                  style={{ animationDelay: `${index * 90}ms` }}
+                >
+                  {Array.from({ length: 5 }, (_dot, dotIndex) => (
+                    <i className={`editor-export-chevron-dot editor-export-chevron-dot-${dotIndex + 1}`} key={dotIndex} />
+                  ))}
+                </span>
+              ))}
+            </span>
+          </span>
+          <span className="editor-export-label relative z-10 ml-9 inline-flex h-full items-center justify-center">
+            {props.exporting ? "Exporting…" : "Export"}
+          </span>
         </button>
       </div>
     </header>

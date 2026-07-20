@@ -62,6 +62,7 @@ import {
   assertExportVideoRequest,
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
+  assertProviderKeyId,
   assertSaveEditorProjectStateRequest,
   assertStartRecordingRequest,
   assertSttTranscribeRequest,
@@ -95,6 +96,7 @@ import type {
   MusicSetupStatus,
   ProjectLibraryEntry,
   ProjectView,
+  ProviderKeyId,
   ProviderKeysView,
   RenameProjectRequest,
   SaveEditorProjectStateRequest,
@@ -589,44 +591,16 @@ function enqueueOverlayOp<T>(op: () => Promise<T> | T): Promise<T> {
 }
 
 async function showDisplayOverlay(sourceId: string): Promise<SourceOverlayResult> {
-  const source = sourceCache.get(sourceId);
-
-  if (!source) {
-    await closeDisplayOverlay();
-    return {
-      shown: false,
-      reason: "Selected source is no longer available."
-    };
-  }
-
-  if (!source.id.startsWith("screen:")) {
-    await closeDisplayOverlay();
-    return {
-      shown: false,
-      reason: "Display border is only shown for full-screen sources."
-    };
-  }
-
-  const display = getDisplayForSource(source);
+  // Do not create a display-sized BrowserWindow for capture feedback. On some
+  // GPU/compositor combinations (seen on both macOS and Windows), a nominally
+  // transparent overlay can be promoted to an opaque green surface and hide
+  // the user's display. Keeping this IPC as a no-op also protects older
+  // renderer bundles that may still request the legacy overlay.
+  void sourceId;
   await closeDisplayOverlay();
-
-  if (!display) {
-    return {
-      shown: false,
-      reason: "The selected display is no longer connected."
-    };
-  }
-
-  // Electron Screen and BrowserWindow bounds are both DIP coordinates. Keeping
-  // the overlay in that coordinate space prevents Windows DPI scaling from
-  // creating a border larger than the selected display.
-  displayOverlayWindows = await createDisplayOverlayWindows(display);
-  activeDisplayOverlaySourceId = sourceId;
-  activeDisplayOverlayDisplayId = source.display_id || String(display.id);
-
   return {
-    shown: true,
-    reason: null
+    shown: false,
+    reason: "The selected screen is shown in the recorder controller."
   };
 }
 
@@ -888,6 +862,14 @@ function registerIpc(): void {
 
   ipcMain.handle("providers:get", (): Promise<ProviderKeysView> =>
     getProviderKeysManager().getView()
+  );
+  ipcMain.handle(
+    "providers:reveal",
+    (_event, provider: ProviderKeyId): Promise<string | null> => {
+      assertProviderKeyId(provider);
+      const keys = getProviderKeysManager();
+      return provider === "cohere" ? keys.getCohereKey() : keys.getGeminiKey();
+    }
   );
   ipcMain.handle(
     "providers:update",

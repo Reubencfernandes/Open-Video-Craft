@@ -1,27 +1,15 @@
 /**
  * Pure rule for when the screen-border overlay should be visible.
  */
-import type { FloatingState } from "./types";
-
-const statesWithVisibleBorder: ReadonlySet<FloatingState> = new Set([
-  "ready",
-  "preparing",
-  "countdown",
-  "recording",
-  "paused"
-]);
-
-// The border overlay stays up while recording so the user always sees which
-// screen is captured. The overlay windows are opaque and content-protected in
-// the main process, so they never appear in the recorded video.
+// A display-sized transparent BrowserWindow can become opaque on some macOS
+// and Windows compositor configurations. The recorder therefore identifies
+// the selected source inside its controller and never places an overlay over
+// the user's display.
 export function shouldShowSourceSelectionOverlay(input: {
   borderOverlayEnabled: boolean;
-  state: FloatingState;
+  state: import("./types").FloatingState;
   selectedSourceKind: "screen" | "window" | null;
 }): boolean {
-  return (
-    input.borderOverlayEnabled &&
-    input.selectedSourceKind === "screen" &&
-    statesWithVisibleBorder.has(input.state)
-  );
+  void input;
+  return false;
 }

@@ -38,6 +38,7 @@ type EffectDrag = {
 
 type UseTimelineEffectDragInteractionsParams = {
   beginPlaybackInteraction: () => void;
+  clearMediaSelection: () => void;
   getTimelineTimeFromClientX: (clientX: number) => number | null;
   seek: (time: number) => void;
   setActiveTool: Dispatch<SetStateAction<EditorTool>>;
@@ -76,6 +77,18 @@ export function useTimelineEffectDragInteractions(
     moved: boolean;
   } | null>(null);
 
+  function selectExclusiveTimedItem(
+    kind: "zoom" | "speed" | "subtitles" | "text",
+    id: string
+  ) {
+    params.clearMediaSelection();
+    params.setSelectedZoomId(kind === "zoom" ? id : null);
+    params.setSelectedSpeedId(kind === "speed" ? id : null);
+    params.setSelectedSubtitleId(kind === "subtitles" ? id : null);
+    params.setSelectedTextOverlayId(kind === "text" ? id : null);
+    params.setActiveTool(kind);
+  }
+
   function beginZoomClipDrag(
     event: ReactPointerEvent<HTMLElement>,
     id: string,
@@ -99,7 +112,7 @@ export function useTimelineEffectDragInteractions(
       moved: false
     };
     params.beginPlaybackInteraction();
-    params.setSelectedZoomId(id);
+    selectExclusiveTimedItem("zoom", id);
     if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
@@ -161,7 +174,7 @@ export function useTimelineEffectDragInteractions(
       moved: false
     };
     params.beginPlaybackInteraction();
-    params.setSelectedSpeedId(id);
+    selectExclusiveTimedItem("speed", id);
     if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
@@ -221,8 +234,7 @@ export function useTimelineEffectDragInteractions(
       moved: false
     };
     params.beginPlaybackInteraction();
-    params.setSelectedSubtitleId(id);
-    params.setActiveTool("subtitles");
+    selectExclusiveTimedItem("subtitles", id);
     if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
@@ -289,8 +301,7 @@ export function useTimelineEffectDragInteractions(
       moved: false
     };
     params.beginPlaybackInteraction();
-    params.setSelectedTextOverlayId(id);
-    params.setActiveTool("text");
+    selectExclusiveTimedItem("text", id);
     if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }

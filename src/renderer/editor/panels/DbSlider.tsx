@@ -5,6 +5,7 @@ import {
   minVolumeDb,
   percentToSliderDb
 } from "../audio-utils";
+import { RangeControl } from "../controls";
 
 /**
  * A gain slider that presents decibels (0 dB = unity) but reports the
@@ -16,22 +17,14 @@ export function DbSlider(props: {
   onPercentChange: (percent: number) => void;
 }) {
   return (
-    <label className="grid gap-2 text-xs font-extrabold text-slate-400">
-      <span className="flex items-center justify-between gap-3">
-        {props.label}
-        <output className="rounded-md bg-white/[0.06] px-2 py-1 text-white tabular-nums">
-          {formatDb(props.percent)}
-        </output>
-      </span>
-      <input
-        className="w-full accent-violet-400"
-        type="range"
-        min={minVolumeDb}
-        max={maxVolumeDb}
-        step={1}
-        value={percentToSliderDb(props.percent)}
-        onChange={(event) => props.onPercentChange(dbToLinearPercent(Number(event.target.value)))}
-      />
-    </label>
+    <RangeControl
+      label={props.label}
+      min={minVolumeDb}
+      max={maxVolumeDb}
+      step={1}
+      value={percentToSliderDb(props.percent)}
+      formatValue={() => formatDb(props.percent)}
+      onChange={(value) => props.onPercentChange(dbToLinearPercent(value))}
+    />
   );
 }

@@ -14,7 +14,7 @@ export function PreviewQualityControl(props: {
       <Monitor size={13} className="mx-1 text-neutral-400" aria-hidden="true" />
       {(["high", "low"] as const).map((quality) => (
         <button
-          className={`rounded-md border-0 px-2 py-1 capitalize transition ${
+          className={`editor-choice-button rounded-md border-0 px-2 py-1 capitalize ${
             props.quality === quality
               ? "bg-white/[0.16] text-white"
               : "bg-transparent text-neutral-400 hover:bg-white/[0.08] hover:text-white"

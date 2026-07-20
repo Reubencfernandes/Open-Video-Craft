@@ -89,10 +89,12 @@ function transitionLabel(type: ClipTransition["type"]): string {
  * differs by lane.
  */
 const clipBaseClassName =
-  "group absolute top-[0.15rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-pointer items-center gap-1.5 overflow-hidden rounded-md border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110";
+  "group absolute top-[0.15rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-move items-center gap-1.5 overflow-hidden rounded-md border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110 active:cursor-grabbing";
 
 /** Every selected clip gets the same white inset outline, like the reference. */
 const selectedOutlineClassName = "outline outline-2 -outline-offset-2 outline-white";
+const rangeSelectedOutlineClassName =
+  "outline outline-2 -outline-offset-2 outline-pink-200 shadow-[inset_0_0_0_1px_rgb(244_114_182_/_0.55)]";
 
 /** Timeline feedback shown while on-device subtitle generation is working. */
 export function TimelineSubtitleShimmer() {
@@ -147,6 +149,7 @@ export function TimelineClip(props: {
   clip: TimelineMediaClip;
   timelineDuration: number;
   selected: boolean;
+  rangeSelected?: boolean;
   audioLevel?: { volume: number; muted: boolean };
   onSelect: (additive: boolean) => void;
   onTrimPointerDown: (
@@ -172,7 +175,8 @@ export function TimelineClip(props: {
       className={cx(
         clipBaseClassName,
         fillClassName,
-        props.selected && selectedOutlineClassName
+        props.selected &&
+          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
       )}
       type="button"
       data-segment-id={props.clip.id}
@@ -209,6 +213,7 @@ export function TimelineZoomClip(props: {
   effect: ZoomEffect;
   duration: number;
   selected: boolean;
+  rangeSelected?: boolean;
   onSelect: () => void;
   onDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -218,7 +223,12 @@ export function TimelineZoomClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#7c3aed]", props.selected && selectedOutlineClassName)}
+      className={cx(
+        clipBaseClassName,
+        "bg-[#7c3aed]",
+        props.selected &&
+          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+      )}
       type="button"
       data-zoom-effect-id={props.effect.id}
       title={`Zoom (${props.effect.speed})`}
@@ -244,6 +254,7 @@ export function TimelineSpeedClip(props: {
   effect: SpeedEffect;
   duration: number;
   selected: boolean;
+  rangeSelected?: boolean;
   onSelect: () => void;
   onDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -253,7 +264,12 @@ export function TimelineSpeedClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#5b21b6]", props.selected && selectedOutlineClassName)}
+      className={cx(
+        clipBaseClassName,
+        "bg-[#5b21b6]",
+        props.selected &&
+          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+      )}
       type="button"
       data-speed-effect-id={props.effect.id}
       title={`Speed ${props.effect.rate}x`}
@@ -280,6 +296,7 @@ export function TimelineSubtitleClip(props: {
   subtitle: SubtitleSegment;
   duration: number;
   selected: boolean;
+  rangeSelected?: boolean;
   onSelect: () => void;
   onDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -289,7 +306,12 @@ export function TimelineSubtitleClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#15803d]", props.selected && selectedOutlineClassName)}
+      className={cx(
+        clipBaseClassName,
+        "bg-[#15803d]",
+        props.selected &&
+          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+      )}
       type="button"
       data-subtitle-id={props.subtitle.id}
       title={props.subtitle.text}
@@ -316,6 +338,7 @@ export function TimelineTextClip(props: {
   overlay: TextOverlay;
   duration: number;
   selected: boolean;
+  rangeSelected?: boolean;
   onSelect: () => void;
   onDragPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -325,7 +348,12 @@ export function TimelineTextClip(props: {
 }) {
   return (
     <button
-      className={cx(clipBaseClassName, "bg-[#0e7490]", props.selected && selectedOutlineClassName)}
+      className={cx(
+        clipBaseClassName,
+        "bg-[#0e7490]",
+        props.selected &&
+          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+      )}
       type="button"
       data-text-overlay-clip-id={props.overlay.id}
       title={props.overlay.text}

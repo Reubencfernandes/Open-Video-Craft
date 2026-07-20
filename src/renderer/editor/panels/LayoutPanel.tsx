@@ -108,7 +108,7 @@ export function LayoutPanel(props: {
             <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
               {group.presets.map((preset) => (
                 <button
-                  className={`grid min-h-[5.2rem] gap-2 rounded-lg border p-2 text-left text-xs font-extrabold ${
+                  className={`editor-choice-button grid min-h-[5.2rem] gap-2 rounded-lg border p-2 text-left text-xs font-extrabold ${
                     props.layoutMode === preset.id
                       ? "border-white bg-white/[0.1] text-white"
                       : "border-white/10 bg-white/[0.04] text-slate-300 hover:bg-white/[0.07]"
@@ -116,6 +116,7 @@ export function LayoutPanel(props: {
                   type="button"
                   key={`${group.title}-${preset.variant}`}
                   aria-label={preset.label}
+                  aria-pressed={props.layoutMode === preset.id}
                   onClick={() => props.onLayoutModeChange(preset.id)}
                 >
                   <span className="relative block aspect-video overflow-hidden rounded-md bg-slate-950">
@@ -157,13 +158,14 @@ export function LayoutPanel(props: {
                 <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
                   {screenAspectOptions.map((aspectRatio) => (
                     <button
-                      className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+                      className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
                         props.screenAspectRatio === aspectRatio
                           ? "bg-white text-[#111827]"
                           : "text-slate-300 hover:bg-white/10 hover:text-white"
                       }`}
                       type="button"
                       key={aspectRatio}
+                      aria-pressed={props.screenAspectRatio === aspectRatio}
                       onClick={() => props.onScreenAspectRatioChange(aspectRatio)}
                     >
                       {aspectRatio === "auto" ? "Auto" : aspectRatio}
@@ -180,13 +182,14 @@ export function LayoutPanel(props: {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
             {(["circle", "rounded", "square"] as CameraShape[]).map((shape) => (
               <button
-                className={`grid h-10 place-items-center rounded-md ${
+                className={`editor-choice-button grid h-10 place-items-center rounded-md ${
                   props.cameraShape === shape
                     ? "bg-white text-[#111827]"
                     : "text-slate-300 hover:bg-white/10 hover:text-white"
                 }`}
                 type="button"
                 key={shape}
+                aria-pressed={props.cameraShape === shape}
                 onClick={() => props.onCameraShapeChange(shape)}
                 title={shape}
               >
@@ -205,13 +208,14 @@ export function LayoutPanel(props: {
           <div className="grid grid-cols-[repeat(auto-fit,minmax(3.2rem,1fr))] gap-1 rounded-lg bg-white/[0.05] p-1">
             {(["none", "light", "accent"] as CameraBorderStyle[]).map((border) => (
               <button
-                className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+                className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
                   props.cameraBorderStyle === border
                     ? "bg-white text-[#111827]"
                     : "text-slate-300 hover:bg-white/10 hover:text-white"
                 }`}
                 type="button"
                 key={border}
+                aria-pressed={props.cameraBorderStyle === border}
                 onClick={() => props.onCameraBorderStyleChange(border)}
               >
                 {border}
@@ -226,13 +230,14 @@ export function LayoutPanel(props: {
             <div className="grid aspect-square grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
               {cameraPositionOptions.map((position) => (
                 <button
-                  className={`rounded-md ${
+                  className={`editor-choice-button rounded-md ${
                     props.cameraPosition === position
                       ? "bg-white"
                       : "bg-white/10 hover:bg-white/20"
                   }`}
                   type="button"
                   key={position}
+                  aria-pressed={props.cameraPosition === position}
                   onClick={() => props.onCameraPositionChange(position)}
                   title={position.replace("-", " ")}
                 />
@@ -245,13 +250,14 @@ export function LayoutPanel(props: {
             <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
               {cameraSizeOptions.map((option) => (
                 <button
-                  className={`rounded-md px-2 py-2 text-xs font-extrabold ${
+                  className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
                     props.cameraSize === option.value
                       ? "bg-white text-[#111827]"
                       : "text-slate-300 hover:bg-white/10 hover:text-white"
                   }`}
                   type="button"
                   key={option.label}
+                  aria-pressed={props.cameraSize === option.value}
                   onClick={() => props.onCameraSizeChange(option.value)}
                 >
                   {option.label}

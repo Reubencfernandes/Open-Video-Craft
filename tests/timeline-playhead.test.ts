@@ -3,13 +3,17 @@ import { createElement, createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { TimelinePlayhead } from "../src/renderer/editor/TimelineChrome";
+import { TimelinePlayhead, TimelineRuler } from "../src/renderer/editor/TimelineChrome";
 import { TimelineClip } from "../src/renderer/editor/TimelineClips";
 import { Timeline } from "../src/renderer/editor/Timeline";
+import {
+  getTimelineDurationAfterDrag,
+  getTimelineZoomAfterWheel
+} from "../src/renderer/editor/useTimelineViewport";
 import type {
   EditorMediaItem,
-  TimelineLaneId,
-  TimelineMediaClip
+  TimelineMediaClip,
+  TimelineRangeSelection
 } from "../src/renderer/editor/types";
 
 let root: ReturnType<typeof createRoot> | null = null;
@@ -45,6 +49,21 @@ describe("timeline playhead", () => {
     expect(onPointerDown).toHaveBeenCalledOnce();
     expect(onPointerMove).toHaveBeenCalledOnce();
     expect(onPointerUp).toHaveBeenCalledOnce();
+  });
+});
+
+describe("timeline ruler", () => {
+  it("positions the final timestamp at the true end of the ruler", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    flushSync(() => root?.render(createElement(TimelineRuler, { duration: 67.5 })));
+
+    const ticks = host.querySelectorAll<HTMLElement>("[data-timeline-ruler-tick]");
+    expect(ticks).toHaveLength(6);
+    expect(ticks[0]?.style.left).toBe("0%");
+    expect(ticks[5]?.style.left).toBe("100%");
+    expect(ticks[5]?.textContent).toBe("01:07");
   });
 });
 
@@ -92,7 +111,9 @@ describe("persistent effect lanes", () => {
     empty?: boolean;
     activeTool?: "media" | "style";
     processing?: boolean;
-    rangeSelection?: { start: number; end: number; laneIds: TimelineLaneId[] } | null;
+    rangeSelection?: TimelineRangeSelection | null;
+    selectedZoomId?: string | null;
+    onDeleteSelected?: () => void;
     audio?: boolean;
     audioLevels?: Record<string, { volume: number; muted: boolean }>;
     onSetAudioLevel?: (
@@ -161,6 +182,14 @@ describe("persistent effect lanes", () => {
       onZoomIn: handler,
       onZoomOut: handler,
       onZoomReset: handler,
+      onZoomWheel: handler,
+      onRulerPointerDown: handler,
+      onRulerPointerMove: handler,
+      onRulerPointerUp: handler,
+      onRulerPointerCancel: handler,
+      onRulerContract: handler,
+      onRulerExpand: handler,
+      onRulerReset: handler,
       activeTool: input?.activeTool ?? "style",
       playing: false,
       scrubbing: false,
@@ -168,6 +197,7 @@ describe("persistent effect lanes", () => {
       currentFrame: 0,
       totalFrames: 600,
       playheadPercent: 0,
+      contentDuration: 12,
       renderDuration: 20,
       videoClips: [],
       audioTracks: input?.audio ? [{ lane: 1, clips: audioClips }] : [],
@@ -203,7 +233,7 @@ describe("persistent effect lanes", () => {
       selectedSegmentId: null,
       selectedSegmentIds: [],
       rangeSelection: input?.rangeSelection ?? null,
-      selectedZoomId: null,
+      selectedZoomId: input?.selectedZoomId ?? null,
       selectedSpeedId: null,
       selectedSubtitleId: null,
       selectedTextOverlayId: null,
@@ -215,7 +245,7 @@ describe("persistent effect lanes", () => {
       onUndo: handler,
       onRedo: handler,
       onSplitAtPlayhead: handler,
-      onDeleteSelected: handler,
+      onDeleteSelected: input?.onDeleteSelected ?? handler,
       onSelectClip: handler,
       onSelectZoom: handler,
       onSelectSpeed: handler,
@@ -260,6 +290,42 @@ describe("persistent effect lanes", () => {
     expect(subtitle?.style.width).toBe("25%");
     expect(text?.style.left).toBe("10%");
     expect(text?.style.width).toBe("20%");
+    expect(zoom?.className).toContain("cursor-move");
+  });
+
+  it("enables toolbar deletion for a singular zoom selection", () => {
+    const onDeleteSelected = vi.fn();
+    const host = renderTimeline({ selectedZoomId: "zoom-1", onDeleteSelected });
+    const deleteButton = host.querySelector<HTMLButtonElement>(
+      'button[title="Delete selected timeline items"]'
+    );
+
+    expect(deleteButton?.disabled).toBe(false);
+    deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onDeleteSelected).toHaveBeenCalledOnce();
+  });
+
+  it("exposes mouse resizing and wheel/pinch timeline zoom", () => {
+    const host = renderTimeline();
+    expect(host.querySelector("[data-timeline-resize-handle]")).not.toBeNull();
+    expect(host.querySelector("[data-timeline-zoom-viewport]")?.getAttribute("title"))
+      .toContain("Ctrl/Cmd");
+    expect(getTimelineZoomAfterWheel(1, -120)).toBeGreaterThan(1);
+    expect(getTimelineZoomAfterWheel(2, 120)).toBeLessThan(2);
+    expect(getTimelineZoomAfterWheel(10, -1000)).toBe(10);
+    expect(getTimelineZoomAfterWheel(1, 1000)).toBe(1);
+  });
+
+  it("expands and compresses the time ruler with a horizontal drag", () => {
+    expect(getTimelineDurationAfterDrag(60, 120, 30)).toBeGreaterThan(60);
+    expect(getTimelineDurationAfterDrag(60, -120, 30)).toBeLessThan(60);
+    expect(getTimelineDurationAfterDrag(60, -1000, 30)).toBe(30);
+    expect(getTimelineDurationAfterDrag(60, 1000, 30)).toBe(630);
+
+    const host = renderTimeline();
+    const ruler = host.querySelector('[aria-label="Visible timeline duration"]');
+    expect(ruler?.getAttribute("aria-valuemin")).toBe("12");
+    expect(ruler?.getAttribute("aria-valuenow")).toBe("20");
   });
 
   it("keeps all effect lanes visible before effects or subtitles are added", () => {
@@ -276,29 +342,50 @@ describe("persistent effect lanes", () => {
     expect(host.querySelector("[data-subtitle-processing]")).not.toBeNull();
   });
 
-  it("paints a marked time range only inside the chosen lanes", () => {
+  it("hides the drag rectangle after release and highlights the selected items", () => {
     const host = renderTimeline({
       rangeSelection: { start: 4, end: 8, laneIds: ["speed", "subtitles"] }
     });
-    expect(
-      host.querySelector('[data-timeline-lane="speed"] [data-timeline-range-selection]')
-    ).not.toBeNull();
-    expect(
-      host.querySelector('[data-timeline-lane="subtitles"] [data-timeline-range-selection]')
-    ).not.toBeNull();
-    expect(
-      host.querySelector('[data-timeline-lane="video"] [data-timeline-range-selection]')
-    ).toBeNull();
-    expect(host.querySelectorAll("[data-timeline-range-selection]")).toHaveLength(2);
-    expect(host.querySelector("[data-timeline-range-count]")?.textContent).toBe("1 item");
+    expect(host.querySelector("[data-timeline-range-selection]")).toBeNull();
+    expect(host.querySelector("[data-timeline-range-count]")).toBeNull();
     expect(
       host.querySelector('[data-speed-effect-id="speed-1"]')?.classList.contains("outline")
+    ).toBe(true);
+    expect(
+      host
+        .querySelector('[data-speed-effect-id="speed-1"]')
+        ?.classList.contains("outline-pink-200")
     ).toBe(true);
     expect(
       host.querySelector('[data-subtitle-id="subtitle-1"]')?.classList.contains("outline")
     ).toBe(false);
     expect(
       host.querySelector<HTMLButtonElement>('button[title="Delete selected timeline items"]')?.disabled
+    ).toBe(false);
+  });
+
+  it("shows one pink rectangle without item outlines while the pointer is dragging", () => {
+    const host = renderTimeline({
+      rangeSelection: {
+        start: 4,
+        end: 8,
+        laneIds: ["speed", "subtitles"],
+        dragging: true
+      }
+    });
+    const selection = host.querySelector<HTMLElement>("[data-timeline-range-selection]");
+    const selectionFrame = selection?.parentElement?.parentElement;
+    expect(host.querySelectorAll("[data-timeline-range-selection]")).toHaveLength(1);
+    expect(selection?.dataset.timelineRangeLanes).toBe("speed,subtitles");
+    expect(selection?.dataset.timelineRangeDragging).toBe("true");
+    expect(selection?.className).toContain("bg-pink-400/[0.16]");
+    expect(selection?.style.left).toBe("20%");
+    expect(selection?.style.width).toBe("20%");
+    expect(selectionFrame?.style.top).toBe("5.5rem");
+    expect(selectionFrame?.style.height).toBe("5.25rem");
+    expect(host.querySelector("[data-timeline-range-count]")?.textContent).toBe("1 item");
+    expect(
+      host.querySelector('[data-speed-effect-id="speed-1"]')?.classList.contains("outline")
     ).toBe(false);
   });
 

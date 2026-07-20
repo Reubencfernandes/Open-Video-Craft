@@ -44,6 +44,7 @@ import type {
 
 type UseTimelineDragInteractionsParams = {
   beginPlaybackInteraction: () => void;
+  clearMediaSelection: () => void;
   currentTimeRef: MutableRefObject<number>;
   endPlaybackInteraction: () => void;
   getTimelineTimeFromClientX: (clientX: number) => number | null;
@@ -85,6 +86,7 @@ type UseTimelineDragInteractionsParams = {
 export function useTimelineDragInteractions(params: UseTimelineDragInteractionsParams) {
   const {
     beginPlaybackInteraction,
+    clearMediaSelection,
     currentTimeRef,
     endPlaybackInteraction,
     getTimelineTimeFromClientX,
@@ -168,6 +170,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     updateEffectClipDrag
   } = useTimelineEffectDragInteractions({
     beginPlaybackInteraction,
+    clearMediaSelection,
     getTimelineTimeFromClientX,
     seek,
     setActiveTool,
@@ -293,7 +296,8 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     const selection = {
       start: Math.min(drag.anchorTime, time),
       end: Math.max(drag.anchorTime, time),
-      laneIds
+      laneIds,
+      dragging: true
     };
     const ids = getTimelineSegmentIdsInRange(
       timelineSegments,
@@ -404,12 +408,19 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
 
     const rangeDrag = rangeSelectionDragRef.current;
     if (rangeDrag) {
+      // Pointer-move events may be coalesced during a quick gesture. Commit the
+      // release coordinates so the last part of the marquee is never lost.
+      updateTimelineRangeSelection(event.clientX, event.clientY);
       rangeSelectionDragRef.current = null;
       if (!rangeDrag.moved) {
         setTimelineRangeSelection(null);
         setSelectedTimelineSegmentIds([]);
         setSelectedTimelineSegmentId(null);
         seekTimelinePointer(event.clientX);
+      } else {
+        setTimelineRangeSelection((selection) =>
+          selection ? { ...selection, dragging: false } : selection
+        );
       }
       endPlaybackInteraction();
       return;

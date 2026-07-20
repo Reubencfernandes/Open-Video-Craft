@@ -94,6 +94,8 @@ export type TimelineRangeSelection = {
   start: number;
   end: number;
   laneIds: TimelineLaneId[];
+  /** True only while the pointer is actively resizing the marquee. */
+  dragging?: boolean;
 };
 
 export type ScreenLayoutDragMode = "move" | "resize-nw" | "resize-ne" | "resize-sw" | "resize-se";

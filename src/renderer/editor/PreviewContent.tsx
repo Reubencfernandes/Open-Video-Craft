@@ -21,22 +21,25 @@ const screenResizeModes = ["resize-nw", "resize-ne", "resize-sw", "resize-se"] a
 const mediaFrameClassName =
   "absolute inset-0 size-full border-0 bg-transparent transition-[transform] duration-[45ms] ease-[cubic-bezier(0.2,0,0.2,1)] will-change-transform";
 
-// Selection chrome for the layout editor. A hairline white border with a dark
-// 1px halo stays readable over any footage (the double-contrast outline pro
-// editors use); no color wash over the video itself. The border and handles
-// stay visible while dragging via group-active.
+// Selection chrome for the layout editor. Keep the drag surface itself
+// borderless so selecting a layer never adds a heavy frame around the footage.
+// A separate inset hairline and compact handles appear on hover/drag without
+// changing the media's layout or covering its corners.
 const editOverlayClassName =
-  "group absolute z-[3] box-border cursor-grab touch-none border border-transparent bg-transparent shadow-none transition-[border-color,box-shadow] duration-100 hover:border-white/95 hover:shadow-[0_0_0_1px_rgb(2_6_23_/_0.55),inset_0_0_0_1px_rgb(2_6_23_/_0.45)] active:cursor-grabbing active:border-white active:shadow-[0_0_0_1px_rgb(2_6_23_/_0.55),inset_0_0_0_1px_rgb(2_6_23_/_0.45)]";
+  "group absolute z-[3] box-border cursor-move touch-none border-0 bg-transparent shadow-none active:cursor-grabbing";
+
+const selectionOutlineClassName =
+  "pointer-events-none absolute inset-0 rounded-[inherit] border border-white/40 opacity-0 shadow-[inset_0_0_0_1px_rgb(0_0_0_/_0.2)] transition-opacity duration-150 group-hover:opacity-100 group-active:opacity-100";
 
 const handleBaseClassName =
-  "absolute z-[1] size-2.5 rounded-[2.5px] border border-slate-950/80 bg-white opacity-0 shadow-[0_1px_4px_rgb(2_6_23_/_0.55)] transition-[opacity,transform] duration-100 hover:scale-125 group-hover:opacity-100 group-active:opacity-100";
+  "absolute z-[1] size-2 rounded-full border border-white/75 bg-[#171719] opacity-0 shadow-[0_1px_4px_rgb(0_0_0_/_0.5)] transition-[opacity,transform,background-color] duration-150 hover:scale-110 hover:bg-white group-hover:opacity-100 group-active:opacity-100";
 
 const handleClassByMode: Record<ScreenLayoutDragMode, string> = {
   move: "",
-  "resize-nw": "-left-[5px] -top-[5px] cursor-nwse-resize",
-  "resize-ne": "-right-[5px] -top-[5px] cursor-nesw-resize",
-  "resize-sw": "-bottom-[5px] -left-[5px] cursor-nesw-resize",
-  "resize-se": "-bottom-[5px] -right-[5px] cursor-nwse-resize"
+  "resize-nw": "-left-1 -top-1 cursor-nwse-resize",
+  "resize-ne": "-right-1 -top-1 cursor-nesw-resize",
+  "resize-sw": "-bottom-1 -left-1 cursor-nesw-resize",
+  "resize-se": "-bottom-1 -right-1 cursor-nwse-resize"
 };
 
 /**
@@ -239,6 +242,7 @@ function ScreenEditOverlay(props: {
       data-screen-edit-overlay
       onPointerDown={(event) => props.onPointerDown(event, "move")}
     >
+      <span className={selectionOutlineClassName} data-selection-outline />
       {screenResizeModes.map((mode) => (
         <span
           className={`${handleBaseClassName} ${handleClassByMode[mode]}`}
@@ -278,6 +282,7 @@ function CameraEditOverlay(props: {
       data-camera-edit-overlay
       onPointerDown={(event) => props.onPointerDown(event, "move")}
     >
+      <span className={selectionOutlineClassName} data-selection-outline />
       {screenResizeModes.map((mode) => (
         <span
           className={`${handleBaseClassName} ${handleClassByMode[mode]}`}

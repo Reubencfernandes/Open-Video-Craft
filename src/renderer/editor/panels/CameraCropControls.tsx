@@ -16,13 +16,14 @@ export function CameraCropControls(props: {
         <span className="text-xs font-extrabold text-slate-400">Camera crop</span>
         <div className="inline-flex items-center gap-1">
           <button
-            className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-extrabold ${
+            className={`editor-choice-button inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-extrabold ${
               props.transform.mirrored
                 ? "bg-white text-black"
                 : "bg-white/[0.06] text-slate-200 hover:bg-white/10 hover:text-white"
             }`}
             type="button"
             title="Mirror camera"
+            aria-pressed={props.transform.mirrored}
             onClick={() =>
               props.onChange({
                 mirrored: !props.transform.mirrored

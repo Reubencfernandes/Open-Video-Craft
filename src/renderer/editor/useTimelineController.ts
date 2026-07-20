@@ -63,6 +63,8 @@ type UseTimelineControllerParams = {
   seekTimelinePointer: (clientX: number) => void;
   selectedItemId: string | null;
   selectedSpeedId: string | null;
+  selectedSubtitleId: string | null;
+  selectedTextOverlayId: string | null;
   selectedTimelineItemId: string | null;
   selectedTimelineSegmentId: string | null;
   selectedTimelineSegmentIds: string[];
@@ -168,6 +170,11 @@ export function useTimelineController(params: UseTimelineControllerParams) {
 
   const drags = useTimelineDragInteractions({
     beginPlaybackInteraction: params.beginPlaybackInteraction,
+    clearMediaSelection: () => {
+      params.setSelectedTimelineSegmentId(null);
+      params.setSelectedTimelineSegmentIds([]);
+      params.setTimelineRangeSelection(null);
+    },
     currentTimeRef: params.currentTimeRef,
     endPlaybackInteraction: params.endPlaybackInteraction,
     getTimelineTimeFromClientX: params.getTimelineTimeFromClientX,
@@ -223,7 +230,31 @@ export function useTimelineController(params: UseTimelineControllerParams) {
   function deleteSelectedTimelineItems() {
     const selection = params.timelineRangeSelection;
     if (!selection) {
-      editing.deleteSelectedTimelineSegment();
+      if (params.selectedTimelineSegmentIds.length > 0 || params.selectedTimelineSegmentId) {
+        editing.deleteSelectedTimelineSegment();
+        return;
+      }
+      if (params.selectedZoomId) {
+        effects.removeZoomEffect(params.selectedZoomId);
+        return;
+      }
+      if (params.selectedSpeedId) {
+        effects.removeSpeedEffect(params.selectedSpeedId);
+        return;
+      }
+      if (params.selectedSubtitleId) {
+        params.setSubtitles((current) =>
+          current.filter((subtitle) => subtitle.id !== params.selectedSubtitleId)
+        );
+        params.setSelectedSubtitleId(null);
+        return;
+      }
+      if (params.selectedTextOverlayId) {
+        params.setTextOverlays((current) =>
+          current.filter((overlay) => overlay.id !== params.selectedTextOverlayId)
+        );
+        params.setSelectedTextOverlayId(null);
+      }
       return;
     }
 
@@ -282,12 +313,9 @@ export function useTimelineController(params: UseTimelineControllerParams) {
   }
 
   useEditorShortcuts({
-    activeTool: params.activeTool,
     currentTime: params.currentTime,
     currentTimeRef: params.currentTimeRef,
     selectedTimelineSegmentId: params.selectedTimelineSegmentId,
-    selectedZoomId: params.selectedZoomId,
-    selectedSpeedId: params.selectedSpeedId,
     hasTimelineRangeSelection: Boolean(params.timelineRangeSelection),
     seek: params.seek,
     undo: editing.undoTimelineEdit,
@@ -298,8 +326,6 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     pasteClip: clipboard.pasteTimelineSegment,
     splitAtPlayhead: editing.splitTimelineSegment,
     togglePlayback: params.togglePlayback,
-    removeZoom: effects.removeZoomEffect,
-    removeSpeed: effects.removeSpeedEffect,
     deleteSelected: deleteSelectedTimelineItems
   });
 

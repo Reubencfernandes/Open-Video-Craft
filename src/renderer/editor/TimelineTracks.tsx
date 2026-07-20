@@ -99,30 +99,33 @@ export function TimelineTracks(props: TimelineTracksProps) {
     "text",
     ...props.audioTracks.map((track) => getAudioTimelineLaneId(track.lane))
   ];
-  const firstSelectedLaneId = orderedLaneIds.find((laneId) =>
-    props.rangeSelection?.laneIds.includes(laneId)
-  );
-  const selectionOverlay = (laneId: TimelineLaneId) => (
-    <TimelineLaneRangeOverlay
-      laneId={laneId}
-      selection={props.rangeSelection}
-      duration={props.renderDuration}
-      selectedCount={props.selectedCount}
-      selectedNoun={props.selectedNoun}
-      showCount={firstSelectedLaneId === laneId}
-    />
+  const rangeSelectionSettled = Boolean(
+    props.rangeSelection && !props.rangeSelection.dragging
   );
 
   return (
-    <>
+    <div className="relative grid content-start gap-1" data-timeline-tracks>
+      <TimelineRangeOverlay
+        orderedLaneIds={orderedLaneIds}
+        selection={props.rangeSelection}
+        duration={props.renderDuration}
+        selectedCount={props.selectedCount}
+        selectedNoun={props.selectedNoun}
+      />
+
       <TimelineTrack laneId="video" label="Video 1" icon={<Film size={14} />}>
-        {selectionOverlay("video")}
         {props.videoClips.map((clip) => (
           <TimelineClip
             key={clip.id}
             clip={clip}
             timelineDuration={props.renderDuration}
-            selected={props.selectedSegmentIds.includes(clip.id)}
+            selected={
+              (!props.rangeSelection || rangeSelectionSettled) &&
+              props.selectedSegmentIds.includes(clip.id)
+            }
+            rangeSelected={
+              rangeSelectionSettled && props.selectedSegmentIds.includes(clip.id)
+            }
             onSelect={(additive) => props.onSelectClip(clip, additive)}
             onTrimPointerDown={props.onTrimPointerDown}
             onMovePointerDown={props.onMovePointerDown}
@@ -155,7 +158,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
       </TimelineTrack>
 
       <TimelineTrack laneId="zoom" label="Zoom" icon={<ZoomIn size={14} />}>
-        {selectionOverlay("zoom")}
         {getOrderedZoomTimingItems(props.zoomEffects).map((effect) => (
           <TimelineZoomClip
             key={effect.id}
@@ -163,6 +165,16 @@ export function TimelineTracks(props: TimelineTracksProps) {
             duration={props.renderDuration}
             selected={
               props.selectedZoomId === effect.id ||
+              (rangeSelectionSettled &&
+                isTimelineTimedItemInRange(
+                  props.rangeSelection,
+                  "zoom",
+                  effect.start,
+                  effect.end
+                ))
+            }
+            rangeSelected={
+              rangeSelectionSettled &&
               isTimelineTimedItemInRange(
                 props.rangeSelection,
                 "zoom",
@@ -177,7 +189,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
       </TimelineTrack>
 
       <TimelineTrack laneId="speed" label="Speed" icon={<SpeedIcon size={14} />}>
-        {selectionOverlay("speed")}
         {getOrderedZoomTimingItems(props.speedEffects).map((effect) => (
           <TimelineSpeedClip
             key={effect.id}
@@ -185,6 +196,16 @@ export function TimelineTracks(props: TimelineTracksProps) {
             duration={props.renderDuration}
             selected={
               props.selectedSpeedId === effect.id ||
+              (rangeSelectionSettled &&
+                isTimelineTimedItemInRange(
+                  props.rangeSelection,
+                  "speed",
+                  effect.start,
+                  effect.end
+                ))
+            }
+            rangeSelected={
+              rangeSelectionSettled &&
               isTimelineTimedItemInRange(
                 props.rangeSelection,
                 "speed",
@@ -199,7 +220,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
       </TimelineTrack>
 
       <TimelineTrack laneId="subtitles" label="Subtitles" icon={<Captions size={14} />}>
-        {selectionOverlay("subtitles")}
         {props.subtitleProcessing ? <TimelineSubtitleShimmer /> : null}
         {props.subtitles.map((subtitle) => (
           <TimelineSubtitleClip
@@ -208,6 +228,16 @@ export function TimelineTracks(props: TimelineTracksProps) {
             duration={props.renderDuration}
             selected={
               props.selectedSubtitleId === subtitle.id ||
+              (rangeSelectionSettled &&
+                isTimelineTimedItemInRange(
+                  props.rangeSelection,
+                  "subtitles",
+                  subtitle.start,
+                  subtitle.end
+                ))
+            }
+            rangeSelected={
+              rangeSelectionSettled &&
               isTimelineTimedItemInRange(
                 props.rangeSelection,
                 "subtitles",
@@ -222,7 +252,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
       </TimelineTrack>
 
       <TimelineTrack laneId="text" label="Text" icon={<Type size={14} />}>
-        {selectionOverlay("text")}
         {props.textOverlays.map((overlay) => (
           <TimelineTextClip
             key={overlay.id}
@@ -230,6 +259,16 @@ export function TimelineTracks(props: TimelineTracksProps) {
             duration={props.renderDuration}
             selected={
               props.selectedTextOverlayId === overlay.id ||
+              (rangeSelectionSettled &&
+                isTimelineTimedItemInRange(
+                  props.rangeSelection,
+                  "text",
+                  overlay.start,
+                  overlay.end
+                ))
+            }
+            rangeSelected={
+              rangeSelectionSettled &&
               isTimelineTimedItemInRange(
                 props.rangeSelection,
                 "text",
@@ -277,7 +316,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
               </button>
             }
           >
-            {selectionOverlay(laneId)}
             {track.clips.map((clip) => (
               <TimelineClip
                 key={clip.id}
@@ -288,7 +326,13 @@ export function TimelineTracks(props: TimelineTracksProps) {
                   track.lane
                 )}
                 timelineDuration={props.renderDuration}
-                selected={props.selectedSegmentIds.includes(clip.id)}
+                selected={
+                  (!props.rangeSelection || rangeSelectionSettled) &&
+                  props.selectedSegmentIds.includes(clip.id)
+                }
+                rangeSelected={
+                  rangeSelectionSettled && props.selectedSegmentIds.includes(clip.id)
+                }
                 onSelect={(additive) => props.onSelectClip(clip, additive)}
                 onTrimPointerDown={props.onTrimPointerDown}
                 onMovePointerDown={props.onMovePointerDown}
@@ -299,50 +343,67 @@ export function TimelineTracks(props: TimelineTracksProps) {
           </TimelineTrack>
         );
       })}
-    </>
+    </div>
   );
 }
 
-function TimelineLaneRangeOverlay(props: {
-  laneId: TimelineLaneId;
+function TimelineRangeOverlay(props: {
+  orderedLaneIds: readonly TimelineLaneId[];
   selection: TimelineRangeSelection | null;
   duration: number;
   selectedCount: number;
   selectedNoun: "clip" | "item";
-  showCount: boolean;
 }) {
-  if (
-    !props.selection ||
-    props.duration <= 0 ||
-    !props.selection.laneIds.includes(props.laneId)
-  ) {
+  if (!props.selection?.dragging || props.duration <= 0) {
     return null;
   }
+
+  const selectedLaneIndexes = props.selection.laneIds
+    .map((laneId) => props.orderedLaneIds.indexOf(laneId))
+    .filter((index) => index >= 0);
+  if (selectedLaneIndexes.length === 0) return null;
 
   const start = Math.max(0, Math.min(props.selection.start, props.duration));
   const end = Math.max(start, Math.min(props.selection.end, props.duration));
   const startRatio = start / props.duration;
   const widthRatio = (end - start) / props.duration;
+  const firstLaneIndex = Math.min(...selectedLaneIndexes);
+  const lastLaneIndex = Math.max(...selectedLaneIndexes);
+  const laneCount = lastLaneIndex - firstLaneIndex + 1;
+  const laneHeightRem = 2.5;
+  const laneGapRem = 0.25;
 
   return (
     <div
-      className="pointer-events-none absolute inset-y-0 z-[4] border border-white/55 bg-white/[0.075] shadow-[inset_0_0_0_1px_rgb(255_255_255_/_0.04)]"
-      data-timeline-range-selection
-      data-timeline-range-lane={props.laneId}
+      className="pointer-events-none absolute inset-x-0 z-[4] grid grid-cols-[var(--timeline-label-width)_minmax(0,1fr)] gap-[var(--timeline-track-gap)] transition-[top,height] duration-75 ease-out will-change-[top,height]"
+      aria-hidden="true"
       style={{
-        left: `${startRatio * 100}%`,
-        width: `${widthRatio * 100}%`
+        top: `${firstLaneIndex * (laneHeightRem + laneGapRem)}rem`,
+        height: `${laneCount * laneHeightRem + (laneCount - 1) * laneGapRem}rem`
       }}
     >
-      {props.showCount && props.selectedCount > 0 ? (
-        <span
-          className="absolute left-1 top-1 whitespace-nowrap rounded bg-white/90 px-1.5 py-0.5 text-[0.58rem] font-bold text-black shadow"
-          data-timeline-range-count
+      <div className="relative col-start-2 h-full">
+        <div
+          className="absolute inset-y-0 overflow-visible rounded-lg border border-pink-200/90 bg-pink-400/[0.16] shadow-[0_0_0_1px_rgb(190_24_93_/_0.35),0_0_20px_rgb(236_72_153_/_0.14),inset_0_0_0_1px_rgb(252_231_243_/_0.12)] transition-[left,width,background-color,border-color,box-shadow] duration-75 ease-out will-change-[left,width]"
+          data-timeline-range-selection
+          data-timeline-range-lanes={props.selection.laneIds.join(",")}
+          data-timeline-range-dragging={props.selection.dragging ? "true" : "false"}
+          style={{
+            left: `${startRatio * 100}%`,
+            width: `${widthRatio * 100}%`
+          }}
         >
-          {props.selectedCount}{" "}
-          {props.selectedCount === 1 ? props.selectedNoun : `${props.selectedNoun}s`}
-        </span>
-      ) : null}
+          {props.selectedCount > 0 ? (
+            <span
+              className="absolute left-2 top-2 whitespace-nowrap rounded-md bg-pink-100/95 px-2 py-1 text-[0.58rem] font-bold text-pink-950 shadow-sm"
+              data-timeline-range-count
+            >
+              {props.selectedCount}{" "}
+              {props.selectedCount === 1 ? props.selectedNoun : `${props.selectedNoun}s`}
+            </span>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 }

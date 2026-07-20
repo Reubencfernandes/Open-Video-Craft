@@ -29,8 +29,12 @@ describe("editor AI and audio panels", () => {
     }));
 
     expect(html).toContain("Master volume");
-    expect(html).toContain("accent-violet-400");
-    expect(html).not.toContain("transition-[width]");
+    expect(html).toContain("data-range-control");
+    expect(html).toContain("data-range-fill");
+    expect(html).toContain("data-bubble-action-button");
+    expect(html).toContain("Add background music");
+    expect(html).not.toMatch(/violet|purple/i);
+    expect(html).not.toMatch(/live output|equalizer/i);
   });
 
   it("offers only Lyria engines and defaults to Lyria Clip", () => {
@@ -68,10 +72,6 @@ describe("editor AI and audio panels", () => {
       sending: false,
       statusMessage: null,
       chatError: null,
-      includeVideo: false,
-      videoConsent: false,
-      onIncludeVideoChange: () => undefined,
-      onVideoConsentChange: () => undefined,
       onSend: () => undefined,
       onCancel: () => undefined,
       onReset: () => undefined,
@@ -93,16 +93,13 @@ describe("editor AI and audio panels", () => {
         id: "message-1",
         role: "assistant",
         text: "A-very-long-token-that-must-wrap-without-growing-the-panel",
+        createdAt: 1_700_000_000_000,
         editSummary: null,
         editId: null
       }],
       sending: false,
       statusMessage: null,
       chatError: "Request failed",
-      includeVideo: false,
-      videoConsent: false,
-      onIncludeVideoChange: () => undefined,
-      onVideoConsentChange: () => undefined,
       onSend: () => undefined,
       onCancel: () => undefined,
       onReset: () => undefined,
@@ -110,11 +107,14 @@ describe("editor AI and audio panels", () => {
       onOpenAiSettings: () => undefined
     }));
 
-    expect(html).toContain("grid-rows-[auto_minmax(0,1fr)_auto]");
+    expect(html).toContain("flex h-full");
+    expect(html).toContain("data-assistant-thread");
+    expect(html).toContain("data-assistant-composer");
     expect(html).toContain("overflow-y-auto");
     expect(html).toContain("[overflow-wrap:anywhere]");
-    expect(html).toContain("bg-rose-500/10");
+    expect(html).toContain("bg-rose-500/[0.08]");
     expect(html).not.toContain("bg-red-500/10");
+    expect(html).not.toMatch(/violet|purple|Let Gemini watch|type="checkbox"/i);
   });
 
   it("omits project revision text and bounds the AI dialog to the viewport", () => {
@@ -126,8 +126,14 @@ describe("editor AI and audio panels", () => {
       onProviderKeysChanged: () => undefined
     }));
 
-    expect(html).toContain("AI video editing");
+    expect(html).toContain("Set up AI connections");
     expect(html).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(html).toContain("data-provider-card");
+    expect(html).toContain("Google Gemini");
+    expect(html).toContain("Connect");
+    expect(html).not.toMatch(/violet|purple/i);
     expect(html).not.toMatch(/Project revision|Codex/);
+    expect(html).not.toContain("Allow connected CLI clients");
+    expect(html).not.toContain('type="checkbox"');
   });
 });

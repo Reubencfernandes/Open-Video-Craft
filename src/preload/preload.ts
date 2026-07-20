@@ -28,6 +28,7 @@ import type {
   MusicSetupStatus,
   ProjectLibraryEntry,
   ProjectView,
+  ProviderKeyId,
   ProviderKeysView,
   RenameProjectRequest,
   SaveEditorProjectStateRequest,
@@ -71,6 +72,8 @@ const api = {
   },
   providers: {
     get: (): Promise<ProviderKeysView> => ipcRenderer.invoke("providers:get"),
+    reveal: (provider: ProviderKeyId): Promise<string | null> =>
+      ipcRenderer.invoke("providers:reveal", provider),
     update: (request: UpdateProviderKeysRequest): Promise<ProviderKeysView> =>
       ipcRenderer.invoke("providers:update", request)
   },

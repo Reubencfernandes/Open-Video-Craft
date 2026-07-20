@@ -16,19 +16,14 @@ afterEach(() => {
 function ShortcutHarness(props: {
   hasTimelineRangeSelection?: boolean;
   selectedTimelineSegmentId?: string | null;
-  selectedZoomId?: string | null;
   togglePlayback: () => void;
-  removeZoom: (id: string) => void;
   deleteSelected: () => void;
   onMute: () => void;
 }) {
   useEditorShortcuts({
-    activeTool: "zoom",
     currentTime: 0,
     currentTimeRef: { current: 0 },
     selectedTimelineSegmentId: props.selectedTimelineSegmentId ?? null,
-    selectedZoomId: props.selectedZoomId ?? null,
-    selectedSpeedId: null,
     hasTimelineRangeSelection: props.hasTimelineRangeSelection ?? false,
     seek: vi.fn(),
     undo: vi.fn(),
@@ -39,8 +34,6 @@ function ShortcutHarness(props: {
     pasteClip: vi.fn(),
     splitAtPlayhead: vi.fn(),
     togglePlayback: props.togglePlayback,
-    removeZoom: props.removeZoom,
-    removeSpeed: vi.fn(),
     deleteSelected: props.deleteSelected
   });
 
@@ -56,7 +49,6 @@ function renderHarness(
 ) {
   const callbacks = {
     togglePlayback: vi.fn(),
-    removeZoom: vi.fn(),
     deleteSelected: vi.fn(),
     onMute: vi.fn(),
     ...overrides
@@ -88,15 +80,29 @@ describe("editor global shortcuts", () => {
     expect(callbacks.onMute).toHaveBeenCalledOnce();
   });
 
-  it("deletes the marquee selection before an old effect owned by the active tool", () => {
+  it("routes Delete through the unified timeline selection", () => {
     const { callbacks } = renderHarness({
-      hasTimelineRangeSelection: true,
-      selectedZoomId: "old-zoom"
+      hasTimelineRangeSelection: true
     });
 
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
 
     expect(callbacks.deleteSelected).toHaveBeenCalledOnce();
-    expect(callbacks.removeZoom).not.toHaveBeenCalled();
+  });
+
+  it("deletes a selected timeline region even while its button has focus", () => {
+    const { callbacks, host } = renderHarness();
+    const button = host.querySelector<HTMLButtonElement>("[data-mute]");
+    button?.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Delete"
+    });
+    button?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(callbacks.deleteSelected).toHaveBeenCalledOnce();
   });
 });

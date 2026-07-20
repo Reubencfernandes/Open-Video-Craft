@@ -1,9 +1,10 @@
 /**
  * Preview overlay for picking a zoom effect's focal point.
  */
-import { AudioLines, Crosshair, ZoomIn } from "lucide-react";
+import { AudioLines } from "lucide-react";
 import { useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import { RangeControl } from "./controls";
 import { clampNumber } from "./utils";
 import type { EditorMediaItem, ZoomEffect } from "./types";
 
@@ -58,7 +59,7 @@ export function ZoomTargetPanel(props: {
         Drag the dot to set what the zoom focuses on
       </span>
       <button
-        className="relative grid aspect-video w-full cursor-crosshair place-items-center overflow-hidden rounded-lg border border-white/10 bg-[#24262b] p-0 disabled:cursor-not-allowed disabled:opacity-55 [&>img]:size-full [&>img]:object-cover [&>video]:size-full [&>video]:object-cover"
+        className="relative grid aspect-video w-full cursor-move place-items-center overflow-hidden rounded-lg border border-white/10 bg-[#24262b] p-0 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-55 [&>img]:size-full [&>img]:object-cover [&>video]:size-full [&>video]:object-cover"
         type="button"
         disabled={!effect}
         onPointerDown={handlePointerDown}
@@ -77,35 +78,25 @@ export function ZoomTargetPanel(props: {
         )}
         {effect ? (
           <span
-            className="pointer-events-none absolute grid size-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/90 bg-black/65 text-rose-300 shadow-[0_0_0_3px_rgb(244_63_94_/_0.28),0_6px_18px_rgb(0_0_0_/_0.55)]"
+            aria-hidden="true"
+            className="pointer-events-none absolute size-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-500 shadow-[0_5px_18px_rgb(239_68_68_/_0.48)]"
+            data-zoom-target-dot
             style={{
               left: `${effect.targetX}%`,
               top: `${effect.targetY}%`
             }}
-          >
-            <Crosshair size={18} strokeWidth={2.25} />
-            <i className="absolute size-1.5 rounded-full bg-white shadow-[0_0_8px_rgb(251_113_133)]" />
-          </span>
+          />
         ) : null}
       </button>
-      <label className="grid gap-2 text-xs font-extrabold text-slate-400">
-        <span>Scale</span>
-        <div className="grid grid-cols-[auto_minmax(0,1fr)_4rem] items-center gap-2">
-          <ZoomIn size={15} />
-          <input
-            className="w-full accent-violet-400"
-            type="range"
-            min={125}
-            max={300}
-            value={Math.round((effect?.scale ?? 1.5) * 100)}
-            disabled={!effect}
-            onChange={(event) => props.onScaleChange(Number(event.target.value) / 100)}
-          />
-          <output className="rounded-md bg-white/[0.06] px-2 py-1 text-center text-white tabular-nums">
-            {Math.round((effect?.scale ?? 1.5) * 100)} %
-          </output>
-        </div>
-      </label>
+      <RangeControl
+        label="Scale"
+        min={125}
+        max={300}
+        value={Math.round((effect?.scale ?? 1.5) * 100)}
+        suffix="%"
+        disabled={!effect}
+        onChange={(value) => props.onScaleChange(value / 100)}
+      />
     </div>
   );
 }

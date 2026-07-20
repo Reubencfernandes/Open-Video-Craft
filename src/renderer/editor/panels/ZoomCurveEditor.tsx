@@ -238,7 +238,7 @@ function CurveCanvas(props: {
 function CurveHandle(props: { x: number; y: number }) {
   return (
     <span
-      className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-violet-300 bg-white shadow-[0_1px_6px_rgb(0_0_0_/_0.45)]"
+      className="absolute size-3.5 -translate-x-1/2 -translate-y-1/2 cursor-move rounded-full border-2 border-violet-300 bg-white shadow-[0_1px_6px_rgb(0_0_0_/_0.45)]"
       style={{ left: `${props.x * 100}%`, top: `${(1 - props.y) * 100}%` }}
     />
   );
@@ -253,12 +253,13 @@ function CurveButton(props: {
 }) {
   return (
     <button
-      className={`${props.className ?? ""} grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-bold transition ${
+      className={`${props.className ?? ""} editor-choice-button grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-bold ${
         props.active
           ? "bg-white text-black"
           : "bg-white/[0.05] text-slate-300 hover:bg-white/10 hover:text-white"
       }`}
       type="button"
+      aria-pressed={props.active}
       onClick={props.onClick}
     >
       <ZoomCurvePreview bezier={props.bezier} />

@@ -94,20 +94,21 @@ export function MediaPanel(props: {
       <div className="flex flex-none items-center gap-1 overflow-x-auto px-0.5">
         {mediaTabs.map((tab) => (
           <button
-            className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1.5 text-[0.7rem] font-semibold transition ${
+            className={`editor-choice-button flex-none whitespace-nowrap rounded-full px-2.5 py-1.5 text-[0.7rem] font-semibold ${
               props.activeTab === tab.id
                 ? "bg-white/[0.14] text-white"
                 : "text-neutral-400 hover:bg-white/[0.06] hover:text-white"
             }`}
             type="button"
             key={tab.id}
+            aria-pressed={props.activeTab === tab.id}
             onClick={() => props.onTabChange(tab.id)}
           >
             {tab.label}
           </button>
         ))}
         <button
-          className={`ml-auto grid size-7 flex-none place-items-center rounded-full transition ${
+          className={`editor-choice-button ml-auto grid size-7 flex-none place-items-center rounded-full ${
             searchOpen
               ? "bg-white/[0.14] text-white"
               : "text-neutral-400 hover:bg-white/[0.06] hover:text-white"

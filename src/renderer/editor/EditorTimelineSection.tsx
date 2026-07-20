@@ -5,7 +5,8 @@ import type {
   DragEvent as ReactDragEvent,
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
-  RefObject
+  RefObject,
+  WheelEvent as ReactWheelEvent
 } from "react";
 import { Timeline } from "./Timeline";
 import type {
@@ -31,6 +32,14 @@ export function EditorTimelineSection(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomWheel: (event: ReactWheelEvent<HTMLElement>) => void;
+  onRulerPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerPointerCancel: (event: ReactPointerEvent<HTMLElement>) => void;
+  onRulerContract: () => void;
+  onRulerExpand: () => void;
+  onRulerReset: () => void;
   activeTool: EditorTool;
   playing: boolean;
   scrubbing: boolean;
@@ -38,6 +47,7 @@ export function EditorTimelineSection(props: {
   currentFrame: number;
   totalFrames: number;
   playheadPercent: number;
+  contentDuration: number;
   renderDuration: number;
   videoClips: TimelineMediaClip[];
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
@@ -125,6 +135,14 @@ export function EditorTimelineSection(props: {
       onZoomIn={props.onZoomIn}
       onZoomOut={props.onZoomOut}
       onZoomReset={props.onZoomReset}
+      onZoomWheel={props.onZoomWheel}
+      onRulerPointerDown={props.onRulerPointerDown}
+      onRulerPointerMove={props.onRulerPointerMove}
+      onRulerPointerUp={props.onRulerPointerUp}
+      onRulerPointerCancel={props.onRulerPointerCancel}
+      onRulerContract={props.onRulerContract}
+      onRulerExpand={props.onRulerExpand}
+      onRulerReset={props.onRulerReset}
       activeTool={props.activeTool}
       playing={props.playing}
       scrubbing={props.scrubbing}
@@ -132,6 +150,7 @@ export function EditorTimelineSection(props: {
       currentFrame={props.currentFrame}
       totalFrames={props.totalFrames}
       playheadPercent={props.playheadPercent}
+      contentDuration={props.contentDuration}
       renderDuration={props.renderDuration}
       videoClips={props.videoClips}
       audioTracks={props.audioTracks}
