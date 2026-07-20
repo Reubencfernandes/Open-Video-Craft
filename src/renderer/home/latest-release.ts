@@ -2,7 +2,7 @@
 const heroImageUrl: string | null = null;
 
 export const latestRelease = {
-  version: "2.3.2",
+  version: "2.3.3",
   title: "A smoother, safer recording and editing experience",
   releasedAt: "July 20, 2026",
   summary:
@@ -12,7 +12,7 @@ export const latestRelease = {
   heroImageUrl,
   changes: [
     "The recorder no longer creates a display-sized green border overlay, preventing transparent-window compositor failures on macOS and Windows.",
-    "The recorder has a cleaner black-and-pink interface, smooth state transitions, clearer device controls, and an elapsed recording timer.",
+    "The recorder has a cleaner black-and-pink interface, smooth state transitions, clearer device controls, and a stable square-pixel elapsed timer.",
     "Drag across an exact time region and one or more timeline lanes; only clips and timed items inside that rectangle are selected.",
     "Zoom, speed, subtitle, text, and media selections are exclusive, and Delete now removes the selected timeline item even while its button has focus.",
     "Each audio lane now has its own mute control, with the same lane-aware mix used during preview, transcription, and final export.",

@@ -22,6 +22,7 @@ import {
 import { useEffect, useRef } from "react";
 import { cx } from "../classNames";
 import { FloatingDeviceControl } from "./FloatingDeviceControl";
+import { PixelTimer } from "./PixelTimer";
 import {
   cameraQualities,
   cameraQualityPresets,
@@ -384,9 +385,7 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
               />
               {statusText}
             </div>
-            <strong className="font-mono text-3xl tracking-tight text-white tabular-nums">
-              {formatElapsedTime(props.elapsedMs)}
-            </strong>
+            <PixelTimer value={formatElapsedTime(props.elapsedMs)} />
             <div className="grid w-full grid-cols-3 gap-2">
               <button
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-white/[0.07] px-3 text-xs font-bold text-neutral-200 transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.12] active:translate-y-0"

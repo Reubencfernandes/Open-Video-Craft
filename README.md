@@ -31,7 +31,7 @@ Recording, editing, Whisper transcription, and export run locally. Optional
 Gemini, Cohere, and Claude Code connections are used only when you explicitly
 invoke their AI features.
 
-## Screenshots — v2.3.2
+## Screenshots — v2.3.3
 
 | Launcher | Floating recorder |
 | :---: | :---: |

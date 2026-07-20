@@ -64,6 +64,7 @@ describe("recorder controller view", () => {
 
     expect(html).toContain("Recording in progress");
     expect(html).toContain("01:05");
+    expect(html).toContain("data-pixel-timer");
     expect(html).toContain("recorder-recording-dot");
     expect(html).toContain("Pause");
     expect(html).toContain("Cancel");
