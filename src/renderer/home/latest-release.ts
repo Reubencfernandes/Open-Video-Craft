@@ -2,7 +2,7 @@
 const heroImageUrl: string | null = null;
 
 export const latestRelease = {
-  version: "2.3.1",
+  version: "2.3.2",
   title: "A smoother, safer recording and editing experience",
   releasedAt: "July 20, 2026",
   summary:
