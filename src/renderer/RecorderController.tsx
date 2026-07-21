@@ -88,10 +88,7 @@ export function RecorderController() {
     const nextSources = await window.openVideoCraft.sources.list();
     setSources(nextSources);
     setSelectedSourceId((current) => {
-      if (
-        current &&
-        nextSources.some((source) => source.id === current && source.kind === "screen")
-      ) {
+      if (current && nextSources.some((source) => source.id === current)) {
         return current;
       }
 
@@ -740,9 +737,9 @@ export function RecorderController() {
       countdown={countdown}
       elapsedMs={elapsedMs}
       errorMessage={errorMessage}
-      projectRootPath={project?.rootPath ?? null}
       systemAudioEnabled={systemAudioEnabled}
-      selectedSourceName={selectedSource?.name ?? null}
+      sources={sources}
+      selectedSourceId={selectedSourceId}
       baseDirectory={baseDirectory}
       microphones={microphones}
       cameras={cameras}
@@ -774,6 +771,7 @@ export function RecorderController() {
       }
       onMicChange={setSelectedMicId}
       onCameraChange={setSelectedCameraId}
+      onSourceChange={setSelectedSourceId}
       onScreenQualityChange={setScreenQuality}
       onCameraQualityChange={setCameraQuality}
     />
