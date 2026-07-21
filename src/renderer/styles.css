@@ -456,6 +456,58 @@ select,
   }
 }
 
+/* The active subtitle sends a narrow red beam along the list's time spine. */
+.subtitle-timeline-marker {
+  isolation: isolate;
+}
+
+.subtitle-timeline-laser {
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 3.25rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgb(255 59 92 / 0.08) 16%,
+    rgb(255 59 92 / 0.78) 44%,
+    rgb(255 228 233) 50%,
+    rgb(255 59 92 / 0.78) 56%,
+    rgb(255 59 92 / 0.08) 84%,
+    transparent 100%
+  );
+  filter: drop-shadow(0 0 5px rgb(255 59 92 / 0.9));
+  animation: subtitle-timeline-laser-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes subtitle-timeline-laser-sweep {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -82%) scaleY(0.45);
+  }
+  28% {
+    opacity: 1;
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -18%) scaleY(0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtitle-timeline-laser {
+    animation: none;
+    opacity: 1;
+    transform: translate(-50%, -50%) scaleY(0.7);
+  }
+}
+
 @keyframes recorder-state-enter {
   from {
     opacity: 0;

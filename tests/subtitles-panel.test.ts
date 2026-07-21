@@ -81,7 +81,7 @@ describe("SubtitlesPanel", () => {
     expect(onSelectSubtitle).toHaveBeenLastCalledWith(null);
   });
 
-  it("clamps an edited end time to the media duration", async () => {
+  it("shows timing as read-only because timing is edited on the timeline", async () => {
     const onUpdateSubtitle = vi.fn();
     const host = await renderPanel({
       subtitles: [{ id: "first", start: 40.74, end: 11_111, text: "July 16th." }],
@@ -89,20 +89,35 @@ describe("SubtitlesPanel", () => {
       duration: 90,
       onUpdateSubtitle
     });
-    const endInput = host.querySelector<HTMLInputElement>('[aria-label="Subtitle end time"]');
-    const valueSetter = Object.getOwnPropertyDescriptor(
-      HTMLInputElement.prototype,
-      "value"
-    )?.set;
+    const start = host.querySelector<HTMLOutputElement>('[aria-label="Subtitle start time"]');
+    const end = host.querySelector<HTMLOutputElement>('[aria-label="Subtitle end time"]');
 
-    await act(async () => {
-      endInput?.focus();
-      valueSetter?.call(endInput, "999:59.999");
-      endInput?.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(start?.tagName).toBe("OUTPUT");
+    expect(start?.textContent).toBe("00:40.740");
+    expect(end?.textContent).toBe("03:05:11.000");
+    expect(host.querySelector('input[aria-label="Subtitle start time"]')).toBeNull();
+    expect(host.textContent).toContain("Adjust timing by dragging the subtitle clip in the timeline");
+    expect(onUpdateSubtitle).not.toHaveBeenCalled();
+  });
+
+  it("sorts cues by their current timestamps", async () => {
+    const host = await renderPanel({
+      subtitles: [
+        { id: "last", start: 94.708, end: 96.868, text: "Last subtitle" },
+        { id: "first", start: 43.44, end: 53.5, text: "First subtitle" },
+        { id: "middle", start: 53.5, end: 58.66, text: "Middle subtitle" }
+      ]
     });
-    await act(async () => endInput?.blur());
+    const cueIds = [...host.querySelectorAll<HTMLButtonElement>('button[aria-controls^="subtitle-editor-"]')]
+      .map((button) => button.getAttribute("aria-controls"));
 
-    expect(onUpdateSubtitle).toHaveBeenCalledWith("first", { end: 90 });
-    expect(endInput?.value).toBe("01:30.000");
+    expect(cueIds).toEqual([
+      "subtitle-editor-first",
+      "subtitle-editor-middle",
+      "subtitle-editor-last"
+    ]);
+    expect(
+      host.querySelector('[aria-controls="subtitle-editor-first"]')?.getAttribute("aria-expanded")
+    ).toBe("true");
   });
 });
