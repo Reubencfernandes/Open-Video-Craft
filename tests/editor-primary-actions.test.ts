@@ -100,6 +100,8 @@ describe("editor primary actions", () => {
     expect(html).toContain("data-api-key-prompt");
     expect(html).toContain("Add your Gemini API key to use this model");
     expect(html).toContain("rounded-full");
+    expect(html).toContain("border-cyan-300/70");
+    expect(html).not.toContain("border-amber-300/70");
   });
 
   it("shows the zoom focus as one large solid red dot", () => {

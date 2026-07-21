@@ -68,6 +68,7 @@ export function AssistantPanel(props: {
         <ApiKeyPromptPill
           className="m-2.5 flex-none"
           onClick={props.onOpenAiSettings}
+          provider="gemini"
         >
           Add your Gemini API key to use the assistant
         </ApiKeyPromptPill>

@@ -81,7 +81,7 @@ export function MusicPanel(props: {
       ) : null}
 
       {needsGeminiKey ? (
-        <ApiKeyPromptPill onClick={props.onOpenAiSettings}>
+        <ApiKeyPromptPill onClick={props.onOpenAiSettings} provider="gemini">
           Add your Gemini API key to use Lyria
         </ApiKeyPromptPill>
       ) : null}

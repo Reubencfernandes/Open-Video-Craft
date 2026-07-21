@@ -21,11 +21,13 @@ workflow together as one production-ready desktop app.
 - Redesigned the floating recorder around a larger camera preview, the Open Video Craft logo, flatter quality controls, and a clear red recording button.
 - Refreshed the launcher, recorder, editor, and subtitle documentation screenshots to match the stable interface.
 - Subtitle cues now show millisecond-accurate `MM:SS.mmm` timestamps instead of rounded or raw decimal values.
+- Gemini and Cohere setup prompts now use distinct blue/cyan and green liquid-glass palettes.
 
 ### Fixed
 
 - Restored the launcher and floating-recorder screenshot assets and made the screenshot capture workflow more reliable.
 - Subtitle time editing accepts seconds, `MM:SS`, and `HH:MM:SS` input while preserving valid cue ordering.
+- Claude Code now appears immediately in AI settings with a clear checking state while CLI detection completes.
 
 ## [1.5.0] - 2026-07-13
 

@@ -117,7 +117,8 @@ describe("editor AI and audio panels", () => {
       expect(html).toContain("data-api-key-prompt");
       expect(html).toContain("rounded-full");
       expect(html).toContain("shadow-[inset_0_0_14px");
-      expect(html).not.toContain("rounded-md border border-amber-400/40");
+      expect(html).toContain("border-cyan-300/70");
+      expect(html).not.toMatch(/border-amber-300\/70|rounded-md border border-amber-400\/40/);
     }
   });
 
@@ -165,6 +166,9 @@ describe("editor AI and audio panels", () => {
     expect(html).toContain("Set up AI connections");
     expect(html).toContain("max-h-[calc(100dvh-2rem)]");
     expect(html).toContain("data-provider-card");
+    expect(html).toContain('data-provider-loading="true"');
+    expect(html).toContain("Claude Code");
+    expect(html).toContain("Checking Claude Code…");
     expect(html).toContain("Google Gemini");
     expect(html).toContain("Connect");
     expect(html).not.toMatch(/violet|purple/i);

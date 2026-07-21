@@ -4,11 +4,38 @@ import type { AiConnectionProviderStatus, AiProvider } from "../../shared/types"
 
 /** Claude Code provider card, visually aligned with the cloud API-key cards. */
 export function AiProviderConnectionCard(props: {
-  provider: AiConnectionProviderStatus;
+  provider: AiConnectionProviderStatus | null;
   busy: AiProvider | "undo" | null;
   onConfigure: (provider: AiProvider, connected: boolean) => Promise<void>;
 }) {
   const { provider } = props;
+  if (!provider) {
+    return (
+      <article className="flex min-h-[12.5rem] min-w-0 flex-col overflow-hidden rounded-xl bg-[#18181b] shadow-[0_8px_28px_rgb(0_0_0_/_0.18)]" data-provider-card="claude" data-provider-loading="true">
+        <div className="flex flex-1 items-start justify-between gap-3 p-4">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-white">Claude Code</h3>
+            <p className="mt-1.5 inline-flex items-center gap-1.5 text-[0.68rem] leading-4 text-neutral-400">
+              <LoaderCircle className="animate-spin" size={12} /> Checking Claude Code…
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5 opacity-60">
+              <span className="rounded-full bg-emerald-400/[0.09] px-2 py-1 text-[0.58rem] font-bold text-emerald-300">Video editing</span>
+              <span className="rounded-full bg-sky-400/[0.09] px-2 py-1 text-[0.58rem] font-bold text-sky-300">Local CLI</span>
+              <span className="rounded-full bg-amber-300/[0.09] px-2 py-1 text-[0.58rem] font-bold text-amber-200">Project tools</span>
+            </div>
+          </div>
+          <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-xl bg-[#d97757]/10">
+            <ClaudeCodeIcon size={27} />
+          </span>
+        </div>
+        <div className="grid min-h-12 grid-cols-1 px-2 pb-2">
+          <button className="inline-flex items-center justify-center gap-2 text-xs font-bold text-neutral-500" type="button" disabled>
+            <LoaderCircle className="animate-spin" size={14} /> Checking…
+          </button>
+        </div>
+      </article>
+    );
+  }
   const connectionDisabled = props.busy !== null || (
     !provider.configured && (!provider.installed || !provider.supported)
   );

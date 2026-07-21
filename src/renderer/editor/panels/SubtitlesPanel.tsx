@@ -146,7 +146,10 @@ export function SubtitlesPanel(props: {
           </div>
         ) : null}
         {missingKey ? (
-          <ApiKeyPromptPill onClick={props.onOpenAiSettings}>
+          <ApiKeyPromptPill
+            onClick={props.onOpenAiSettings}
+            provider={props.sttProvider === "cohere" ? "cohere" : "gemini"}
+          >
             Add your {providerLabel.split(" ")[0]} API key to use this model
           </ApiKeyPromptPill>
         ) : null}
