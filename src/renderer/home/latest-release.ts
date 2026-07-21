@@ -2,17 +2,21 @@
 const heroImageUrl: string | null = null;
 
 export const latestRelease = {
-  version: "2.3.3",
-  title: "A smoother, safer recording and editing experience",
-  releasedAt: "July 20, 2026",
+  version: "1.0.0",
+  title: "Open Video Craft is ready for its first stable release",
+  releasedAt: "July 21, 2026",
   summary:
-    "A major editor update focused on precise timeline control, complete AI-assisted editing, cleaner audio workflows, and a more polished interface.",
+    "The complete local-first recording and editing workflow, refined for a stable launch with a redesigned recorder and more precise subtitle editing.",
   // Import the release artwork and assign its URL here when it is ready.
   // The changelog uses a plain dark surface until then—never a fake gradient.
   heroImageUrl,
   changes: [
+    "Choose all displays or a specific screen from the floating recorder before recording.",
+    "Click a subtitle cue to smoothly expand an inline editor for its text and precise start and end timecodes.",
+    "Subtitle timestamps now use a readable, millisecond-accurate format instead of raw decimal seconds.",
+    "The floating recorder now features a larger camera preview, the Open Video Craft logo, flatter quality controls, and a clear red recording button.",
+    "Gemini and Cohere setup prompts now use distinct liquid-glass colors, and Claude Code appears immediately while its local CLI status is checked.",
     "The recorder no longer creates a display-sized green border overlay, preventing transparent-window compositor failures on macOS and Windows.",
-    "The recorder has a cleaner black-and-pink interface, smooth state transitions, clearer device controls, and a stable square-pixel elapsed timer.",
     "Drag across an exact time region and one or more timeline lanes; only clips and timed items inside that rectangle are selected.",
     "Zoom, speed, subtitle, text, and media selections are exclusive, and Delete now removes the selected timeline item even while its button has focus.",
     "Each audio lane now has its own mute control, with the same lane-aware mix used during preview, transcription, and final export.",

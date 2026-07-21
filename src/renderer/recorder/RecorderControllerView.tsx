@@ -20,6 +20,8 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import type { SourceSummary } from "../../shared/types";
+import appLogo from "../assets/app.png";
 import { cx } from "../classNames";
 import { FloatingDeviceControl } from "./FloatingDeviceControl";
 import { PixelTimer } from "./PixelTimer";
@@ -40,9 +42,9 @@ export function RecorderControllerView(props: {
   countdown: number;
   elapsedMs: number;
   errorMessage: string | null;
-  projectRootPath: string | null;
   systemAudioEnabled: boolean;
-  selectedSourceName: string | null;
+  sources: SourceSummary[];
+  selectedSourceId: string | null;
   baseDirectory: string | null;
   microphones: DeviceOption[];
   cameras: DeviceOption[];
@@ -70,6 +72,7 @@ export function RecorderControllerView(props: {
   onToggleCamera: () => void;
   onMicChange: (deviceId: string | null) => void;
   onCameraChange: (deviceId: string | null) => void;
+  onSourceChange: (sourceId: string) => void;
   onScreenQualityChange: (quality: ScreenQuality) => void;
   onCameraQualityChange: (quality: CameraQuality) => void;
 }) {
@@ -147,9 +150,7 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
       <section className="flex h-full w-full flex-col overflow-hidden rounded-2xl bg-[#0b0b0d] pb-3 text-white shadow-[0_24px_80px_rgb(0_0_0_/_0.55)]" data-recorder-controller>
         <div className="flex h-14 flex-none items-center justify-between px-4 [-webkit-app-region:drag]">
           <div className="inline-flex min-w-0 items-center gap-2.5">
-            <span className="grid size-8 place-items-center rounded-xl bg-[#ff3b9d]/10">
-              <Video className="text-[#ff6db7]" size={17} fill="currentColor" />
-            </span>
+            <img className="size-8 rounded-xl object-contain" src={appLogo} alt="" />
             <span className="grid min-w-0 leading-tight">
               <strong className="truncate text-[0.82rem] font-extrabold">Open Video Craft</strong>
               <small className="text-[0.58rem] font-bold uppercase tracking-[0.14em] text-neutral-500">Screen recorder</small>
@@ -195,7 +196,7 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
 
         <RecorderBody {...props} />
 
-        <div className="mx-3 grid grid-cols-2 gap-2 rounded-2xl bg-white/[0.025] p-2">
+        <div className="mx-3 grid grid-cols-2 gap-2">
           <QualitySelect
             label="Screen quality"
             value={props.screenQuality}
@@ -298,11 +299,52 @@ function CameraPreview(props: { stream: MediaStream }) {
   return (
     <video
       ref={videoRef}
-      className="aspect-video w-[200px] flex-none rounded-2xl bg-black object-cover shadow-[0_14px_34px_rgb(0_0_0_/_0.4)]"
+      className="pointer-events-none absolute inset-0 size-full bg-black object-cover"
       autoPlay
       muted
       playsInline
+      aria-label="Camera preview"
     />
+  );
+}
+
+function CaptureSourceSelect(props: {
+  sources: SourceSummary[];
+  selectedSourceId: string | null;
+  disabled: boolean;
+  onChange: (sourceId: string) => void;
+}) {
+  const screens = props.sources.filter((source) => source.kind === "screen");
+  const windows = props.sources.filter((source) => source.kind === "window");
+
+  return (
+    <label className="absolute left-1/2 top-3 z-20 inline-flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl bg-black/65 p-1.5 pl-3 text-[0.64rem] font-bold text-neutral-300 backdrop-blur-md [-webkit-app-region:no-drag]">
+      <MonitorUp className="shrink-0 text-[#ff6db7]" size={14} />
+      <span className="sr-only">Screen or window to record</span>
+      <select
+        className="themed-select h-8 min-w-0 max-w-[18rem] cursor-pointer border-0 bg-transparent text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-55"
+        value={props.selectedSourceId ?? ""}
+        disabled={props.disabled || props.sources.length === 0}
+        onChange={(event) => props.onChange(event.target.value)}
+        aria-label="Screen or window to record"
+      >
+        {props.sources.length === 0 ? <option value="">No source available</option> : null}
+        {screens.length > 0 ? (
+          <optgroup label="Screens">
+            {screens.map((source) => (
+              <option key={source.id} value={source.id}>{source.name}</option>
+            ))}
+          </optgroup>
+        ) : null}
+        {windows.length > 0 ? (
+          <optgroup label="Windows">
+            {windows.map((source) => (
+              <option key={source.id} value={source.id}>{source.name}</option>
+            ))}
+          </optgroup>
+        ) : null}
+      </select>
+    </label>
   );
 }
 
@@ -344,7 +386,6 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
   const isRecordingActive = props.state === "recording" || props.state === "paused";
   const isBusy = ["preparing", "countdown", "processing", "stopping"].includes(props.state);
   const showCameraPreview = props.cameraPreviewStream !== null;
-  const sourceName = props.selectedSourceName ?? "No screen available";
 
   const statusText = props.state === "recording"
     ? "Recording in progress"
@@ -360,18 +401,25 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
               ? "Preparing capture"
               : props.state === "complete"
                 ? "Recording saved"
-                : "Ready to record";
+                : "Start recording";
 
   return (
     <div className="relative grid min-h-0 flex-1 place-items-center overflow-hidden px-4 pb-5 pt-3">
-      <div className="absolute left-1/2 top-3 inline-flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-full bg-white/[0.045] px-3 py-1.5 text-[0.64rem] font-bold text-neutral-300">
-        <MonitorUp className="shrink-0 text-[#ff6db7]" size={14} />
-        <span className="truncate">{sourceName}</span>
-      </div>
+      {showCameraPreview ? (
+        <>
+          <CameraPreview stream={props.cameraPreviewStream!} />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(0_0_0_/_0.5)_0%,rgb(0_0_0_/_0.12)_42%,rgb(0_0_0_/_0.56)_100%)]" />
+        </>
+      ) : null}
 
-      <div className="recorder-state-enter flex flex-col items-center gap-4" key={props.state}>
-        {showCameraPreview ? <CameraPreview stream={props.cameraPreviewStream!} /> : null}
+      <CaptureSourceSelect
+        sources={props.sources}
+        selectedSourceId={props.selectedSourceId}
+        disabled={!props.canStart}
+        onChange={props.onSourceChange}
+      />
 
+      <div className="recorder-state-enter relative z-10 flex flex-col items-center gap-4" key={props.state}>
         {isRecordingActive ? (
           <div className="grid min-w-[19rem] justify-items-center gap-4 rounded-3xl bg-white/[0.035] px-5 py-5 shadow-[0_18px_48px_rgb(0_0_0_/_0.28)]">
             <div className="inline-flex items-center gap-2 text-[0.64rem] font-extrabold uppercase tracking-[0.14em] text-neutral-300">
@@ -417,10 +465,10 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
             </div>
           </div>
         ) : (
-          <div className="grid justify-items-center gap-4">
-            <div className={cx("relative grid size-28 place-items-center", !isBusy && "recorder-ready-glow")}>
+          <div className="grid justify-items-center gap-3">
+            <div className="relative grid size-28 place-items-center">
               <button
-                className="relative z-[1] grid size-[88px] place-items-center rounded-full border-0 bg-[#ff3b9d] text-white shadow-[0_16px_42px_rgb(255_59_157_/_0.28)] transition-[transform,background-color,box-shadow] duration-300 ease-out hover:scale-[1.04] hover:bg-[#ff58aa] hover:shadow-[0_18px_48px_rgb(255_59_157_/_0.38)] active:scale-[0.97] disabled:cursor-wait disabled:opacity-70 disabled:hover:scale-100"
+                className="relative z-[1] grid size-[88px] place-items-center rounded-full border-2 border-white bg-red-600 text-white transition-colors duration-200 hover:bg-red-500 active:bg-red-700 disabled:cursor-wait disabled:opacity-70"
                 type="button"
                 disabled={isBusy}
                 onClick={props.onStartRecording}
@@ -432,18 +480,11 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
                   <strong className="text-3xl">{props.countdown}</strong>
                 ) : isBusy ? (
                   <LoaderCircle className="animate-spin" size={26} />
-                ) : (
-                  <Video size={28} fill="currentColor" strokeWidth={1.8} />
-                )}
+                ) : null}
               </button>
             </div>
-            <div className="grid justify-items-center gap-1 text-center">
+            <div className="grid justify-items-center text-center">
               <strong className="text-sm font-extrabold text-white">{statusText}</strong>
-              <span className="max-w-[20rem] truncate text-[0.65rem] font-semibold text-neutral-500">
-                {props.state === "complete" && props.projectRootPath
-                  ? props.projectRootPath
-                  : "Screen, camera, microphone, and system audio are saved as separate tracks."}
-              </span>
             </div>
           </div>
         )}

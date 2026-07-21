@@ -15,6 +15,10 @@ const providerKeys: ProviderKeysView = {
   cohereLanguage: "en",
   encryptionAvailable: true
 };
+const missingGeminiKey: ProviderKeysView = {
+  ...providerKeys,
+  hasGeminiKey: false
+};
 
 describe("editor AI and audio panels", () => {
   it("starts the Audio panel at Master volume without the live meter", () => {
@@ -85,6 +89,39 @@ describe("editor AI and audio panels", () => {
     expect(assistantHtml).toMatch(/<textarea[^>]*disabled=""/);
   });
 
+  it("uses the shared glowing status pill for missing Gemini keys", () => {
+    const musicHtml = renderToStaticMarkup(createElement(MusicPanel, {
+      generationState: "idle",
+      progress: null,
+      lastLyrics: null,
+      providerKeys: missingGeminiKey,
+      onGenerate: () => undefined,
+      onCancel: () => undefined,
+      onOpenAiSettings: () => undefined
+    }));
+    const assistantHtml = renderToStaticMarkup(createElement(AssistantPanel, {
+      projectId: "project-1",
+      providerKeys: missingGeminiKey,
+      messages: [],
+      sending: false,
+      statusMessage: null,
+      chatError: null,
+      onSend: () => undefined,
+      onCancel: () => undefined,
+      onReset: () => undefined,
+      onUndoEdit: () => undefined,
+      onOpenAiSettings: () => undefined
+    }));
+
+    for (const html of [musicHtml, assistantHtml]) {
+      expect(html).toContain("data-api-key-prompt");
+      expect(html).toContain("rounded-full");
+      expect(html).toContain("shadow-[inset_0_0_14px");
+      expect(html).toContain("border-cyan-300/70");
+      expect(html).not.toMatch(/border-amber-300\/70|rounded-md border border-amber-400\/40/);
+    }
+  });
+
   it("pins the assistant composer and scrolls only the message thread", () => {
     const html = renderToStaticMarkup(createElement(AssistantPanel, {
       projectId: "project-1",
@@ -129,6 +166,9 @@ describe("editor AI and audio panels", () => {
     expect(html).toContain("Set up AI connections");
     expect(html).toContain("max-h-[calc(100dvh-2rem)]");
     expect(html).toContain("data-provider-card");
+    expect(html).toContain('data-provider-loading="true"');
+    expect(html).toContain("Claude Code");
+    expect(html).toContain("Checking Claude Code…");
     expect(html).toContain("Google Gemini");
     expect(html).toContain("Connect");
     expect(html).not.toMatch(/violet|purple/i);

@@ -465,16 +465,6 @@ select,
   }
 }
 
-@keyframes recorder-ready-glow {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 0 rgb(255 59 157 / 0));
-  }
-  50% {
-    filter: drop-shadow(0 0 14px rgb(255 59 157 / 0.24));
-  }
-}
-
 @keyframes recorder-recording-dot {
   0%,
   100% {
@@ -489,17 +479,12 @@ select,
   animation: recorder-state-enter 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.recorder-ready-glow {
-  animation: recorder-ready-glow 2.4s ease-in-out infinite;
-}
-
 .recorder-recording-dot {
   animation: recorder-recording-dot 1.35s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .recorder-state-enter,
-  .recorder-ready-glow,
   .recorder-recording-dot {
     animation: none;
   }

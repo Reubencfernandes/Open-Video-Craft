@@ -55,6 +55,8 @@ export function AiConnectionDialog(props: {
 
   if (!props.open) return null;
 
+  const claudeProvider = status?.providers.find((provider) => provider.provider === "claude") ?? null;
+
   const configure = async (provider: AiProvider, connected: boolean) => {
     setBusy(provider); setError(null);
     try {
@@ -104,14 +106,11 @@ export function AiConnectionDialog(props: {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {(filter === "all" || filter === "editing")
-              ? (status?.providers ?? []).filter((provider) => provider.provider === "claude").map((provider) => (
-                  <AiProviderConnectionCard
-                    key={provider.provider}
-                    provider={provider}
-                    busy={busy}
-                    onConfigure={configure}
-                  />
-                ))
+              ? <AiProviderConnectionCard
+                  provider={claudeProvider}
+                  busy={busy}
+                  onConfigure={configure}
+                />
               : null}
             {filter === "all" || filter === "editing" || filter === "transcription" || filter === "music" ? (
               <ApiKeyCard

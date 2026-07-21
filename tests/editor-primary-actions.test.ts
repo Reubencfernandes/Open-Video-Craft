@@ -68,6 +68,42 @@ describe("editor primary actions", () => {
     expect(subtitlesHtml).toContain("Add subtitle");
   });
 
+  it("uses the glowing API-key pill for cloud subtitle setup", () => {
+    const html = renderToStaticMarkup(createElement(SubtitlesPanel, {
+      sttStatus: "idle",
+      sttDownloadProgress: null,
+      sttModelLabel: "Gemini",
+      sttProvider: "gemini",
+      providerKeys: {
+        sttProvider: "gemini",
+        hasCohereKey: false,
+        hasGeminiKey: false,
+        cohereLanguage: "en",
+        encryptionAvailable: true
+      },
+      subtitleLanguage: "English",
+      subtitleStyle: "clean",
+      subtitles: [],
+      selectedSubtitle: null,
+      currentTime: 0,
+      onAddSubtitle: () => undefined,
+      onGenerateSubtitles: () => undefined,
+      onCancelTranscription: () => undefined,
+      onSttProviderChange: () => undefined,
+      onCohereLanguageChange: () => undefined,
+      onOpenAiSettings: () => undefined,
+      onStyleChange: () => undefined,
+      onUpdateSubtitle: () => undefined,
+      onSelectSubtitle: () => undefined
+    }));
+
+    expect(html).toContain("data-api-key-prompt");
+    expect(html).toContain("Add your Gemini API key to use this model");
+    expect(html).toContain("rounded-full");
+    expect(html).toContain("border-cyan-300/70");
+    expect(html).not.toContain("border-amber-300/70");
+  });
+
   it("shows the zoom focus as one large solid red dot", () => {
     const html = renderToStaticMarkup(createElement(ZoomPanel, {
       previewItem: null,
@@ -120,9 +156,15 @@ describe("editor primary actions", () => {
     }));
 
     expect(html).toContain("data-subtitle-timeline");
-    expect(html).toContain("00:03 — 00:07");
+    expect(html).toContain("00:03.000 — 00:07.000");
     expect(html).toContain('data-active-subtitle="true"');
     expect(html).toContain('aria-current="true"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('data-subtitle-editor="true"');
+    expect(html).toContain('aria-label="Subtitle start time"');
+    expect(html).toContain('value="00:01.000"');
+    expect(html).toContain("grid-rows-[1fr] opacity-100");
+    expect(html).toContain("duration-300");
     expect(html).toContain("Playing now");
     expect(html).toContain("The subtitle currently being played");
   });
