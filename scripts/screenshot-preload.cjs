@@ -8,17 +8,22 @@
  */
 const { contextBridge } = require("electron");
 
+const appVersionArgument = process.argv.find((argument) =>
+  argument.startsWith("--screenshot-app-version=")
+);
+const appVersion = appVersionArgument?.slice("--screenshot-app-version=".length) ?? "dev";
+
 const now = new Date();
 const iso = (minutesAgo) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
 
 const demoAssetBase = "http://127.0.0.1:5173/demo-assets";
 
-const appInfo = { version: "2.1.0", isPackaged: true, platform: "darwin" };
+const appInfo = { version: appVersion, isPackaged: true, platform: "darwin" };
 
 const updateStatus = {
   state: "not-available",
-  currentVersion: "2.1.0",
-  latestVersion: "2.1.0",
+  currentVersion: appVersion,
+  latestVersion: appVersion,
   message: "You're up to date.",
   checkedAt: iso(4),
   downloadProgress: null,
@@ -260,6 +265,7 @@ const api = {
     listRecent: async () => recentProjects,
     get: async () => demoProject,
     openExistingProjectFolder: async () => null,
+    delete: async () => true,
     removeFromRecent: async () => true,
     discard: async () => true,
     create: async () => demoProject
@@ -302,7 +308,9 @@ const api = {
     hideSourceBorder: async () => true
   },
   events: {
-    onGlobalStop: () => () => undefined
+    onGlobalStop: () => () => undefined,
+    onPowerSuspend: () => () => undefined,
+    onPowerResume: () => () => undefined
   }
 };
 

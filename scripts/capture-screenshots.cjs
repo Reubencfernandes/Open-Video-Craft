@@ -11,23 +11,44 @@
  *   1. Generate demo media into ./demo-assets (see docs in the repo history
  *      or regenerate any short mp4/m4a files with those names).
  *   2. npx vite --host 127.0.0.1              # dev server on :5173
- *   3. npx electron scripts/capture-screenshots.cjs
+ *   3. npx electron scripts/capture-screenshots.cjs [launcher recorder editor editor-timeline]
  *
  * Output: docs/screenshots/{launcher,recorder,editor}.png
  */
 const { app, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const { version: appVersion } = require("../package.json");
 
 const devServer = "http://127.0.0.1:5173/";
 const outDir = path.join(__dirname, "..", "docs", "screenshots");
+const availableTargets = new Set(["launcher", "recorder", "editor", "editor-timeline"]);
+const requestedTargets = new Set(process.argv.slice(2));
+
+for (const target of requestedTargets) {
+  if (!availableTargets.has(target)) {
+    throw new Error(`Unknown screenshot target: ${target}`);
+  }
+}
+
+function shouldCapture(name) {
+  return requestedTargets.size === 0 || requestedTargets.has(name);
+}
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function capture(name, view, options) {
-  const { width, height, query = {}, settleMs = 3000, css = null, script = null } = options;
+  const {
+    width,
+    height,
+    query = {},
+    settleMs = 3000,
+    css = null,
+    script = null,
+    expectedSelector = null
+  } = options;
   const win = new BrowserWindow({
     width,
     height,
@@ -39,7 +60,17 @@ async function capture(name, view, options) {
       preload: path.join(__dirname, "screenshot-preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      additionalArguments: [`--screenshot-app-version=${appVersion}`]
+    }
+  });
+
+  win.webContents.on("preload-error", (_event, preloadPath, error) => {
+    console.error(`preload failed for ${name} (${preloadPath}):`, error);
+  });
+  win.webContents.on("console-message", (details) => {
+    if (details.level === "error") {
+      console.error(`renderer error for ${name}:`, details.message);
     }
   });
 
@@ -66,6 +97,14 @@ async function capture(name, view, options) {
     });
   }
   await delay(settleMs);
+  if (expectedSelector) {
+    const rendered = await win.webContents.executeJavaScript(
+      `Boolean(document.querySelector(${JSON.stringify(expectedSelector)}))`
+    );
+    if (!rendered) {
+      throw new Error(`${name} did not render its expected UI (${expectedSelector})`);
+    }
+  }
   // Hidden BrowserWindows can retain an incomplete damage region after a tool
   // switch. Force one complete repaint before capture so every pane is present.
   win.webContents.invalidate();
@@ -88,49 +127,63 @@ app.on("window-all-closed", () => undefined);
 
 app.whenReady().then(async () => {
   fs.mkdirSync(outDir, { recursive: true });
+  let exitCode = 0;
 
   try {
-    await capture("launcher", "main", { width: 1360, height: 900 });
+    if (shouldCapture("launcher")) {
+      await capture("launcher", "main", {
+        width: 1360,
+        height: 900,
+        expectedSelector: "[data-home-project-grid]"
+      });
+    }
 
     // The recorder window is transparent chrome; draw a backdrop so the PNG
     // reads well on both GitHub themes.
-    await capture("recorder", "controller", {
-      width: 460,
-      height: 560,
-      css: "html, body { background: radial-gradient(120% 120% at 20% 0%, #232735 0%, #14161d 60%, #0d0e13 100%) !important; }"
-    });
+    if (shouldCapture("recorder")) {
+      await capture("recorder", "controller", {
+        width: 460,
+        height: 560,
+        css: "html, body { background: radial-gradient(120% 120% at 20% 0%, #232735 0%, #14161d 60%, #0d0e13 100%) !important; }",
+        expectedSelector: "[data-recorder-controller]"
+      });
+    }
 
-    await capture("editor", "editor", {
-      width: 1720,
-      height: 1040,
-      query: { projectId: "demo" },
-      settleMs: 5000
-    });
+    if (shouldCapture("editor")) {
+      await capture("editor", "editor", {
+        width: 1720,
+        height: 1040,
+        query: { projectId: "demo" },
+        settleMs: 5000
+      });
+    }
 
     // Same project with the Subtitles tool active: shows the timeline lanes
     // (video/audio/subtitles), the subtitle overlay, and the playhead seeked
     // one second in via the ArrowRight shortcut.
-    await capture("editor-timeline", "editor", {
-      width: 1720,
-      height: 1040,
-      query: { projectId: "demo" },
-      settleMs: 6000,
-      script: `
-        new Promise((resolve) => {
-          setTimeout(() => {
-            document.querySelector('button[title="Subtitles"]')?.click();
+    if (shouldCapture("editor-timeline")) {
+      await capture("editor-timeline", "editor", {
+        width: 1720,
+        height: 1040,
+        query: { projectId: "demo" },
+        settleMs: 6000,
+        script: `
+          new Promise((resolve) => {
             setTimeout(() => {
-              window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-              resolve(true);
-            }, 800);
-          }, 2500);
-        })
-      `
-    });
+              document.querySelector('button[title="Subtitles"]')?.click();
+              setTimeout(() => {
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+                resolve(true);
+              }, 800);
+            }, 2500);
+          })
+        `
+      });
+    }
   } catch (error) {
     console.error(error);
-    process.exitCode = 1;
+    exitCode = 1;
   }
 
-  app.quit();
+  app.exit(exitCode);
 });
