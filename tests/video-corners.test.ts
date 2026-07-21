@@ -5,14 +5,14 @@ import {
 } from "../src/renderer/editor/useEditorDerivedData";
 
 describe("video corner styles", () => {
-  it("maps Flat to square and both persisted rounded values to rounded corners", () => {
+  it("maps Flat, Slight, and Rounded to progressively rounder corners", () => {
     expect(getVideoCornerStyles("flat")).toEqual({
       borderRadius: 0,
       clipPath: "none"
     });
     expect(getVideoCornerStyles("soft")).toEqual({
-      borderRadius: "32px",
-      clipPath: "inset(0 round 32px)"
+      borderRadius: "16px",
+      clipPath: "inset(0 round 16px)"
     });
     expect(getVideoCornerStyles("round")).toEqual({
       borderRadius: "32px",
@@ -21,7 +21,7 @@ describe("video corner styles", () => {
   });
 
   it("reveals the selected background around a rounded filled screen", () => {
-    expect(getVideoCornerScale("bubble-fill", "soft")).toBe(0.94);
+    expect(getVideoCornerScale("bubble-fill", "soft")).toBe(0.97);
     expect(getVideoCornerScale("bubble-fill", "round")).toBe(0.94);
     expect(getVideoCornerScale("bubble-fill", "flat")).toBe(1);
     expect(getVideoCornerScale("bubble", "soft")).toBe(1);

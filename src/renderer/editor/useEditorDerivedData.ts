@@ -51,10 +51,7 @@ export function getVideoCornerStyles(style: VideoCornerStyle): Pick<
     return { borderRadius: 0, clipPath: "none" };
   }
 
-  // Legacy `round` projects and the current `soft` value both render as the
-  // single user-facing Rounded option. Keep the persisted union backward
-  // compatible without exposing a pill-shaped mode in the UI.
-  const radius = "32px";
+  const radius = style === "soft" ? "16px" : "32px";
   return {
     borderRadius: radius,
     clipPath: `inset(0 round ${radius})`
@@ -66,7 +63,9 @@ export function getVideoCornerScale(
   layoutMode: LayoutMode,
   style: VideoCornerStyle
 ): number {
-  return layoutMode === "bubble-fill" && style !== "flat" ? 0.94 : 1;
+  if (layoutMode !== "bubble-fill") return 1;
+  if (style === "soft") return 0.97;
+  return style === "round" ? 0.94 : 1;
 }
 
 type UseEditorDerivedDataParams = {

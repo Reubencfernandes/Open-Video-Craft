@@ -63,7 +63,7 @@ invoke their AI features.
 - AI prompts can be copied, concurrent requests are guarded cleanly, and Gemini
   errors are presented as concise messages instead of IPC implementation text.
 - The export dialog is wider and more compact, video corners now offer clear
-  Flat and Rounded choices, and selected clips remain
+  Flat, Slight, and Rounded choices, and selected clips remain
   visible over bright filmstrip frames.
 
 ## Features

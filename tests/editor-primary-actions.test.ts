@@ -194,7 +194,7 @@ describe("editor primary actions", () => {
     expect(html).toContain("editor-choice-content");
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("Rounded");
-    expect(html).not.toContain("Slight");
+    expect(html).toContain("Slight");
     expect(html).not.toContain("Full");
   });
 });
