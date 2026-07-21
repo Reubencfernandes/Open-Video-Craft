@@ -39,21 +39,15 @@ export function ChangelogDialog(props: { open: boolean; onClose: () => void }) {
         </div>
 
         <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7">
-          <header className="mx-auto max-w-md text-center">
-            <span className="text-[0.65rem] font-bold uppercase tracking-[0.16em] text-[#ff6ba5]">
-              Open Video Craft {latestRelease.version}
-            </span>
-            <h2 id="changelog-title" className="m-0 mt-2 text-xl font-semibold tracking-[-0.02em]">
-              {latestRelease.title}
-            </h2>
-            <p className="m-0 mt-1.5 text-xs text-neutral-500">Released {latestRelease.releasedAt}</p>
-          </header>
-
-          <article className="mt-5 rounded-2xl bg-[#18181b] p-4 shadow-[0_12px_35px_rgb(0_0_0_/_0.22)]">
+          <article data-changelog-content>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="m-0 text-sm font-semibold text-white">Open Video Craft</h3>
-                <p className="m-0 mt-0.5 text-[0.68rem] text-neutral-500">Desktop video creation suite</p>
+                <h2 id="changelog-title" className="m-0 text-base font-semibold text-white">
+                  Open Video Craft {latestRelease.version}
+                </h2>
+                <p className="m-0 mt-1 text-xs text-neutral-500">
+                  Released {latestRelease.releasedAt}
+                </p>
               </div>
               <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[0.6rem] font-semibold text-neutral-400">
                 Release notes

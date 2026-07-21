@@ -25,10 +25,10 @@ export function RecentProjectsSection(props: {
       {props.loading ? <ProjectSkeletons /> : props.projects.length === 0 ? (
         <div className="grid min-h-40 place-items-center rounded-2xl bg-white/[0.025] text-sm text-neutral-600">No saved projects yet.</div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,190px),1fr))] gap-3">
-          {props.projects.slice(0, 9).map((project, index) => (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-4">
+          {props.projects.slice(0, 9).map((project) => (
             <article className="group grid min-w-0 gap-2.5 rounded-2xl bg-[#19191c] p-2.5 shadow-[0_8px_22px_rgb(0_0_0_/_0.12)] transition-[background-color,transform] duration-200 hover:-translate-y-0.5 hover:bg-[#1e1e22]" key={`${project.id}-${project.rootPath}`}>
-              <ProjectArtwork name={project.name} index={index} duration={formatProjectDuration(project.durationMs)} thumbnailUrl={project.thumbnailUrl} />
+              <ProjectArtwork name={project.name} index={0} duration={formatProjectDuration(project.durationMs)} thumbnailUrl={project.thumbnailUrl} />
               <div className="flex min-w-0 items-center justify-between gap-2 px-1">
                 <strong className="truncate text-sm font-medium text-white">{project.name}</strong>
                 {!project.available ? <AlertTriangle className="shrink-0 text-amber-300" size={15} /> : null}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addLanguageToWhisperWordChunks,
+  createWhisperTranscriptionOptions,
   createSubtitleSegmentsFromWhisperOutput,
   formatSubtitleLanguage,
   getWhisperOutputLanguage,
@@ -8,6 +9,19 @@ import {
 } from "../src/renderer/editor/subtitle-transcription";
 
 describe("subtitle transcription", () => {
+  it("auto-detects any spoken language without translating it to English", () => {
+    expect(createWhisperTranscriptionOptions("word")).toMatchObject({
+      language: null,
+      task: "transcribe",
+      return_timestamps: "word"
+    });
+    expect(createWhisperTranscriptionOptions(true)).toMatchObject({
+      language: null,
+      task: "transcribe",
+      return_timestamps: true
+    });
+  });
+
   it("groups Whisper word timestamps into subtitle segments with word timing", () => {
     const segments = createSubtitleSegmentsFromWhisperOutput({
       chunks: [

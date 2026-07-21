@@ -38,9 +38,24 @@ function ShortcutHarness(props: {
   });
 
   return createElement(
-    "button",
-    { type: "button", "data-mute": true, onClick: props.onMute },
-    "Mute"
+    "main",
+    null,
+    createElement("button", { type: "button", "data-layout-preset": true }, "Layout preset"),
+    createElement(
+      "div",
+      { "data-timeline-body": true, tabIndex: 0 },
+      createElement(
+        "button",
+        {
+          type: "button",
+          "data-mute": true,
+          "data-timeline-audio-mute": "1",
+          onClick: props.onMute
+        },
+        "Mute"
+      ),
+      createElement("button", { type: "button", "data-segment-id": "clip-1" }, "Clip")
+    )
   );
 }
 
@@ -78,6 +93,53 @@ describe("editor global shortcuts", () => {
     expect(callbacks.togglePlayback).not.toHaveBeenCalled();
     button?.click();
     expect(callbacks.onMute).toHaveBeenCalledOnce();
+  });
+
+  it("toggles playback when a timeline clip button has focus", () => {
+    const { callbacks, host } = renderHarness();
+    const clip = host.querySelector<HTMLButtonElement>("[data-segment-id]");
+    clip?.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "Space",
+      key: " "
+    });
+    clip?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(callbacks.togglePlayback).toHaveBeenCalledOnce();
+  });
+
+  it("toggles playback after a Layout preset button receives focus", () => {
+    const { callbacks, host } = renderHarness();
+    const preset = host.querySelector<HTMLButtonElement>("[data-layout-preset]");
+    preset?.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "Space",
+      key: " "
+    });
+    preset?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(callbacks.togglePlayback).toHaveBeenCalledOnce();
+  });
+
+  it("toggles playback as a general editor shortcut", () => {
+    const { callbacks } = renderHarness();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "Space",
+      key: " "
+    }));
+
+    expect(callbacks.togglePlayback).toHaveBeenCalledOnce();
   });
 
   it("routes Delete through the unified timeline selection", () => {

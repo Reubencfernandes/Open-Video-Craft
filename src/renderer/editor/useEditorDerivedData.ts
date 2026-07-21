@@ -42,6 +42,33 @@ type ScreenPosition = {
   scale: number;
 };
 
+/** CSS clipping shared by video, image, and low-quality canvas previews. */
+export function getVideoCornerStyles(style: VideoCornerStyle): Pick<
+  CSSProperties,
+  "borderRadius" | "clipPath"
+> {
+  if (style === "flat") {
+    return { borderRadius: 0, clipPath: "none" };
+  }
+
+  // Legacy `round` projects and the current `soft` value both render as the
+  // single user-facing Rounded option. Keep the persisted union backward
+  // compatible without exposing a pill-shaped mode in the UI.
+  const radius = "32px";
+  return {
+    borderRadius: radius,
+    clipPath: `inset(0 round ${radius})`
+  };
+}
+
+/** Rounded filled-screen layouts need a small reveal for the chosen background. */
+export function getVideoCornerScale(
+  layoutMode: LayoutMode,
+  style: VideoCornerStyle
+): number {
+  return layoutMode === "bubble-fill" && style !== "flat" ? 0.94 : 1;
+}
+
 type UseEditorDerivedDataParams = {
   project: ProjectView | null;
   importedMedia: EditorMediaItem[];
@@ -226,7 +253,10 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
   const sideBySideScreenFrame =
     layoutMode === "side-by-side" ? { x: 40, y: 0, width: 60, height: 100 } : null;
   const activeScreenFrame = screenFrame ?? sideBySideScreenFrame;
-  const screenScale = (screenPosition.scale / 100) * activeZoom.scale;
+  const screenScale =
+    (screenPosition.scale / 100) *
+    activeZoom.scale *
+    getVideoCornerScale(layoutMode, videoCornerStyle);
   const screenStyle: CSSProperties = {
     ...(activeScreenFrame
       ? {
@@ -238,18 +268,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
           height: `${activeScreenFrame.height}%`
         }
       : {}),
-    // A filled screen is edge-to-edge: rounded corners would punch holes into
-    // the canvas edges, so corner styling only applies to non-fill layouts.
-    borderRadius:
-      layoutMode === "bubble-fill" || videoCornerStyle === "flat"
-        ? 0
-        : videoCornerStyle === "round"
-          ? 32
-          : 12,
-    clipPath:
-      layoutMode === "bubble-fill" || videoCornerStyle === "flat"
-        ? "none"
-        : `inset(0 round ${videoCornerStyle === "round" ? 32 : 12}px)`,
+    ...getVideoCornerStyles(videoCornerStyle),
     objectFit: layoutMode === "bubble-fill" || layoutMode === "side-by-side" ? "cover" : "contain",
     transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
       3

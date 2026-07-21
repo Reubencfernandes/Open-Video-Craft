@@ -1,3 +1,7 @@
+import type { SubtitleSegment } from "./types";
+
+export const subtitleMinimumDuration = 0.1;
+
 /** Precise, human-readable subtitle timecodes used by the inline editor. */
 export function formatSubtitleTimecode(seconds: number): string {
   const totalMilliseconds = Math.max(
@@ -19,10 +23,16 @@ export function formatSubtitleTimecode(seconds: number): string {
 
 /** Accepts seconds, MM:SS.mmm, or HH:MM:SS.mmm. */
 export function parseSubtitleTimecode(value: string): number | null {
-  const parts = value.trim().replace(",", ".").split(":");
+  const parts = value.trim().replace(/,/g, ".").split(":").map((part) => part.trim());
   if (parts.length === 0 || parts.length > 3 || parts.some((part) => part.trim() === "")) {
     return null;
   }
+
+  const decimalPattern = /^\d+(?:\.\d+)?$/;
+  const integerPattern = /^\d+$/;
+  if (!decimalPattern.test(parts.at(-1) ?? "")) return null;
+  if (parts.length >= 2 && !integerPattern.test(parts.at(-2) ?? "")) return null;
+  if (parts.length === 3 && !integerPattern.test(parts[0])) return null;
 
   const numbers = parts.map(Number);
   if (numbers.some((part) => !Number.isFinite(part) || part < 0)) {
@@ -41,4 +51,37 @@ export function parseSubtitleTimecode(value: string): number | null {
   }
 
   return Math.round((hours * 3600 + minutes * 60 + seconds) * 1000) / 1000;
+}
+
+/** Keep generated subtitle ranges and word timings inside the actual media duration. */
+export function clampSubtitleSegmentsToDuration(
+  segments: SubtitleSegment[],
+  duration: number
+): SubtitleSegment[] {
+  if (!Number.isFinite(duration) || duration <= 0) return segments;
+  const maximum = Math.max(subtitleMinimumDuration, duration);
+
+  return segments.map((segment) => {
+    const rawStart = Number.isFinite(segment.start) ? segment.start : 0;
+    const rawEnd = Number.isFinite(segment.end) ? segment.end : rawStart + subtitleMinimumDuration;
+    const start = Math.min(
+      Math.max(0, rawStart),
+      Math.max(0, maximum - subtitleMinimumDuration)
+    );
+    const end = Math.min(maximum, Math.max(start + subtitleMinimumDuration, rawEnd));
+    const words = segment.words
+      ?.map((word) => ({
+        ...word,
+        start: Math.min(end, Math.max(start, Number.isFinite(word.start) ? word.start : start)),
+        end: Math.min(end, Math.max(start, Number.isFinite(word.end) ? word.end : end))
+      }))
+      .filter((word) => word.end > word.start);
+
+    return {
+      ...segment,
+      start: Math.round(start * 1000) / 1000,
+      end: Math.round(end * 1000) / 1000,
+      ...(segment.words ? { words } : {})
+    };
+  });
 }

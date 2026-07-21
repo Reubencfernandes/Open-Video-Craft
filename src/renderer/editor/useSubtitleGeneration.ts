@@ -17,12 +17,18 @@ import type {
   UpdateProviderKeysRequest
 } from "../../shared/types";
 import { getEffectiveAudioLevel } from "../../shared/editor-domain";
+import {
+  detectSubtitleActivityRanges,
+  type SubtitleActivityRange
+} from "../../shared/subtitle-activity";
 import { decodeTimelineAudioMix } from "./media-utils";
 import {
   createSubtitleSegmentsFromWhisperOutput,
   getWhisperOutputLanguage,
 } from "./subtitle-transcription";
 import { transcribeAudioInWorker } from "./subtitle-transcription-client";
+import { clampSubtitleSegmentsToDuration } from "./subtitle-time";
+import { formatSpeechToTextError } from "./stt-errors";
 import type { SubtitleSegment, TimelineMediaClip } from "./types";
 
 type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
@@ -97,6 +103,7 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
 
   const [sttStatus, setSttStatus] = useState<SttStatus>("idle");
   const [sttDownloadProgress, setSttDownloadProgress] = useState<number | null>(null);
+  const [sttActivityRanges, setSttActivityRanges] = useState<SubtitleActivityRange[]>([]);
   const [providerKeys, setProviderKeys] = useState<ProviderKeysView | null>(null);
   const activeCloudRequestId = useRef<string | null>(null);
 
@@ -144,11 +151,21 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
       return;
     }
 
+    // A fresh transcription replaces the previous subtitle track. Clear it
+    // before showing speech-position placeholders so old and pending clips
+    // are never layered together.
+    setSubtitles([]);
+    setSelectedSubtitleId(null);
+    setSubtitleLanguage(null);
+    setSttActivityRanges([]);
     setError(null);
     setSttStatus("loading");
 
     try {
       if (sttProvider === "whisper-local") {
+        // Let React paint the same timeline processing indicator used by cloud
+        // providers before local decoding/model setup starts doing heavier work.
+        await yieldForSubtitleStatusPaint();
         await generateWithWhisper(sources);
       } else {
         await generateWithCloud(sttProvider, sources);
@@ -156,18 +173,21 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
       setSttStatus("done");
     } catch (sttError) {
       setSttDownloadProgress(null);
-      const message = sttError instanceof Error ? sttError.message : String(sttError);
-      setError(`Speech-to-text failed: ${message}`);
+      setSttActivityRanges([]);
+      setError(formatSpeechToTextError(sttError, sttProvider));
       setSttStatus("error");
     }
   }
 
   async function generateWithWhisper(sources: SpeechSource[]) {
     const audio = await decodeTimelineAudioMix(sources);
+    setSttActivityRanges(detectSubtitleActivityRanges(audio));
     const output = await transcribeAudioInWorker({
       audio,
       wasmBaseUrl: new URL(".", document.baseURI).href,
-      onProgress: setSttDownloadProgress,
+      onProgress: (progress) => {
+        setSttDownloadProgress(progress);
+      },
       onTranscribing: () => {
         setSttDownloadProgress(null);
         setSttStatus("transcribing");
@@ -175,7 +195,7 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
     });
 
     const segments = createSubtitleSegmentsFromWhisperOutput(output);
-    applySegments(segments, getWhisperOutputLanguage(output));
+    applySegments(segments, getWhisperOutputLanguage(output), getSpeechTimelineDuration(sources));
   }
 
   async function generateWithCloud(provider: "cohere" | "gemini", sources: SpeechSource[]) {
@@ -184,6 +204,7 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
 
     const unsubscribe = window.openVideoCraft.stt.onProgress((event) => {
       if (event.requestId !== requestId) return;
+      if (event.activityRanges) setSttActivityRanges(event.activityRanges);
       if (event.phase === "transcribing") {
         setSttDownloadProgress(null);
         setSttStatus("transcribing");
@@ -199,7 +220,7 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
         provider,
         sources
       });
-      applySegments(result.segments, result.language);
+      applySegments(result.segments, result.language, getSpeechTimelineDuration(sources));
     } finally {
       unsubscribe();
       setSttDownloadProgress(null);
@@ -209,12 +230,19 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
     }
   }
 
-  function applySegments(segments: SubtitleSegment[], language: string | null) {
-    if (segments.length > 0) {
+  function applySegments(
+    segments: SubtitleSegment[],
+    language: string | null,
+    timelineDuration: number
+  ) {
+    const boundedSegments = clampSubtitleSegmentsToDuration(segments, timelineDuration);
+    if (boundedSegments.length > 0) {
+      setSttActivityRanges([]);
       setSubtitleLanguage(language);
-      setSubtitles(segments);
-      setSelectedSubtitleId(segments[0].id);
+      setSubtitles(boundedSegments);
+      setSelectedSubtitleId(boundedSegments[0].id);
     } else {
+      setSttActivityRanges([]);
       setSubtitleLanguage(null);
       setError("No speech was detected in the audio.");
     }
@@ -235,6 +263,15 @@ export function useSubtitleGeneration(params: UseSubtitleGenerationParams) {
     sttDownloadProgress,
     sttProvider,
     sttStatus,
+    sttActivityRanges,
     updateProviderSettings
   };
+}
+
+function getSpeechTimelineDuration(sources: SpeechSource[]): number {
+  return Math.max(0, ...sources.map((source) => source.timelineOffset + source.duration));
+}
+
+function yieldForSubtitleStatusPaint(): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, 0));
 }

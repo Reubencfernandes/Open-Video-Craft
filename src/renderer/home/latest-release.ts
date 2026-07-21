@@ -1,5 +1,5 @@
 /** Single source for the homepage changelog dialog and release badge. */
-const heroImageUrl: string | null = null;
+import heroImageUrl from "../assets/release-1.0.0-hero.jpg";
 
 export const latestRelease = {
   version: "1.0.0",
@@ -7,8 +7,6 @@ export const latestRelease = {
   releasedAt: "July 21, 2026",
   summary:
     "The complete local-first recording and editing workflow, refined for a stable launch with a redesigned recorder and more precise subtitle editing.",
-  // Import the release artwork and assign its URL here when it is ready.
-  // The changelog uses a plain dark surface until then—never a fake gradient.
   heroImageUrl,
   changes: [
     "Choose all displays or a specific screen from the floating recorder before recording.",

@@ -5,7 +5,7 @@
  * AI CLIs use — every applied edit shows an undo chip.
  */
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
+import { AlertCircle, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
 import type { GeminiChatMessage, ProviderKeysView } from "../../../shared/types";
 import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { ChatMessageBubble } from "./assistant/ChatMessageBubble";
@@ -143,9 +143,21 @@ export function AssistantPanel(props: {
         ) : null}
 
         {props.chatError ? (
-          <p className="rounded-lg border border-rose-400/20 bg-rose-500/[0.08] px-3 py-2 text-xs text-rose-300">
-            {props.chatError}
-          </p>
+          <section
+            className="flex min-w-0 items-start gap-2.5 rounded-xl border border-rose-400/25 bg-rose-500/[0.08] px-3 py-3 text-rose-200"
+            role="alert"
+            aria-live="assertive"
+          >
+            <AlertCircle className="mt-0.5 shrink-0 text-rose-300" size={15} />
+            <div className="min-w-0">
+              <strong className="block text-xs text-rose-100">
+                Gemini couldn’t complete this request
+              </strong>
+              <p className="mt-1 break-words text-[0.68rem] leading-4 text-rose-300 [overflow-wrap:anywhere]">
+                {props.chatError}
+              </p>
+            </div>
+          </section>
         ) : null}
       </div>
 

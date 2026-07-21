@@ -12,6 +12,19 @@ import { createId } from "./utils";
 export const whisperTranscriptionModel = "onnx-community/whisper-base_timestamped";
 export const whisperTranscriptionModelLabel = "Whisper base";
 
+/** Whisper stays multilingual: null lets the model detect the spoken language. */
+export function createWhisperTranscriptionOptions(
+  returnTimestamps: true | "word"
+): Record<string, unknown> {
+  return {
+    return_timestamps: returnTimestamps,
+    language: null,
+    task: "transcribe",
+    chunk_length_s: 30,
+    stride_length_s: 5
+  };
+}
+
 export function isMissingWhisperAttentionError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return /cross attentions|output_attentions=True/i.test(message);

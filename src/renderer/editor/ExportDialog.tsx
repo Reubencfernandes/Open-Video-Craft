@@ -29,11 +29,11 @@ export function ExportDialog(props: {
 }) {
   return (
     <div
-      className="fixed inset-0 z-20 grid place-items-center bg-black/50 backdrop-blur-[10px]"
+      className="fixed inset-0 z-[80] grid place-items-center bg-black/50 backdrop-blur-[10px]"
       role="presentation"
     >
       <section
-        className="grid w-[min(92vw,380px)] gap-5 rounded-2xl border border-white/10 bg-[#161618] p-5 text-white shadow-[0_28px_90px_rgb(0_0_0_/_0.62)]"
+        className="grid w-[min(94vw,620px)] gap-4 rounded-2xl border border-white/10 bg-[#161618] p-5 text-white shadow-[0_28px_90px_rgb(0_0_0_/_0.62)]"
         role="dialog"
         aria-modal="true"
         aria-label="Export video"
@@ -49,54 +49,49 @@ export function ExportDialog(props: {
             <X size={16} />
           </button>
         </div>
-        <label className="grid gap-1 text-xs font-extrabold text-slate-400">
-          <span>Resolution</span>
-          <select
-            className="themed-select h-11"
-            value={props.exportResolution}
-            onChange={(event) =>
-              props.onResolutionChange(event.target.value as ExportResolution)
-            }
-            disabled={props.exporting}
-          >
-            {exportResolutions.map((resolution) => (
-              <option key={resolution} value={resolution}>
-                {resolution === "source" ? "Source" : resolution}
-              </option>
-            ))}
-          </select>
-        </label>
-        {props.hasSubtitles ? (
+        <div className="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2">
           <label className="grid gap-1 text-xs font-extrabold text-slate-400">
-            <span>Subtitles</span>
-            <select className="themed-select h-11" value={props.exportSubtitleMode} onChange={(event) => props.onSubtitleModeChange(event.target.value as ExportSubtitleMode)} disabled={props.exporting}>
-              <option value="burn-in">Burn into video</option>
-              <option value="sidecar">Separate .srt file</option>
-              <option value="none">Do not export</option>
+            <span>Resolution</span>
+            <select
+              className="themed-select h-10"
+              value={props.exportResolution}
+              onChange={(event) =>
+                props.onResolutionChange(event.target.value as ExportResolution)
+              }
+              disabled={props.exporting}
+            >
+              {exportResolutions.map((resolution) => (
+                <option key={resolution} value={resolution}>
+                  {resolution === "source" ? "Source" : resolution}
+                </option>
+              ))}
             </select>
           </label>
-        ) : null}
-        <label className="grid gap-1 text-xs font-extrabold text-slate-400">
-          <span>Format</span>
-          <select
-            className="themed-select h-11"
-            value={props.exportFormat}
-            onChange={(event) => props.onFormatChange(event.target.value as ExportVideoFormat)}
-            disabled={props.exporting}
-          >
-            {exportFormats.map((format) => (
-              <option key={format} value={format}>
-                {format.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="grid gap-2 rounded-lg border border-white/10 bg-white/[0.04] p-3 text-xs leading-5 text-slate-300">
-          <strong className="text-white">What this export includes</strong>
-          <span>Timeline cuts, reordered clips, transitions, gaps, resolution, and mixed project/imported audio.</span>
-          <span>{props.hasSubtitles ? "Choose burned-in, sidecar, or disabled subtitles above." : "No subtitles are currently present."}</span>
-          <span>Zoom, speed effects, text animations, and subtitle burn-in are included.</span>
-          <span className="text-neutral-400">Visual layout/backgrounds, camera compositing, and advanced subtitle styles remain preview-only.</span>
+          <label className="grid gap-1 text-xs font-extrabold text-slate-400">
+            <span>Format</span>
+            <select
+              className="themed-select h-10"
+              value={props.exportFormat}
+              onChange={(event) => props.onFormatChange(event.target.value as ExportVideoFormat)}
+              disabled={props.exporting}
+            >
+              {exportFormats.map((format) => (
+                <option key={format} value={format}>
+                  {format.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+          {props.hasSubtitles ? (
+            <label className="grid gap-1 text-xs font-extrabold text-slate-400 min-[420px]:col-span-2">
+              <span>Subtitles</span>
+              <select className="themed-select h-10" value={props.exportSubtitleMode} onChange={(event) => props.onSubtitleModeChange(event.target.value as ExportSubtitleMode)} disabled={props.exporting}>
+                <option value="burn-in">Burn into video</option>
+                <option value="sidecar">Separate .srt file</option>
+                <option value="none">Do not export</option>
+              </select>
+            </label>
+          ) : null}
         </div>
         {props.exporting ? (
           <div className="grid gap-2 text-xs font-bold text-slate-300" aria-live="polite">

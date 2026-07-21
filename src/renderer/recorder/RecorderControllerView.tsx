@@ -141,6 +141,8 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
 
 function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0]) {
   const isRecordingActive = props.state === "recording" || props.state === "paused";
+  const dockCameraRecordingControls =
+    isRecordingActive && props.cameraPreviewStream !== null;
   const systemAudioLabel = props.systemAudioEnabled
     ? "System audio on"
     : "System audio off";
@@ -196,84 +198,92 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
 
         <RecorderBody {...props} />
 
-        <div className="mx-3 grid grid-cols-2 gap-2">
-          <QualitySelect
-            label="Screen quality"
-            value={props.screenQuality}
-            options={screenQualities.map((quality) => ({
-              value: quality,
-              label: screenQualityPresets[quality].label
-            }))}
-            disabled={!props.canStart}
-            onChange={props.onScreenQualityChange}
-          />
-          <QualitySelect
-            label="Camera quality"
-            value={props.cameraQuality}
-            options={cameraQualities.map((quality) => ({
-              value: quality,
-              label: cameraQualityPresets[quality].label
-            }))}
-            disabled={!props.canStart}
-            onChange={props.onCameraQualityChange}
-          />
-        </div>
+        {dockCameraRecordingControls ? (
+          <div className="flex-none px-3 pt-2">
+            <RecordingControls {...props} docked />
+          </div>
+        ) : (
+          <>
+            <div className="mx-3 grid grid-cols-2 gap-2">
+              <QualitySelect
+                label="Screen quality"
+                value={props.screenQuality}
+                options={screenQualities.map((quality) => ({
+                  value: quality,
+                  label: screenQualityPresets[quality].label
+                }))}
+                disabled={!props.canStart}
+                onChange={props.onScreenQualityChange}
+              />
+              <QualitySelect
+                label="Camera quality"
+                value={props.cameraQuality}
+                options={cameraQualities.map((quality) => ({
+                  value: quality,
+                  label: cameraQualityPresets[quality].label
+                }))}
+                disabled={!props.canStart}
+                onChange={props.onCameraQualityChange}
+              />
+            </div>
 
-        <footer className="grid grid-cols-4 gap-2 px-3 pt-2">
-          <FloatingDeviceControl
-            enabled={props.micEnabled}
-            enabledIcon={<Mic size={25} />}
-            disabledIcon={<MicOff size={25} />}
-            enabledLabel="Mic on"
-            disabledLabel="Mic off"
-            options={props.microphones}
-            value={props.selectedMicId}
-            disabled={!props.canStart}
-            onToggle={props.onToggleMic}
-            onValueChange={props.onMicChange}
-          />
+            <footer className="grid grid-cols-4 gap-2 px-3 pt-2">
+              <FloatingDeviceControl
+                enabled={props.micEnabled}
+                enabledIcon={<Mic size={25} />}
+                disabledIcon={<MicOff size={25} />}
+                enabledLabel="Mic on"
+                disabledLabel="Mic off"
+                options={props.microphones}
+                value={props.selectedMicId}
+                disabled={!props.canStart}
+                onToggle={props.onToggleMic}
+                onValueChange={props.onMicChange}
+              />
 
-          <button
-            className={cx(
-              "grid min-h-16 place-items-center gap-1 rounded-xl border-0 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-neutral-300 transition-[transform,background-color,color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45",
-              props.systemAudioEnabled && "bg-[#ff3b9d]/10 text-white"
-            )}
-            type="button"
-            onClick={props.onToggleSystemAudio}
-            disabled={!props.canStart}
-            aria-pressed={props.systemAudioEnabled}
-            title={systemAudioLabel}
-          >
-            <span className={props.systemAudioEnabled ? "text-[#ff6db7]" : "text-neutral-500"}>
-              {props.systemAudioEnabled ? <Volume2 size={25} /> : <VolumeX size={25} />}
-            </span>
-            <span>{props.systemAudioEnabled ? "System on" : "System off"}</span>
-          </button>
+              <button
+                className={cx(
+                  "grid min-h-16 place-items-center gap-1 rounded-xl border-0 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-neutral-300 transition-[transform,background-color,color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45",
+                  props.systemAudioEnabled && "bg-[#ff3b9d]/10 text-white"
+                )}
+                type="button"
+                onClick={props.onToggleSystemAudio}
+                disabled={!props.canStart}
+                aria-pressed={props.systemAudioEnabled}
+                title={systemAudioLabel}
+              >
+                <span className={props.systemAudioEnabled ? "text-[#ff6db7]" : "text-neutral-500"}>
+                  {props.systemAudioEnabled ? <Volume2 size={25} /> : <VolumeX size={25} />}
+                </span>
+                <span>{props.systemAudioEnabled ? "System on" : "System off"}</span>
+              </button>
 
-          <button
-            className="grid min-h-16 place-items-center gap-1 rounded-xl border-0 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-neutral-300 transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45"
-            type="button"
-            onClick={props.onChooseFolder}
-            disabled={!props.canStart}
-            title={props.baseDirectory ?? "Choose project folder"}
-          >
-            <FolderOpen className="text-[#ff6db7]" size={25} />
-            <span>{props.baseDirectory ? "Project set" : "Project"}</span>
-          </button>
+              <button
+                className="grid min-h-16 place-items-center gap-1 rounded-xl border-0 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-neutral-300 transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45"
+                type="button"
+                onClick={props.onChooseFolder}
+                disabled={!props.canStart}
+                title={props.baseDirectory ?? "Choose project folder"}
+              >
+                <FolderOpen className="text-[#ff6db7]" size={25} />
+                <span>{props.baseDirectory ? "Project set" : "Project"}</span>
+              </button>
 
-          <FloatingDeviceControl
-            enabled={props.cameraEnabled}
-            enabledIcon={<Video size={25} />}
-            disabledIcon={<VideoOff size={25} />}
-            enabledLabel={truncateLabel(props.selectedCameraLabel)}
-            disabledLabel="Camera off"
-            options={props.cameras}
-            value={props.selectedCameraId}
-            disabled={!props.canStart}
-            onToggle={props.onToggleCamera}
-            onValueChange={props.onCameraChange}
-          />
-        </footer>
+              <FloatingDeviceControl
+                enabled={props.cameraEnabled}
+                enabledIcon={<Video size={25} />}
+                disabledIcon={<VideoOff size={25} />}
+                enabledLabel={truncateLabel(props.selectedCameraLabel)}
+                disabledLabel="Camera off"
+                options={props.cameras}
+                value={props.selectedCameraId}
+                disabled={!props.canStart}
+                onToggle={props.onToggleCamera}
+                onValueChange={props.onCameraChange}
+              />
+            </footer>
+          </>
+        )}
       </section>
     </main>
   );
@@ -382,12 +392,10 @@ function formatElapsedTime(elapsedMs: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
-  const isRecordingActive = props.state === "recording" || props.state === "paused";
-  const isBusy = ["preparing", "countdown", "processing", "stopping"].includes(props.state);
-  const showCameraPreview = props.cameraPreviewStream !== null;
-
-  const statusText = props.state === "recording"
+function getRecorderStatusText(
+  props: Parameters<typeof RecorderControllerView>[0]
+): string {
+  return props.state === "recording"
     ? "Recording in progress"
     : props.state === "paused"
       ? "Recording paused"
@@ -402,6 +410,73 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
               : props.state === "complete"
                 ? "Recording saved"
                 : "Start recording";
+}
+
+function RecordingControls(
+  props: Parameters<typeof RecorderControllerView>[0] & { docked?: boolean }
+) {
+  const statusText = getRecorderStatusText(props);
+
+  return (
+    <div
+      className={cx(
+        "grid justify-items-center gap-4 px-5 py-5 shadow-[0_18px_48px_rgb(0_0_0_/_0.28)]",
+        props.docked
+          ? "w-full rounded-2xl bg-[#101012] ring-1 ring-white/10"
+          : "min-w-[19rem] rounded-3xl bg-white/[0.035]"
+      )}
+    >
+      <div className="inline-flex items-center gap-2 text-[0.64rem] font-extrabold uppercase tracking-[0.14em] text-neutral-300">
+        <span
+          className={cx(
+            "size-2.5 rounded-full transition-colors",
+            props.state === "paused"
+              ? "bg-neutral-500"
+              : "recorder-recording-dot bg-[#ff3b9d]"
+          )}
+        />
+        {statusText}
+      </div>
+      <PixelTimer value={formatElapsedTime(props.elapsedMs)} />
+      <div className="grid w-full grid-cols-3 gap-2">
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-white/[0.07] px-3 text-xs font-bold text-neutral-200 transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.12] active:translate-y-0"
+          type="button"
+          onClick={props.state === "paused" ? props.onResumeRecording : props.onPauseRecording}
+          aria-label={props.state === "paused" ? "Resume recording" : "Pause recording"}
+        >
+          {props.state === "paused" ? <Play size={16} /> : <Pause size={16} />}
+          <span>{props.state === "paused" ? "Resume" : "Pause"}</span>
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-white/[0.07] px-3 text-xs font-bold text-neutral-300 transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.12] active:translate-y-0"
+          type="button"
+          onClick={props.onCancelRecording}
+          aria-label="Cancel recording"
+        >
+          <X size={16} />
+          <span>Cancel</span>
+        </button>
+        <button
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-[#ff3b9d] px-3 text-xs font-bold text-white shadow-[0_8px_22px_rgb(255_59_157_/_0.22)] transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-[#ff58aa] active:translate-y-0"
+          type="button"
+          onClick={props.onStopRecording}
+          aria-label="Finish recording"
+        >
+          <CheckCircle2 size={16} />
+          <span>Done</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
+  const isRecordingActive = props.state === "recording" || props.state === "paused";
+  const isBusy = ["preparing", "countdown", "processing", "stopping"].includes(props.state);
+  const showCameraPreview = props.cameraPreviewStream !== null;
+
+  const statusText = getRecorderStatusText(props);
 
   return (
     <div className="relative grid min-h-0 flex-1 place-items-center overflow-hidden px-4 pb-5 pt-3">
@@ -419,51 +494,36 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
         onChange={props.onSourceChange}
       />
 
-      <div className="recorder-state-enter relative z-10 flex flex-col items-center gap-4" key={props.state}>
+      <div
+        className={cx(
+          "recorder-state-enter z-10 flex flex-col items-center gap-4",
+          showCameraPreview && !isRecordingActive
+            ? "absolute inset-x-0 bottom-4 px-4"
+            : "relative"
+        )}
+        key={props.state}
+      >
         {isRecordingActive ? (
-          <div className="grid min-w-[19rem] justify-items-center gap-4 rounded-3xl bg-white/[0.035] px-5 py-5 shadow-[0_18px_48px_rgb(0_0_0_/_0.28)]">
-            <div className="inline-flex items-center gap-2 text-[0.64rem] font-extrabold uppercase tracking-[0.14em] text-neutral-300">
-              <span
-                className={cx(
-                  "size-2.5 rounded-full transition-colors",
-                  props.state === "paused"
-                    ? "bg-neutral-500"
-                    : "recorder-recording-dot bg-[#ff3b9d]"
-                )}
-              />
-              {statusText}
-            </div>
-            <PixelTimer value={formatElapsedTime(props.elapsedMs)} />
-            <div className="grid w-full grid-cols-3 gap-2">
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-white/[0.07] px-3 text-xs font-bold text-neutral-200 transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.12] active:translate-y-0"
-                type="button"
-                onClick={props.state === "paused" ? props.onResumeRecording : props.onPauseRecording}
-                aria-label={props.state === "paused" ? "Resume recording" : "Pause recording"}
-              >
-                {props.state === "paused" ? <Play size={16} /> : <Pause size={16} />}
-                <span>{props.state === "paused" ? "Resume" : "Pause"}</span>
-              </button>
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-white/[0.07] px-3 text-xs font-bold text-neutral-300 transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.12] active:translate-y-0"
-                type="button"
-                onClick={props.onCancelRecording}
-                aria-label="Cancel recording"
-              >
-                <X size={16} />
-                <span>Cancel</span>
-              </button>
-              <button
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border-0 bg-[#ff3b9d] px-3 text-xs font-bold text-white shadow-[0_8px_22px_rgb(255_59_157_/_0.22)] transition-[transform,background-color] duration-200 hover:-translate-y-0.5 hover:bg-[#ff58aa] active:translate-y-0"
-                type="button"
-                onClick={props.onStopRecording}
-                aria-label="Finish recording"
-              >
-                <CheckCircle2 size={16} />
-                <span>Done</span>
-              </button>
-            </div>
-          </div>
+          showCameraPreview ? null : <RecordingControls {...props} />
+        ) : showCameraPreview ? (
+          <button
+            className="inline-flex h-12 items-center gap-3 rounded-full border border-white/15 bg-[#101012] py-1.5 pl-2 pr-5 text-white shadow-[0_12px_36px_rgb(0_0_0_/_0.42)] transition-[background-color,transform] duration-200 hover:-translate-y-0.5 hover:bg-[#18181b] active:translate-y-0 disabled:cursor-wait disabled:opacity-70"
+            type="button"
+            disabled={isBusy}
+            onClick={props.onStartRecording}
+            aria-label="Start recording"
+            title="Start recording"
+            data-recorder-start
+          >
+            <span className="grid size-9 place-items-center rounded-full border-2 border-white bg-red-600 shadow-[0_0_0_4px_rgb(0_0_0_/_0.2)]">
+              {props.state === "countdown" ? (
+                <strong className="text-base">{props.countdown}</strong>
+              ) : isBusy ? (
+                <LoaderCircle className="animate-spin" size={18} />
+              ) : null}
+            </span>
+            <strong className="text-sm font-extrabold">{statusText}</strong>
+          </button>
         ) : (
           <div className="grid justify-items-center gap-3">
             <div className="relative grid size-28 place-items-center">

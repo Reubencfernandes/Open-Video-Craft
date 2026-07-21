@@ -12,7 +12,7 @@ export function HomeActionCard(props: {
 }) {
   return (
     <button
-      className="group flex min-h-28 min-w-0 items-center gap-3 rounded-2xl bg-[#19191c] p-4 text-left shadow-[0_10px_26px_rgb(0_0_0_/_0.16)] transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-[#21171d] hover:shadow-[0_12px_30px_rgb(255_49_146_/_0.08)] disabled:cursor-not-allowed disabled:opacity-45"
+      className="group flex min-h-28 min-w-0 items-center gap-3 rounded-2xl bg-[#19191c] p-4 text-left shadow-[0_10px_26px_rgb(0_0_0_/_0.16)] transition-[background-color,transform] duration-200 hover:-translate-y-0.5 hover:bg-[#21171d] disabled:cursor-not-allowed disabled:opacity-45"
       type="button"
       disabled={props.disabled}
       onClick={props.onAction}

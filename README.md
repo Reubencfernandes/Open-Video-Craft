@@ -43,6 +43,29 @@ invoke their AI features.
 | :---: | :---: |
 | ![Editor with the media library, preview, and multi-lane timeline](docs/screenshots/editor.png) | ![Timeline with clips and subtitle lane](docs/screenshots/editor-timeline.png) |
 
+### Latest improvements
+
+- The projects dashboard now gives recent projects more room, waits for real
+  thumbnails instead of flashing placeholder artwork, and keeps the latest
+  recordings one click away.
+- The floating recorder has a camera-first preview, an opaque recording timer,
+  clearer controls, and a compact mode that stays out of the captured content.
+- Timeline clips have a stronger selected state, Space consistently controls
+  playback across editor panels, and drag-selection no longer outlines the
+  whole timeline.
+- Whisper, Gemini, and Cohere subtitle generation now expose consistent
+  timeline processing states. On-device Whisper auto-detects the spoken
+  language, while readable errors and retry guidance replace raw provider
+  payloads.
+- Subtitle cues open and close independently, accept validated
+  millisecond-accurate timecodes, and replace old cues only after generation
+  completes successfully.
+- AI prompts can be copied, concurrent requests are guarded cleanly, and Gemini
+  errors are presented as concise messages instead of IPC implementation text.
+- The export dialog is wider and more compact, video corners now offer clear
+  Flat and Rounded choices, and selected clips remain
+  visible over bright filmstrip frames.
+
 ## Features
 
 ### Recording
@@ -63,8 +86,9 @@ invoke their AI features.
 - Zoom-in effects with an adjustable focal point; speed sections up to 5×.
 - Camera layouts (bubble, side-by-side, presenter…), draggable/resizable
   screen and camera, backgrounds and corner styling.
-- **On-device Whisper subtitles** with word-level karaoke highlighting, plus
-  manual subtitle editing and draggable subtitle clips.
+- **Multilingual on-device Whisper subtitles** with automatic language
+  detection and word-level karaoke highlighting, plus manual timestamp editing
+  and draggable subtitle clips.
 - Per-lane mute and volume controls with the same mix used for preview,
   transcription, and export; background music drops straight onto the timeline.
 - Debounced autosave, dirty-state close protection, and safe recovery from an
@@ -74,11 +98,11 @@ invoke their AI features.
 - Connect Claude Code through the built-in local MCP server or Gemini with an
   API key so an AI agent can inspect and edit the complete project surface.
 
-> **Current export scope:** timeline cuts, reordered clips, clip transitions, intentional gaps,
-> resolution, source/system/microphone/imported audio, gain/mute settings, and
-> clean burned-in or sidecar subtitles are exported. Camera compositing, visual
-> layouts/backgrounds, zoom/speed effects, and advanced subtitle styles remain
-> preview-only. The export dialog shows this before every export.
+> **Current export scope:** timeline cuts, reordered clips, clip transitions,
+> intentional gaps, resolution, source/system/microphone/imported audio,
+> gain/mute settings, zoom and speed effects, text animations, and clean
+> burned-in or sidecar subtitles are exported. Camera compositing, visual
+> layouts/backgrounds, and advanced subtitle styles remain preview-only.
 
 ### AI editing with Gemini or Claude Code
 
@@ -160,9 +184,9 @@ npm run build      # production build
 Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. FFmpeg is
 bundled (`ffmpeg-static`) for remuxing, audio conversion, and export.
 
-The screenshots above were captured from the current desktop app with its
-deterministic demo project, including screen media, subtitles, zoom and speed
-regions, and separate timeline lanes.
+The screenshots above were captured from the current desktop app using existing
+local recording projects, including real project thumbnails, screen and camera
+media, subtitles, and separate audio lanes.
 
 ## Releases
 

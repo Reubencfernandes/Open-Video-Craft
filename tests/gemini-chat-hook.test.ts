@@ -3,7 +3,10 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenVideoCraftApi } from "../src/preload/preload";
-import { useGeminiChat } from "../src/renderer/editor/useGeminiChat";
+import {
+  formatGeminiChatError,
+  useGeminiChat
+} from "../src/renderer/editor/useGeminiChat";
 
 type ChatState = ReturnType<typeof useGeminiChat>;
 
@@ -111,5 +114,28 @@ describe("useGeminiChat project lifecycle", () => {
       message: "Fix the pacing",
       includeVideo: true
     });
+  });
+});
+
+describe("formatGeminiChatError", () => {
+  it("turns a raw Electron-wrapped Gemini 503 response into a useful message", () => {
+    const raw = new Error(
+      `Error invoking remote method 'gemini:chat-send': Error: Gemini request failed (HTTP 503). { "error": { "code": 503, "message": "This model is currently experiencing high demand.", "status": "UNAVAILABLE" } }`
+    );
+
+    const message = formatGeminiChatError(raw);
+
+    expect(message).toBe(
+      "Gemini is temporarily unavailable because of high demand. Wait a moment and try again."
+    );
+    expect(message).not.toMatch(/remote method|\{\s*"error"|HTTP 503/);
+  });
+
+  it("explains when a previous request is still active", () => {
+    expect(formatGeminiChatError(
+      "Error invoking remote method 'gemini:chat-send': Error: The assistant is still working on the previous message."
+    )).toBe(
+      "Gemini is still completing the previous request. Wait for it to finish or stop it before trying again."
+    );
   });
 });

@@ -35,7 +35,7 @@ export function AudioPanel(props: {
         onClick={props.onAddBackgroundMusic}
       >
         <Music2 size={16} />
-        Add background music
+        Add audio clip
       </BubbleActionButton>
       <div className="grid gap-3">
         {props.audioSources.map((item) => (

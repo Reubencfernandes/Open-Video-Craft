@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeProviderError,
   mapGeminiSegments,
   parseClockTimestamp,
   pickChunkBoundaries
 } from "../src/main/stt-cloud";
+
+describe("provider errors", () => {
+  it("does not expose a raw Gemini overload payload", async () => {
+    const error = await describeProviderError("Gemini", new Response(JSON.stringify({
+      error: {
+        code: 503,
+        message: "This model is currently experiencing high demand.",
+        status: "UNAVAILABLE"
+      }
+    }), { status: 503 }));
+
+    expect(error).toBe(
+      "Gemini is temporarily unavailable. This is usually caused by high demand; wait a moment and try again."
+    );
+    expect(error).not.toContain("UNAVAILABLE");
+    expect(error).not.toContain("{\"");
+  });
+});
 
 describe("parseClockTimestamp", () => {
   it("parses MM:SS and MM:SS.mmm", () => {

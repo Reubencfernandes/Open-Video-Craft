@@ -439,6 +439,7 @@ export interface SttProgressEvent {
   percent: number | null;
   chunkIndex?: number;
   chunkCount?: number;
+  activityRanges?: Array<{ start: number; end: number }>;
 }
 
 /* ------------------------------------------------------------------ */

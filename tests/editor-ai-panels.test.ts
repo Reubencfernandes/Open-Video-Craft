@@ -36,7 +36,7 @@ describe("editor AI and audio panels", () => {
     expect(html).toContain("data-range-control");
     expect(html).toContain("data-range-fill");
     expect(html).toContain("data-bubble-action-button");
-    expect(html).toContain("Add background music");
+    expect(html).toContain("Add audio clip");
     expect(html).not.toMatch(/violet|purple/i);
     expect(html).not.toMatch(/live output|equalizer/i);
   });

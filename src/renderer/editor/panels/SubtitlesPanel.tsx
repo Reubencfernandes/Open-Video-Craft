@@ -10,7 +10,8 @@ import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { FloatingSelect } from "../FloatingSelect";
 import {
   formatSubtitleTimecode,
-  parseSubtitleTimecode
+  parseSubtitleTimecode,
+  subtitleMinimumDuration
 } from "../subtitle-time";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 import type { SttStatus } from "../useSubtitleGeneration";
@@ -25,7 +26,7 @@ const subtitleStyleOptions: Array<{ id: SubtitleStyle; label: string }> = [
 ];
 
 const sttProviderOptions: Array<{ id: SttProviderId; label: string }> = [
-  { id: "whisper-local", label: "Whisper base (on-device)" },
+  { id: "whisper-local", label: "Whisper base multilingual (on-device)" },
   { id: "cohere", label: "Cohere Transcribe (cloud)" },
   { id: "gemini", label: "Gemini (cloud)" }
 ];
@@ -55,7 +56,9 @@ export function SubtitlesPanel(props: {
   subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
+  selectedSubtitleId: string | null;
   selectedSubtitle: SubtitleSegment | null;
+  duration: number;
   currentTime: number;
   onAddSubtitle: () => void;
   onGenerateSubtitles: () => void;
@@ -65,9 +68,12 @@ export function SubtitlesPanel(props: {
   onOpenAiSettings: () => void;
   onStyleChange: (style: SubtitleStyle) => void;
   onUpdateSubtitle: (id: string, updates: Partial<SubtitleSegment>) => void;
-  onSelectSubtitle: (subtitleId: string) => void;
+  onSelectSubtitle: (subtitleId: string | null) => void;
 }) {
-  const selected = props.selectedSubtitle;
+  const subtitleIdsKey = props.subtitles.map((subtitle) => subtitle.id).join("\u0000");
+  const [expandedSubtitleId, setExpandedSubtitleId] = useState<string | null>(
+    () => props.selectedSubtitleId ?? props.selectedSubtitle?.id ?? props.subtitles[0]?.id ?? null
+  );
   const busy = props.sttStatus === "loading" || props.sttStatus === "transcribing";
   const isCloudProvider = props.sttProvider !== "whisper-local";
   const missingKey =
@@ -76,6 +82,20 @@ export function SubtitlesPanel(props: {
   const providerLabel =
     sttProviderOptions.find((option) => option.id === props.sttProvider)?.label ??
     props.sttModelLabel;
+
+  useEffect(() => {
+    if (props.selectedSubtitleId) {
+      setExpandedSubtitleId(props.selectedSubtitleId);
+    }
+  }, [props.selectedSubtitleId]);
+
+  useEffect(() => {
+    const subtitleIds = subtitleIdsKey ? subtitleIdsKey.split("\u0000") : [];
+    setExpandedSubtitleId((current) => {
+      if (current && subtitleIds.includes(current)) return current;
+      return subtitleIds[0] ?? null;
+    });
+  }, [subtitleIdsKey]);
 
   return (
     <div className="grid min-h-0 content-start gap-3 overflow-auto">
@@ -96,7 +116,13 @@ export function SubtitlesPanel(props: {
         className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
         type="button"
         disabled={busy || missingKey}
-        onClick={props.onGenerateSubtitles}
+        data-auto-generate-subtitles
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          props.onGenerateSubtitles();
+        }}
       >
         <WandSparkles className="shrink-0" size={16} />
         <span className="min-w-0 truncate">
@@ -153,10 +179,29 @@ export function SubtitlesPanel(props: {
             Add your {providerLabel.split(" ")[0]} API key to use this model
           </ApiKeyPromptPill>
         ) : null}
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <span className="font-bold text-slate-400">Language</span>
-          <span className="min-w-0 truncate text-right font-semibold text-white">{props.subtitleLanguage}</span>
-        </div>
+        {props.sttProvider === "whisper-local" ? (
+          <>
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <span className="font-bold text-slate-400">Spoken language</span>
+              <span className="min-w-0 truncate text-right font-semibold text-white">
+                Auto-detect (any language)
+              </span>
+            </div>
+            {props.subtitleLanguage !== "Auto-detected" ? (
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <span className="font-bold text-slate-400">Detected</span>
+                <span className="min-w-0 truncate text-right font-semibold text-white">
+                  {props.subtitleLanguage}
+                </span>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <span className="font-bold text-slate-400">Language</span>
+            <span className="min-w-0 truncate text-right font-semibold text-white">{props.subtitleLanguage}</span>
+          </div>
+        )}
       </div>
       <div className="grid gap-2">
         <span className="text-xs font-bold text-slate-400">Subtitle style</span>
@@ -191,15 +236,20 @@ export function SubtitlesPanel(props: {
           {props.subtitles.map((subtitle) => {
             const isActive =
               props.currentTime >= subtitle.start && props.currentTime < subtitle.end;
-            const isSelected = selected?.id === subtitle.id;
+            const isSelected = expandedSubtitleId === subtitle.id;
 
             return (
               <SubtitleTimelineItem
                 key={subtitle.id}
                 subtitle={subtitle}
+                duration={props.duration}
                 active={isActive}
                 selected={isSelected}
-                onSelect={() => props.onSelectSubtitle(subtitle.id)}
+                onSelect={() => {
+                  const nextId = isSelected ? null : subtitle.id;
+                  setExpandedSubtitleId(nextId);
+                  props.onSelectSubtitle(nextId);
+                }}
                 onUpdate={(updates) => props.onUpdateSubtitle(subtitle.id, updates)}
               />
             );
@@ -212,6 +262,7 @@ export function SubtitlesPanel(props: {
 
 function SubtitleTimelineItem(props: {
   subtitle: SubtitleSegment;
+  duration: number;
   active: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -300,20 +351,29 @@ function SubtitleTimelineItem(props: {
                   label="Start"
                   seconds={props.subtitle.start}
                   minimum={0}
-                  maximum={Math.max(0, props.subtitle.end - 0.1)}
+                  maximum={Math.max(
+                    0,
+                    Math.min(
+                      props.subtitle.end - subtitleMinimumDuration,
+                      props.duration > 0
+                        ? props.duration - subtitleMinimumDuration
+                        : Number.POSITIVE_INFINITY
+                    )
+                  )}
                   disabled={!props.selected}
                   onCommit={(start) => props.onUpdate({ start })}
                 />
                 <SubtitleTimeInput
                   label="End"
                   seconds={props.subtitle.end}
-                  minimum={props.subtitle.start + 0.1}
+                  minimum={props.subtitle.start + subtitleMinimumDuration}
+                  maximum={props.duration > 0 ? props.duration : undefined}
                   disabled={!props.selected}
                   onCommit={(end) => props.onUpdate({ end })}
                 />
               </div>
               <span className="text-center text-[0.56rem] font-semibold text-neutral-600">
-                Timecode format · MM:SS.mmm
+                Enter seconds, MM:SS.mmm, or HH:MM:SS.mmm
               </span>
             </div>
           </div>
@@ -332,39 +392,55 @@ function SubtitleTimeInput(props: {
   onCommit: (seconds: number) => void;
 }) {
   const [draft, setDraft] = useState(() => formatSubtitleTimecode(props.seconds));
+  const [invalid, setInvalid] = useState(false);
 
   useEffect(() => {
     setDraft(formatSubtitleTimecode(props.seconds));
+    setInvalid(false);
   }, [props.seconds]);
 
   const commit = () => {
     const parsed = parseSubtitleTimecode(draft);
     if (parsed === null) {
       setDraft(formatSubtitleTimecode(props.seconds));
+      setInvalid(true);
       return;
     }
 
+    const maximum = props.maximum === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.max(props.minimum, props.maximum);
     const clamped = Math.min(
       Math.max(parsed, props.minimum),
-      props.maximum ?? Number.POSITIVE_INFINITY
+      maximum
     );
     const precise = Math.round(clamped * 1000) / 1000;
+    setInvalid(false);
     setDraft(formatSubtitleTimecode(precise));
-    props.onCommit(precise);
+    if (precise !== props.seconds) props.onCommit(precise);
   };
 
   return (
     <label className="grid min-w-0 gap-1.5 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-neutral-500">
       <span>{props.label}</span>
       <input
-        className="h-9 min-w-0 rounded-lg border border-white/[0.09] bg-black/25 px-2 text-center text-xs font-bold tabular-nums tracking-normal text-white outline-none transition-[border-color,background-color,box-shadow] focus:border-white/25 focus:bg-black/35 focus:shadow-[0_0_0_3px_rgb(255_255_255_/_0.05)] disabled:opacity-50"
+        className={`h-9 min-w-0 rounded-lg border bg-black/25 px-2 text-center text-xs font-bold tabular-nums tracking-normal text-white outline-none transition-[border-color,background-color,box-shadow] disabled:opacity-50 ${
+          invalid
+            ? "border-rose-400/70 focus:border-rose-300 focus:shadow-[0_0_0_3px_rgb(251_113_133_/_0.12)]"
+            : "border-white/[0.09] focus:border-white/25 focus:bg-black/35 focus:shadow-[0_0_0_3px_rgb(255_255_255_/_0.05)]"
+        }`}
         type="text"
         inputMode="decimal"
         value={draft}
         disabled={props.disabled}
         aria-label={`Subtitle ${props.label.toLowerCase()} time`}
+        aria-invalid={invalid}
+        title={invalid ? "Use seconds, MM:SS.mmm, or HH:MM:SS.mmm" : undefined}
         spellCheck={false}
-        onChange={(event) => setDraft(event.target.value)}
+        onChange={(event) => {
+          setInvalid(false);
+          setDraft(event.target.value);
+        }}
         onBlur={commit}
         onFocus={(event) => event.currentTarget.select()}
         onKeyDown={(event) => {
@@ -373,6 +449,7 @@ function SubtitleTimeInput(props: {
             event.currentTarget.blur();
           } else if (event.key === "Escape") {
             setDraft(formatSubtitleTimecode(props.seconds));
+            setInvalid(false);
             event.currentTarget.blur();
           }
         }}

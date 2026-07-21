@@ -329,6 +329,11 @@ export class GeminiAgentManager {
       if (response.status === 429) {
         throw new Error("Gemini rate limit reached. Wait a moment and try again.");
       }
+      if ([500, 502, 503, 504].includes(response.status)) {
+        throw new Error(
+          "Gemini is temporarily unavailable. This is usually caused by high demand; wait a moment and try again."
+        );
+      }
       throw new Error(`Gemini request failed (HTTP ${response.status}). ${detail}`.trim());
     }
 

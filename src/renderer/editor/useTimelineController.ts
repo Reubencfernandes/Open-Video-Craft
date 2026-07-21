@@ -348,6 +348,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     providerKeys: subtitleGeneration.providerKeys,
     refreshProviderKeys: subtitleGeneration.refreshProviderKeys,
     sttProvider: subtitleGeneration.sttProvider,
+    sttActivityRanges: subtitleGeneration.sttActivityRanges,
     updateProviderSettings: subtitleGeneration.updateProviderSettings,
     handleTimelineDragOver: editing.handleTimelineDragOver,
     handleTimelineDrop: editing.handleTimelineDrop,

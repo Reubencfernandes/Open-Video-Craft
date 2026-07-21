@@ -12,6 +12,7 @@ import type {
   WheelEvent as ReactWheelEvent
 } from "react";
 import { cx } from "../classNames";
+import type { SubtitleActivityRange } from "../../shared/subtitle-activity";
 import {
   TimelineContextMenuView,
   TimelinePlayhead,
@@ -92,6 +93,7 @@ export function Timeline(props: {
   transitions: ClipTransition[];
   subtitles: SubtitleSegment[];
   subtitleProcessing?: boolean;
+  subtitleProcessingRanges?: SubtitleActivityRange[];
   textOverlays: TextOverlay[];
   selectedSegmentId: string | null;
   selectedSegmentIds: string[];
@@ -279,9 +281,14 @@ export function Timeline(props: {
               touch-none keeps pointer capture stable during drags. */}
           <div
             className={cx(
-              "relative grid min-h-[10rem] cursor-crosshair select-none content-start gap-1 overflow-visible px-[var(--timeline-body-pad)] pb-2 pt-2 touch-none",
-              props.scrubbing && "cursor-ew-resize"
+              "relative grid min-h-[10rem] select-none content-start gap-1 overflow-visible px-[var(--timeline-body-pad)] pb-2 pt-2 touch-none",
+              props.scrubbing
+                ? "cursor-ew-resize"
+                : props.rangeSelection?.dragging
+                  ? "cursor-crosshair"
+                  : "cursor-default"
             )}
+            data-timeline-body
             ref={props.bodyRef}
             onPointerDown={props.onBodyPointerDown}
             onPointerMove={props.onBodyPointerMove}
@@ -318,6 +325,7 @@ export function Timeline(props: {
           transitionDropKey={transitionDropKey}
           subtitles={props.subtitles}
           subtitleProcessing={props.subtitleProcessing}
+          subtitleProcessingRanges={props.subtitleProcessingRanges}
           textOverlays={props.textOverlays}
           selectedSegmentIds={props.selectedSegmentIds}
           selectedCount={rangeSelectionCount}

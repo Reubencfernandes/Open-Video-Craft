@@ -47,7 +47,9 @@ describe("editor primary actions", () => {
       subtitleLanguage: "English",
       subtitleStyle: "clean",
       subtitles: [],
+      selectedSubtitleId: null,
       selectedSubtitle: null,
+      duration: 0,
       currentTime: 0,
       onAddSubtitle: () => undefined,
       onGenerateSubtitles: () => undefined,
@@ -84,7 +86,9 @@ describe("editor primary actions", () => {
       subtitleLanguage: "English",
       subtitleStyle: "clean",
       subtitles: [],
+      selectedSubtitleId: null,
       selectedSubtitle: null,
+      duration: 0,
       currentTime: 0,
       onAddSubtitle: () => undefined,
       onGenerateSubtitles: () => undefined,
@@ -142,7 +146,9 @@ describe("editor primary actions", () => {
       subtitleLanguage: "English",
       subtitleStyle: "clean",
       subtitles,
+      selectedSubtitleId: "first",
       selectedSubtitle: subtitles[0],
+      duration: 20,
       currentTime: 4,
       onAddSubtitle: () => undefined,
       onGenerateSubtitles: () => undefined,
@@ -187,5 +193,8 @@ describe("editor primary actions", () => {
     expect(html).toContain("editor-choice-button");
     expect(html).toContain("editor-choice-content");
     expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain("Rounded");
+    expect(html).not.toContain("Slight");
+    expect(html).not.toContain("Full");
   });
 });
