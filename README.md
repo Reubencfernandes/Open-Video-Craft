@@ -6,6 +6,8 @@
 
 **Record your screen, camera, and audio — then cut, mix, subtitle, and export locally. No account and no upload.**
 
+[**Download Open Video Craft for macOS or Windows →**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
+
 [![Latest release](https://img.shields.io/github/v/release/Reubencfernandes/Open-Video-Craft?label=download&color=34d399)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows-6366f1)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
 [![Built with Electron](https://img.shields.io/badge/Electron%2043-React%20%2B%20TypeScript-38bdf8)](#development)
@@ -31,7 +33,7 @@ Recording, editing, Whisper transcription, and export run locally. Optional
 Gemini, Cohere, and Claude Code connections are used only when you explicitly
 invoke their AI features.
 
-## Screenshots — v1.0.0
+## Screenshots — v1.0.1
 
 | Launcher | Floating recorder |
 | :---: | :---: |
@@ -106,7 +108,7 @@ requested by a connected provider are handled under that provider's data policy.
 | Export | `⌘E` | `Ctrl E` |
 | Toggle Chromium DevTools | `OVC_ENABLE_DEVTOOLS=1` + `Ctrl Shift I` | `F12` or `Ctrl Shift I` |
 
-## Install
+## Download and install
 
 Grab the latest installer from the
 [**Releases page**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest):
@@ -158,9 +160,9 @@ npm run build      # production build
 Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. FFmpeg is
 bundled (`ffmpeg-static`) for remuxing, audio conversion, and export.
 
-The editor screenshots above were captured from a real saved project in the
-current desktop app, including its screen recording, camera, subtitles, zoom
-regions, and separate audio lanes.
+The screenshots above were captured from the current desktop app with its
+deterministic demo project, including screen media, subtitles, zoom and speed
+regions, and separate timeline lanes.
 
 ## Releases
 
