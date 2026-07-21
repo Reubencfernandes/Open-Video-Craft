@@ -2,12 +2,16 @@
  * Subtitles tool: speech-to-text (on-device Whisper or a cloud provider),
  * style selection, and per-subtitle text/timing editing.
  */
-import { Captions, WandSparkles, X } from "lucide-react";
+import { Captions, ChevronDown, WandSparkles, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { ProviderKeysView, SttProviderId } from "../../../shared/types";
 import { BubbleActionButton } from "../../BubbleActionButton";
 import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { FloatingSelect } from "../FloatingSelect";
-import { formatSeconds } from "../utils";
+import {
+  formatSubtitleTimecode,
+  parseSubtitleTimecode
+} from "../subtitle-time";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 import type { SttStatus } from "../useSubtitleGeneration";
 
@@ -171,48 +175,11 @@ export function SubtitlesPanel(props: {
           ))}
         </div>
       </div>
-      {selected ? (
-        <div className="grid gap-3">
-          <textarea
-            className="min-h-24 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-violet-400"
-            value={selected.text}
-            onChange={(event) => props.onUpdateSubtitle(selected.id, { text: event.target.value })}
-          />
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-3">
-            <label className="grid gap-1 text-xs font-extrabold text-slate-400">
-              <span>Start</span>
-              <input
-                className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 text-white"
-                type="number"
-                min={0}
-                step={0.1}
-                value={selected.start}
-                onChange={(event) =>
-                  props.onUpdateSubtitle(selected.id, { start: Number(event.target.value) })
-                }
-              />
-            </label>
-            <label className="grid gap-1 text-xs font-extrabold text-slate-400">
-              <span>End</span>
-              <input
-                className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 text-white"
-                type="number"
-                min={selected.start + 0.1}
-                step={0.1}
-                value={selected.end}
-                onChange={(event) =>
-                  props.onUpdateSubtitle(selected.id, { end: Number(event.target.value) })
-                }
-              />
-            </label>
-          </div>
-        </div>
-      ) : (
+      {props.subtitles.length === 0 ? (
         <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-sm font-bold text-slate-400">
           No subtitles
         </div>
-      )}
-      {props.subtitles.length ? (
+      ) : (
         <div className="relative grid" data-subtitle-timeline>
           <span
             aria-hidden="true"
@@ -224,50 +191,189 @@ export function SubtitlesPanel(props: {
             const isSelected = selected?.id === subtitle.id;
 
             return (
-              <div className="relative min-w-0 pb-2 pl-6" key={subtitle.id}>
-                <span
-                  aria-hidden="true"
-                  className={`absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,box-shadow,transform] duration-200 ${
-                    isActive
-                      ? "scale-110 bg-[#ff3b5c] shadow-[0_0_0_3px_rgb(255_59_92_/_0.16),0_0_12px_rgb(255_59_92_/_0.8)]"
-                      : "bg-neutral-600"
-                  }`}
-                />
-                <button
-                  className={`group grid w-full min-w-0 gap-1 rounded-xl px-3 py-2.5 text-left transition-[background-color,color,transform] duration-200 ${
-                    isActive
-                      ? "bg-[#ff3b5c]/[0.11] text-white"
-                      : isSelected
-                        ? "bg-white/[0.075] text-white"
-                        : "bg-transparent text-neutral-400 hover:bg-white/[0.045] hover:text-neutral-200"
-                  }`}
-                  type="button"
-                  aria-current={isActive ? "true" : undefined}
-                  aria-pressed={isSelected}
-                  data-active-subtitle={isActive ? "true" : undefined}
-                  onClick={() => props.onSelectSubtitle(subtitle.id)}
-                >
-                  <span
-                    className={`text-[0.62rem] font-bold uppercase tracking-[0.08em] tabular-nums transition-colors ${
-                      isActive ? "text-[#ff6b82]" : "text-neutral-600 group-hover:text-neutral-500"
-                    }`}
-                  >
-                    {formatSeconds(subtitle.start)} — {formatSeconds(subtitle.end)}
-                  </span>
-                  <span className="whitespace-normal break-words text-[0.82rem] font-semibold leading-5">
-                    {subtitle.text}
-                  </span>
-                  {isActive ? (
-                    <span className="text-[0.58rem] font-bold uppercase tracking-[0.1em] text-[#ff6b82]">
-                      Playing now
-                    </span>
-                  ) : null}
-                </button>
-              </div>
+              <SubtitleTimelineItem
+                key={subtitle.id}
+                subtitle={subtitle}
+                active={isActive}
+                selected={isSelected}
+                onSelect={() => props.onSelectSubtitle(subtitle.id)}
+                onUpdate={(updates) => props.onUpdateSubtitle(subtitle.id, updates)}
+              />
             );
           })}
         </div>
-      ) : null}
+      )}
     </div>
+  );
+}
+
+function SubtitleTimelineItem(props: {
+  subtitle: SubtitleSegment;
+  active: boolean;
+  selected: boolean;
+  onSelect: () => void;
+  onUpdate: (updates: Partial<SubtitleSegment>) => void;
+}) {
+  const editorId = `subtitle-editor-${props.subtitle.id}`;
+  const surfaceClassName = props.active
+    ? "bg-[#ff3b5c]/[0.11] text-white"
+    : props.selected
+      ? "bg-white/[0.075] text-white"
+      : "bg-transparent text-neutral-400 hover:bg-white/[0.045] hover:text-neutral-200";
+
+  return (
+    <div className="relative min-w-0 pb-2 pl-6">
+      <span
+        aria-hidden="true"
+        className={`absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,box-shadow,transform] duration-200 ${
+          props.active
+            ? "scale-110 bg-[#ff3b5c] shadow-[0_0_0_3px_rgb(255_59_92_/_0.16),0_0_12px_rgb(255_59_92_/_0.8)]"
+            : "bg-neutral-600"
+        }`}
+      />
+      <div
+        className={`overflow-hidden rounded-xl transition-[background-color,color,box-shadow] duration-300 ${surfaceClassName} ${
+          props.selected ? "shadow-[0_12px_30px_rgb(0_0_0_/_0.22)]" : ""
+        }`}
+      >
+        <button
+          className="group grid w-full min-w-0 gap-1 bg-transparent px-3 py-2.5 text-left"
+          type="button"
+          aria-controls={editorId}
+          aria-current={props.active ? "true" : undefined}
+          aria-expanded={props.selected}
+          aria-pressed={props.selected}
+          data-active-subtitle={props.active ? "true" : undefined}
+          onClick={props.onSelect}
+        >
+          <span className="flex min-w-0 items-center justify-between gap-2">
+            <span
+              className={`min-w-0 truncate text-[0.62rem] font-bold uppercase tracking-[0.08em] tabular-nums transition-colors ${
+                props.active ? "text-[#ff6b82]" : "text-neutral-600 group-hover:text-neutral-500"
+              }`}
+            >
+              {formatSubtitleTimecode(props.subtitle.start)} — {formatSubtitleTimecode(props.subtitle.end)}
+            </span>
+            <ChevronDown
+              className={`shrink-0 transition-transform duration-300 ${props.selected ? "rotate-180 text-white" : "text-neutral-600"}`}
+              size={14}
+            />
+          </span>
+          <span className="whitespace-normal break-words text-[0.82rem] font-semibold leading-5">
+            {props.subtitle.text}
+          </span>
+          {props.active ? (
+            <span className="text-[0.58rem] font-bold uppercase tracking-[0.1em] text-[#ff6b82]">
+              Playing now
+            </span>
+          ) : null}
+        </button>
+
+        <div
+          className={`grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+            props.selected
+              ? "grid-rows-[1fr] opacity-100"
+              : "pointer-events-none grid-rows-[0fr] opacity-0"
+          }`}
+          aria-hidden={!props.selected}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div
+              className="grid gap-2.5 border-t border-white/[0.07] px-3 pb-3 pt-2.5"
+              id={editorId}
+              data-subtitle-editor={props.selected ? "true" : undefined}
+            >
+              <label className="grid gap-1.5 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-neutral-500">
+                <span>Subtitle text</span>
+                <textarea
+                  className="min-h-20 resize-y rounded-lg border border-white/[0.09] bg-black/25 p-2.5 text-xs font-semibold normal-case leading-5 tracking-normal text-white outline-none transition-[border-color,background-color,box-shadow] placeholder:text-neutral-600 focus:border-white/25 focus:bg-black/35 focus:shadow-[0_0_0_3px_rgb(255_255_255_/_0.05)] disabled:opacity-50"
+                  value={props.subtitle.text}
+                  disabled={!props.selected}
+                  onChange={(event) => props.onUpdate({ text: event.target.value })}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <SubtitleTimeInput
+                  label="Start"
+                  seconds={props.subtitle.start}
+                  minimum={0}
+                  maximum={Math.max(0, props.subtitle.end - 0.1)}
+                  disabled={!props.selected}
+                  onCommit={(start) => props.onUpdate({ start })}
+                />
+                <SubtitleTimeInput
+                  label="End"
+                  seconds={props.subtitle.end}
+                  minimum={props.subtitle.start + 0.1}
+                  disabled={!props.selected}
+                  onCommit={(end) => props.onUpdate({ end })}
+                />
+              </div>
+              <span className="text-center text-[0.56rem] font-semibold text-neutral-600">
+                Timecode format · MM:SS.mmm
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubtitleTimeInput(props: {
+  label: "Start" | "End";
+  seconds: number;
+  minimum: number;
+  maximum?: number;
+  disabled: boolean;
+  onCommit: (seconds: number) => void;
+}) {
+  const [draft, setDraft] = useState(() => formatSubtitleTimecode(props.seconds));
+
+  useEffect(() => {
+    setDraft(formatSubtitleTimecode(props.seconds));
+  }, [props.seconds]);
+
+  const commit = () => {
+    const parsed = parseSubtitleTimecode(draft);
+    if (parsed === null) {
+      setDraft(formatSubtitleTimecode(props.seconds));
+      return;
+    }
+
+    const clamped = Math.min(
+      Math.max(parsed, props.minimum),
+      props.maximum ?? Number.POSITIVE_INFINITY
+    );
+    const precise = Math.round(clamped * 1000) / 1000;
+    setDraft(formatSubtitleTimecode(precise));
+    props.onCommit(precise);
+  };
+
+  return (
+    <label className="grid min-w-0 gap-1.5 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-neutral-500">
+      <span>{props.label}</span>
+      <input
+        className="h-9 min-w-0 rounded-lg border border-white/[0.09] bg-black/25 px-2 text-center text-xs font-bold tabular-nums tracking-normal text-white outline-none transition-[border-color,background-color,box-shadow] focus:border-white/25 focus:bg-black/35 focus:shadow-[0_0_0_3px_rgb(255_255_255_/_0.05)] disabled:opacity-50"
+        type="text"
+        inputMode="decimal"
+        value={draft}
+        disabled={props.disabled}
+        aria-label={`Subtitle ${props.label.toLowerCase()} time`}
+        spellCheck={false}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onFocus={(event) => event.currentTarget.select()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            event.currentTarget.blur();
+          } else if (event.key === "Escape") {
+            setDraft(formatSubtitleTimecode(props.seconds));
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
   );
 }

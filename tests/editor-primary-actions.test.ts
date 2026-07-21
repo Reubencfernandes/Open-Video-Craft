@@ -154,9 +154,15 @@ describe("editor primary actions", () => {
     }));
 
     expect(html).toContain("data-subtitle-timeline");
-    expect(html).toContain("00:03 — 00:07");
+    expect(html).toContain("00:03.000 — 00:07.000");
     expect(html).toContain('data-active-subtitle="true"');
     expect(html).toContain('aria-current="true"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('data-subtitle-editor="true"');
+    expect(html).toContain('aria-label="Subtitle start time"');
+    expect(html).toContain('value="00:01.000"');
+    expect(html).toContain("grid-rows-[1fr] opacity-100");
+    expect(html).toContain("duration-300");
     expect(html).toContain("Playing now");
     expect(html).toContain("The subtitle currently being played");
   });
