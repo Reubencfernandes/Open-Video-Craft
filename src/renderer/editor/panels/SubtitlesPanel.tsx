@@ -2,9 +2,10 @@
  * Subtitles tool: speech-to-text (on-device Whisper or a cloud provider),
  * style selection, and per-subtitle text/timing editing.
  */
-import { Captions, KeyRound, WandSparkles, X } from "lucide-react";
+import { Captions, WandSparkles, X } from "lucide-react";
 import type { ProviderKeysView, SttProviderId } from "../../../shared/types";
 import { BubbleActionButton } from "../../BubbleActionButton";
+import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { FloatingSelect } from "../FloatingSelect";
 import { formatSeconds } from "../utils";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
@@ -141,14 +142,9 @@ export function SubtitlesPanel(props: {
           </div>
         ) : null}
         {missingKey ? (
-          <button
-            className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 font-bold text-amber-200 hover:bg-amber-400/20"
-            type="button"
-            onClick={props.onOpenAiSettings}
-          >
-            <KeyRound size={13} />
+          <ApiKeyPromptPill onClick={props.onOpenAiSettings}>
             Add your {providerLabel.split(" ")[0]} API key to use this model
-          </button>
+          </ApiKeyPromptPill>
         ) : null}
         <div className="flex min-w-0 items-center justify-between gap-3">
           <span className="font-bold text-slate-400">Language</span>

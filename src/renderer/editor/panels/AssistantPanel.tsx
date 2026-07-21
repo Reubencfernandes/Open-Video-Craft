@@ -5,8 +5,9 @@
  * AI CLIs use — every applied edit shows an undo chip.
  */
 import { useEffect, useRef, useState } from "react";
-import { KeyRound, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
 import type { GeminiChatMessage, ProviderKeysView } from "../../../shared/types";
+import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { ChatMessageBubble } from "./assistant/ChatMessageBubble";
 
 const quickActions = [
@@ -64,13 +65,12 @@ export function AssistantPanel(props: {
           <Loader2 className="animate-spin" size={12} /> Loading Gemini settings…
         </p>
       ) : missingKey ? (
-        <button
-          className="m-2.5 inline-flex min-h-9 flex-none items-center justify-center gap-1.5 rounded-lg bg-amber-400/10 px-3 text-xs font-bold text-amber-200 transition hover:bg-amber-400/15"
-          type="button"
+        <ApiKeyPromptPill
+          className="m-2.5 flex-none"
           onClick={props.onOpenAiSettings}
         >
-          <KeyRound size={13} /> Add your Gemini API key to use the assistant
-        </button>
+          Add your Gemini API key to use the assistant
+        </ApiKeyPromptPill>
       ) : null}
 
       {props.messages.length > 0 ? (

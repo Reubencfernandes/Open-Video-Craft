@@ -68,6 +68,40 @@ describe("editor primary actions", () => {
     expect(subtitlesHtml).toContain("Add subtitle");
   });
 
+  it("uses the glowing API-key pill for cloud subtitle setup", () => {
+    const html = renderToStaticMarkup(createElement(SubtitlesPanel, {
+      sttStatus: "idle",
+      sttDownloadProgress: null,
+      sttModelLabel: "Gemini",
+      sttProvider: "gemini",
+      providerKeys: {
+        sttProvider: "gemini",
+        hasCohereKey: false,
+        hasGeminiKey: false,
+        cohereLanguage: "en",
+        encryptionAvailable: true
+      },
+      subtitleLanguage: "English",
+      subtitleStyle: "clean",
+      subtitles: [],
+      selectedSubtitle: null,
+      currentTime: 0,
+      onAddSubtitle: () => undefined,
+      onGenerateSubtitles: () => undefined,
+      onCancelTranscription: () => undefined,
+      onSttProviderChange: () => undefined,
+      onCohereLanguageChange: () => undefined,
+      onOpenAiSettings: () => undefined,
+      onStyleChange: () => undefined,
+      onUpdateSubtitle: () => undefined,
+      onSelectSubtitle: () => undefined
+    }));
+
+    expect(html).toContain("data-api-key-prompt");
+    expect(html).toContain("Add your Gemini API key to use this model");
+    expect(html).toContain("rounded-full");
+  });
+
   it("shows the zoom focus as one large solid red dot", () => {
     const html = renderToStaticMarkup(createElement(ZoomPanel, {
       previewItem: null,

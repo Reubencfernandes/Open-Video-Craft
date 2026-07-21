@@ -3,8 +3,9 @@
  * drop it straight onto the timeline as background audio.
  */
 import { useState } from "react";
-import { KeyRound, Loader2, Music4, X } from "lucide-react";
+import { Loader2, Music4, X } from "lucide-react";
 import type { MusicEngine, ProviderKeysView } from "../../../shared/types";
+import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import type {
   MusicGenerationForm,
   MusicGenerationState
@@ -80,14 +81,9 @@ export function MusicPanel(props: {
       ) : null}
 
       {needsGeminiKey ? (
-        <button
-          className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md border border-amber-400/40 bg-amber-400/10 px-2 text-xs font-bold text-amber-200 hover:bg-amber-400/20"
-          type="button"
-          onClick={props.onOpenAiSettings}
-        >
-          <KeyRound size={13} />
+        <ApiKeyPromptPill onClick={props.onOpenAiSettings}>
           Add your Gemini API key to use Lyria
-        </button>
+        </ApiKeyPromptPill>
       ) : null}
 
       <label className="grid gap-1 text-xs">
