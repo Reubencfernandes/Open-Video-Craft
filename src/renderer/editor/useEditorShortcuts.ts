@@ -43,6 +43,13 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
       const accel = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
+      // Text controls own their native undo/redo stack. Handling Cmd/Ctrl+Z or
+      // Y here would undo an unrelated timeline edit while leaving the user's
+      // in-progress text unchanged.
+      if (isTyping && accel && (key === "z" || key === "y")) {
+        return;
+      }
+
       if (accel && key === "z") {
         event.preventDefault();
         if (event.shiftKey) {
@@ -97,6 +104,27 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
         return;
       }
 
+      if (event.code === "Space") {
+        const target = event.target instanceof Element ? event.target : null;
+        // Video editors treat Space as transport control even after a toolbar or
+        // inspector button receives focus. Keep native Space only where it edits
+        // a value, toggles a dedicated control, or acts inside a modal.
+        const keepsNativeSpace = Boolean(
+          target?.closest(
+            "input, select, textarea, [contenteditable='true'], [role='dialog'], " +
+            "[aria-modal='true'], [data-keep-native-space], [data-timeline-audio-mute]"
+          )
+        );
+        if (keepsNativeSpace) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        if (!event.repeat) p.togglePlayback();
+        return;
+      }
+
       if (isInteractive) {
         return;
       }
@@ -120,17 +148,6 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
         const direction = event.key === "ArrowRight" ? 1 : -1;
         const step = accel ? 60 : event.shiftKey ? 10 : 1;
         seekBy(direction * step);
-        return;
-      }
-
-      if (event.code === "Space") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.repeat) {
-          return;
-        }
-
-        p.togglePlayback();
         return;
       }
 

@@ -1,5 +1,5 @@
 /** Dashboard greeting and project search. */
-import { Search, SlidersHorizontal } from "lucide-react";
+import { Search } from "lucide-react";
 
 export function HomeHeader(props: {
   search: string;
@@ -16,9 +16,6 @@ export function HomeHeader(props: {
           <Search size={16} />
           <input className="min-w-0 flex-1 bg-transparent text-xs text-white outline-none placeholder:text-neutral-600" type="search" placeholder="Search projects, recordings, and edits…" value={props.search} onChange={(event) => props.onSearchChange(event.target.value)} />
         </label>
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-white/[0.045] text-neutral-500" title="Project filters">
-          <SlidersHorizontal size={15} />
-        </span>
       </div>
     </header>
   );

@@ -20,6 +20,7 @@ import {
 } from "../zoom-timing";
 import type { PlaybackSyncReason } from "./playback-sync";
 import { defaultSpeedRate, speedMinDurationSeconds } from "./speed-utils";
+import { subtitleMinimumDuration } from "./subtitle-time";
 import { clampNumber, createId } from "./utils";
 import type { EditorTool, SpeedEffect, SubtitleSegment, ZoomEffect } from "./types";
 
@@ -162,12 +163,17 @@ export function useEditorEffects(params: UseEditorEffectsParams) {
   }
 
   function addSubtitle() {
-    const start = currentTime;
-    const end = activeDuration > 0 ? Math.min(activeDuration, start + 3) : start + 3;
+    const maximum = Math.max(subtitleMinimumDuration, timelineDuration || activeDuration);
+    const start = clampNumber(
+      currentTime,
+      0,
+      Math.max(0, maximum - subtitleMinimumDuration)
+    );
+    const end = Math.min(maximum, start + 3);
     const nextSubtitle: SubtitleSegment = {
       id: createId("subtitle"),
       start,
-      end: Math.max(start + 0.5, end),
+      end: Math.max(start + subtitleMinimumDuration, end),
       text: "New subtitle"
     };
     setSubtitles((current) => [...current, nextSubtitle]);
@@ -178,21 +184,44 @@ export function useEditorEffects(params: UseEditorEffectsParams) {
   function updateSubtitle(id: string, updates: Partial<SubtitleSegment>) {
     // Editing the text invalidates word-level timings, so they are dropped and
     // the overlay falls back to spreading words evenly across the window.
-    const nextUpdates = "text" in updates ? { ...updates, words: undefined } : updates;
+    const timingChanged = "start" in updates || "end" in updates;
+    const nextUpdates = "text" in updates || timingChanged
+      ? { ...updates, words: undefined }
+      : updates;
+    const maximum = Math.max(subtitleMinimumDuration, timelineDuration || activeDuration);
     setSubtitles((current) =>
       current.map((subtitle) => {
         if (subtitle.id !== id) {
           return subtitle;
         }
 
-        const requestedStart = Number.isFinite(nextUpdates.start)
-          ? nextUpdates.start ?? subtitle.start
-          : subtitle.start;
-        const start = clampNumber(requestedStart, 0, Math.max(0, subtitle.end - 0.1));
+        let start = clampNumber(
+          subtitle.start,
+          0,
+          Math.max(0, maximum - subtitleMinimumDuration)
+        );
+        if (Number.isFinite(nextUpdates.start)) {
+          const requestedStart = nextUpdates.start ?? start;
+          const comparisonEnd = Number.isFinite(nextUpdates.end)
+            ? nextUpdates.end ?? subtitle.end
+            : subtitle.end;
+          start = clampNumber(
+            requestedStart,
+            0,
+            Math.max(
+              0,
+              Math.min(maximum, comparisonEnd) - subtitleMinimumDuration
+            )
+          );
+        }
         const requestedEnd = Number.isFinite(nextUpdates.end)
           ? nextUpdates.end ?? subtitle.end
           : subtitle.end;
-        const end = Math.max(start + 0.1, requestedEnd);
+        const end = clampNumber(
+          requestedEnd,
+          start + subtitleMinimumDuration,
+          maximum
+        );
         return { ...subtitle, ...nextUpdates, start, end };
       })
     );

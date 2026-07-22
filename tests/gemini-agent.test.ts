@@ -79,6 +79,33 @@ function expectValidFunctionResponsePairs(contents: RequestContent[]): void {
 }
 
 describe("GeminiAgentManager function calling", () => {
+  it("returns a friendly message when Gemini is temporarily overloaded", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        error: {
+          code: 503,
+          message: "This model is currently experiencing high demand.",
+          status: "UNAVAILABLE"
+        }
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    )));
+    const manager = new GeminiAgentManager({
+      userDataPath: "/unused",
+      getApiKey: async () => "test-api-key",
+      onUpdate: () => undefined,
+      requestEditorFlush: () => undefined
+    });
+
+    await expect(manager.send({
+      projectId: "test-project",
+      message: "Add transitions",
+      includeVideo: false
+    })).rejects.toThrow(
+      "Gemini is temporarily unavailable. This is usually caused by high demand; wait a moment and try again."
+    );
+  });
+
   it("passes expanded editor operations through the shared Gemini contract", async () => {
     let requestCount = 0;
     vi.stubGlobal("fetch", vi.fn(async () => {

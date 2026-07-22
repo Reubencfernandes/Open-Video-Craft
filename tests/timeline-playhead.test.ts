@@ -95,7 +95,11 @@ describe("timeline trim handles", () => {
     })));
 
     const handle = host.querySelector<HTMLElement>("[data-trim-edge='start']");
+    const selectedClip = host.querySelector<HTMLElement>("[data-segment-id='clip']");
     expect(handle).not.toBeNull();
+    expect(selectedClip?.className).toContain("border-2");
+    expect(selectedClip?.className).toContain("border-[#ff4b93]");
+    expect(selectedClip?.className).toContain("after:bg-[#ff4b93]/10");
     handle?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     handle?.dispatchEvent(new Event("pointermove", { bubbles: true }));
     handle?.dispatchEvent(new Event("pointerup", { bubbles: true }));
@@ -111,6 +115,7 @@ describe("persistent effect lanes", () => {
     empty?: boolean;
     activeTool?: "media" | "style";
     processing?: boolean;
+    processingRanges?: Array<{ start: number; end: number }>;
     rangeSelection?: TimelineRangeSelection | null;
     selectedZoomId?: string | null;
     onDeleteSelected?: () => void;
@@ -226,6 +231,7 @@ describe("persistent effect lanes", () => {
         text: "Always visible"
       }],
       subtitleProcessing: input?.processing ?? false,
+      subtitleProcessingRanges: input?.processingRanges,
       textOverlays: input?.empty ? [] : [{
         id: "text-1", start: 2, end: 6, text: "Title", x: 50, y: 25,
         size: 64, color: "#ffffff", weight: 700, animation: "pop"
@@ -308,6 +314,7 @@ describe("persistent effect lanes", () => {
   it("exposes mouse resizing and wheel/pinch timeline zoom", () => {
     const host = renderTimeline();
     expect(host.querySelector("[data-timeline-resize-handle]")).not.toBeNull();
+    expect(host.querySelector("[data-timeline-body]")?.hasAttribute("tabindex")).toBe(false);
     expect(host.querySelector("[data-timeline-zoom-viewport]")?.getAttribute("title"))
       .toContain("Ctrl/Cmd");
     expect(getTimelineZoomAfterWheel(1, -120)).toBeGreaterThan(1);
@@ -338,14 +345,34 @@ describe("persistent effect lanes", () => {
   });
 
   it("shows timeline feedback while subtitles are processing", () => {
-    const host = renderTimeline({ empty: true, processing: true });
-    expect(host.querySelector("[data-subtitle-processing]")).not.toBeNull();
+    const host = renderTimeline({
+      empty: true,
+      processing: true,
+      processingRanges: [
+        { start: 2, end: 5 },
+        { start: 10, end: 12 }
+      ]
+    });
+    const generation = host.querySelector("[data-subtitle-generation]");
+    const ranges = host.querySelectorAll<HTMLElement>("[data-subtitle-generation-range]");
+    expect(generation).not.toBeNull();
+    expect(generation?.getAttribute("aria-label")).toBe("Generating subtitles");
+    expect(ranges).toHaveLength(2);
+    expect(ranges[0]?.style.left).toBe("10%");
+    expect(ranges[0]?.style.width).toBe("15%");
+    expect(ranges[1]?.style.left).toBe("50%");
+    expect(ranges[1]?.style.width).toBe("10%");
+    expect(generation?.textContent).not.toContain("%");
+    expect(generation?.className).not.toContain("timeline-subtitle-shimmer");
+    expect(host.querySelector("[data-subtitle-id]")).toBeNull();
   });
 
   it("hides the drag rectangle after release and highlights the selected items", () => {
     const host = renderTimeline({
       rangeSelection: { start: 4, end: 8, laneIds: ["speed", "subtitles"] }
     });
+    expect(host.querySelector("[data-timeline-body]")?.className).toContain("cursor-default");
+    expect(host.querySelector("[data-timeline-body]")?.className).not.toContain("cursor-crosshair");
     expect(host.querySelector("[data-timeline-range-selection]")).toBeNull();
     expect(host.querySelector("[data-timeline-range-count]")).toBeNull();
     expect(
@@ -375,6 +402,8 @@ describe("persistent effect lanes", () => {
     });
     const selection = host.querySelector<HTMLElement>("[data-timeline-range-selection]");
     const selectionFrame = selection?.parentElement?.parentElement;
+    expect(host.querySelector("[data-timeline-body]")?.className).toContain("cursor-crosshair");
+    expect(host.querySelector("[data-timeline-body]")?.className).not.toContain("cursor-default");
     expect(host.querySelectorAll("[data-timeline-range-selection]")).toHaveLength(1);
     expect(selection?.dataset.timelineRangeLanes).toBe("speed,subtitles");
     expect(selection?.dataset.timelineRangeDragging).toBe("true");

@@ -18,12 +18,13 @@ import type { EditorEditOperation } from "../shared/editor-domain";
 import { operationSchema as sharedOperationSchema } from "../shared/editor-domain/operation-schema";
 import { listCatalogProjects, resolveCatalogProject } from "./project-catalog";
 
+const { version: serverVersion } = require("../../package.json") as { version: string };
 const configuredUserDataPath = readArgument("--user-data") ?? process.env.OVC_USER_DATA;
 if (!configuredUserDataPath) throw new Error("Open Video Craft MCP requires --user-data <directory>.");
 const userDataPath: string = configuredUserDataPath;
 
 const server = new McpServer(
-  { name: "open-video-craft", version: "1.2.0" },
+  { name: "open-video-craft", version: serverVersion },
   { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
 );
 

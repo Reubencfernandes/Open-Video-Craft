@@ -4,6 +4,42 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-07-22
+
+Timeline editing is more predictable, subtitle timing stays anchored to the
+timeline, and the release pipeline now validates both production bundles and
+the bundled MCP server.
+
+### Added
+
+- CI coverage for the production build and the end-to-end MCP smoke test on macOS and Windows.
+- A smooth cumulative playback line along the subtitle spine plus a red active-cue card.
+
+### Changed
+
+- Subtitle cue cards stay sorted by timeline time after moves or trims, show read-only start/end timestamps, and direct timing changes to the draggable timeline clip.
+- Completed subtitle connectors remain highlighted as playback advances, leaving a continuous visual history without adding a border to the active card.
+- Refreshed the launcher, recorder, editor, and subtitle timeline screenshots for the 1.0.2 interface.
+- Synchronized the app, in-app release notes, MCP handshake, changelog, and documentation on the 1.0.2 release line.
+- Added an in-package FFmpeg source-code offer and a verified source/build-script bundle to the v1.0.2 GitHub release.
+- Added Windows x64 Setup and Portable releases using a checksum-pinned BtbN FFmpeg 8.1.2 build with matching build-script and dependency-source bundles; macOS builds remain signed and notarized.
+- Removed the inactive project-filter/settings icon beside the dashboard search.
+
+### Fixed
+
+- Native undo/redo remains available while typing in text inputs and editable regions.
+- Subtitle cues use an exact half-open time boundary, preventing two adjacent cues from appearing active on the same frame.
+- Timeline Cut removes only the primary clip copied to the single-item clipboard, preserving the rest of a multi-selection and unrelated timed items.
+- Sidecar subtitle export creates `.srt` files exclusively, preserves video output when a collision is found, and keeps burn-in subtitles in scoped temporary storage.
+- The downloaded-update Restart action stays contained in the launcher sidebar and uses the application’s purple glow treatment.
+
+## [1.0.1] - 2026-07-21
+
+### Changed
+
+- Refreshed the application icon across the renderer, macOS, and Windows packages.
+- Advanced the public stable package and updater version from 1.0.0 to 1.0.1.
+
 ## [1.0.0] - 2026-07-21
 
 The first stable Open Video Craft release. This resets the public version line
@@ -28,6 +64,10 @@ workflow together as one production-ready desktop app.
 - Restored the launcher and floating-recorder screenshot assets and made the screenshot capture workflow more reliable.
 - Subtitle time editing accepts seconds, `MM:SS`, and `HH:MM:SS` input while preserving valid cue ordering.
 - Claude Code now appears immediately in AI settings with a clear checking state while CLI detection completes.
+
+> **Pre-stable development history:** the version headings below record
+> internal development builds. They were not published as stable GitHub
+> releases and do not supersede the public 1.0.x line.
 
 ## [1.5.0] - 2026-07-13
 

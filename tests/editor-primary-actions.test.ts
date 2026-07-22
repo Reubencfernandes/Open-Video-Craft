@@ -47,7 +47,9 @@ describe("editor primary actions", () => {
       subtitleLanguage: "English",
       subtitleStyle: "clean",
       subtitles: [],
+      selectedSubtitleId: null,
       selectedSubtitle: null,
+      duration: 0,
       currentTime: 0,
       onAddSubtitle: () => undefined,
       onGenerateSubtitles: () => undefined,
@@ -84,7 +86,9 @@ describe("editor primary actions", () => {
       subtitleLanguage: "English",
       subtitleStyle: "clean",
       subtitles: [],
+      selectedSubtitleId: null,
       selectedSubtitle: null,
+      duration: 0,
       currentTime: 0,
       onAddSubtitle: () => undefined,
       onGenerateSubtitles: () => undefined,
@@ -131,7 +135,8 @@ describe("editor primary actions", () => {
   it("renders subtitle text as a timed hierarchy and marks the playing segment", () => {
     const subtitles = [
       { id: "first", start: 1, end: 3, text: "First complete subtitle line" },
-      { id: "active", start: 3, end: 7, text: "The subtitle currently being played" }
+      { id: "active", start: 3, end: 7, text: "The subtitle currently being played" },
+      { id: "next", start: 9, end: 11, text: "The next subtitle" }
     ];
     const html = renderToStaticMarkup(createElement(SubtitlesPanel, {
       sttStatus: "idle",
@@ -142,7 +147,9 @@ describe("editor primary actions", () => {
       subtitleLanguage: "English",
       subtitleStyle: "clean",
       subtitles,
+      selectedSubtitleId: "first",
       selectedSubtitle: subtitles[0],
+      duration: 20,
       currentTime: 4,
       onAddSubtitle: () => undefined,
       onGenerateSubtitles: () => undefined,
@@ -162,7 +169,9 @@ describe("editor primary actions", () => {
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('data-subtitle-editor="true"');
     expect(html).toContain('aria-label="Subtitle start time"');
-    expect(html).toContain('value="00:01.000"');
+    expect(html).toContain('aria-readonly="true"');
+    expect(html).toContain("00:01.000");
+    expect(html).not.toContain('input aria-label="Subtitle start time"');
     expect(html).toContain("grid-rows-[1fr] opacity-100");
     expect(html).toContain("duration-300");
     expect(html).toContain("Playing now");
@@ -187,5 +196,8 @@ describe("editor primary actions", () => {
     expect(html).toContain("editor-choice-button");
     expect(html).toContain("editor-choice-content");
     expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain("Rounded");
+    expect(html).toContain("Slight");
+    expect(html).not.toContain("Full");
   });
 });

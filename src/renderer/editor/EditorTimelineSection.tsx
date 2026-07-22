@@ -9,6 +9,7 @@ import type {
   WheelEvent as ReactWheelEvent
 } from "react";
 import { Timeline } from "./Timeline";
+import type { SubtitleActivityRange } from "../../shared/subtitle-activity";
 import type {
   EditorTool,
   ClipTransition,
@@ -61,6 +62,7 @@ export function EditorTimelineSection(props: {
   transitions: ClipTransition[];
   subtitles: SubtitleSegment[];
   subtitleProcessing: boolean;
+  subtitleProcessingRanges: SubtitleActivityRange[];
   textOverlays: TextOverlay[];
   selectedSegmentId: string | null;
   selectedSegmentIds: string[];
@@ -161,6 +163,7 @@ export function EditorTimelineSection(props: {
       transitions={props.transitions}
       subtitles={props.subtitles}
       subtitleProcessing={props.subtitleProcessing}
+      subtitleProcessingRanges={props.subtitleProcessingRanges}
       textOverlays={props.textOverlays}
       selectedSegmentId={props.selectedSegmentId}
       selectedSegmentIds={props.selectedSegmentIds}

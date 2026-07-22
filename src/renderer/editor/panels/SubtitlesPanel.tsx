@@ -1,6 +1,6 @@
 /**
  * Subtitles tool: speech-to-text (on-device Whisper or a cloud provider),
- * style selection, and per-subtitle text/timing editing.
+ * style selection, per-subtitle text editing, and read-only timing details.
  */
 import { Captions, ChevronDown, WandSparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -10,7 +10,8 @@ import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { FloatingSelect } from "../FloatingSelect";
 import {
   formatSubtitleTimecode,
-  parseSubtitleTimecode
+  getSubtitleTimelineProgressPosition,
+  isSubtitleActiveAtTime
 } from "../subtitle-time";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 import type { SttStatus } from "../useSubtitleGeneration";
@@ -25,7 +26,7 @@ const subtitleStyleOptions: Array<{ id: SubtitleStyle; label: string }> = [
 ];
 
 const sttProviderOptions: Array<{ id: SttProviderId; label: string }> = [
-  { id: "whisper-local", label: "Whisper base (on-device)" },
+  { id: "whisper-local", label: "Whisper base multilingual (on-device)" },
   { id: "cohere", label: "Cohere Transcribe (cloud)" },
   { id: "gemini", label: "Gemini (cloud)" }
 ];
@@ -44,7 +45,7 @@ const cohereLanguageOptions: Array<{ code: string; label: string }> = [
 /**
  * "Subs" tool: add subtitles manually or auto-generate them with on-device
  * speech-to-text, pick the rendering style, and edit the selected subtitle's
- * text and time window.
+ * text. Timing is adjusted directly from the subtitle lane in the timeline.
  */
 export function SubtitlesPanel(props: {
   sttStatus: SttStatus;
@@ -55,7 +56,9 @@ export function SubtitlesPanel(props: {
   subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
+  selectedSubtitleId: string | null;
   selectedSubtitle: SubtitleSegment | null;
+  duration: number;
   currentTime: number;
   onAddSubtitle: () => void;
   onGenerateSubtitles: () => void;
@@ -65,9 +68,22 @@ export function SubtitlesPanel(props: {
   onOpenAiSettings: () => void;
   onStyleChange: (style: SubtitleStyle) => void;
   onUpdateSubtitle: (id: string, updates: Partial<SubtitleSegment>) => void;
-  onSelectSubtitle: (subtitleId: string) => void;
+  onSelectSubtitle: (subtitleId: string | null) => void;
 }) {
-  const selected = props.selectedSubtitle;
+  const orderedSubtitles = [...props.subtitles].sort(
+    (left, right) =>
+      left.start - right.start ||
+      left.end - right.end ||
+      left.id.localeCompare(right.id)
+  );
+  const subtitleIdsKey = orderedSubtitles.map((subtitle) => subtitle.id).join("\u0000");
+  const progressPosition = getSubtitleTimelineProgressPosition(
+    orderedSubtitles,
+    props.currentTime
+  );
+  const [expandedSubtitleId, setExpandedSubtitleId] = useState<string | null>(
+    () => props.selectedSubtitleId ?? orderedSubtitles[0]?.id ?? null
+  );
   const busy = props.sttStatus === "loading" || props.sttStatus === "transcribing";
   const isCloudProvider = props.sttProvider !== "whisper-local";
   const missingKey =
@@ -76,6 +92,20 @@ export function SubtitlesPanel(props: {
   const providerLabel =
     sttProviderOptions.find((option) => option.id === props.sttProvider)?.label ??
     props.sttModelLabel;
+
+  useEffect(() => {
+    if (props.selectedSubtitleId) {
+      setExpandedSubtitleId(props.selectedSubtitleId);
+    }
+  }, [props.selectedSubtitleId]);
+
+  useEffect(() => {
+    const subtitleIds = subtitleIdsKey ? subtitleIdsKey.split("\u0000") : [];
+    setExpandedSubtitleId((current) => {
+      if (current && subtitleIds.includes(current)) return current;
+      return subtitleIds[0] ?? null;
+    });
+  }, [subtitleIdsKey]);
 
   return (
     <div className="grid min-h-0 content-start gap-3 overflow-auto">
@@ -96,7 +126,13 @@ export function SubtitlesPanel(props: {
         className="inline-flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/[0.055] px-3 text-sm font-bold text-white hover:bg-white/10 disabled:cursor-wait disabled:opacity-60"
         type="button"
         disabled={busy || missingKey}
-        onClick={props.onGenerateSubtitles}
+        data-auto-generate-subtitles
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          props.onGenerateSubtitles();
+        }}
       >
         <WandSparkles className="shrink-0" size={16} />
         <span className="min-w-0 truncate">
@@ -153,10 +189,29 @@ export function SubtitlesPanel(props: {
             Add your {providerLabel.split(" ")[0]} API key to use this model
           </ApiKeyPromptPill>
         ) : null}
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <span className="font-bold text-slate-400">Language</span>
-          <span className="min-w-0 truncate text-right font-semibold text-white">{props.subtitleLanguage}</span>
-        </div>
+        {props.sttProvider === "whisper-local" ? (
+          <>
+            <div className="flex min-w-0 items-center justify-between gap-3">
+              <span className="font-bold text-slate-400">Spoken language</span>
+              <span className="min-w-0 truncate text-right font-semibold text-white">
+                Auto-detect (any language)
+              </span>
+            </div>
+            {props.subtitleLanguage !== "Auto-detected" ? (
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <span className="font-bold text-slate-400">Detected</span>
+                <span className="min-w-0 truncate text-right font-semibold text-white">
+                  {props.subtitleLanguage}
+                </span>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="flex min-w-0 items-center justify-between gap-3">
+            <span className="font-bold text-slate-400">Language</span>
+            <span className="min-w-0 truncate text-right font-semibold text-white">{props.subtitleLanguage}</span>
+          </div>
+        )}
       </div>
       <div className="grid gap-2">
         <span className="text-xs font-bold text-slate-400">Subtitle style</span>
@@ -186,20 +241,32 @@ export function SubtitlesPanel(props: {
         <div className="relative grid" data-subtitle-timeline>
           <span
             aria-hidden="true"
-            className="pointer-events-none absolute bottom-5 left-[0.4375rem] top-4 w-px bg-white/[0.09]"
+            className="subtitle-timeline-spine pointer-events-none absolute bottom-5 left-[0.4375rem] top-4 w-px bg-white/[0.09]"
           />
-          {props.subtitles.map((subtitle) => {
-            const isActive =
-              props.currentTime >= subtitle.start && props.currentTime < subtitle.end;
-            const isSelected = selected?.id === subtitle.id;
+          {orderedSubtitles.map((subtitle, index) => {
+            const isActive = isSubtitleActiveAtTime(subtitle, props.currentTime);
+            const isSelected = expandedSubtitleId === subtitle.id;
+            const nextSubtitle = orderedSubtitles[index + 1] ?? null;
 
             return (
               <SubtitleTimelineItem
                 key={subtitle.id}
                 subtitle={subtitle}
+                nextSubtitleId={nextSubtitle?.id ?? null}
+                connectorProgress={nextSubtitle
+                  ? props.currentTime >= nextSubtitle.start
+                    ? 1
+                    : progressPosition?.fromId === subtitle.id
+                      ? progressPosition.progress
+                      : 0
+                  : null}
                 active={isActive}
                 selected={isSelected}
-                onSelect={() => props.onSelectSubtitle(subtitle.id)}
+                onSelect={() => {
+                  const nextId = isSelected ? null : subtitle.id;
+                  setExpandedSubtitleId(nextId);
+                  props.onSelectSubtitle(nextId);
+                }}
                 onUpdate={(updates) => props.onUpdateSubtitle(subtitle.id, updates)}
               />
             );
@@ -212,6 +279,8 @@ export function SubtitlesPanel(props: {
 
 function SubtitleTimelineItem(props: {
   subtitle: SubtitleSegment;
+  nextSubtitleId: string | null;
+  connectorProgress: number | null;
   active: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -219,25 +288,41 @@ function SubtitleTimelineItem(props: {
 }) {
   const editorId = `subtitle-editor-${props.subtitle.id}`;
   const surfaceClassName = props.active
-    ? "bg-[#ff3b5c]/[0.11] text-white"
+    ? "subtitle-timeline-card-active text-white"
     : props.selected
       ? "bg-white/[0.075] text-white"
       : "bg-transparent text-neutral-400 hover:bg-white/[0.045] hover:text-neutral-200";
 
   return (
     <div className="relative min-w-0 pb-2 pl-6">
+      {props.nextSubtitleId ? (
+        <span
+          aria-hidden="true"
+          className="subtitle-timeline-connector pointer-events-none absolute left-[0.4375rem] top-[1.04rem] z-0 h-full w-px"
+          data-subtitle-connector={`${props.subtitle.id}:${props.nextSubtitleId}`}
+        >
+          {props.connectorProgress !== null && props.connectorProgress > 0 ? (
+            <span
+              className="subtitle-timeline-progress"
+              data-subtitle-progress
+              style={{ height: `${props.connectorProgress * 100}%` }}
+            />
+          ) : null}
+        </span>
+      ) : null}
       <span
         aria-hidden="true"
-        className={`absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,box-shadow,transform] duration-200 ${
+        className={`subtitle-timeline-marker absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,box-shadow,transform] duration-200 ${
           props.active
             ? "scale-110 bg-[#ff3b5c] shadow-[0_0_0_3px_rgb(255_59_92_/_0.16),0_0_12px_rgb(255_59_92_/_0.8)]"
             : "bg-neutral-600"
         }`}
       />
       <div
-        className={`overflow-hidden rounded-xl transition-[background-color,color,box-shadow] duration-300 ${surfaceClassName} ${
+        className={`subtitle-timeline-card overflow-hidden rounded-xl transition-[background-color,color,box-shadow] duration-300 ${surfaceClassName} ${
           props.selected ? "shadow-[0_12px_30px_rgb(0_0_0_/_0.22)]" : ""
         }`}
+        data-active-subtitle-section={props.active ? "true" : undefined}
       >
         <button
           className="group grid w-full min-w-0 gap-1 bg-transparent px-3 py-2.5 text-left"
@@ -296,24 +381,11 @@ function SubtitleTimelineItem(props: {
                 />
               </label>
               <div className="grid grid-cols-2 gap-2">
-                <SubtitleTimeInput
-                  label="Start"
-                  seconds={props.subtitle.start}
-                  minimum={0}
-                  maximum={Math.max(0, props.subtitle.end - 0.1)}
-                  disabled={!props.selected}
-                  onCommit={(start) => props.onUpdate({ start })}
-                />
-                <SubtitleTimeInput
-                  label="End"
-                  seconds={props.subtitle.end}
-                  minimum={props.subtitle.start + 0.1}
-                  disabled={!props.selected}
-                  onCommit={(end) => props.onUpdate({ end })}
-                />
+                <SubtitleTimeDisplay label="Start" seconds={props.subtitle.start} />
+                <SubtitleTimeDisplay label="End" seconds={props.subtitle.end} />
               </div>
               <span className="text-center text-[0.56rem] font-semibold text-neutral-600">
-                Timecode format · MM:SS.mmm
+                Adjust timing by dragging the subtitle clip in the timeline
               </span>
             </div>
           </div>
@@ -323,60 +395,20 @@ function SubtitleTimelineItem(props: {
   );
 }
 
-function SubtitleTimeInput(props: {
+function SubtitleTimeDisplay(props: {
   label: "Start" | "End";
   seconds: number;
-  minimum: number;
-  maximum?: number;
-  disabled: boolean;
-  onCommit: (seconds: number) => void;
 }) {
-  const [draft, setDraft] = useState(() => formatSubtitleTimecode(props.seconds));
-
-  useEffect(() => {
-    setDraft(formatSubtitleTimecode(props.seconds));
-  }, [props.seconds]);
-
-  const commit = () => {
-    const parsed = parseSubtitleTimecode(draft);
-    if (parsed === null) {
-      setDraft(formatSubtitleTimecode(props.seconds));
-      return;
-    }
-
-    const clamped = Math.min(
-      Math.max(parsed, props.minimum),
-      props.maximum ?? Number.POSITIVE_INFINITY
-    );
-    const precise = Math.round(clamped * 1000) / 1000;
-    setDraft(formatSubtitleTimecode(precise));
-    props.onCommit(precise);
-  };
-
   return (
-    <label className="grid min-w-0 gap-1.5 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-neutral-500">
+    <div className="grid min-w-0 gap-1.5 text-[0.62rem] font-bold uppercase tracking-[0.08em] text-neutral-500">
       <span>{props.label}</span>
-      <input
-        className="h-9 min-w-0 rounded-lg border border-white/[0.09] bg-black/25 px-2 text-center text-xs font-bold tabular-nums tracking-normal text-white outline-none transition-[border-color,background-color,box-shadow] focus:border-white/25 focus:bg-black/35 focus:shadow-[0_0_0_3px_rgb(255_255_255_/_0.05)] disabled:opacity-50"
-        type="text"
-        inputMode="decimal"
-        value={draft}
-        disabled={props.disabled}
+      <output
+        className="grid h-9 min-w-0 place-items-center rounded-lg border border-white/[0.09] bg-black/20 px-2 text-center text-xs font-bold tabular-nums tracking-normal text-neutral-300"
         aria-label={`Subtitle ${props.label.toLowerCase()} time`}
-        spellCheck={false}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onFocus={(event) => event.currentTarget.select()}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            event.currentTarget.blur();
-          } else if (event.key === "Escape") {
-            setDraft(formatSubtitleTimecode(props.seconds));
-            event.currentTarget.blur();
-          }
-        }}
-      />
-    </label>
+        aria-readonly="true"
+      >
+        {formatSubtitleTimecode(props.seconds)}
+      </output>
+    </div>
   );
 }

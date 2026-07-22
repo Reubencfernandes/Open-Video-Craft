@@ -92,7 +92,7 @@ export function useGeminiChat(params: { projectId: string | null }) {
       ) {
         return;
       }
-      setChatError(error instanceof Error ? error.message : String(error));
+      setChatError(formatGeminiChatError(error));
       // Re-sync with the authoritative main-process history.
       void window.openVideoCraft.gemini
         .getHistory(requestProjectId)
@@ -143,6 +143,47 @@ export function useGeminiChat(params: { projectId: string | null }) {
     sending,
     statusMessage
   };
+}
+
+/** Convert Electron IPC and Gemini API failures into concise, actionable UI copy. */
+export function formatGeminiChatError(error: unknown): string {
+  let message = error instanceof Error ? error.message : String(error);
+  message = message
+    .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim();
+
+  const normalized = message.toLowerCase();
+  if (
+    /http\s*503|\bcode["']?\s*:\s*503\b|\bunavailable\b|high demand/.test(normalized)
+  ) {
+    return "Gemini is temporarily unavailable because of high demand. Wait a moment and try again.";
+  }
+  if (/http\s*429|rate limit|resource_exhausted/.test(normalized)) {
+    return "Gemini's rate limit has been reached. Wait a moment and try again.";
+  }
+  if (/rejected the api key|http\s*(401|403)|invalid api key/.test(normalized)) {
+    return "Gemini rejected the API key. Check it in AI settings and try again.";
+  }
+  if (/still working on the previous message/.test(normalized)) {
+    return "Gemini is still completing the previous request. Wait for it to finish or stop it before trying again.";
+  }
+  if (/aborterror|operation was aborted|request was cancelled|request was canceled/.test(normalized)) {
+    return "The Gemini request was stopped.";
+  }
+  if (/failed to fetch|network error|network request failed|econnreset|enotfound/.test(normalized)) {
+    return "Gemini could not be reached. Check your internet connection and try again.";
+  }
+
+  const apiMessage = message.match(/["']message["']\s*:\s*["']([^"']+)["']/i)?.[1];
+  if (apiMessage) return apiMessage.trim();
+
+  const status = message.match(/HTTP\s*(\d{3})/i)?.[1];
+  if (status) {
+    return `Gemini couldn't complete the request (HTTP ${status}). Please try again.`;
+  }
+
+  return message || "Gemini couldn't complete the request. Please try again.";
 }
 
 function describeStatus(event: GeminiChatUpdateEvent): string | null {

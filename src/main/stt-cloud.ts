@@ -20,6 +20,7 @@ import {
   createSubtitleSegmentsFromPlainText,
   maxCharactersPerSubtitle
 } from "../shared/subtitle-segmentation";
+import { createSubtitleActivityRangesFromSilence } from "../shared/subtitle-activity";
 import type {
   SttProgressEvent,
   SttTranscribeRequest,
@@ -76,7 +77,11 @@ export async function transcribeCloud(
 
     const silenceRanges = await detectSilenceRanges(mixedPath, deps.signal);
     const chunks = pickChunkBoundaries(durationSeconds, silenceRanges);
-    deps.onProgress({ phase: "extracting", percent: 20 });
+    deps.onProgress({
+      phase: "extracting",
+      percent: 20,
+      activityRanges: createSubtitleActivityRangesFromSilence(durationSeconds, silenceRanges)
+    });
 
     const apiKey = await deps.getApiKey(request.provider);
     if (!apiKey) {
@@ -430,7 +435,7 @@ export function parseClockTimestamp(value: string): number | null {
   return hours * 3600 + minutes * 60 + seconds;
 }
 
-async function describeProviderError(provider: string, response: Response): Promise<string> {
+export async function describeProviderError(provider: string, response: Response): Promise<string> {
   const detail = await response.text().then((text) => text.slice(0, 300)).catch(() => "");
   switch (response.status) {
     case 401:
@@ -440,6 +445,11 @@ async function describeProviderError(provider: string, response: Response): Prom
       return `${provider} rejected the audio chunk as too large.`;
     case 429:
       return `${provider} rate limit reached. Wait a moment and try again.`;
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return `${provider} is temporarily unavailable. This is usually caused by high demand; wait a moment and try again.`;
     default:
       return `${provider} transcription failed (HTTP ${response.status}). ${detail}`.trim();
   }

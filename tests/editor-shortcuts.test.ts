@@ -19,6 +19,8 @@ function ShortcutHarness(props: {
   togglePlayback: () => void;
   deleteSelected: () => void;
   onMute: () => void;
+  undo: () => void;
+  redo: () => void;
 }) {
   useEditorShortcuts({
     currentTime: 0,
@@ -26,8 +28,8 @@ function ShortcutHarness(props: {
     selectedTimelineSegmentId: props.selectedTimelineSegmentId ?? null,
     hasTimelineRangeSelection: props.hasTimelineRangeSelection ?? false,
     seek: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
+    undo: props.undo,
+    redo: props.redo,
     openExport: vi.fn(),
     copyClip: vi.fn(),
     cutClip: vi.fn(),
@@ -38,9 +40,31 @@ function ShortcutHarness(props: {
   });
 
   return createElement(
-    "button",
-    { type: "button", "data-mute": true, onClick: props.onMute },
-    "Mute"
+    "main",
+    null,
+    createElement("button", { type: "button", "data-layout-preset": true }, "Layout preset"),
+    createElement("input", { "data-text-input": true }),
+    createElement("textarea", { "data-textarea": true }),
+    createElement(
+      "div",
+      { contentEditable: true, "data-contenteditable": true, suppressContentEditableWarning: true },
+      createElement("span", { "data-contenteditable-child": true }, "Editable text")
+    ),
+    createElement(
+      "div",
+      { "data-timeline-body": true, tabIndex: 0 },
+      createElement(
+        "button",
+        {
+          type: "button",
+          "data-mute": true,
+          "data-timeline-audio-mute": "1",
+          onClick: props.onMute
+        },
+        "Mute"
+      ),
+      createElement("button", { type: "button", "data-segment-id": "clip-1" }, "Clip")
+    )
   );
 }
 
@@ -51,6 +75,8 @@ function renderHarness(
     togglePlayback: vi.fn(),
     deleteSelected: vi.fn(),
     onMute: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
     ...overrides
   };
   const host = document.createElement("div");
@@ -61,6 +87,31 @@ function renderHarness(
 }
 
 describe("editor global shortcuts", () => {
+  it("leaves Cmd/Ctrl+Z and Y native in text inputs and contenteditable regions", () => {
+    const { callbacks, host } = renderHarness();
+    const targets = [
+      host.querySelector<HTMLElement>("[data-text-input]"),
+      host.querySelector<HTMLElement>("[data-textarea]"),
+      host.querySelector<HTMLElement>("[data-contenteditable-child]")
+    ];
+
+    for (const target of targets) {
+      for (const key of ["z", "y"]) {
+        const event = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          key
+        });
+        target?.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+      }
+    }
+
+    expect(callbacks.undo).not.toHaveBeenCalled();
+    expect(callbacks.redo).not.toHaveBeenCalled();
+  });
+
   it("leaves Space on a focused timeline mute button to native activation", () => {
     const { callbacks, host } = renderHarness();
     const button = host.querySelector<HTMLButtonElement>("[data-mute]");
@@ -78,6 +129,53 @@ describe("editor global shortcuts", () => {
     expect(callbacks.togglePlayback).not.toHaveBeenCalled();
     button?.click();
     expect(callbacks.onMute).toHaveBeenCalledOnce();
+  });
+
+  it("toggles playback when a timeline clip button has focus", () => {
+    const { callbacks, host } = renderHarness();
+    const clip = host.querySelector<HTMLButtonElement>("[data-segment-id]");
+    clip?.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "Space",
+      key: " "
+    });
+    clip?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(callbacks.togglePlayback).toHaveBeenCalledOnce();
+  });
+
+  it("toggles playback after a Layout preset button receives focus", () => {
+    const { callbacks, host } = renderHarness();
+    const preset = host.querySelector<HTMLButtonElement>("[data-layout-preset]");
+    preset?.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "Space",
+      key: " "
+    });
+    preset?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(callbacks.togglePlayback).toHaveBeenCalledOnce();
+  });
+
+  it("toggles playback as a general editor shortcut", () => {
+    const { callbacks } = renderHarness();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      code: "Space",
+      key: " "
+    }));
+
+    expect(callbacks.togglePlayback).toHaveBeenCalledOnce();
   });
 
   it("routes Delete through the unified timeline selection", () => {

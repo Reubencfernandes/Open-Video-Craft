@@ -7,8 +7,14 @@ export function isKeyboardTextTarget(target: EventTarget | null): boolean {
     return false;
   }
 
-  if (
+  const contentEditableRoot = target.closest<HTMLElement>("[contenteditable]");
+  const isWithinEditableContent =
     target.isContentEditable ||
+    (contentEditableRoot !== null &&
+      contentEditableRoot.getAttribute("contenteditable")?.toLowerCase() !== "false");
+
+  if (
+    isWithinEditableContent ||
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement
   ) {

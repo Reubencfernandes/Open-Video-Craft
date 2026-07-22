@@ -2,6 +2,7 @@
 import * as transformers from "@huggingface/transformers";
 import {
   addLanguageToWhisperWordChunks,
+  createWhisperTranscriptionOptions,
   isMissingWhisperAttentionError,
   whisperTranscriptionModel
 } from "./subtitle-transcription";
@@ -51,18 +52,16 @@ async function transcribe(request: WorkerRequest): Promise<void> {
 
     let output: WhisperTranscriptionOutput;
     try {
-      output = await transcriber(request.audio, {
-        return_timestamps: "word",
-        chunk_length_s: 30,
-        stride_length_s: 5
-      });
+      output = await transcriber(
+        request.audio,
+        createWhisperTranscriptionOptions("word")
+      );
     } catch (timestampError) {
       if (!isMissingWhisperAttentionError(timestampError)) throw timestampError;
-      output = await transcriber(request.audio, {
-        return_timestamps: true,
-        chunk_length_s: 30,
-        stride_length_s: 5
-      });
+      output = await transcriber(
+        request.audio,
+        createWhisperTranscriptionOptions(true)
+      );
     }
     post(request.id, { type: "result", output });
   } catch (error) {

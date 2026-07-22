@@ -1,6 +1,7 @@
 /** Track-lane composition for the editor timeline. */
 import { AudioLines, Captions, Film, Type, Volume2, VolumeX, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import type { SubtitleActivityRange } from "../../shared/subtitle-activity";
 import { getAudioLaneLevelKey, getEffectiveAudioLevel } from "../../shared/editor-domain";
 import { getOrderedZoomTimingItems } from "../zoom-timing";
 import { SpeedIcon } from "./SpeedIcon";
@@ -8,7 +9,7 @@ import {
   TimelineClip,
   TimelineSpeedClip,
   TimelineSubtitleClip,
-  TimelineSubtitleShimmer,
+  TimelineSubtitleGenerationPlaceholders,
   TimelineTextClip,
   TimelineTransitionDropTarget,
   TimelineTransitionMarker,
@@ -41,6 +42,7 @@ type TimelineTracksProps = {
   transitionDropKey: string | null;
   subtitles: SubtitleSegment[];
   subtitleProcessing?: boolean;
+  subtitleProcessingRanges?: SubtitleActivityRange[];
   textOverlays: TextOverlay[];
   selectedSegmentIds: string[];
   selectedCount: number;
@@ -220,8 +222,12 @@ export function TimelineTracks(props: TimelineTracksProps) {
       </TimelineTrack>
 
       <TimelineTrack laneId="subtitles" label="Subtitles" icon={<Captions size={14} />}>
-        {props.subtitleProcessing ? <TimelineSubtitleShimmer /> : null}
-        {props.subtitles.map((subtitle) => (
+        {props.subtitleProcessing ? (
+          <TimelineSubtitleGenerationPlaceholders
+            ranges={props.subtitleProcessingRanges ?? []}
+            duration={props.renderDuration}
+          />
+        ) : props.subtitles.map((subtitle) => (
           <TimelineSubtitleClip
             key={subtitle.id}
             subtitle={subtitle}

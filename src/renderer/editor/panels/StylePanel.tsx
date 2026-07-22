@@ -116,21 +116,23 @@ export function StylePanel(props: {
       <div className="grid gap-2">
         <span className="text-xs font-extrabold text-slate-400">Video corners</span>
         <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
-          {(["flat", "soft", "round"] as VideoCornerStyle[]).map((shape) => (
-            <button
+          {(["flat", "soft", "round"] as VideoCornerStyle[]).map((shape) => {
+            return (
+              <button
                 className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
-                props.videoCornerStyle === shape
-                  ? "bg-white text-[#111827]"
-                  : "text-slate-300 hover:bg-white/10 hover:text-white"
-              }`}
+                  props.videoCornerStyle === shape
+                    ? "bg-white text-[#111827]"
+                    : "text-slate-300 hover:bg-white/10 hover:text-white"
+                }`}
                 type="button"
                 key={shape}
                 aria-pressed={props.videoCornerStyle === shape}
-              onClick={() => props.onCornerStyleChange(shape)}
-            >
-              {shape === "flat" ? "Flat" : shape === "soft" ? "Slight" : "Full"}
-            </button>
-          ))}
+                onClick={() => props.onCornerStyleChange(shape)}
+              >
+                {shape === "flat" ? "Flat" : shape === "soft" ? "Slight" : "Rounded"}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

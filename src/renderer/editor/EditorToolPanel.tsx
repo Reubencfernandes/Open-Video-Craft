@@ -85,7 +85,9 @@ export function EditorToolPanel(props: {
   subtitleLanguage: string;
   subtitleStyle: SubtitleStyle;
   subtitles: SubtitleSegment[];
+  selectedSubtitleId: string | null;
   selectedSubtitle: SubtitleSegment | null;
+  subtitleDuration: number;
   currentTime: number;
   textOverlays: TextOverlay[];
   selectedTextOverlay: TextOverlay | null;
@@ -241,7 +243,9 @@ export function EditorToolPanel(props: {
           subtitleLanguage={props.subtitleLanguage}
           subtitleStyle={props.subtitleStyle}
           subtitles={props.subtitles}
+          selectedSubtitleId={props.selectedSubtitleId}
           selectedSubtitle={props.selectedSubtitle}
+          duration={props.subtitleDuration}
           currentTime={props.currentTime}
           onAddSubtitle={props.onAddSubtitle}
           onGenerateSubtitles={props.onGenerateSubtitles}

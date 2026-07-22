@@ -14,7 +14,6 @@ import type {
 import { HomeActionCard } from "./home/HomeActionCard";
 import { ChangelogDialog } from "./home/ChangelogDialog";
 import { HomeHeader } from "./home/HomeHeader";
-import { HomeProjectSummary } from "./home/HomeProjectSummary";
 import { HomeSidebar } from "./home/HomeSidebar";
 import { RecentProjectsSection } from "./home/RecentProjectsSection";
 import { latestRelease } from "./home/latest-release";
@@ -186,7 +185,7 @@ export function App() {
         <HomeHeader search={projectSearch} onSearchChange={setProjectSearch} />
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-5 pt-3 sm:px-5 xl:px-6">
-          <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="grid min-w-0">
             <div className="grid min-w-0 content-start gap-6">
               <section className="grid gap-3" aria-labelledby="quick-start-title">
                 <div>
@@ -204,13 +203,6 @@ export function App() {
 
               <RecentProjectsSection projects={visibleProjects} loading={recentProjectsLoading} disabled={busyAction !== null} onRefresh={() => void loadRecentProjects()} onOpen={(project) => void openRecentProject(project)} onDelete={(projectId) => void deleteRecentProject(projectId)} />
             </div>
-
-            <HomeProjectSummary
-              projects={visibleProjects}
-              disabled={busyAction !== null}
-              onOpen={(project) => void openRecentProject(project)}
-              onNewProject={() => void openEditor()}
-            />
           </div>
         </div>
       </section>

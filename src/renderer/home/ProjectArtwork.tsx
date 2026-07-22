@@ -1,22 +1,11 @@
-/** Real project preview with generated artwork as a legacy-project fallback. */
-import { Film } from "lucide-react";
+/** Real project preview that remains empty until its thumbnail has loaded. */
+import { useState } from "react";
 import { useMediaThumbnail } from "../editor/thumbnail-cache";
-
-const artworkStyles = [
-  "from-[#3b2818] via-[#6b4321] to-[#171717]",
-  "from-[#1c3327] via-[#2f664b] to-[#171717]",
-  "from-[#3b2020] via-[#704039] to-[#171717]",
-  "from-[#292929] via-[#505050] to-[#171717]",
-  "from-[#313016] via-[#62602b] to-[#171717]"
-];
 
 export function ProjectArtwork(props: { name: string; index: number; duration: string; thumbnailUrl?: string | null }) {
   return (
-    <div className={`relative grid aspect-video place-items-center overflow-hidden rounded-xl bg-gradient-to-br ${artworkStyles[props.index % artworkStyles.length]} before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_70%_18%,rgb(255_255_255_/_0.18),transparent_32%)] before:content-['']`}>
-      {props.thumbnailUrl ? <ProjectThumbnail url={props.thumbnailUrl} /> : <div className="relative grid justify-items-center gap-2 text-center">
-        <span className="grid size-10 place-items-center rounded-xl bg-black/25 text-white"><Film size={20} /></span>
-        <strong className="max-w-[10rem] text-sm text-white/90">{props.name}</strong>
-      </div>}
+    <div className="relative aspect-video overflow-hidden rounded-xl bg-[#101012]" data-project-artwork>
+      {props.thumbnailUrl ? <ProjectThumbnail url={props.thumbnailUrl} /> : null}
       <span className="absolute bottom-2 right-2 rounded bg-black/75 px-1.5 py-0.5 text-[0.64rem] font-medium tabular-nums text-white">{props.duration}</span>
     </div>
   );
@@ -25,5 +14,19 @@ export function ProjectArtwork(props: { name: string; index: number; duration: s
 function ProjectThumbnail({ url }: { url: string }) {
   const isImage = url.startsWith("data:image") || /\.(png|jpe?g|webp)(?:$|\?)/i.test(url);
   const { thumbnailUrl } = useMediaThumbnail({ url, kind: isImage ? "image" : "video" });
-  return thumbnailUrl ? <img className="absolute inset-0 size-full object-cover" src={thumbnailUrl} alt="" /> : <span className="relative grid size-10 place-items-center rounded-xl bg-black/25 text-neutral-300"><Film size={20} /></span>;
+  return thumbnailUrl ? <LoadedThumbnailImage key={thumbnailUrl} url={thumbnailUrl} /> : null;
+}
+
+function LoadedThumbnailImage({ url }: { url: string }) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <img
+      className={`absolute inset-0 size-full object-cover transition-opacity duration-150 ${loaded ? "opacity-100" : "opacity-0"}`}
+      src={url}
+      alt=""
+      onLoad={() => setLoaded(true)}
+      onError={() => setLoaded(false)}
+    />
+  );
 }

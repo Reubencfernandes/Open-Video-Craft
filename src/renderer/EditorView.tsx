@@ -641,6 +641,7 @@ export function EditorView() {
     providerKeys,
     refreshProviderKeys,
     sttProvider,
+    sttActivityRanges,
     updateProviderSettings,
     handleTimelineDragOver,
     handleTimelineDrop,
@@ -924,7 +925,9 @@ export function EditorView() {
             subtitleLanguage={formatSubtitleLanguage(subtitleLanguage)}
             subtitleStyle={subtitleStyle}
             subtitles={subtitles}
+            selectedSubtitleId={selectedSubtitleId}
             selectedSubtitle={selectedSubtitle}
+            subtitleDuration={timelineDuration}
             currentTime={currentTime}
             textOverlays={textOverlays}
             selectedTextOverlay={selectedTextOverlay}
@@ -967,7 +970,12 @@ export function EditorView() {
             onSetTransition={setClipTransition}
             onRemoveTransition={removeClipTransition}
             onAddSubtitle={addSubtitle}
-            onGenerateSubtitles={() => void generateSubtitles()}
+            onGenerateSubtitles={() => {
+              // Keep the first click anchored to Subtitles while async audio
+              // preparation and the Whisper worker begin.
+              setActiveTool("subtitles");
+              void generateSubtitles();
+            }}
             onSubtitleStyleChange={setSubtitleStyle}
             onUpdateSubtitle={updateSubtitle}
             onSelectSubtitle={setSelectedSubtitleId}
@@ -1091,6 +1099,7 @@ export function EditorView() {
           transitions={transitions}
           subtitles={subtitles}
           subtitleProcessing={sttStatus === "loading" || sttStatus === "transcribing"}
+          subtitleProcessingRanges={sttActivityRanges}
           textOverlays={textOverlays}
           selectedSegmentId={selectedTimelineSegmentId}
           selectedSegmentIds={selectedTimelineSegmentIds}

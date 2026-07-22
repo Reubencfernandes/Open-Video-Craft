@@ -2,8 +2,9 @@
  * Clip components for every lane (media, zoom, speed, subtitle) and the
  * cubic-Bézier audio waveform.
  */
-import { Blend, Captions, Music2, Type, WandSparkles, ZoomIn } from "lucide-react";
+import { Blend, Captions, Music2, Type, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
+import type { SubtitleActivityRange } from "../../shared/subtitle-activity";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
 import { useMediaFilmstrip } from "./thumbnail-cache";
@@ -91,22 +92,39 @@ function transitionLabel(type: ClipTransition["type"]): string {
 const clipBaseClassName =
   "group absolute top-[0.15rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-move items-center gap-1.5 overflow-hidden rounded-md border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110 active:cursor-grabbing";
 
-/** Every selected clip gets the same white inset outline, like the reference. */
-const selectedOutlineClassName = "outline outline-2 -outline-offset-2 outline-white";
+/** A branded border and light tint keep selection visible across every filmstrip frame. */
+const selectedOutlineClassName =
+  "z-[2] border-2 border-[#ff4b93] shadow-[inset_0_0_0_1px_rgb(255_255_255_/_0.72),inset_0_0_18px_rgb(255_49_146_/_0.24),0_0_14px_rgb(255_49_146_/_0.62)] after:pointer-events-none after:absolute after:inset-0 after:z-[1] after:rounded-[inherit] after:bg-[#ff4b93]/10 after:content-['']";
 const rangeSelectedOutlineClassName =
   "outline outline-2 -outline-offset-2 outline-pink-200 shadow-[inset_0_0_0_1px_rgb(244_114_182_/_0.55)]";
 
-/** Timeline feedback shown while on-device subtitle generation is working. */
-export function TimelineSubtitleShimmer() {
+/** Blurred clip placeholders positioned only where the audio likely contains speech. */
+export function TimelineSubtitleGenerationPlaceholders(props: {
+  ranges: SubtitleActivityRange[];
+  duration: number;
+}) {
+  if (props.duration <= 0 || props.ranges.length === 0) return null;
+
   return (
     <div
-      className="timeline-subtitle-shimmer pointer-events-none absolute inset-[0.15rem] z-0 inline-flex h-[2.2rem] items-center justify-end gap-2 overflow-hidden rounded-md bg-emerald-500/10 px-3 text-right text-[0.68rem] font-semibold text-emerald-100 ring-1 ring-inset ring-emerald-300/25"
-      data-subtitle-processing
+      className="pointer-events-none absolute inset-0 z-0"
+      data-subtitle-generation
       role="status"
       aria-label="Generating subtitles"
     >
-      <WandSparkles className="relative z-[1] shrink-0" size={14} />
-      <span className="relative z-[1] truncate">Generating subtitles…</span>
+      {props.ranges.map((range, index) => (
+        <span
+          aria-hidden="true"
+          className="timeline-subtitle-generation-placeholder absolute top-[0.15rem] h-[2.2rem] overflow-hidden rounded-md border border-emerald-300/45 bg-emerald-800/45"
+          data-subtitle-generation-range
+          key={`${range.start}-${range.end}-${index}`}
+          style={createTimelineClipStyle(
+            range.start,
+            Math.max(0.1, range.end - range.start),
+            props.duration
+          )}
+        />
+      ))}
     </div>
   );
 }
@@ -180,6 +198,8 @@ export function TimelineClip(props: {
       )}
       type="button"
       data-segment-id={props.clip.id}
+      data-selected={props.selected ? "true" : undefined}
+      aria-pressed={props.selected}
       style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
       onClick={(event) =>
         props.onSelect(event.metaKey || event.ctrlKey || event.shiftKey)
