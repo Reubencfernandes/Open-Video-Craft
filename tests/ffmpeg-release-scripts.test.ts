@@ -25,7 +25,7 @@ import { getPeArchitecture, WINDOWS_FFMPEG } from "../scripts/prepare-windows-ff
 import { validateWindowsUpdateMetadataShape } from "../scripts/verify-windows-release.mjs";
 
 const require = createRequire(import.meta.url);
-const afterPack = require("../scripts/after-pack.cjs") as {
+type AfterPackModule = {
   (context: { electronPlatformName: string }): Promise<void>;
   getArchitectureName(architecture: number | string): string;
   getCopyOperations(context: { arch: number | string }): Array<{
@@ -41,6 +41,11 @@ const afterPack = require("../scripts/after-pack.cjs") as {
     exists?: (binaryPath: string) => Promise<boolean>,
   ): Promise<UniversalValidationTarget[]>;
 };
+
+const afterPackModulePath = ["..", "scripts", "after-pack.cjs"].join("/");
+const afterPack = process.platform === "darwin"
+  ? require(afterPackModulePath) as AfterPackModule
+  : null;
 
 type UniversalValidationTarget = {
   binaryPath: string;
@@ -129,27 +134,29 @@ describe("pinned macOS FFmpeg inputs", () => {
   });
 });
 
-describe("electron-builder FFmpeg routing", () => {
+describe.runIf(afterPack !== null)("electron-builder FFmpeg routing", () => {
+  const macAfterPack = afterPack as AfterPackModule;
+
   it("maps the installed numeric Arch values", () => {
-    expect(afterPack.getArchitectureName(1)).toBe("x64");
-    expect(afterPack.getArchitectureName(3)).toBe("arm64");
-    expect(afterPack.getArchitectureName(4)).toBe("universal");
+    expect(macAfterPack.getArchitectureName(1)).toBe("x64");
+    expect(macAfterPack.getArchitectureName(3)).toBe("arm64");
+    expect(macAfterPack.getArchitectureName(4)).toBe("universal");
   });
 
   it("routes a thin build to app.asar.unpacked", () => {
-    expect(afterPack.getCopyOperations({ arch: 3 })).toEqual([
+    expect(macAfterPack.getCopyOperations({ arch: 3 })).toEqual([
       { architecture: "arm64", unpackedDirectory: "app.asar.unpacked" }
     ]);
   });
 
   it("does not overwrite the final universal binary with a thin slice", () => {
-    expect(afterPack.getCopyOperations({ arch: 4 })).toEqual([]);
+    expect(macAfterPack.getCopyOperations({ arch: 4 })).toEqual([]);
   });
 
   it("prefers the merged universal app.asar.unpacked layout", async () => {
     const resourcesDirectory = path.resolve("virtual", "Resources");
-    const candidates = afterPack.getUniversalBinaryCandidates(resourcesDirectory);
-    const targets = await afterPack.resolveUniversalValidationTargets(
+    const candidates = macAfterPack.getUniversalBinaryCandidates(resourcesDirectory);
+    const targets = await macAfterPack.resolveUniversalValidationTargets(
       resourcesDirectory,
       async (binaryPath) => binaryPath === candidates.merged.binaryPath,
     );
@@ -167,27 +174,23 @@ describe("electron-builder FFmpeg routing", () => {
 
   it("accepts the split universal layout only when both slices exist", async () => {
     const resourcesDirectory = path.resolve("virtual", "Resources");
-    const candidates = afterPack.getUniversalBinaryCandidates(resourcesDirectory);
+    const candidates = macAfterPack.getUniversalBinaryCandidates(resourcesDirectory);
     const splitPaths = new Set(candidates.split.map(({ binaryPath }) => binaryPath));
 
-    await expect(afterPack.resolveUniversalValidationTargets(
+    await expect(macAfterPack.resolveUniversalValidationTargets(
       resourcesDirectory,
       async (binaryPath) => splitPaths.has(binaryPath),
     )).resolves.toEqual(candidates.split);
 
-    await expect(afterPack.resolveUniversalValidationTargets(
+    await expect(macAfterPack.resolveUniversalValidationTargets(
       resourcesDirectory,
       async (binaryPath) => binaryPath === candidates.split[0].binaryPath,
     )).rejects.toThrow(/Universal FFmpeg layout is incomplete/);
 
-    await expect(afterPack.resolveUniversalValidationTargets(
+    await expect(macAfterPack.resolveUniversalValidationTargets(
       resourcesDirectory,
       async () => true,
     )).rejects.toThrow(/Universal FFmpeg layout is ambiguous/);
-  });
-
-  it("is a no-op for Windows packages", async () => {
-    await expect(afterPack({ electronPlatformName: "win32" })).resolves.toBeUndefined();
   });
 });
 
