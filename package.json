@@ -25,6 +25,8 @@
     "dist": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder",
     "dist:win": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --win",
     "dist:mac": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac",
+    "dist:mas": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas",
+    "dist:mas:dev": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas-dev",
     "verify:mac-release": "node scripts/verify-mac-release.mjs",
     "verify:windows-release": "node scripts/verify-windows-release.mjs",
     "dist:mac:adhoc": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=-",
@@ -102,6 +104,7 @@
       "extendInfo": {
         "CFBundleDisplayName": "Open Video Craft",
         "CFBundleName": "Open Video Craft",
+        "ITSAppUsesNonExemptEncryption": false,
         "LSApplicationCategoryType": "public.app-category.video",
         "NSCameraUsageDescription": "Open Video Craft uses the camera when recording face camera video.",
         "NSMicrophoneUsageDescription": "Open Video Craft uses the microphone when recording audio.",
@@ -111,6 +114,18 @@
         "dmg",
         "zip"
       ]
+    },
+    "mas": {
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "notarize": false,
+      "hardenedRuntime": false
+    },
+    "masDev": {
+      "entitlements": "build/entitlements.mas.plist",
+      "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "notarize": false,
+      "hardenedRuntime": false
     },
     "win": {
       "icon": "build/icon.ico",

@@ -99,6 +99,8 @@ describe("timeline trim handles", () => {
     expect(handle).not.toBeNull();
     expect(selectedClip?.className).toContain("border-2");
     expect(selectedClip?.className).toContain("border-[#ff4b93]");
+    expect(selectedClip?.className).toContain("shadow-none");
+    expect(selectedClip?.className).not.toContain("0_0_14px");
     expect(selectedClip?.className).toContain("after:bg-[#ff4b93]/10");
     handle?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     handle?.dispatchEvent(new Event("pointermove", { bubbles: true }));

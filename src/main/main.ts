@@ -75,6 +75,10 @@ import { assertProjectDeletionTarget } from "./project-deletion";
 import { setEditorSessionState, undoAgentEdit } from "./editor-document-store";
 import { writeJsonFileAtomic } from "./project-file";
 import { createMediaUrl, ProjectStore } from "./project-store";
+import {
+  isMacAppStoreBuild,
+  SecurityScopedResourceManager
+} from "./security-scoped-resources";
 import type {
   AiConnectionStatus,
   AiProvider,
@@ -160,6 +164,7 @@ let activeDisplayOverlaySourceId: string | null = null;
 let activeDisplayOverlayDisplayId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
+let securityScopedResources: SecurityScopedResourceManager | null = null;
 let aiConnectionManager: AiConnectionManager | null = null;
 let providerKeysManager: ProviderKeysManager | null = null;
 let musicGenerationManager: MusicGenerationManager | null = null;
@@ -196,6 +201,13 @@ const recorderWindowSize = {
 function getProjectLibrary(): ProjectLibrary {
   projectLibrary ??= new ProjectLibrary(path.join(app.getPath("userData"), "projects.json"));
   return projectLibrary;
+}
+
+function getSecurityScopedResources(): SecurityScopedResourceManager {
+  securityScopedResources ??= new SecurityScopedResourceManager(
+    path.join(app.getPath("userData"), "security-scoped-bookmarks.json")
+  );
+  return securityScopedResources;
 }
 
 function getProviderKeysManager(): ProviderKeysManager {
@@ -912,14 +924,28 @@ function registerIpc(): void {
     return Boolean(control);
   });
 
-  ipcMain.handle("music:get-status", (): Promise<MusicSetupStatus> =>
-    getMusicGenerationManager().getStatus()
-  );
-  ipcMain.handle("music:install", (event): Promise<MusicSetupStatus> =>
-    getMusicGenerationManager().install((progress) => {
+  ipcMain.handle("music:get-status", (): Promise<MusicSetupStatus> => {
+    if (isMacAppStoreBuild()) {
+      return Promise.resolve({
+        pythonPath: null,
+        pythonVersion: null,
+        venvReady: false,
+        acestepInstalled: false,
+        checkpointsDownloaded: false,
+        installing: false,
+        generatingJobId: null
+      });
+    }
+    return getMusicGenerationManager().getStatus();
+  });
+  ipcMain.handle("music:install", (event): Promise<MusicSetupStatus> => {
+    if (isMacAppStoreBuild()) {
+      return Promise.reject(new Error("Local music setup is unavailable in the Mac App Store build."));
+    }
+    return getMusicGenerationManager().install((progress) => {
       if (!event.sender.isDestroyed()) event.sender.send("music:setup-progress", progress);
-    })
-  );
+    });
+  });
   ipcMain.handle(
     "music:generate",
     async (event, request: MusicGenerateRequest): Promise<MusicGenerateResult> => {
@@ -933,6 +959,9 @@ function registerIpc(): void {
       let lyrics: string | null = null;
 
       if (request.engine === "acestep") {
+        if (isMacAppStoreBuild()) {
+          throw new Error("Local ACE-Step music generation is unavailable in the Mac App Store build.");
+        }
         const generated = await getMusicGenerationManager().generateAceStep(request, sendProgress);
         outputPath = generated.outputPath;
         extension = "wav";
@@ -1196,6 +1225,8 @@ function registerIpc(): void {
   ipcMain.handle("editor:import-media", async (): Promise<ImportedMediaFile[]> => {
     return showImportMediaDialog(getDialogParentWindow(), (id, filePath) => {
       importedMediaCache.set(id, filePath);
+    }, (resourcePath, bookmark) => {
+      getSecurityScopedResources().activate(resourcePath, bookmark);
     });
   });
 
@@ -1259,6 +1290,9 @@ function registerIpc(): void {
           projectStore,
           importedMediaCache,
           getDialogParentWindow,
+          activateSecurityScopedResource: (resourcePath, bookmark) => {
+            getSecurityScopedResources().activate(resourcePath, bookmark);
+          },
           control
         });
       } finally {
@@ -1282,7 +1316,10 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:choose-base-directory", async (): Promise<string | null> => {
-    const directory = await showBaseDirectoryDialog(getDialogParentWindow());
+    const directory = await showBaseDirectoryDialog(
+      getDialogParentWindow(),
+      (resourcePath, bookmark) => getSecurityScopedResources().remember(resourcePath, bookmark)
+    );
     if (directory) {
       grantedBaseDirectories.add(path.resolve(directory));
     }
@@ -1318,7 +1355,10 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:open-existing-project-folder", async (): Promise<ProjectView | null> => {
-    const projectRootPath = await showExistingProjectFolderDialog(getDialogParentWindow());
+    const projectRootPath = await showExistingProjectFolderDialog(
+      getDialogParentWindow(),
+      (resourcePath, bookmark) => getSecurityScopedResources().remember(resourcePath, bookmark)
+    );
     if (!projectRootPath) {
       return null;
     }
@@ -1398,7 +1438,10 @@ function registerIpc(): void {
           throw new Error("The chosen project folder was not granted through the folder picker.");
         }
       } else {
-        baseDirectory = await showBaseDirectoryDialog(getDialogParentWindow());
+        baseDirectory = await showBaseDirectoryDialog(
+          getDialogParentWindow(),
+          (resourcePath, bookmark) => getSecurityScopedResources().remember(resourcePath, bookmark)
+        );
 
         if (!baseDirectory) {
           throw new Error("A project folder is required to save this project.");
@@ -1663,6 +1706,7 @@ function delay(ms: number): Promise<void> {
 
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   configureAppIdentity();
+  await getSecurityScopedResources().restoreAll();
   applyApplicationMenu();
   registerNavigationHardening();
   registerPermissionRequestHandlers({
@@ -1707,6 +1751,7 @@ app.on("will-quit", () => {
   killActiveSttProcesses();
   musicGenerationManager?.killActiveProcesses();
   globalShortcut.unregisterAll();
+  securityScopedResources?.stopAll();
 });
 
 app.on("window-all-closed", () => {

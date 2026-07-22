@@ -170,5 +170,9 @@ describe("SubtitlesPanel", () => {
     expect(completedProgress?.style.height).toBe("100%");
     expect(completedProgress?.closest("[data-subtitle-connector]")?.getAttribute("data-subtitle-connector"))
       .toBe("first:second");
+    expect(
+      [...activeHost.querySelectorAll("[data-subtitle-marker-state]")]
+        .map((marker) => marker.getAttribute("data-subtitle-marker-state"))
+    ).toEqual(["passed", "active"]);
   });
 });

@@ -390,7 +390,7 @@ function TimelineRangeOverlay(props: {
     >
       <div className="relative col-start-2 h-full">
         <div
-          className="absolute inset-y-0 overflow-visible rounded-lg border border-pink-200/90 bg-pink-400/[0.16] shadow-[0_0_0_1px_rgb(190_24_93_/_0.35),0_0_20px_rgb(236_72_153_/_0.14),inset_0_0_0_1px_rgb(252_231_243_/_0.12)] transition-[left,width,background-color,border-color,box-shadow] duration-75 ease-out will-change-[left,width]"
+          className="absolute inset-y-0 overflow-visible rounded-lg border border-pink-200/90 bg-pink-400/[0.16] shadow-none transition-[left,width,background-color,border-color] duration-75 ease-out will-change-[left,width]"
           data-timeline-range-selection
           data-timeline-range-lanes={props.selection.laneIds.join(",")}
           data-timeline-range-dragging={props.selection.dragging ? "true" : "false"}

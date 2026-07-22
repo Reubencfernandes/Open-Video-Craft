@@ -16,37 +16,51 @@ import {
   supportedMediaExtensions
 } from "./media-import";
 
+export type SecurityScopedBookmarkHandler = (
+  resourcePath: string,
+  bookmark: string | undefined
+) => void | Promise<void>;
+
 export async function chooseBaseDirectory(
-  parentWindow: Electron.BrowserWindow | null
+  parentWindow: Electron.BrowserWindow | null,
+  onBookmark?: SecurityScopedBookmarkHandler
 ): Promise<string | null> {
   const options: Electron.OpenDialogOptions = {
     title: "Choose where Open Video Craft should save this project",
-    properties: ["openDirectory", "createDirectory"]
+    properties: ["openDirectory", "createDirectory"],
+    securityScopedBookmarks: process.mas === true
   };
   const result = parentWindow
     ? await dialog.showOpenDialog(parentWindow, options)
     : await dialog.showOpenDialog(options);
 
-  return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  if (result.canceled || result.filePaths.length === 0) return null;
+  await onBookmark?.(result.filePaths[0], result.bookmarks?.[0]);
+  return result.filePaths[0];
 }
 
 export async function chooseExistingProjectFolder(
-  parentWindow: Electron.BrowserWindow | null
+  parentWindow: Electron.BrowserWindow | null,
+  onBookmark?: SecurityScopedBookmarkHandler
 ): Promise<string | null> {
   const options: Electron.OpenDialogOptions = {
     title: "Open an Open Video Craft project folder",
-    properties: ["openDirectory"]
+    properties: ["openDirectory"],
+    securityScopedBookmarks: process.mas === true
   };
   const result = parentWindow
     ? await dialog.showOpenDialog(parentWindow, options)
     : await dialog.showOpenDialog(options);
 
-  return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0];
+  if (result.canceled || result.filePaths.length === 0) return null;
+  await onBookmark?.(result.filePaths[0], result.bookmarks?.[0]);
+  return result.filePaths[0];
 }
 
 export async function importMediaFiles(
   parentWindow: Electron.BrowserWindow | null,
-  registerImport: (id: string, filePath: string) => void
+  registerImport: (id: string, filePath: string) => void,
+  onBookmark?: SecurityScopedBookmarkHandler
 ): Promise<ImportedMediaFile[]> {
   const options: Electron.OpenDialogOptions = {
     title: "Import media into Open Video Craft",
@@ -57,7 +71,8 @@ export async function importMediaFiles(
         extensions: [...supportedMediaExtensions]
       },
       { name: "All Files", extensions: ["*"] }
-    ]
+    ],
+    securityScopedBookmarks: process.mas === true
   };
   const result = parentWindow
     ? await dialog.showOpenDialog(parentWindow, options)
@@ -67,6 +82,9 @@ export async function importMediaFiles(
     return [];
   }
 
+  for (const [index, filePath] of result.filePaths.entries()) {
+    await onBookmark?.(filePath, result.bookmarks?.[index]);
+  }
   return collectSupportedImports(result.filePaths, registerImport, parentWindow);
 }
 
@@ -166,7 +184,8 @@ export async function chooseExportPath(
   input: {
     format: ExportVideoRequest["format"];
     name: string;
-  }
+  },
+  onBookmark?: SecurityScopedBookmarkHandler
 ): Promise<string | null> {
   const extension = input.format;
   const result = parentWindow
@@ -176,6 +195,8 @@ export async function chooseExportPath(
   if (result.canceled || !result.filePath) {
     return null;
   }
+
+  await onBookmark?.(result.filePath, result.bookmark);
 
   if (path.extname(result.filePath).toLowerCase() === `.${extension}`) {
     return result.filePath;
@@ -231,6 +252,7 @@ function createExportDialogOptions(
   return {
     title: "Export video",
     defaultPath: `${slugForFileName(name)}.${extension}`,
+    securityScopedBookmarks: process.mas === true,
     filters: [
       { name: extension.toUpperCase(), extensions: [extension] },
       { name: "Video", extensions: ["mp4", "webm", "mov"] }
