@@ -92,11 +92,11 @@ function transitionLabel(type: ClipTransition["type"]): string {
 const clipBaseClassName =
   "group absolute top-[0.15rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-move items-center gap-1.5 overflow-hidden rounded-md border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110 active:cursor-grabbing";
 
-/** A branded border and light tint keep selection visible across every filmstrip frame. */
+/** A crisp branded border and flat tint keep selection visible without a glow. */
 const selectedOutlineClassName =
-  "z-[2] border-2 border-[#ff4b93] shadow-[inset_0_0_0_1px_rgb(255_255_255_/_0.72),inset_0_0_18px_rgb(255_49_146_/_0.24),0_0_14px_rgb(255_49_146_/_0.62)] after:pointer-events-none after:absolute after:inset-0 after:z-[1] after:rounded-[inherit] after:bg-[#ff4b93]/10 after:content-['']";
+  "z-[2] border-2 border-[#ff4b93] shadow-none after:pointer-events-none after:absolute after:inset-0 after:z-[1] after:rounded-[inherit] after:bg-[#ff4b93]/10 after:content-['']";
 const rangeSelectedOutlineClassName =
-  "outline outline-2 -outline-offset-2 outline-pink-200 shadow-[inset_0_0_0_1px_rgb(244_114_182_/_0.55)]";
+  "outline outline-2 -outline-offset-2 outline-pink-200 shadow-none";
 
 /** Blurred clip placeholders positioned only where the audio likely contains speech. */
 export function TimelineSubtitleGenerationPlaceholders(props: {

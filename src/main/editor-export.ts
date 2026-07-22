@@ -9,7 +9,10 @@
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import type { BrowserWindow } from "electron";
-import { chooseExportPath as showExportPathDialog } from "./file-dialogs";
+import {
+  chooseExportPath as showExportPathDialog,
+  type SecurityScopedBookmarkHandler
+} from "./file-dialogs";
 import { exportVideo } from "./ffmpeg";
 import { exportEditorProjectToPath } from "./composition-export";
 import type { ProjectStore } from "./project-store";
@@ -25,6 +28,7 @@ export interface EditorExportContext {
   projectStore: ProjectStore;
   importedMediaCache: Map<string, string>;
   getDialogParentWindow: () => BrowserWindow | null;
+  activateSecurityScopedResource?: SecurityScopedBookmarkHandler;
   control?: ExportJobControl;
 }
 
@@ -43,7 +47,7 @@ export async function exportEditorVideo(
   const outputPath = await showExportPathDialog(context.getDialogParentWindow(), {
     format: request.format,
     name: source.name
-  });
+  }, context.activateSecurityScopedResource);
 
   if (!outputPath) {
     return null;

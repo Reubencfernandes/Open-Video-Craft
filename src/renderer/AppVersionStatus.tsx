@@ -31,6 +31,7 @@ export function AppVersionStatus({ className }: AppVersionStatusProps) {
   const canCheck =
     Boolean(updateStatus?.isPackaged) &&
     !checking &&
+    state !== "disabled" &&
     state !== "checking" &&
     state !== "downloading" &&
     state !== "downloaded";

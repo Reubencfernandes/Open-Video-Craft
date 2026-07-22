@@ -6,6 +6,7 @@ import { app, BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
 import { getProductVersion } from "./app-version";
 import type { UpdateStatus } from "../shared/types";
+import { isMacAppStoreBuild } from "./security-scoped-resources";
 
 const STARTUP_UPDATE_CHECK_DELAY_MS = 5_000;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1_000;
@@ -35,6 +36,16 @@ export function startAutoUpdates(): void {
   }
 
   autoUpdatesStarted = true;
+
+  if (isMacAppStoreBuild()) {
+    setUpdateStatus({
+      state: "disabled",
+      message: "Updates are managed by the Mac App Store.",
+      isPackaged: app.isPackaged
+    });
+    return;
+  }
+
   configureAutoUpdater();
   registerAutoUpdateEvents();
 
@@ -66,6 +77,7 @@ export function startAutoUpdates(): void {
 }
 
 export async function checkForAppUpdates(reason = "manual"): Promise<boolean> {
+  if (isMacAppStoreBuild()) return false;
   if (!app.isPackaged) {
     setUpdateStatus({
       state: "disabled",
@@ -111,6 +123,7 @@ export function getAutoUpdateStatus(): UpdateStatus {
 }
 
 export function installDownloadedUpdate(): boolean {
+  if (isMacAppStoreBuild()) return false;
   if (!updateDownloaded) {
     return false;
   }

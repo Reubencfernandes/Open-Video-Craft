@@ -261,6 +261,7 @@ export function SubtitlesPanel(props: {
                       : 0
                   : null}
                 active={isActive}
+                passed={props.currentTime >= subtitle.start}
                 selected={isSelected}
                 onSelect={() => {
                   const nextId = isSelected ? null : subtitle.id;
@@ -282,6 +283,7 @@ function SubtitleTimelineItem(props: {
   nextSubtitleId: string | null;
   connectorProgress: number | null;
   active: boolean;
+  passed: boolean;
   selected: boolean;
   onSelect: () => void;
   onUpdate: (updates: Partial<SubtitleSegment>) => void;
@@ -312,16 +314,17 @@ function SubtitleTimelineItem(props: {
       ) : null}
       <span
         aria-hidden="true"
-        className={`subtitle-timeline-marker absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,box-shadow,transform] duration-200 ${
+        className={`subtitle-timeline-marker absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,transform] duration-200 ${
           props.active
-            ? "scale-110 bg-[#ff3b5c] shadow-[0_0_0_3px_rgb(255_59_92_/_0.16),0_0_12px_rgb(255_59_92_/_0.8)]"
-            : "bg-neutral-600"
+            ? "scale-110 bg-[#ff3b5c]"
+            : props.passed
+              ? "bg-[#ff3b5c]"
+              : "bg-neutral-600"
         }`}
+        data-subtitle-marker-state={props.active ? "active" : props.passed ? "passed" : "future"}
       />
       <div
-        className={`subtitle-timeline-card overflow-hidden rounded-xl transition-[background-color,color,box-shadow] duration-300 ${surfaceClassName} ${
-          props.selected ? "shadow-[0_12px_30px_rgb(0_0_0_/_0.22)]" : ""
-        }`}
+        className={`subtitle-timeline-card overflow-hidden rounded-xl transition-[background-color,color] duration-300 ${surfaceClassName}`}
         data-active-subtitle-section={props.active ? "true" : undefined}
       >
         <button

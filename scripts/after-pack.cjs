@@ -156,6 +156,13 @@ async function afterPack(context) {
   const resourcesDirectory = context.packager.getResourcesDir(context.appOutDir);
   const architecture = getArchitectureName(context.arch);
 
+  // Local ACE-Step setup launches an external Python environment, which is not
+  // compatible with the Mac App Store sandbox. The MAS runtime already hides
+  // the feature; remove its helper script from the submitted bundle as well.
+  if (context.electronPlatformName === "mas") {
+    await rm(path.join(resourcesDirectory, "acestep_generate.py"), { force: true });
+  }
+
   if (architecture === "universal") {
     const { validateMacFfmpegBinary } = await loadValidatorModule();
     const targets = await resolveUniversalValidationTargets(resourcesDirectory);
