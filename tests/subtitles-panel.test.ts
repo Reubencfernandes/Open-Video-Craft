@@ -139,7 +139,7 @@ describe("SubtitlesPanel", () => {
     ).toBe("true");
   });
 
-  it("moves one fast laser beam into the next cue and highlights the active card", async () => {
+  it("grows the current connector and keeps completed connectors filled", async () => {
     const host = await renderPanel({
       subtitles: [
         { id: "first", start: 0, end: 2, text: "First subtitle" },
@@ -149,12 +149,12 @@ describe("SubtitlesPanel", () => {
       currentTime: 9.725
     });
 
-    const laser = host.querySelector<HTMLElement>("[data-subtitle-laser]");
-    expect(laser).not.toBeNull();
-    expect(laser?.style.top).toBe("50%");
-    expect(laser?.closest("[data-subtitle-connector]")?.getAttribute("data-subtitle-connector"))
+    const progress = host.querySelector<HTMLElement>("[data-subtitle-progress]");
+    expect(progress).not.toBeNull();
+    expect(progress?.style.height).toBe("50%");
+    expect(progress?.closest("[data-subtitle-connector]")?.getAttribute("data-subtitle-connector"))
       .toBe("first:second");
-    expect(host.querySelectorAll("[data-subtitle-laser]")).toHaveLength(1);
+    expect(host.querySelectorAll("[data-subtitle-progress]")).toHaveLength(1);
 
     const activeHost = await renderPanel({
       subtitles: [
@@ -166,5 +166,9 @@ describe("SubtitlesPanel", () => {
     expect(
       activeHost.querySelector('[data-active-subtitle-section="true"]')?.textContent
     ).toContain("Second subtitle");
+    const completedProgress = activeHost.querySelector<HTMLElement>("[data-subtitle-progress]");
+    expect(completedProgress?.style.height).toBe("100%");
+    expect(completedProgress?.closest("[data-subtitle-connector]")?.getAttribute("data-subtitle-connector"))
+      .toBe("first:second");
   });
 });

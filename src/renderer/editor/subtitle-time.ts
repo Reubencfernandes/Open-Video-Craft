@@ -17,23 +17,23 @@ export function findActiveSubtitleAtTime(
   return subtitles.find((subtitle) => isSubtitleActiveAtTime(subtitle, time)) ?? null;
 }
 
-export interface SubtitleTimelineLaserPosition {
+export interface SubtitleTimelineProgressPosition {
   fromId: string;
   toId: string;
   progress: number;
 }
 
-export const subtitleTimelineLaserDuration = 0.55;
+export const subtitleTimelineProgressDuration = 0.55;
 
 /**
- * Locate the short playback beam that arrives at the next cue marker. The
- * beam only appears immediately before the next cue starts, so even a long
- * silence produces one quick, predictable sweep instead of a slow crawler.
+ * Locate the growing progress line that arrives at the next cue marker. The
+ * current section fills immediately before the next cue starts; completed
+ * connectors remain filled by the subtitle panel after playback moves on.
  */
-export function getSubtitleTimelineLaserPosition(
+export function getSubtitleTimelineProgressPosition(
   subtitles: SubtitleSegment[],
   time: number
-): SubtitleTimelineLaserPosition | null {
+): SubtitleTimelineProgressPosition | null {
   if (!Number.isFinite(time) || subtitles.length < 2) return null;
   const ordered = [...subtitles].sort(
     (left, right) =>
@@ -48,7 +48,7 @@ export function getSubtitleTimelineLaserPosition(
     const interval = next.start - current.start;
     if (interval <= 0 || time < current.start || time >= next.start) continue;
 
-    const travelDuration = Math.min(subtitleTimelineLaserDuration, interval);
+    const travelDuration = Math.min(subtitleTimelineProgressDuration, interval);
     const travelStart = next.start - travelDuration;
     if (time < travelStart) return null;
 

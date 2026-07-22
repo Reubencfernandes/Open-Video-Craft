@@ -13,11 +13,12 @@ the bundled MCP server.
 ### Added
 
 - CI coverage for the production build and the end-to-end MCP smoke test on macOS and Windows.
-- A fast, smooth red playback beam along the subtitle spine plus a red active-cue card.
+- A smooth cumulative playback line along the subtitle spine plus a red active-cue card.
 
 ### Changed
 
 - Subtitle cue cards stay sorted by timeline time after moves or trims, show read-only start/end timestamps, and direct timing changes to the draggable timeline clip.
+- Completed subtitle connectors remain highlighted as playback advances, leaving a continuous visual history without adding a border to the active card.
 - Refreshed the launcher, recorder, editor, and subtitle timeline screenshots for the 1.0.2 interface.
 - Synchronized the app, in-app release notes, MCP handshake, changelog, and documentation on the 1.0.2 release line.
 - Added an in-package FFmpeg source-code offer and a verified source/build-script bundle to the v1.0.2 GitHub release.
@@ -30,6 +31,7 @@ the bundled MCP server.
 - Subtitle cues use an exact half-open time boundary, preventing two adjacent cues from appearing active on the same frame.
 - Timeline Cut removes only the primary clip copied to the single-item clipboard, preserving the rest of a multi-selection and unrelated timed items.
 - Sidecar subtitle export creates `.srt` files exclusively, preserves video output when a collision is found, and keeps burn-in subtitles in scoped temporary storage.
+- The downloaded-update Restart action stays contained in the launcher sidebar and uses the application’s purple glow treatment.
 
 ## [1.0.1] - 2026-07-21
 

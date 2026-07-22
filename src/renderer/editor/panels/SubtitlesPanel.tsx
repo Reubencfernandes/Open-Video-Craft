@@ -10,7 +10,7 @@ import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { FloatingSelect } from "../FloatingSelect";
 import {
   formatSubtitleTimecode,
-  getSubtitleTimelineLaserPosition,
+  getSubtitleTimelineProgressPosition,
   isSubtitleActiveAtTime
 } from "../subtitle-time";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
@@ -77,7 +77,7 @@ export function SubtitlesPanel(props: {
       left.id.localeCompare(right.id)
   );
   const subtitleIdsKey = orderedSubtitles.map((subtitle) => subtitle.id).join("\u0000");
-  const laserPosition = getSubtitleTimelineLaserPosition(
+  const progressPosition = getSubtitleTimelineProgressPosition(
     orderedSubtitles,
     props.currentTime
   );
@@ -253,8 +253,12 @@ export function SubtitlesPanel(props: {
                 key={subtitle.id}
                 subtitle={subtitle}
                 nextSubtitleId={nextSubtitle?.id ?? null}
-                laserProgress={laserPosition?.fromId === subtitle.id
-                  ? laserPosition.progress
+                connectorProgress={nextSubtitle
+                  ? props.currentTime >= nextSubtitle.start
+                    ? 1
+                    : progressPosition?.fromId === subtitle.id
+                      ? progressPosition.progress
+                      : 0
                   : null}
                 active={isActive}
                 selected={isSelected}
@@ -276,7 +280,7 @@ export function SubtitlesPanel(props: {
 function SubtitleTimelineItem(props: {
   subtitle: SubtitleSegment;
   nextSubtitleId: string | null;
-  laserProgress: number | null;
+  connectorProgress: number | null;
   active: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -294,14 +298,14 @@ function SubtitleTimelineItem(props: {
       {props.nextSubtitleId ? (
         <span
           aria-hidden="true"
-          className="subtitle-timeline-connector pointer-events-none absolute left-[0.4375rem] top-[1.04rem] z-[2] h-full w-px"
+          className="subtitle-timeline-connector pointer-events-none absolute left-[0.4375rem] top-[1.04rem] z-0 h-full w-px"
           data-subtitle-connector={`${props.subtitle.id}:${props.nextSubtitleId}`}
         >
-          {props.laserProgress !== null ? (
+          {props.connectorProgress !== null && props.connectorProgress > 0 ? (
             <span
-              className="subtitle-timeline-laser"
-              data-subtitle-laser
-              style={{ top: `${props.laserProgress * 100}%` }}
+              className="subtitle-timeline-progress"
+              data-subtitle-progress
+              style={{ height: `${props.connectorProgress * 100}%` }}
             />
           ) : null}
         </span>
