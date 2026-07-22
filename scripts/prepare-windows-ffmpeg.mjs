@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
