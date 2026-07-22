@@ -9,6 +9,7 @@
 [**Download Open Video Craft for macOS or Windows →**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
 
 [![Latest release](https://img.shields.io/github/v/release/Reubencfernandes/Open-Video-Craft?label=download&color=34d399)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
+[![Community](https://img.shields.io/badge/community-questions%20%26%20feedback-f472b6)](https://github.com/Reubencfernandes/Open-Video-Craft/discussions/7)
 [![Source platforms](https://img.shields.io/badge/source-macOS%20%7C%20Windows-6366f1)](#development)
 [![Built with Electron](https://img.shields.io/badge/Electron%2043-React%20%2B%20TypeScript-38bdf8)](#development)
 
@@ -182,6 +183,14 @@ my-recording-project/
 ```
 
 Paths are relative, so a project keeps working after moving folders or machines.
+
+## Community
+
+Ask questions, share workflow feedback, and suggest improvements in the
+[v1.0.2 community discussion](https://github.com/Reubencfernandes/Open-Video-Craft/discussions/7).
+For a reproducible bug, open a
+[GitHub issue](https://github.com/Reubencfernandes/Open-Video-Craft/issues)
+with your operating system, app version, and steps to reproduce it.
 
 ## Development
 
