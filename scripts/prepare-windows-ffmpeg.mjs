@@ -63,7 +63,7 @@ async function findWindowsFfmpeg(directory) {
 export function getPeArchitecture(buffer) {
   if (buffer.length < 0x40 || buffer.toString("ascii", 0, 2) !== "MZ") return null;
   const peOffset = buffer.readUInt32LE(0x3c);
-  if (peOffset + 6 > buffer.length || buffer.toString("ascii", peOffset, peOffset + 4) !== "PE\0\0") return null;
+  if (peOffset + 6 > buffer.length || buffer.readUInt32LE(peOffset) !== 0x00004550) return null;
   const machine = buffer.readUInt16LE(peOffset + 4);
   return machine === 0x8664 ? "x64" : machine === 0xaa64 ? "arm64" : machine === 0x14c ? "ia32" : null;
 }

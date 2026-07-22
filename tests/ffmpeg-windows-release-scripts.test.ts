@@ -18,7 +18,7 @@ describe("Windows release inputs", () => {
     const header = Buffer.alloc(512);
     header.write("MZ", 0, "ascii");
     header.writeUInt32LE(128, 0x3c);
-    header.write("PE\0\0", 128, "ascii");
+    header.writeUInt32LE(0x00004550, 128);
     header.writeUInt16LE(0x8664, 132);
     expect(getPeArchitecture(header)).toBe("x64");
     header.writeUInt16LE(0xaa64, 132);
