@@ -456,55 +456,46 @@ select,
   }
 }
 
-/* The active subtitle sends a narrow red beam along the list's time spine. */
-.subtitle-timeline-marker {
-  isolation: isolate;
+/* Playback sends one quick beam down the spine just before the next cue. */
+.subtitle-timeline-connector {
+  overflow: visible;
+}
+
+.subtitle-timeline-card-active {
+  background:
+    linear-gradient(100deg, rgb(57 8 18 / 0.96), rgb(34 7 13 / 0.86));
+  box-shadow:
+    inset 3px 0 0 rgb(255 59 92 / 0.95),
+    0 10px 28px rgb(255 25 65 / 0.1);
 }
 
 .subtitle-timeline-laser {
   position: absolute;
-  z-index: -1;
+  z-index: 2;
   left: 50%;
-  top: 50%;
-  width: 2px;
-  height: 3.25rem;
+  width: 4px;
+  height: 5.75rem;
   border-radius: 999px;
   background: linear-gradient(
     to bottom,
     transparent 0%,
-    rgb(255 59 92 / 0.08) 16%,
-    rgb(255 59 92 / 0.78) 44%,
-    rgb(255 228 233) 50%,
-    rgb(255 59 92 / 0.78) 56%,
-    rgb(255 59 92 / 0.08) 84%,
+    rgb(255 59 92 / 0.08) 8%,
+    rgb(255 59 92 / 0.88) 36%,
+    rgb(255 240 243) 50%,
+    rgb(255 59 92 / 0.88) 64%,
+    rgb(255 59 92 / 0.08) 92%,
     transparent 100%
   );
-  filter: drop-shadow(0 0 5px rgb(255 59 92 / 0.9));
-  animation: subtitle-timeline-laser-sweep 1.4s ease-in-out infinite;
-}
-
-@keyframes subtitle-timeline-laser-sweep {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -82%) scaleY(0.45);
-  }
-  28% {
-    opacity: 1;
-  }
-  72% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -18%) scaleY(0.45);
-  }
+  filter:
+    drop-shadow(0 0 4px rgb(255 59 92 / 0.98))
+    drop-shadow(0 0 11px rgb(255 30 72 / 0.58));
+  transform: translate(-50%, -50%);
+  transition: top 48ms linear;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .subtitle-timeline-laser {
-    animation: none;
-    opacity: 1;
-    transform: translate(-50%, -50%) scaleY(0.7);
+    transition: none;
   }
 }
 

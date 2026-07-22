@@ -23,7 +23,7 @@ type ClipboardEntry = {
 type UseTimelineClipboardParams = {
   commitTimelineSegments: (updater: (segments: TimelineSegment[]) => TimelineSegment[]) => void;
   currentTimeRef: MutableRefObject<number>;
-  deleteSelectedTimelineSegment: () => void;
+  deleteTimelineSegment: (segmentId: string | null) => void;
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
   mediaById: Map<string, EditorMediaItem>;
   selectedTimelineSegmentId: string | null;
@@ -38,7 +38,7 @@ export function useTimelineClipboard(params: UseTimelineClipboardParams) {
   const {
     commitTimelineSegments,
     currentTimeRef,
-    deleteSelectedTimelineSegment,
+    deleteTimelineSegment,
     knownTimelineItemIdsRef,
     mediaById,
     selectedTimelineSegmentId,
@@ -51,10 +51,10 @@ export function useTimelineClipboard(params: UseTimelineClipboardParams) {
 
   const timelineClipboardRef = useRef<ClipboardEntry | null>(null);
 
-  function copySelectedTimelineSegment() {
+  function copySelectedTimelineSegment(): string | null {
     const segment = timelineSegments.find((item) => item.id === selectedTimelineSegmentId);
     if (!segment) {
-      return;
+      return null;
     }
 
     timelineClipboardRef.current = {
@@ -64,11 +64,16 @@ export function useTimelineClipboard(params: UseTimelineClipboardParams) {
       duration: Math.max(0.1, segment.end - segment.start)
     };
     setExportMessage("Clip copied");
+    return segment.id;
   }
 
   function cutSelectedTimelineSegment() {
-    copySelectedTimelineSegment();
-    deleteSelectedTimelineSegment();
+    const copiedSegmentId = copySelectedTimelineSegment();
+    if (copiedSegmentId) {
+      // The clipboard stores one clip, so Cut must remove only that copied
+      // primary clip even when the UI currently has a larger range selected.
+      deleteTimelineSegment(copiedSegmentId);
+    }
   }
 
   function pasteTimelineSegment() {

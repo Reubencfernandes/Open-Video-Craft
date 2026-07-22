@@ -2,27 +2,20 @@
 import heroImageUrl from "../assets/release-1.0.0-hero.jpg";
 
 export const latestRelease = {
-  version: "1.0.0",
-  title: "Open Video Craft is ready for its first stable release",
-  releasedAt: "July 21, 2026",
+  version: "1.0.2",
+  title: "Timeline editing and release reliability",
+  releasedAt: "July 22, 2026",
   summary:
-    "The complete local-first recording and editing workflow, refined for a stable launch with a redesigned recorder and more precise subtitle editing.",
+    "A more predictable editing release with timeline-owned subtitle timing, safer Cut behavior, stronger export safeguards, and complete build validation.",
   heroImageUrl,
   changes: [
-    "Choose all displays or a specific screen from the floating recorder before recording.",
-    "Click a subtitle cue to smoothly expand an inline editor for its text and precise start and end timecodes.",
-    "Subtitle timestamps now use a readable, millisecond-accurate format instead of raw decimal seconds.",
-    "The floating recorder now features a larger camera preview, the Open Video Craft logo, flatter quality controls, and a clear red recording button.",
-    "Gemini and Cohere setup prompts now use distinct liquid-glass colors, and Claude Code appears immediately while its local CLI status is checked.",
-    "The recorder no longer creates a display-sized green border overlay, preventing transparent-window compositor failures on macOS and Windows.",
-    "Drag across an exact time region and one or more timeline lanes; only clips and timed items inside that rectangle are selected.",
-    "Zoom, speed, subtitle, text, and media selections are exclusive, and Delete now removes the selected timeline item even while its button has focus.",
-    "Each audio lane now has its own mute control, with the same lane-aware mix used during preview, transcription, and final export.",
-    "Gemini and Claude Code can now inspect and edit layouts, backgrounds, camera and screen composition, text, subtitles, audio, view settings, media imports, and Lyria music in addition to timeline effects.",
-    "The Gemini assistant is responsive at narrow panel widths, handles long messages safely, and sends edits through the shared validated operation contract.",
-    "Music AI now focuses on Lyria 3 Clip and Pro; the previous local-model setup and controls have been removed from the interface.",
-    "Preview quality and timeline/preview zoom are saved per project and are available to connected AI editors.",
-    "Success notifications use a clean tick without a circular border, and notification surfaces no longer use decorative backgrounds or borders.",
-    "Codex has been removed from the AI connection screen; Claude Code remains available through the bundled MCP server."
+    "Capture screen, camera, microphone, and system audio as separate project tracks from the floating recorder.",
+    "Arrange cuts, transitions, zoom and speed effects, text, subtitles, and lane-aware audio on the multi-track timeline.",
+    "Subtitle cues stay in timeline order while a fast red playback beam sweeps into the next cue and the active card is highlighted; cue-card timing remains read-only because the timeline is the timing source of truth.",
+    "Native text undo/redo, exact subtitle boundary handoffs, and multi-selection Cut behavior are safer and more predictable.",
+    "Generate multilingual subtitles with local Whisper or optional cloud providers, with word-level karaoke highlighting in preview.",
+    "Gemini and Claude Code can inspect and edit the validated project surface, with one-click rollback for agent edits.",
+    "Export timeline composition to MP4, WebM, or MOV with mixed audio and burned-in or sidecar subtitles; preview-only camera and layout styling remains clearly scoped.",
+    "Production bundles and the bundled MCP server now run as required CI release checks on both supported desktop platforms."
   ]
 } as const;

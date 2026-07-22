@@ -14,7 +14,11 @@ import { exportVideo } from "./ffmpeg";
 import { exportEditorProjectToPath } from "./composition-export";
 import type { ProjectStore } from "./project-store";
 import type { ExportJobControl } from "./export-jobs";
-import { writeSubtitleSidecar } from "./subtitle-export";
+import {
+  SubtitleSidecarExistsError,
+  writeSubtitleSidecar,
+  writeTemporarySubtitleSidecar
+} from "./subtitle-export";
 import type { ExportVideoRequest, ExportVideoResult } from "../shared/types";
 
 export interface EditorExportContext {
@@ -50,7 +54,12 @@ export async function exportEditorVideo(
     context.control?.onProgress(100, "Export complete.");
     return result;
   } catch (error) {
-    await fs.rm(outputPath, { force: true }).catch(() => undefined);
+    // Sidecar creation is exclusive and happens before rendering or encoding.
+    // If it reports a collision, FFmpeg has not touched the selected video path;
+    // deleting it here could erase an existing export the user chose to replace.
+    if (!(error instanceof SubtitleSidecarExistsError)) {
+      await fs.rm(outputPath, { force: true }).catch(() => undefined);
+    }
     throw error;
   }
 }
@@ -80,33 +89,51 @@ async function exportEditorVideoToPath(
     }
   }
 
-  const bytesWritten = await exportVideo({
-    videoPath: source.videoPath,
-    audioTracks: [
-      ...source.audioTracks.map((track) => ({
-        path: track.path,
-        volume: request.volume * getRequestedAudioGain(request, track.id)
-      })),
-      ...request.backgroundAudioImportIds.map((id) => ({
-        path: resolveImportedMediaPath(id, context),
-        volume: request.volume * getRequestedAudioGain(request, id)
-      }))
-    ],
-    outputPath,
-    format: request.format,
-    resolution: request.resolution,
-    trimStart: Math.max(0, request.trimStart),
-    trimEnd:
-      request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
-    sourceAudioVolume: request.volume,
-    preserveSourceAudio: source.preserveSourceAudio
-  }, context.control);
-  const subtitlePath = await writeSubtitleSidecar(outputPath, request);
+  const subtitleMode = request.subtitleMode ?? "burn-in";
+  const temporarySubtitles = subtitleMode === "burn-in"
+    ? await writeTemporarySubtitleSidecar(request)
+    : null;
+  const subtitlePath = subtitleMode === "sidecar"
+    ? await writeSubtitleSidecar(outputPath, request)
+    : null;
+  let bytesWritten: number;
+  let exportCompleted = false;
+
+  try {
+    bytesWritten = await exportVideo({
+      videoPath: source.videoPath,
+      audioTracks: [
+        ...source.audioTracks.map((track) => ({
+          path: track.path,
+          volume: request.volume * getRequestedAudioGain(request, track.id)
+        })),
+        ...request.backgroundAudioImportIds.map((id) => ({
+          path: resolveImportedMediaPath(id, context),
+          volume: request.volume * getRequestedAudioGain(request, id)
+        }))
+      ],
+      outputPath,
+      format: request.format,
+      resolution: request.resolution,
+      trimStart: Math.max(0, request.trimStart),
+      trimEnd:
+        request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
+      sourceAudioVolume: request.volume,
+      preserveSourceAudio: source.preserveSourceAudio,
+      subtitlePath: subtitleMode === "burn-in" ? temporarySubtitles?.path ?? null : null
+    }, context.control);
+    exportCompleted = true;
+  } finally {
+    await temporarySubtitles?.cleanup().catch(() => undefined);
+    if (subtitlePath && !exportCompleted) {
+      await fs.rm(subtitlePath, { force: true }).catch(() => undefined);
+    }
+  }
 
   return {
     path: outputPath,
     bytesWritten,
-    subtitlePath
+    subtitlePath: subtitleMode === "sidecar" ? subtitlePath : null
   };
 }
 

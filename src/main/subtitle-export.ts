@@ -4,7 +4,23 @@
  * to the exported trim range. Pure aside from the final file write.
  */
 import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { ExportVideoRequest } from "../shared/types";
+
+export class SubtitleSidecarExistsError extends Error {
+  constructor(readonly subtitlePath: string) {
+    super(
+      `A subtitle file already exists at "${subtitlePath}". Choose a different export name or move the existing .srt file, then try again.`
+    );
+    this.name = "SubtitleSidecarExistsError";
+  }
+}
+
+export interface TemporarySubtitleSidecar {
+  path: string | null;
+  cleanup: () => Promise<void>;
+}
 
 export async function writeSubtitleSidecar(
   outputPath: string,
@@ -35,8 +51,46 @@ export async function writeSubtitleSidecar(
         ].join("\r\n")
       )
       .join("\r\n\r\n") + "\r\n";
-  await fs.writeFile(subtitlePath, srt, "utf8");
+  try {
+    // `wx` combines the existence check and file creation into one filesystem
+    // operation. A separate access() check would race another export/process and
+    // could still overwrite a sidecar created between the check and this write.
+    await fs.writeFile(subtitlePath, srt, { encoding: "utf8", flag: "wx" });
+  } catch (error) {
+    if ((error as { code?: string }).code === "EEXIST") {
+      throw new SubtitleSidecarExistsError(subtitlePath);
+    }
+    throw error;
+  }
   return subtitlePath;
+}
+
+/**
+ * Creates a burn-in-only subtitle file in its own temporary directory. The
+ * caller owns the returned cleanup function; it removes only that directory,
+ * never a sibling `.srt` beside the user's chosen export path.
+ */
+export async function writeTemporarySubtitleSidecar(
+  request: ExportVideoRequest
+): Promise<TemporarySubtitleSidecar> {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "open-video-craft-subtitles-"));
+  let cleaned = false;
+  const cleanup = async () => {
+    if (cleaned) return;
+    cleaned = true;
+    await fs.rm(directory, { recursive: true, force: true });
+  };
+
+  try {
+    const subtitlePath = await writeSubtitleSidecar(
+      path.join(directory, "burn-in-video.mp4"),
+      request
+    );
+    return { path: subtitlePath, cleanup };
+  } catch (error) {
+    await cleanup().catch(() => undefined);
+    throw error;
+  }
 }
 
 // Keep cue text from corrupting the SRT structure: normalize to CRLF, drop

@@ -7,7 +7,10 @@ import type {
   TimelineCompositionAudioSegment,
   TimelineCompositionVideoSegment
 } from "./ffmpeg";
-import { writeSubtitleSidecar } from "./subtitle-export";
+import {
+  writeSubtitleSidecar,
+  writeTemporarySubtitleSidecar
+} from "./subtitle-export";
 import type {
   EditorProjectStateFile,
   ExportResolution,
@@ -100,7 +103,14 @@ export async function exportEditorProjectToPath(input: {
     subtitles: exportSubtitles,
     subtitleMode
   };
-  const subtitlePath = subtitleMode === "none" ? null : await writeSubtitleSidecar(input.outputPath, subtitleRequest);
+  const temporarySubtitles = subtitleMode === "burn-in"
+    ? await writeTemporarySubtitleSidecar(subtitleRequest)
+    : null;
+  const subtitlePath = subtitleMode === "none"
+    ? null
+    : subtitleMode === "burn-in"
+      ? temporarySubtitles?.path ?? null
+      : await writeSubtitleSidecar(input.outputPath, subtitleRequest);
   let bytesWritten: number;
   let exportCompleted = false;
   try {
@@ -115,7 +125,8 @@ export async function exportEditorProjectToPath(input: {
     }, input.control);
     exportCompleted = true;
   } finally {
-    if (subtitlePath && (subtitleMode === "burn-in" || !exportCompleted)) {
+    await temporarySubtitles?.cleanup().catch(() => undefined);
+    if (subtitlePath && subtitleMode === "sidecar" && !exportCompleted) {
       await fs.rm(subtitlePath, { force: true }).catch(() => undefined);
     }
   }

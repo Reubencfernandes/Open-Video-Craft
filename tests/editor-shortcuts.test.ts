@@ -19,6 +19,8 @@ function ShortcutHarness(props: {
   togglePlayback: () => void;
   deleteSelected: () => void;
   onMute: () => void;
+  undo: () => void;
+  redo: () => void;
 }) {
   useEditorShortcuts({
     currentTime: 0,
@@ -26,8 +28,8 @@ function ShortcutHarness(props: {
     selectedTimelineSegmentId: props.selectedTimelineSegmentId ?? null,
     hasTimelineRangeSelection: props.hasTimelineRangeSelection ?? false,
     seek: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
+    undo: props.undo,
+    redo: props.redo,
     openExport: vi.fn(),
     copyClip: vi.fn(),
     cutClip: vi.fn(),
@@ -41,6 +43,13 @@ function ShortcutHarness(props: {
     "main",
     null,
     createElement("button", { type: "button", "data-layout-preset": true }, "Layout preset"),
+    createElement("input", { "data-text-input": true }),
+    createElement("textarea", { "data-textarea": true }),
+    createElement(
+      "div",
+      { contentEditable: true, "data-contenteditable": true, suppressContentEditableWarning: true },
+      createElement("span", { "data-contenteditable-child": true }, "Editable text")
+    ),
     createElement(
       "div",
       { "data-timeline-body": true, tabIndex: 0 },
@@ -66,6 +75,8 @@ function renderHarness(
     togglePlayback: vi.fn(),
     deleteSelected: vi.fn(),
     onMute: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
     ...overrides
   };
   const host = document.createElement("div");
@@ -76,6 +87,31 @@ function renderHarness(
 }
 
 describe("editor global shortcuts", () => {
+  it("leaves Cmd/Ctrl+Z and Y native in text inputs and contenteditable regions", () => {
+    const { callbacks, host } = renderHarness();
+    const targets = [
+      host.querySelector<HTMLElement>("[data-text-input]"),
+      host.querySelector<HTMLElement>("[data-textarea]"),
+      host.querySelector<HTMLElement>("[data-contenteditable-child]")
+    ];
+
+    for (const target of targets) {
+      for (const key of ["z", "y"]) {
+        const event = new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+          key
+        });
+        target?.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+      }
+    }
+
+    expect(callbacks.undo).not.toHaveBeenCalled();
+    expect(callbacks.redo).not.toHaveBeenCalled();
+  });
+
   it("leaves Space on a focused timeline mute button to native activation", () => {
     const { callbacks, host } = renderHarness();
     const button = host.querySelector<HTMLButtonElement>("[data-mute]");

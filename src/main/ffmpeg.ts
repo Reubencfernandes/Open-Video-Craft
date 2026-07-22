@@ -20,7 +20,7 @@ export interface ExportProcessControl {
   onProgress?: (percent: number, message?: string) => void;
 }
 
-interface ExportVideoJob {
+export interface ExportVideoJob {
   videoPath: string;
   audioTracks: Array<{ path: string; volume: number }>;
   outputPath: string;
@@ -30,6 +30,7 @@ interface ExportVideoJob {
   trimEnd: number | null;
   sourceAudioVolume: number;
   preserveSourceAudio: boolean;
+  subtitlePath?: string | null;
 }
 
 export interface TimelineCompositionVideoSegment {
@@ -238,7 +239,7 @@ export async function exportVideo(
     args.push("-t", formatFfmpegNumber(outputDuration));
   }
 
-  const videoFilter = createVideoFilter(job.resolution);
+  const videoFilter = createVideoFilter(job.resolution, job.subtitlePath);
   const audioInputs = [
     ...(job.preserveSourceAudio
       ? [{ inputIndex: 0, volume: job.sourceAudioVolume }]
@@ -706,19 +707,26 @@ function addInput(args: string[], inputPath: string, trimStart: number): void {
   args.push("-i", inputPath);
 }
 
-function createVideoFilter(resolution: ExportResolution): string | null {
+export function createVideoFilter(
+  resolution: ExportResolution,
+  subtitlePath?: string | null
+): string {
   const dimensions = getResolutionDimensions(resolution);
+  const filters: string[] = [];
 
-  if (!dimensions) {
-    return "setsar=1";
+  if (dimensions) {
+    const [width, height] = dimensions;
+    filters.push(
+      `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
+      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`
+    );
   }
 
-  const [width, height] = dimensions;
-  return [
-    `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
-    `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`,
-    "setsar=1"
-  ].join(",");
+  filters.push("setsar=1");
+  if (subtitlePath) {
+    filters.push(`subtitles='${escapeFilterPath(subtitlePath)}'`);
+  }
+  return filters.join(",");
 }
 
 function getResolutionDimensions(resolution: ExportResolution): [number, number] | null {
@@ -767,7 +775,7 @@ async function createCodecArgs(format: ExportVideoFormat): Promise<string[]> {
   ];
 }
 
-function canStreamCopy(job: ExportVideoJob): boolean {
+export function canStreamCopy(job: ExportVideoJob): boolean {
   const sourceExtension = path.extname(job.videoPath).toLowerCase();
   return (
     (job.format === "mp4" || job.format === "mov") &&
@@ -777,7 +785,8 @@ function canStreamCopy(job: ExportVideoJob): boolean {
     job.trimEnd === null &&
     job.audioTracks.length === 0 &&
     job.preserveSourceAudio &&
-    job.sourceAudioVolume === 1
+    job.sourceAudioVolume === 1 &&
+    !job.subtitlePath
   );
 }
 

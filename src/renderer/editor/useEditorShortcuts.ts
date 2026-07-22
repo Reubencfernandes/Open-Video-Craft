@@ -43,6 +43,13 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
       const accel = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
+      // Text controls own their native undo/redo stack. Handling Cmd/Ctrl+Z or
+      // Y here would undo an unrelated timeline edit while leaving the user's
+      // in-progress text unchanged.
+      if (isTyping && accel && (key === "z" || key === "y")) {
+        return;
+      }
+
       if (accel && key === "z") {
         event.preventDefault();
         if (event.shiftKey) {

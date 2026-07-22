@@ -2,6 +2,67 @@ import type { SubtitleSegment } from "./types";
 
 export const subtitleMinimumDuration = 0.1;
 
+/** Subtitle windows are half-open so adjacent cues switch exactly once. */
+export function isSubtitleActiveAtTime(
+  subtitle: Pick<SubtitleSegment, "start" | "end">,
+  time: number
+): boolean {
+  return time >= subtitle.start && time < subtitle.end;
+}
+
+export function findActiveSubtitleAtTime(
+  subtitles: SubtitleSegment[],
+  time: number
+): SubtitleSegment | null {
+  return subtitles.find((subtitle) => isSubtitleActiveAtTime(subtitle, time)) ?? null;
+}
+
+export interface SubtitleTimelineLaserPosition {
+  fromId: string;
+  toId: string;
+  progress: number;
+}
+
+export const subtitleTimelineLaserDuration = 0.55;
+
+/**
+ * Locate the short playback beam that arrives at the next cue marker. The
+ * beam only appears immediately before the next cue starts, so even a long
+ * silence produces one quick, predictable sweep instead of a slow crawler.
+ */
+export function getSubtitleTimelineLaserPosition(
+  subtitles: SubtitleSegment[],
+  time: number
+): SubtitleTimelineLaserPosition | null {
+  if (!Number.isFinite(time) || subtitles.length < 2) return null;
+  const ordered = [...subtitles].sort(
+    (left, right) =>
+      left.start - right.start ||
+      left.end - right.end ||
+      left.id.localeCompare(right.id)
+  );
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index];
+    const next = ordered[index + 1];
+    const interval = next.start - current.start;
+    if (interval <= 0 || time < current.start || time >= next.start) continue;
+
+    const travelDuration = Math.min(subtitleTimelineLaserDuration, interval);
+    const travelStart = next.start - travelDuration;
+    if (time < travelStart) return null;
+
+    const rawProgress = (time - travelStart) / travelDuration;
+    return {
+      fromId: current.id,
+      toId: next.id,
+      progress: Math.round(Math.max(0, Math.min(1, rawProgress)) * 1000) / 1000
+    };
+  }
+
+  return null;
+}
+
 /** Precise, human-readable subtitle timecodes used by the inline editor. */
 export function formatSubtitleTimecode(seconds: number): string {
   const totalMilliseconds = Math.max(

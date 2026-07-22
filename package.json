@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -13,17 +13,20 @@
   "type": "commonjs",
   "main": "dist-electron/main/main.js",
   "scripts": {
+    "postinstall": "node scripts/prepare-ffmpeg.mjs",
     "dev": "npm run build:main && concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist-electron/main/main.js\"",
     "build:icons": "node scripts/create-app-icons.mjs",
     "build:main": "tsc -p tsconfig.electron.json",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
-    "dist": "npm run build:icons && npm run build && electron-builder",
-    "dist:win": "npm run build:icons && npm run build && electron-builder --win",
-    "dist:mac": "node scripts/check-mac-signing.mjs && npm run build:icons && npm run build && electron-builder --mac",
+    "prepare:ffmpeg:mac": "node scripts/prepare-ffmpeg.mjs --all-mac",
+    "verify:ffmpeg": "node scripts/verify-ffmpeg.mjs",
+    "dist": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder",
+    "dist:win": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --win",
+    "dist:mac": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac",
     "verify:mac-release": "node scripts/verify-mac-release.mjs",
-    "dist:mac:adhoc": "npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=-",
-    "dist:mac:universal": "node scripts/check-mac-signing.mjs && npm run build:icons && npm run build && electron-builder --mac --universal",
+    "dist:mac:adhoc": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=-",
+    "dist:mac:universal": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "test:mcp": "npm run build:main && node scripts/test-mcp-smoke.mjs",
@@ -41,6 +44,7 @@
       "enableEmbeddedAsarIntegrityValidation": true,
       "onlyLoadAppFromAsar": true
     },
+    "afterPack": "scripts/after-pack.cjs",
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",
       "node_modules/onnxruntime-node/**/*"
@@ -65,6 +69,18 @@
       {
         "from": "resources/acestep_generate.py",
         "to": "acestep_generate.py"
+      },
+      {
+        "from": "THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "FFMPEG_SOURCE_OFFER.md",
+        "to": "FFMPEG_SOURCE_OFFER.md"
+      },
+      {
+        "from": "FFMPEG_MACOS_BUILD_NOTES.md",
+        "to": "FFMPEG_MACOS_BUILD_NOTES.md"
       }
     ],
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",
@@ -131,13 +147,13 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "autoprefixer": "^10.5.2",
-    "concurrently": "^10.0.3",
+    "concurrently": "^9.2.4",
     "cross-env": "^10.1.0",
     "electron": "^43.0.0",
     "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.16",
-    "sharp": "^0.32.6",
+    "sharp": "0.35.3",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vite": "^8.1.2",
@@ -149,7 +165,7 @@
     "@lobehub/icons": "^5.14.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "electron-updater": "^6.8.9",
-    "ffmpeg-static": "^5.3.0",
+    "ffmpeg-static": "5.3.0",
     "lucide-react": "^1.22.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
@@ -157,5 +173,19 @@
     "remark-gfm": "^4.0.1",
     "wavesurfer.js": "^7.12.8",
     "zod": "^4.4.3"
+  },
+  "overrides": {
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.16"
+    },
+    "minimatch@5.1.9": {
+      "brace-expansion": "2.1.2"
+    },
+    "minimatch@9.0.9": {
+      "brace-expansion": "2.1.2"
+    },
+    "@hono/node-server": "2.0.11",
+    "fast-uri": "3.1.4",
+    "sharp": "0.35.3"
   }
 }

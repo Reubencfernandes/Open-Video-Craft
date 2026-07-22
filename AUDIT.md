@@ -1,123 +1,405 @@
-# AUDIT.md — Open Video Craft security & code-flaw audit
+# Open Video Craft v1.0.2 audit
 
-**Version audited:** 2.0.0 (`main` @ `48d3d83`) · **Date:** 2026-07-14 (rev 2)
-**Scope:** `src/main`, `src/preload`, `src/mcp`, `src/renderer`, `src/shared`, plus CSP, entitlements, and electron-builder config.
-**Method:** manual read of every main-process module, the preload bridge, the MCP server, and the security-relevant renderer paths. Findings below were verified against the current code, not carried over blindly.
+**Audit date:** 2026-07-22
+**Release line:** 1.0.2
+**Scope:** recorder lifecycle, project persistence/deletion, renderer IPC,
+Gemini and local AI jobs, export behavior, timeline/subtitle accessibility,
+dependencies, packaging, CI, documentation, and release metadata.
 
-## Remediation status — 2026-07-14
+This document records confirmed behavior in the v1.0.2 release candidate. It
+does not claim that every finding is fixed. Severity is based on user impact:
+**P0** blocks release, **P1** should be fixed soon, and **P2** is hardening or
+accessibility debt.
 
-The actionable findings were implemented in the working tree after this audit:
+## Release posture
 
-- **Resolved:** 1.1 (bundled local backgrounds/CSP), 1.3 (compatible Electron fuses), 1.5 (validated Trash-only project deletion), 1.6 (UUID validation), 1.8 (protocol invariant), 2.1 (import-time rejection), 2.2 (accurate export disclosure), 2.3 (progress/cancel/timeout), 2.4 (sleep auto-pause + media-derived duration), 2.5 (Whisper Web Worker with WebGPU/WASM fallback), 2.6 (hardware H.264 probe/fallback + copy-remux fast path), 2.7 (display-id overlay resilience), 2.8 (mtime cache/capped recents), and 2.9 (single-use preload drag/drop grants).
-- **Partially resolved and package-tested:** 1.2. `allow-unsigned-executable-memory` was removed. `allow-jit` remains required by Electron and `disable-library-validation` remains for the unpacked ONNX native runtime. An ad-hoc hardened-runtime package passed strict code-signature verification with the reduced entitlements.
-- **Credential-dependent:** 1.4. The release workflow now accepts `WINDOWS_CSC_LINK` / `WINDOWS_CSC_KEY_PASSWORD` and verifies Authenticode signatures when configured. A real signature still requires the repository owner to provide a Windows signing certificate or Azure Trusted Signing credentials.
-- **Accepted low-risk dependency:** 1.7. Provider commands and arguments remain fixed (no renderer-controlled shell input), with a 15-second timeout. The login shell remains as the compatibility fallback for CLI tools installed by user shell managers.
-- **Already resolved before this remediation:** 2.10. `formatDuration` already emits `H:MM:SS` for hour-plus recordings; the original finding was stale.
+The published stable release is v1.0.1, so v1.0.2 is the next stable patch.
+Earlier v2.x tags were beta-test builds used only by the owner and are not part
+of the public stable update line. The release should not be tagged until the
+packaging, signing, dependency, and upgrade checks at the end of this document
+pass.
 
-Validation completed: TypeScript, 27 test files / 111 tests, MCP smoke test, production renderer/main build, ad-hoc macOS packaging, Electron fuse inspection, and strict package signature verification.
-**Rev 2 corrections** (after independent cross-review): the Export dialog *does* disclose preview-only features — the finding is now about its stale copy (2.2); `formatDuration` handles hours (old 2.10 removed); the autosave failure mode in 2.1 is re-triggered-per-edit, not an infinite loop. The three P1 engineering gaps (2.1, 2.3, 2.4) were re-verified and stand.
+The following safeguards are present and verified in source:
 
-Severity: **P0** = fix before next release · **P1** = fix soon · **P2** = hardening · **P3** = latent/defense-in-depth.
+- Renderer windows use context isolation, no Node integration, a typed preload
+  bridge, navigation blocking, a restrictive CSP, and validated IPC inputs on
+  security-sensitive paths.
+- Project JSON writes are atomic and retry transient filesystem locks.
+- FFmpeg jobs have bounded logs, progress, cancellation, and quit cleanup.
+- macOS release verification checks updater metadata, hashes, the Developer ID
+  team, strict signing, Gatekeeper acceptance, and a stapled notarization ticket.
+- CI runs typechecking, unit tests, production builds, and the bundled MCP
+  smoke test on both supported operating systems.
 
-## Overall posture
+## Fixed for v1.0.2
 
-The security fundamentals are strong and have improved since the prior (`REUBEN.md`, v1.3.1) audit. Verified good:
+These regressions were found during this audit and have targeted coverage in the
+v1.0.2 worktree:
 
-- `contextIsolation: true`, `nodeIntegration: false`, renderer sandbox never disabled, typed `contextBridge` bridge as the only IPC surface (`preload.ts`).
-- Navigation hardening: `setWindowOpenHandler` deny + same-origin `will-navigate` guard on every web-contents (`main.ts:1282`).
-- Permission request handler restricted to app windows and only `media`/`display-capture` (`desktop-permissions.ts:41`); display-media handler only ever exposes the user-selected source.
-- Path-traversal guard on `resolveProjectFile` (`project-store.ts:348`), the MCP contact-sheet reader (`editor-analysis.ts:84`), and imported-analysis source resolution (`editor-analysis.ts:238`).
-- `app:open-external` restricted to http/https (`app-status-ipc.ts:24`).
-- ffmpeg invoked via `spawn` with an argv array (no shell → no arg injection), killed on quit, stderr capped (`ffmpeg.ts:743`).
-- Recording chunk size capped at 256 MB (`main.ts:122`, `main.ts:1125`); `projects:create` only accepts a `baseDirectory` previously granted through the folder picker (`main.ts:1078`).
-- Atomic JSON writes with transient-lock retry (`project-file.ts:39`), SRT cue sanitization (`subtitle-export.ts:45`), IPC payload validators (`request-validation.ts`).
+1. **SRT collision data loss.** Sidecars are created exclusively instead of
+   overwriting an existing `.srt`; project-timeline exports reserve that path
+   before rendering, and a late collision in the raw/import fallback no longer
+   deletes the video output. Burn-in subtitles use a scoped temporary directory
+   (`src/main/composition-export.ts`, `src/main/editor-export.ts`,
+   `src/main/subtitle-export.ts`).
+2. **Native editor undo.** Cmd/Ctrl+Z and redo shortcuts remain native while
+   focus is in an input, textarea, select, or contenteditable element
+   (`src/renderer/editor/useEditorShortcuts.ts`).
+3. **Subtitle boundary overlap.** Cue activity uses a half-open interval, so an
+   ending cue and the next starting cue are not both active at the exact handoff
+   time (`src/renderer/editor/subtitle-time.ts`).
+4. **Multi-selection Cut.** The single-item clipboard now removes only the
+   primary media clip it actually copied, without deleting the rest of a
+   multi-selection or unrelated timed items
+   (`src/renderer/editor/useTimelineClipboard.ts`).
+5. **Release metadata drift.** Package, documentation, in-app notes, and the MCP
+   handshake now use the v1.0.2 line; the MCP smoke test asserts the packaged
+   server version.
+6. **Release checks.** CI now builds production bundles and exercises the MCP
+   server in addition to typechecking and unit tests (`.github/workflows/ci.yml`).
+7. **FFmpeg source path.** Every packaged app includes an explicit source offer,
+   and the tag workflow publishes the exact FFmpeg 8.1.2/6.1.1 source archives,
+   pinned macOS build scripts, dependency versions, checksums, and release
+   metadata beside the installers (`FFMPEG_SOURCE_OFFER.md`,
+   `THIRD_PARTY_NOTICES.md`, `.github/workflows/release.yml`).
+8. **Inactive dashboard control.** The project filter/settings glyph beside the
+   home search was decorative and has been removed (`src/renderer/home/HomeHeader.tsx`).
 
-**Fixed since the prior audit (confirmed):** preview/timeline media now set `crossOrigin="anonymous"` (no CORS-tainted silence); macOS app menu restored with edit roles (copy/paste works); export now renders cuts/sequence/zoom/speed/transitions/text/audio-mix/subtitle burn-in through a real ffmpeg composition; the Export dialog gained a "What this export includes" disclosure panel (`ExportDialog.tsx:87`); recording adds `ended` listeners on camera/mic/system tracks; persistence snapshot + signature are memoized; SRT is sanitized; `formatDuration` handles hour-plus recordings (`recorder-utils.ts:231`); connect-src CSP now lists the custom schemes and huggingface.
+## Confirmed open findings
 
-The items below are what remains.
+### P1 — Reliability, data loss, and security
 
----
+#### 1. Interrupted recordings are not reconciled at app startup
 
-## 1. Security
+`ProjectStore.startRecording` persists a project with status `recording`, and
+the main process handles a recorder renderer crash while that process remains
+alive. Startup does not scan the project library for a recording left behind by
+a full app crash, forced restart, or power loss. That project can remain stuck
+as `recording` even though its chunk files may be recoverable.
 
-### 1.1 (P2) CSP still allows remote images from `https://images.unsplash.com`
-`index.html:6` — `img-src` includes `https://images.unsplash.com`, used only for the six "real-world" editor backgrounds. In a desktop app this is a privacy beacon (Unsplash sees IP/usage), a hard offline failure (background renders black with no network), and an unnecessary remote-content origin. Bundle the six images locally and drop the origin. (`connect-src` was correctly tightened to the custom schemes + `huggingface.co` for the STT model download — leave those.)
+**Evidence:** `src/main/project-store.ts` (`startRecording`),
+`src/main/main.ts` (renderer crash handling and startup).
+**Fix:** reconcile interrupted projects during startup, probe usable media,
+finalize recoverable tracks, and otherwise mark the project failed with a clear
+recovery action.
 
-### 1.2 (P2) macOS entitlements are broader than needed
-`build/entitlements.mac.plist` grants `allow-jit`, `allow-unsigned-executable-memory`, and `disable-library-validation`. Nuance vs. the prior audit: `onnxruntime-node` is now bundled and asar-unpacked (`package.json` build.asarUnpack), so `disable-library-validation` may now be load-bearing for that unsigned native module — test before removing it. `allow-unsigned-executable-memory` is very likely still droppable on modern Electron. Trim in a notarized test build; every dropped entitlement shrinks the code-injection surface.
+#### 2. Gemini uploads load the entire recording into main-process memory
 
-### 1.3 (P2) No Electron fuses — but the MCP design constrains which ones
-No `@electron/fuses`/`afterPack` config exists (`package.json` build has no `afterPack`). Standard hardening flips `EnableNodeCliInspectArguments=off`, `EnableNodeOptionsEnvironmentVariable=off`, `OnlyLoadAppFromAsar=on`. **Caveat specific to this app:** the AI integration registers the MCP server by invoking the packaged Electron binary with `ELECTRON_RUN_AS_NODE=1` (`ai-connection.ts:84,89`), so you **cannot** flip the `RunAsNode` fuse off without breaking your own MCP feature. Flip the other three, which don't conflict.
+`GeminiAgentManager.ensureVideoUploaded` calls `fs.readFile` for the complete
+video before upload. A multi-gigabyte recording can cause a severe memory spike
+or terminate the Electron main process.
 
-### 1.4 (P2) Windows binaries are unsigned
-`package.json` build.win has only `icon`/`target` (nsis + portable, x64) — no `certificateFile`/`CSC_LINK`. Users get SmartScreen warnings and electron-updater's on-disk verification is weaker without a publisher certificate (transport is HTTPS-to-GitHub via `publish.provider: github`, which is decent). Budget permitting, use Azure Trusted Signing or an OV cert and enable `verifyUpdateCodeSignature`.
+**Evidence:** `src/main/gemini-agent.ts` (`ensureVideoUploaded`).
+**Fix:** stream or resumably upload from disk, cap accepted size, report upload
+progress, and reject oversized input before allocating it.
 
-### 1.5 (P2) `projects:delete` can permanently `fs.rm` a path read from the library file
-`main.ts:1047-1051` — after a confirm dialog (which does show the path, good), if `shell.trashItem` fails it falls back to `fs.rm(entry.rootPath, { recursive: true, force: true })`. `entry.rootPath` comes from the user-writable `projects.json`. If that file is ever tampered with, the fallback is a recursive delete of an arbitrary path. Before deleting, validate the folder actually contains a `project.json` whose `id` matches `projectId`; consider dropping the permanent-delete fallback entirely (tell the user trash failed instead).
+#### 3. Cached AI analysis can outlive the edit it describes
 
-### 1.6 (P3) `editor:undo-agent-edit` IPC accepts an unvalidated `editId` that reaches a file path
-`main.ts:749-756` validates `editId` only as `typeof === "string"`, then passes it to `undoAgentEdit`, which builds a checkpoint path `${editId}.json` (`editor-document-store.ts:188`). Traversal is currently blocked in practice by the earlier equality guard `current.lastMutation.editId !== input.editId` (the on-disk editId is a real UUID), so a crafted `../` value can't match and is rejected before the path is used. Still, the raw renderer string reaching `path.join` is a latent gap — validate it as a UUID here the way the MCP layer already does (`server.ts:220`, `z.string().uuid()`).
+Gemini returns the latest cached analysis before validating its fingerprint at
+all, so even a changed source file can reuse stale output. The fingerprint also
+omits the current editor revision and timeline, allowing cached transcripts and
+contact sheets to outlive cuts, reordering, and speed changes.
 
-### 1.7 (P3) AI-provider probing runs a login shell and inherits the full environment
-`ai-connection.ts:112` — `run()` spawns with `env: { ...process.env, ...extraEnv }`; `resolveProviderExecutable` (`:135`) runs `$SHELL -lic "command -v <provider>"`. The command and args are fixed literals (`"codex"`/`"claude"`), so there is **no injection vector**, but executing the user's login rc is an environment dependency that can hang or misbehave (the 15 s timeout mitigates hangs). Low risk; noted for completeness. Not exploitable from the renderer.
+**Evidence:** `src/main/gemini-agent.ts` (`runAnalysis`) and
+`src/main/editor-analysis.ts` (`createFingerprint`).
+**Fix:** include the relevant editor revision/timeline signature in the cache
+key, or invalidate composition-sensitive analysis after every timeline change.
 
-### 1.8 (P3) `ovc-import://` serves any registered absolute path with `ACAO: *` — keep the invariant
-By design (`media-protocols.ts:46`), registration only happens through the file dialog / drag-drop / validated project-internal imports, and lookups are by opaque UUID. This is safe today. Document the invariant in the file header so a future "register a path over IPC" convenience can't quietly turn it into an arbitrary-file-read oracle.
+#### 4. Local cancellation does not stop all long-running work
 
----
+The Gemini cancel path aborts the request controller, but locally executed tool
+work does not receive that signal. Analysis polling can continue for up to ten
+minutes after the user presses Cancel.
 
-## 2. Correctness / code flaws
+**Evidence:** `src/main/gemini-agent.ts` (`cancel`, `executeTool`, and
+`runAnalysis`).
+**Fix:** thread an `AbortSignal` through tool execution, analysis jobs, polling,
+and subprocesses; clean up partial work when cancellation wins.
 
-### 2.1 (P1) Importing an extensionless (or non-alphanumeric-extension) file permanently breaks saving
-Still present. `describeImportedFile` (`file-dialogs.ts:120`) derives `extension` from the filename; the import dialog allows "All Files" (`file-dialogs.ts:71`), and extensionless files are common on macOS → `extension` becomes `""`. On save, `isEditorProjectImportInput` requires `extension` to match `/^[a-zA-Z0-9]{1,12}$/` (`project-file.ts:159`), so `persistEditorImport` throws "invalid metadata" (`project-store.ts:441`) and the save rejects. The autosave effect re-arms on every subsequent edit (`useEditorPersistence.ts:496-512`), so the error banner returns on each change, and **both autosave and manual save stay broken** until the offending import is removed — with nothing telling the user which import is the problem. Unicode/full-width extensions hit the same wall. **Fix:** reject unsupported files at import time with a clear message, or fall back to a sniffed/`bin` extension instead of throwing at save time.
+#### 5. ACE-Step can accept an incomplete model cache as ready
 
-### 2.2 (P2) Export dialog's disclosure copy is stale — it under-claims what exports now include
-The composition export (`ffmpeg.ts:exportTimelineComposition`, reached via `editor-export.ts:47`) renders cuts, sequencing, transitions, **zoom, speed, text overlays**, audio mixing, and subtitle burn-in. The Export dialog *does* have a "What this export includes" panel (`ExportDialog.tsx:87-91`) — an earlier draft of this audit missed it — but its copy is now wrong in both directions:
-- The amber warning says "zoom/speed effects … remain preview-only", yet both are exported by the composition path (`composition-export.ts:76-102`).
-- The includes line omits zoom, speed, and text overlays entirely.
-- What genuinely remains preview-only: layout modes, camera-bubble compositing, backgrounds, corner styles, screen position/scale, and styled subtitles (the MCP layer declares this correctly at `server.ts:294`).
+The legacy local music setup treats a cache above roughly 2 GB as complete,
+while a normal checkpoint download is substantially larger. An interrupted
+download can therefore become a permanently broken “ready” cache.
 
-Also note the copy is one static string, but the fallback path (`editor-export.ts:63` — used when the source is an import or the project has no video timeline segments) exports none of the timeline features it lists. Update the copy to match the composition path, and ideally make it path-aware.
+**Evidence:** `src/main/music-generation.ts` and
+`resources/acestep_generate.py`.
+**Fix:** validate a manifest of required files, sizes, and preferably hashes;
+resume or replace partial downloads atomically.
 
-### 2.3 (P1) ffmpeg export has no timeout, progress, or cancel
-`ffmpeg.ts:743` `runProcess` resolves/rejects on child close only — no `-progress` parsing, no timeout, no cancel handle. Kill-on-quit (`killActiveFfmpegProcesses`) and the capped stderr are done, but a corrupt/huge input spins the Export dialog forever with no way to cancel (the dialog blocks close while `exporting`). **Do:** pass `-progress pipe:1`, parse `out_time_ms` against known duration for a real progress bar, keep the child handle to back a Cancel button, and add a sane wall-clock ceiling.
+#### 6. Provider keys can be revealed to the renderer
 
-### 2.4 (P1) Recording duration is wall-clock; no `powerMonitor` handling
-`getCurrentRecordedDurationMs` (`RecorderController.tsx:723`) is `activeRecordedMs + (Date.now() - segmentStartedAt)`. `powerMonitor` is used nowhere in `src/` (verified). If the machine sleeps mid-recording, the elapsed timer and persisted `durationMs` include the sleep gap while MediaRecorder produced nothing, and the editor trusts `durationMs` for timeline math until real metadata loads. Derive final duration from the remuxed media (ffprobe / `<video>` metadata) and listen for suspend/resume to auto-pause or at least flag the recording.
+The provider-key service states that plaintext keys remain in the main process,
+but the preload bridge exposes a reveal operation and the IPC handler returns
+the plaintext value. When Electron `safeStorage` is unavailable, persistence
+also silently falls back to reversible base64/plaintext storage. A renderer or
+local-file compromise can therefore expose saved AI keys.
 
-### 2.5 (P2) Whisper transcription still runs on the renderer main thread
-`useSubtitleGeneration.ts:117-130` dynamically imports `@huggingface/transformers` and calls `transformers.pipeline(...)` directly in the renderer — no Web Worker. Without cross-origin isolation, onnxruntime-web is single-threaded WASM, so transcribing long audio pegs and jank-freezes the whole editor for minutes. Move the pipeline into a Web Worker (CSP already allows `worker-src 'self' blob:`) and prefer `device: "webgpu"` with a WASM fallback. The first run also downloads ~145 MB from huggingface.co — the progress UI exists but surface an explicit "requires network" hint for offline users.
+**Evidence:** `src/main/provider-keys.ts`, `src/preload/preload.ts`, and the
+provider IPC handlers in `src/main/main.ts`.
+**Fix:** remove key reveal from the renderer API. Use masked state plus
+main-process provider calls, and require replacement rather than readback.
 
-### 2.6 (P2) Software-only export encoders
-`createCodecArgs` (`ffmpeg.ts:675`) always uses `libx264 -preset medium` / `libvpx-vp9`. The bundled ffmpeg-static supports `h264_videotoolbox` (macOS) and, on Windows, `h264_nvenc`/`qsv`/`amf` — probe and use them for 5–15× faster mp4/mov exports, falling back to libx264. Also: a `-c:v copy` remux path when `resolution === "source"`, format mp4/mov, `trimStart === 0`, and no filters would make those exports near-instant.
+#### 7. `projects:discard` permanently removes a loaded project
 
-### 2.7 (P2) Overlay border can vanish after a source-list refresh
-`sources:list` clears `sourceCache` on every call (`main.ts:766`). A `display-metrics-changed`/re-list that reassigns source ids leaves `showDisplayOverlay` unable to find the previously-selected id (`main.ts:477`) and it closes the border even though the display is still connected. Cache per-listing generation, or re-resolve the overlay by `display_id` rather than capture-source id.
+The discard handler reaches recursive filesystem removal rather than Trash and
+does not revalidate the target as carefully as the normal project-delete path.
+A mistaken call is not recoverable from the OS Trash.
 
-### 2.8 (P2) `projects:list-recent` re-reads every `project.json` on every launcher view
-`ProjectLibrary.listRecentUnlocked` (`project-library.ts:32`) stat+reads every project folder on each call, and `get()` funnels through it too (so deleting one project re-scans all). Cheap for 10 projects, slow at 200 or on synced/network folders. Cache by mtime and cap the recent list.
+**Evidence:** `src/main/main.ts` (`projects:discard`) and
+`src/main/project-store.ts` (`discardProject`).
+**Fix:** use the validated Trash-only deletion service, require an eligible
+temporary/recording status, and reject broad or mismatched project roots.
 
-### 2.9 (P2) `editor:import-media-paths` accepts renderer-supplied absolute paths
-`main.ts:903` registers any renderer-supplied file path into `importedMediaCache` after only a `stat().isFile()` check (`file-dialogs.ts:100`). Combined with `ovc-import://` serving any registered path with `ACAO: *`, a compromised renderer could register and then read any file the user can read. This is the intended OS drag-drop path (`webUtils.getPathForFile`), and the renderer is sandboxed/local-only, so it's defense-in-depth — but consider gating registration to paths that actually arrived via a real drag/drop event rather than trusting an arbitrary IPC string array.
+#### 8. Failed final save is ignored when leaving the editor
 
----
+`saveState` catches persistence failures internally, and `leaveToHome` also
+continues after an error. It disables the unload guard and navigates home even
+when the final dirty snapshot was not written.
 
-## 3. Prioritized action list
+**Evidence:** `src/renderer/editor/useEditorPersistence.ts` (`saveState`) and
+`src/renderer/EditorView.tsx` (`leaveToHome`).
+**Fix:** return an explicit save result, keep the editor open on failure, and
+offer Retry / Leave without saving as an intentional choice.
 
-Keep the modular shape the codebase already has — separate services, hooks, IPC contracts, and small UI components rather than growing the large editor files.
+#### 9. Export can silently bypass the edited timeline for an imported source
 
-**P1 — next**
-1. Fix import validation and recovery: import-time rejection (or sniffed/`bin` fallback) for extensionless/odd-extension files, plus a save error that names the offending import (2.1).
-2. Build an export-job module: ffmpeg progress (`-progress pipe:1`), cancellation, and a wall-clock timeout, surfaced in the Export dialog (2.3).
-3. Correct recording duration from media metadata (ffprobe / `<video>` metadata) and handle `powerMonitor` suspend/resume (2.4).
+When an imported video is selected, the renderer sends an `import` export
+source before considering the saved project. The main process then uses the
+single-source FFmpeg path, bypassing timeline cuts, ordering, effects, and text.
 
-**P2 — hardening & accuracy**
-4. Fix the Export dialog disclosure copy (zoom/speed/text are exported; layout/camera/backgrounds are not) and make it path-aware (2.2).
-5. Validate the delete target folder before the `fs.rm` fallback (1.5); UUID-validate `editId` in `editor:undo-agent-edit` (1.6).
-6. Bundle the Unsplash backgrounds; drop the remote `img-src` origin (1.1); add the three non-conflicting Electron fuses (1.3).
-7. Trim macOS entitlements (test `disable-library-validation` need for onnxruntime-node) (1.2); Windows code signing (1.4).
-8. Whisper → Web Worker + WebGPU (2.5); hardware export encoders + copy-remux fast path (2.6).
+**Evidence:** `src/renderer/editor/useEditorExport.ts` (`getExportSource`) and
+`src/main/editor-export.ts` (`exportEditorVideoToPath`).
+**Fix:** make “Export project timeline” the default whenever a project timeline
+exists, and expose direct source export as a separate, clearly labelled action.
 
-**P3 — remaining**
-9. Overlay-border source-id resilience (2.7); recent-projects cache/cap (2.8).
-10. Gate `import-media-paths` to real drag/drop (2.9); document the `ovc-import://` invariant (1.8).
+#### 10. Preview composition exceeds current export composition
+
+Preview renders camera compositing, layout modes, backgrounds, screen position,
+and corner styling. The composition exporter does not receive or render those
+fields. The README documents this limitation, but the export modal does not
+warn users at the point of action.
+
+**Evidence:** `src/renderer/editor/PreviewContent.tsx`,
+`src/main/composition-export.ts`, `src/mcp/server.ts` export capabilities, and
+`src/renderer/editor/ExportDialog.tsx`.
+**Fix:** either render those fields in FFmpeg or show a concise, path-aware
+preview-versus-export disclosure in the modal.
+
+#### 11. AI and MCP `import_media` silently drops valid paths
+
+AI operations queue absolute media paths, but the preload bridge only accepts
+paths backed by single-use drag-and-drop grants. Agent-provided paths never
+receive such a grant, so the request is filtered to an empty list and no-ops.
+
+**Evidence:** `src/main/operations.ts`, `src/preload/preload.ts`, and
+`src/renderer/EditorView.tsx` (`importMediaFromPaths`).
+**Fix:** add a dedicated main-process import operation with canonical path and
+file-type validation, or issue scoped import grants when an approved AI plan is
+applied; surface rejection instead of silently returning an empty list.
+
+#### 12. Fresh AI analysis describes raw sources, not the edited timeline
+
+Local analysis selects one raw screen/video source and one raw mic/system audio
+source. It does not render the mixed, cut, reordered, or speed-adjusted
+composition, so timestamps and contact sheets can disagree with what the user
+is editing even when the cache is fresh.
+
+**Evidence:** `src/main/editor-analysis.ts` (`runEditorAnalysis`) and timeline
+composition in `src/main/composition-export.ts`.
+**Fix:** analyze a bounded proxy rendered from the current editor timeline and
+include the editor revision in its fingerprint.
+
+#### 13. Local Whisper cannot cancel and fully buffers long projects
+
+On-device transcription reads every source and constructs the complete 16 kHz
+timeline mix inside the renderer before inference. The cancel button is only
+available for cloud providers, and unmounting does not abort local decode or
+inference. Long recordings can exhaust renderer memory and keep working after
+the user leaves the panel.
+
+**Evidence:** `src/renderer/editor/useSubtitleGeneration.ts`,
+`subtitle-transcription-client.ts`, and `media-utils.ts`.
+**Fix:** stream/chunk decode and inference in a worker, expose cancellation for
+all providers, and abort/clean up on project switch or unmount.
+
+#### 14. “Source” resolution exports at 1920×1080
+
+The timeline composition path falls through to a fixed 1920×1080 canvas when
+resolution is set to `source`, rather than probing and preserving the source
+dimensions.
+
+**Evidence:** `src/main/ffmpeg.ts` resolution selection and composition output
+setup.
+**Fix:** probe the selected/project primary source and carry its dimensions
+through the composition plan, with a documented fallback only when probing
+fails.
+
+#### 15. Recorder failure can race and lose final buffered chunks
+
+Normal stop awaits the recorder `stop` event and all write queues. The failure
+path stops streams, clears recorder references, and marks the project failed
+without waiting for the final `dataavailable` event or queued writes, so the
+last recoverable chunks can be lost.
+
+**Evidence:** `src/renderer/recorder/RecorderController.tsx` normal stop and
+`failRecording` paths.
+**Fix:** share one idempotent finalization routine that waits for recorder stop,
+final chunks, and write queues before setting the terminal project status.
+
+#### 16. Removed imported media remains in project storage
+
+Removing an import drops it from the renderer and in-memory cache, but saved
+files in the project `imports/` directory are not unlinked. Large or private
+media can accumulate indefinitely after it disappears from the project UI.
+
+**Evidence:** `src/renderer/editor/useEditorMediaActions.ts`, the
+`editor:remove-imported-media` handler in `src/main/main.ts`, and project import
+persistence in `src/main/project-store.ts`.
+**Fix:** garbage-collect unreferenced imports after a successful revision-checked
+save, using project-root containment checks and recoverable deletion where
+possible.
+
+### P1 — Accessibility
+
+#### 17. Subtitle timing controls are pointer-only
+
+Start and end values are correctly read-only in subtitle cards, but the only
+trim handles are pointer-driven spans on timeline clips. Keyboard-only users
+cannot change subtitle timing.
+
+**Evidence:** `src/renderer/editor/panels/SubtitlesPanel.tsx` and
+`src/renderer/editor/TimelineClips.tsx`.
+**Fix:** make trim handles focusable sliders/separators with arrow-key steps,
+accessible names, and the same clamping used by pointer dragging.
+
+#### 18. Global styles remove focus visibility without complete replacements
+
+The global stylesheet suppresses outlines for buttons and ARIA controls. Many
+controls provide no equivalent `:focus-visible` treatment, making keyboard
+focus difficult or impossible to locate.
+
+**Evidence:** `src/renderer/styles.css`, with examples in
+`src/renderer/editor/TimelineClips.tsx` and `EditorTopbar.tsx`.
+**Fix:** restore a shared high-contrast `:focus-visible` ring, overriding it
+only where an equally visible component-specific style exists.
+
+#### 19. Modal dialogs do not manage focus
+
+Export, changelog, and AI-connection dialogs declare `aria-modal`, but do not
+consistently move initial focus inside, trap Tab, close on Escape, or restore
+focus to the invoking control.
+
+**Evidence:** `src/renderer/editor/ExportDialog.tsx`,
+`src/renderer/home/ChangelogDialog.tsx`, and AI connection dialog components.
+**Fix:** implement a tested dialog focus lifecycle and preserve the exporting
+state rule that prevents accidental closure while a job is active.
+
+### P2 — Recorder and packaging hardening
+
+#### 20. System-audio fallback retries on cancellation and can fail silently
+
+The recorder retries display capture without audio for every first-call error,
+including explicit denial or cancellation. This can open a second prompt. If
+capture succeeds without an audio track, the system-audio toggle is silently
+turned off.
+
+**Evidence:** `src/renderer/RecorderController.tsx` display-capture fallback.
+**Fix:** retry only known unsupported-audio errors, preserve cancellation, and
+show a clear warning when requested system audio is unavailable.
+
+#### 21. Packaged ONNX assets are larger than necessary
+
+The broad `onnxruntime-node` unpack rule can include binaries for other
+platforms and architectures, while the renderer bundle emits both a root and a
+hashed copy of the same large WASM runtime. This increases download and install
+size without adding functionality.
+
+**Evidence:** `package.json` `asarUnpack`, `vite.config.ts`, and packaged
+`app.asar.unpacked` contents.
+**Fix:** prune native files by target platform/architecture and emit one runtime
+WASM path, then verify Whisper and MCP analysis in each packaged artifact.
+
+## Dependency, licensing, and signing notes
+
+- Dependency review covered earlier build-tool advisories plus current Sharp,
+  Hono, and `fast-uri` advisories. The v1.0.2 lockfile uses Sharp 0.35.3,
+  `@hono/node-server` 2.0.11, and `fast-uri` 3.1.4; both the full and
+  production-only audits report zero vulnerabilities. A clean `npm ci` remains
+  a release gate.
+- The app is ISC-licensed but distributes FFmpeg. FFmpeg license text,
+  corresponding-source/source-offer information, build provenance, and codec
+  configuration must ship with the installers. A binary built with
+  `--enable-nonfree` is not releasable.
+- A single dependency install must not be reused blindly for both Intel and Arm
+  macOS packages. The v1.0.2 packaging hook prepares and verifies the pinned
+  FFmpeg binary for each target architecture; both resulting apps still require
+  an architecture and codec/license verification gate.
+- macOS publishing requires the Developer ID and notarization credentials
+  documented in `README.md`. The release verification script must pass for both
+  updater ZIPs.
+- Windows v1.0.2 distribution is blocked because the selected Gyan/
+  `ffmpeg-static` binary lacks independently verified complete corresponding
+  source and reproducible build provenance. Code continues to be tested on
+  Windows, but the release workflow must not publish Windows installers until a
+  source-complete FFmpeg input replaces it. Authenticode signing remains a
+  separate requirement when publishing resumes.
+- The current macOS artifacts are Developer ID direct-download builds, not Mac
+  App Store packages. An App Store submission needs a separate sandboxed `mas`
+  target, Store-managed updates, App Store entitlements, and a fresh legal
+  review of GPLv3 binary distribution under Store terms. Do not submit the
+  current DMG/ZIP configuration as if it were App Store-ready.
+
+## Validation record
+
+Working-tree validation after the v1.0.2 changes:
+
+- A clean `npm ci --no-audit --no-fund` passed on macOS and installed the
+  pinned FFmpeg input through the package lifecycle hook.
+- `npm run typecheck` passed.
+- `npm test -- --reporter=dot` passed 63 files / 289 tests. Several React tests
+  emitted non-failing `act(...)` environment warnings.
+- `npm run build` passed. Vite retained its known large-chunk warning and emitted
+  two copies of the approximately 21.6 MB ONNX WASM runtime described above.
+- `npm run test:mcp` passed, including the package-derived server-version check.
+- The full and production-only `npm audit` runs both reported zero
+  vulnerabilities across the current lockfile.
+- `npm run verify:ffmpeg` passed, and an ad-hoc arm64 app-directory package
+  contained an arm64 FFmpeg binary plus the third-party notices, source offer,
+  and macOS rebuild notes; strict code-signature verification passed.
+- All 32 macOS FFmpeg source archives matched the committed SHA-256 manifest;
+  the source-bundle and basename-only release-checksum staging simulations
+  passed.
+- The previous v1.0.1 GitHub workflow verified two signed and notarized macOS
+  updater archives; its Windows job explicitly reported unsigned artifacts.
+
+The pushed commit still requires GitHub CI on both operating systems and the
+tag workflow's signed/notarized Intel and Apple Silicon archive verification.
+The source workflow installs Rust before vending rav1e's locked crates because
+Cargo was not available for that single step in the local environment.
+
+## Release checklist
+
+1. Run `npm ci` on clean macOS and Windows CI workers.
+2. Run typechecking, the full unit suite, production build, and MCP smoke test.
+3. Confirm the full and production dependency audits have no unaccepted
+   advisories.
+4. Build Intel and Arm macOS artifacts from the exact tagged commit; keep
+   Windows publishing disabled until its FFmpeg source-provenance gate passes.
+5. Verify each packaged FFmpeg executable has the correct architecture, expected
+   hash/provenance, and no `--enable-nonfree` configuration.
+6. Verify macOS signatures, team identity, notarization, stapling, updater YAML,
+   archive hashes, and Gatekeeper acceptance.
+7. Confirm the release contains no Windows executable while its source gate is
+   active. When Windows resumes, require complete source provenance and verify
+   Authenticode before publication.
+8. Verify the release contains the FFmpeg source-offer bundle and that the
+   in-package source link resolves to that asset.
+9. Smoke-test recording, project reopen, subtitle timeline edits, export/cancel,
+   on-device Whisper, and MCP startup in packaged builds.
+10. Test the desktop update from the published v1.0.1 build to v1.0.2. Any
+   internal build with a version greater than 1.0.2, including 1.0.9–1.5.0 or
+   beta 2.x, must be replaced manually because the updater will not downgrade.
+11. Confirm README screenshots and release notes match the tagged build, then
+    push the matching `v1.0.2` tag and inspect every uploaded installer,
+    blockmap, and updater metadata file before announcement.

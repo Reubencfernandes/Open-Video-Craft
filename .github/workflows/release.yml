@@ -10,6 +10,124 @@ permissions:
   contents: write
 
 jobs:
+  source-offer:
+    name: Prepare FFmpeg source offer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate release tag version
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          package_version="$(node -p 'require("./package.json").version')"
+          test "$tag_version" = "$package_version" || {
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $package_version."
+            exit 1
+          }
+
+      - name: Set up Rust for locked rav1e sources
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Assemble verified FFmpeg source bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(node -p 'require("./package.json").version')"
+          source_dir="release-source/source-offer"
+          archive_dir="$source_dir/upstream-archives"
+          mkdir -p "$archive_dir"
+
+          : > "$source_dir/SOURCE_SHA256SUMS.txt"
+          while read -r expected_hash filename url; do
+            case "$expected_hash" in
+              ""|'#'*) continue ;;
+              PENDING) echo "Unpinned source archive: $filename" >&2; exit 1 ;;
+            esac
+            curl --fail --location --retry 3 --retry-all-errors \
+              --output "$archive_dir/$filename" \
+              "$url"
+            echo "$expected_hash  $archive_dir/$filename" | sha256sum --check
+            echo "$expected_hash  upstream-archives/$filename" \
+              >> "$source_dir/SOURCE_SHA256SUMS.txt"
+          done < .github/ffmpeg-macos-sources.txt
+
+          # rav1e is a Rust static library. Its release archive contains a
+          # Cargo.lock, but not the locked crate sources compiled into it.
+          # Vendor those immutable, checksummed crates into the source asset.
+          rav1e_dir="$source_dir/rav1e-0.8.1-complete"
+          mkdir -p "$rav1e_dir/.cargo"
+          tar -xzf "$archive_dir/rav1e-0.8.1.tar.gz" \
+            -C "$rav1e_dir" \
+            --strip-components=1
+          (
+            cd "$rav1e_dir"
+            cargo vendor --locked --versioned-dirs vendor \
+              > .cargo/config.toml
+          )
+
+          cp .github/ffmpeg-macos-sources.txt \
+            FFMPEG_SOURCE_OFFER.md \
+            FFMPEG_MACOS_BUILD_NOTES.md \
+            THIRD_PARTY_NOTICES.md \
+            "$source_dir/"
+          cat > "$source_dir/RELEASE_METADATA.txt" <<EOF
+          Open Video Craft ${package_version} FFmpeg source bundle
+          Release tag: ${GITHUB_REF_NAME:-workflow-dispatch}
+          Repository revision: ${GITHUB_SHA}
+
+          macOS binary FFmpeg: 8.1.2, GPLv3-or-later
+          Apple Silicon upstream archive: 1783011502_8.1.2
+          Apple Silicon archive SHA-256: ef1aa60006c7b77ce170c1608c08d8e4ba1c30c5746f2ac986ded932d0ac2c3c
+          Intel upstream archive: 1783018342_8.1.2
+          Intel archive SHA-256: a52ef43883f44c219766d4b3bdde4e635b35465d0b704c01c3a0566b59775df9
+          Build scripts: bb1d6db29cee948f9685bcd69e6caf17d960662b
+          x264 source revision: 0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
+
+          FFmpeg configuration (both architectures):
+          --pkg-config-flags=--static --enable-gray --enable-libxml2
+          --enable-version3 --enable-gpl --enable-openssl --enable-libfreetype
+          --enable-fontconfig --enable-libharfbuzz --enable-libsnappy
+          --enable-libsrt --enable-libvmaf --enable-libass --enable-libklvanc
+          --enable-libzimg --enable-libzvbi --enable-libaom --enable-libdav1d
+          --enable-libopenh264 --enable-libopenjpeg --enable-librav1e
+          --enable-libsvtav1 --enable-libvpx --enable-libvvenc --enable-libwebp
+          --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus
+          --enable-libvorbis --enable-libtheora
+
+          Windows artifacts are intentionally absent from v${package_version}.
+          See FFMPEG_SOURCE_OFFER.md for the compliance gate.
+          EOF
+
+          (
+            cd "$source_dir"
+            find . -type f ! -name SOURCE_TREE_SHA256SUMS.txt -print0 \
+              | sort -z \
+              | xargs -0 sha256sum \
+              | sed 's#  \./#  #'
+          ) > "$source_dir/SOURCE_TREE_SHA256SUMS.txt"
+
+          tar --create --gzip \
+            --file "release-source/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz" \
+            --directory "$source_dir" .
+
+      - name: Upload FFmpeg source offer
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-video-craft-source-offer
+          path: release-source/*.tar.gz
+          if-no-files-found: error
+
   build:
     name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
@@ -17,11 +135,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows
-            os: windows-latest
-            npm_script: dist:win
-            builder_args: "--publish never"
-            artifact_name: open-video-craft-win
           - name: macOS
             npm_script: dist:mac
             os: macos-latest
@@ -53,6 +166,9 @@ jobs:
         run: npm ci --no-audit --no-fund
         timeout-minutes: 20
 
+      - name: Verify FFmpeg input
+        run: npm run verify:ffmpeg
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -61,35 +177,16 @@ jobs:
 
       - name: Build installers
         env:
-          CSC_LINK: ${{ matrix.name == 'macOS' && secrets.CSC_LINK || secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ matrix.name == 'macOS' && secrets.CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
-          CSC_NAME: ${{ matrix.name == 'macOS' && secrets.CSC_NAME || '' }}
-          APPLE_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
-          APPLE_API_KEY: ${{ matrix.name == 'macOS' && secrets.APPLE_API_KEY || '' }}
-          APPLE_API_KEY_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_API_KEY_ID || '' }}
-          APPLE_API_ISSUER: ${{ matrix.name == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.CSC_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: npm run ${{ matrix.npm_script }} -- ${{ matrix.builder_args }}
-
-      - name: Verify Windows signatures when configured
-        if: matrix.name == 'Windows'
-        shell: pwsh
-        env:
-          WINDOWS_SIGNING_CONFIGURED: ${{ secrets.WINDOWS_CSC_LINK != '' }}
-        run: |
-          if ($env:WINDOWS_SIGNING_CONFIGURED -ne 'true') {
-            Write-Warning 'WINDOWS_CSC_LINK is not configured; Windows artifacts are unsigned.'
-            exit 0
-          }
-          $installers = Get-ChildItem -Path release -Filter *.exe -Recurse
-          if ($installers.Count -eq 0) { throw 'No Windows installers were produced.' }
-          foreach ($installer in $installers) {
-            $signature = Get-AuthenticodeSignature $installer.FullName
-            if ($signature.Status -ne 'Valid') {
-              throw "Invalid signature for $($installer.Name): $($signature.Status)"
-            }
-          }
 
       - name: Verify macOS update archive
         if: matrix.name == 'macOS'
@@ -102,7 +199,6 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: |
-            release/*/*.exe
             release/*/*.dmg
             release/*/*.zip
             release/*/*.blockmap
@@ -112,7 +208,9 @@ jobs:
   release:
     name: Publish GitHub release
     if: github.ref_type == 'tag'
-    needs: build
+    needs:
+      - build
+      - source-offer
     runs-on: ubuntu-latest
 
     steps:
@@ -132,6 +230,25 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         shell: bash
         run: |
+          set -euo pipefail
+          mkdir release-assets
+          while IFS= read -r -d '' file; do
+            filename="$(basename "$file")"
+            if test -e "release-assets/$filename"; then
+              echo "Duplicate release asset basename: $filename" >&2
+              exit 1
+            fi
+            cp "$file" "release-assets/$filename"
+          done < <(find artifacts -type f -print0)
+
+          (
+            cd release-assets
+            find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 \
+              | sort -z \
+              | xargs -0 sha256sum \
+              | sed 's#  \./#  #'
+          ) > release-assets/SHA256SUMS.txt
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release edit "$TAG_NAME" --draft=true
           else
@@ -141,8 +258,28 @@ jobs:
               --generate-notes
           fi
 
+          gh release view "$TAG_NAME" --json body --jq .body \
+            | sed '/<!-- open-video-craft-release-metadata -->/,$d' \
+            > release-body.md
+          package_version="${TAG_NAME#v}"
+          cat >> release-body.md <<EOF
+
+          <!-- open-video-craft-release-metadata -->
+          ## Downloads and signing
+
+          - macOS Intel and Apple Silicon builds are signed with Developer ID and notarized by Apple.
+          - Windows installers are not published in this release. Distribution remains blocked until the Windows FFmpeg binary has independently verified, complete corresponding source and reproducible build provenance.
+
+          ## FFmpeg source-code offer
+
+          The macOS installers contain GPLv3-or-later FFmpeg executables. Complete corresponding source—including all enabled external-library sources, locked rav1e crate sources, the exact x264 revision, pinned build scripts, and checksums—is published as [Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz).
+
+          Installer checksums are listed in [SHA256SUMS.txt](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/SHA256SUMS.txt); updater checksums are also recorded in the uploaded YAML metadata.
+          EOF
+          gh release edit "$TAG_NAME" --notes-file release-body.md
+
           while IFS= read -r -d '' file; do
             gh release upload "$TAG_NAME" "$file" --clobber
-          done < <(find artifacts -type f -print0)
+          done < <(find release-assets -maxdepth 1 -type f -print0)
 
           gh release edit "$TAG_NAME" --draft=false

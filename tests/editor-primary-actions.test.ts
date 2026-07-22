@@ -135,7 +135,8 @@ describe("editor primary actions", () => {
   it("renders subtitle text as a timed hierarchy and marks the playing segment", () => {
     const subtitles = [
       { id: "first", start: 1, end: 3, text: "First complete subtitle line" },
-      { id: "active", start: 3, end: 7, text: "The subtitle currently being played" }
+      { id: "active", start: 3, end: 7, text: "The subtitle currently being played" },
+      { id: "next", start: 9, end: 11, text: "The next subtitle" }
     ];
     const html = renderToStaticMarkup(createElement(SubtitlesPanel, {
       sttStatus: "idle",
@@ -167,7 +168,6 @@ describe("editor primary actions", () => {
     expect(html).toContain('aria-current="true"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('data-subtitle-editor="true"');
-    expect(html).toContain("data-subtitle-laser");
     expect(html).toContain('aria-label="Subtitle start time"');
     expect(html).toContain('aria-readonly="true"');
     expect(html).toContain("00:01.000");

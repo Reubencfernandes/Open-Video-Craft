@@ -1,11 +1,45 @@
 import { describe, expect, it } from "vitest";
 import {
   clampSubtitleSegmentsToDuration,
+  findActiveSubtitleAtTime,
   formatSubtitleTimecode,
+  getSubtitleTimelineLaserPosition,
+  isSubtitleActiveAtTime,
   parseSubtitleTimecode
 } from "../src/renderer/editor/subtitle-time";
 
 describe("subtitle timecodes", () => {
+  it("switches adjacent cues at a half-open boundary", () => {
+    const first = { id: "first", start: 0, end: 1, text: "First" };
+    const second = { id: "second", start: 1, end: 2, text: "Second" };
+
+    expect(findActiveSubtitleAtTime([first, second], 0.999)).toBe(first);
+    expect(isSubtitleActiveAtTime(first, 1)).toBe(false);
+    expect(isSubtitleActiveAtTime(second, 1)).toBe(true);
+    expect(findActiveSubtitleAtTime([first, second], 1)).toBe(second);
+    expect(findActiveSubtitleAtTime([first, second], 2)).toBeNull();
+  });
+
+  it("moves a fast playback beam into the next sorted cue", () => {
+    const first = { id: "first", start: 10, end: 12, text: "First" };
+    const second = { id: "second", start: 20, end: 22, text: "Second" };
+    const third = { id: "third", start: 30, end: 32, text: "Third" };
+
+    expect(getSubtitleTimelineLaserPosition([third, first, second], 19.725)).toEqual({
+      fromId: "first",
+      toId: "second",
+      progress: 0.5
+    });
+    expect(getSubtitleTimelineLaserPosition([third, first, second], 29.725)).toEqual({
+      fromId: "second",
+      toId: "third",
+      progress: 0.5
+    });
+    expect(getSubtitleTimelineLaserPosition([third, first, second], 15)).toBeNull();
+    expect(getSubtitleTimelineLaserPosition([third, first, second], 9.9)).toBeNull();
+    expect(getSubtitleTimelineLaserPosition([third, first, second], 30)).toBeNull();
+  });
+
   it("removes floating-point noise while preserving milliseconds", () => {
     expect(formatSubtitleTimecode(0.439999999999)).toBe("00:00.440");
     expect(formatSubtitleTimecode(2.299999999999)).toBe("00:02.300");

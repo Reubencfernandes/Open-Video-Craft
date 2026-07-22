@@ -18,6 +18,7 @@ async function renderPanel(input?: {
   subtitles?: SubtitleSegment[];
   selectedSubtitleId?: string | null;
   duration?: number;
+  currentTime?: number;
   onSelectSubtitle?: (id: string | null) => void;
   onUpdateSubtitle?: (id: string, updates: Partial<SubtitleSegment>) => void;
 }) {
@@ -42,7 +43,7 @@ async function renderPanel(input?: {
       selectedSubtitleId: input?.selectedSubtitleId ?? null,
       selectedSubtitle: subtitles.find((subtitle) => subtitle.id === input?.selectedSubtitleId) ?? subtitles[0] ?? null,
       duration: input?.duration ?? 30,
-      currentTime: 0,
+      currentTime: input?.currentTime ?? 0,
       onAddSubtitle: () => undefined,
       onGenerateSubtitles: () => undefined,
       onCancelTranscription: () => undefined,
@@ -119,5 +120,51 @@ describe("SubtitlesPanel", () => {
     expect(
       host.querySelector('[aria-controls="subtitle-editor-first"]')?.getAttribute("aria-expanded")
     ).toBe("true");
+  });
+
+  it("marks only the next cue active at an adjacent boundary", async () => {
+    const host = await renderPanel({
+      subtitles: [
+        { id: "first", start: 0, end: 1, text: "First subtitle" },
+        { id: "second", start: 1, end: 2, text: "Second subtitle" }
+      ],
+      currentTime: 1
+    });
+
+    expect(
+      host.querySelector('[aria-controls="subtitle-editor-first"]')?.getAttribute("aria-current")
+    ).toBeNull();
+    expect(
+      host.querySelector('[aria-controls="subtitle-editor-second"]')?.getAttribute("aria-current")
+    ).toBe("true");
+  });
+
+  it("moves one fast laser beam into the next cue and highlights the active card", async () => {
+    const host = await renderPanel({
+      subtitles: [
+        { id: "first", start: 0, end: 2, text: "First subtitle" },
+        { id: "second", start: 10, end: 12, text: "Second subtitle" },
+        { id: "third", start: 20, end: 22, text: "Third subtitle" }
+      ],
+      currentTime: 9.725
+    });
+
+    const laser = host.querySelector<HTMLElement>("[data-subtitle-laser]");
+    expect(laser).not.toBeNull();
+    expect(laser?.style.top).toBe("50%");
+    expect(laser?.closest("[data-subtitle-connector]")?.getAttribute("data-subtitle-connector"))
+      .toBe("first:second");
+    expect(host.querySelectorAll("[data-subtitle-laser]")).toHaveLength(1);
+
+    const activeHost = await renderPanel({
+      subtitles: [
+        { id: "first", start: 0, end: 2, text: "First subtitle" },
+        { id: "second", start: 10, end: 12, text: "Second subtitle" }
+      ],
+      currentTime: 10.25
+    });
+    expect(
+      activeHost.querySelector('[data-active-subtitle-section="true"]')?.textContent
+    ).toContain("Second subtitle");
   });
 });

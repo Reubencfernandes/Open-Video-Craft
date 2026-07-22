@@ -7,6 +7,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 
 const require = createRequire(import.meta.url);
 const { createDefaultEditorState } = require("../dist-electron/shared/editor-domain.js");
+const { version: expectedServerVersion } = require("../package.json");
 const root = await mkdtemp(path.join(os.tmpdir(), "ovc-mcp-smoke-"));
 const userData = path.join(root, "user-data");
 const projectRoot = path.join(root, "project");
@@ -51,6 +52,10 @@ const transport = new StdioClientTransport({
 });
 try {
   await client.connect(transport);
+  const serverVersion = client.getServerVersion();
+  if (serverVersion?.name !== "open-video-craft" || serverVersion.version !== expectedServerVersion) {
+    throw new Error(`Unexpected MCP server version: ${JSON.stringify(serverVersion)}`);
+  }
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name);
   for (const required of ["list_projects", "inspect_project", "start_analysis", "get_analysis", "apply_edit_plan", "undo_agent_edit", "export_project"]) {

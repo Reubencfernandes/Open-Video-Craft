@@ -4,6 +4,7 @@ dist-renderer/
 release/
 coverage/
 .vite/
+.ffmpeg-bin/
 
 *.log
 .env

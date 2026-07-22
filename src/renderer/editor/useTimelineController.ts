@@ -216,7 +216,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
   const clipboard = useTimelineClipboard({
     commitTimelineSegments: editing.commitTimelineSegments,
     currentTimeRef: params.currentTimeRef,
-    deleteSelectedTimelineSegment: editing.deleteSelectedTimelineSegment,
+    deleteTimelineSegment: editing.deleteTimelineSegment,
     knownTimelineItemIdsRef: params.knownTimelineItemIdsRef,
     mediaById: params.mediaById,
     selectedTimelineSegmentId: params.selectedTimelineSegmentId,

@@ -8,7 +8,11 @@ import type { ProviderKeysView, SttProviderId } from "../../../shared/types";
 import { BubbleActionButton } from "../../BubbleActionButton";
 import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { FloatingSelect } from "../FloatingSelect";
-import { formatSubtitleTimecode } from "../subtitle-time";
+import {
+  formatSubtitleTimecode,
+  getSubtitleTimelineLaserPosition,
+  isSubtitleActiveAtTime
+} from "../subtitle-time";
 import type { SubtitleSegment, SubtitleStyle } from "../types";
 import type { SttStatus } from "../useSubtitleGeneration";
 
@@ -73,6 +77,10 @@ export function SubtitlesPanel(props: {
       left.id.localeCompare(right.id)
   );
   const subtitleIdsKey = orderedSubtitles.map((subtitle) => subtitle.id).join("\u0000");
+  const laserPosition = getSubtitleTimelineLaserPosition(
+    orderedSubtitles,
+    props.currentTime
+  );
   const [expandedSubtitleId, setExpandedSubtitleId] = useState<string | null>(
     () => props.selectedSubtitleId ?? orderedSubtitles[0]?.id ?? null
   );
@@ -235,15 +243,19 @@ export function SubtitlesPanel(props: {
             aria-hidden="true"
             className="subtitle-timeline-spine pointer-events-none absolute bottom-5 left-[0.4375rem] top-4 w-px bg-white/[0.09]"
           />
-          {orderedSubtitles.map((subtitle) => {
-            const isActive =
-              props.currentTime >= subtitle.start && props.currentTime < subtitle.end;
+          {orderedSubtitles.map((subtitle, index) => {
+            const isActive = isSubtitleActiveAtTime(subtitle, props.currentTime);
             const isSelected = expandedSubtitleId === subtitle.id;
+            const nextSubtitle = orderedSubtitles[index + 1] ?? null;
 
             return (
               <SubtitleTimelineItem
                 key={subtitle.id}
                 subtitle={subtitle}
+                nextSubtitleId={nextSubtitle?.id ?? null}
+                laserProgress={laserPosition?.fromId === subtitle.id
+                  ? laserPosition.progress
+                  : null}
                 active={isActive}
                 selected={isSelected}
                 onSelect={() => {
@@ -263,18 +275,37 @@ export function SubtitlesPanel(props: {
 
 function SubtitleTimelineItem(props: {
   subtitle: SubtitleSegment;
+  nextSubtitleId: string | null;
+  laserProgress: number | null;
   active: boolean;
   selected: boolean;
   onSelect: () => void;
   onUpdate: (updates: Partial<SubtitleSegment>) => void;
 }) {
   const editorId = `subtitle-editor-${props.subtitle.id}`;
-  const surfaceClassName = props.selected
-    ? "bg-white/[0.075] text-white"
-    : "bg-transparent text-neutral-400 hover:bg-white/[0.045] hover:text-neutral-200";
+  const surfaceClassName = props.active
+    ? "subtitle-timeline-card-active text-white"
+    : props.selected
+      ? "bg-white/[0.075] text-white"
+      : "bg-transparent text-neutral-400 hover:bg-white/[0.045] hover:text-neutral-200";
 
   return (
     <div className="relative min-w-0 pb-2 pl-6">
+      {props.nextSubtitleId ? (
+        <span
+          aria-hidden="true"
+          className="subtitle-timeline-connector pointer-events-none absolute left-[0.4375rem] top-[1.04rem] z-[2] h-full w-px"
+          data-subtitle-connector={`${props.subtitle.id}:${props.nextSubtitleId}`}
+        >
+          {props.laserProgress !== null ? (
+            <span
+              className="subtitle-timeline-laser"
+              data-subtitle-laser
+              style={{ top: `${props.laserProgress * 100}%` }}
+            />
+          ) : null}
+        </span>
+      ) : null}
       <span
         aria-hidden="true"
         className={`subtitle-timeline-marker absolute left-1 top-[0.82rem] z-[1] size-[0.4375rem] rounded-full transition-[background-color,box-shadow,transform] duration-200 ${
@@ -282,19 +313,12 @@ function SubtitleTimelineItem(props: {
             ? "scale-110 bg-[#ff3b5c] shadow-[0_0_0_3px_rgb(255_59_92_/_0.16),0_0_12px_rgb(255_59_92_/_0.8)]"
             : "bg-neutral-600"
         }`}
-      >
-        {props.active ? (
-          <span
-            aria-hidden="true"
-            className="subtitle-timeline-laser"
-            data-subtitle-laser
-          />
-        ) : null}
-      </span>
+      />
       <div
-        className={`overflow-hidden rounded-xl transition-[background-color,color,box-shadow] duration-300 ${surfaceClassName} ${
+        className={`subtitle-timeline-card overflow-hidden rounded-xl transition-[background-color,color,box-shadow] duration-300 ${surfaceClassName} ${
           props.selected ? "shadow-[0_12px_30px_rgb(0_0_0_/_0.22)]" : ""
         }`}
+        data-active-subtitle-section={props.active ? "true" : undefined}
       >
         <button
           className="group grid w-full min-w-0 gap-1 bg-transparent px-3 py-2.5 text-left"

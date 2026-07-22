@@ -29,6 +29,7 @@ describe("home dashboard", () => {
     expect(html).toContain("Projects");
     expect(html).toContain("Search projects, recordings, and edits");
     expect(html).toContain('value="walkthrough"');
+    expect(html).not.toContain("Project filters");
   });
 
   it("renders quick-start workflows as dashboard cards", () => {

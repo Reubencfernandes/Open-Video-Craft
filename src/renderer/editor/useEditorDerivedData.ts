@@ -7,6 +7,7 @@ import type { CSSProperties } from "react";
 import type { ProjectView } from "../../shared/types";
 import { previewBackgrounds } from "./backgrounds";
 import { createProjectMedia } from "./media-utils";
+import { findActiveSubtitleAtTime } from "./subtitle-time";
 import { getScreenFrameForAspectRatio } from "./layout-geometry";
 import {
   calculateTimelineDuration,
@@ -228,9 +229,7 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
       ? Math.min(100, Math.max(0, (currentTime / timelineRenderDuration) * 100))
       : 0;
   const activeZoom = getActiveZoom(zoomEffects, zoomPreviewTime ?? currentTime);
-  const activeSubtitle =
-    subtitles.find((subtitle) => currentTime >= subtitle.start && currentTime <= subtitle.end) ??
-    null;
+  const activeSubtitle = findActiveSubtitleAtTime(subtitles, currentTime);
   const selectedSubtitle =
     subtitles.find((subtitle) => subtitle.id === selectedSubtitleId) ?? subtitles[0] ?? null;
   const selectedTextOverlay =
