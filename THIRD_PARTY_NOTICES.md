@@ -38,19 +38,29 @@ beside the app installers:
 
 <https://github.com/Reubencfernandes/Open-Video-Craft/releases/download/v1.0.2/Open-Video-Craft-1.0.2-FFmpeg-Source-Offer.tar.gz>
 
-See [FFMPEG_SOURCE_OFFER.md](FFMPEG_SOURCE_OFFER.md) for its contents and the
-committed, SHA-256-pinned source manifest.
+The Windows build’s exact scripts and FFmpeg source are published as
+`Open-Video-Craft-1.0.2-Windows-FFmpeg-Build-Sources.tar.gz`; all statically
+linked dependency sources are published as
+`Open-Video-Craft-1.0.2-Windows-FFmpeg-Dependency-Sources.tar`.
 
-### Windows release status
+See [FFMPEG_SOURCE_OFFER.md](FFMPEG_SOURCE_OFFER.md) for the bundle contents and
+committed, SHA-256-pinned source manifests.
 
-Version 1.0.2 does not publish Windows installers. The release workflow blocks
-them because the `ffmpeg-static` executable previously selected for Windows
-does not provide enough verified build provenance for this project to identify
-and distribute its exact complete corresponding source. This is a release
-compliance gate, not a claim about the upstream package's license. Windows
-distribution can resume after the app adopts a reproducible, source-complete
-FFmpeg build.
+### Windows build provenance
 
-The source-offer document, macOS rebuild notes, and these notices are packaged
-in the app's Resources directory so a recipient does not need to locate the
-repository.
+The Windows x64 executable is FFmpeg 8.1.2 from BtbN’s
+`autobuild-2026-07-21-13-38` static GPL build. The release workflow replaces
+the platform-selected `ffmpeg-static` download with this pinned executable,
+verifies the archive and binary SHA-256 values, and checks the required codecs
+and filters before packaging.
+
+- Build scripts: `BtbN/FFmpeg-Builds` commit
+  `8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665`
+- FFmpeg revision: `703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d`
+- Archive SHA-256:
+  `ebf57e8b1a10b176b88c3cbc66e68a4aed472cf47520b0fbf003e892fb3be642`
+- Extracted executable SHA-256:
+  `070be6f5202e71a5e0bec88312230eebf2708f9b9ee3694596babf20902dddd2`
+
+The source-offer document, platform rebuild notes, and these notices are
+packaged in the app’s Resources directory.

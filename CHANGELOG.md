@@ -22,7 +22,7 @@ the bundled MCP server.
 - Refreshed the launcher, recorder, editor, and subtitle timeline screenshots for the 1.0.2 interface.
 - Synchronized the app, in-app release notes, MCP handshake, changelog, and documentation on the 1.0.2 release line.
 - Added an in-package FFmpeg source-code offer and a verified source/build-script bundle to the v1.0.2 GitHub release.
-- Release metadata now states that macOS builds are signed/notarized and that Windows v1.0.2 artifacts are withheld pending reproducible, source-complete FFmpeg provenance.
+- Added Windows x64 Setup and Portable releases using a checksum-pinned BtbN FFmpeg 8.1.2 build with matching build-script and dependency-source bundles; macOS builds remain signed and notarized.
 - Removed the inactive project-filter/settings icon beside the dashboard search.
 
 ### Fixed

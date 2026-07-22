@@ -1,0 +1,7 @@
+# SHA-256  filename  upstream URL
+#
+# Pinned Windows FFmpeg binary, build scripts, and FFmpeg source used by the
+# Open Video Craft 1.0.2 Windows release.
+ebf57e8b1a10b176b88c3cbc66e68a4aed472cf47520b0fbf003e892fb3be642  ffmpeg-n8.1.2-29-g703dcc25b9-win64-gpl-8.1.zip  https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-21-13-38/ffmpeg-n8.1.2-29-g703dcc25b9-win64-gpl-8.1.zip
+697d798f9031b5c5ead281761a79c87590e90677af4b28c3fa76f552dc16aedc  btbn-ffmpeg-builds-8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665.tar.gz  https://github.com/BtbN/FFmpeg-Builds/archive/8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665.tar.gz
+1f67a24e928d263c74a4e468cbe63f7ccf116b54fdd39eccc80f9c9c537e1f34  ffmpeg-703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d.tar.gz  https://github.com/FFmpeg/FFmpeg/archive/703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d.tar.gz

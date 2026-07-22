@@ -20,11 +20,13 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "prepare:ffmpeg:mac": "node scripts/prepare-ffmpeg.mjs --all-mac",
+    "prepare:ffmpeg:win": "node scripts/prepare-windows-ffmpeg.mjs",
     "verify:ffmpeg": "node scripts/verify-ffmpeg.mjs",
     "dist": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder",
     "dist:win": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --win",
     "dist:mac": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac",
     "verify:mac-release": "node scripts/verify-mac-release.mjs",
+    "verify:windows-release": "node scripts/verify-windows-release.mjs",
     "dist:mac:adhoc": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=-",
     "dist:mac:universal": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
@@ -81,6 +83,10 @@
       {
         "from": "FFMPEG_MACOS_BUILD_NOTES.md",
         "to": "FFMPEG_MACOS_BUILD_NOTES.md"
+      },
+      {
+        "from": "FFMPEG_WINDOWS_BUILD_NOTES.md",
+        "to": "FFMPEG_WINDOWS_BUILD_NOTES.md"
       }
     ],
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",

@@ -58,8 +58,8 @@ v1.0.2 worktree:
 6. **Release checks.** CI now builds production bundles and exercises the MCP
    server in addition to typechecking and unit tests (`.github/workflows/ci.yml`).
 7. **FFmpeg source path.** Every packaged app includes an explicit source offer,
-   and the tag workflow publishes the exact FFmpeg 8.1.2/6.1.1 source archives,
-   pinned macOS build scripts, dependency versions, checksums, and release
+   and the tag workflow publishes the exact FFmpeg 8.1.2 source archives,
+   pinned macOS/Windows build scripts, dependency sources, checksums, and release
    metadata beside the installers (`FFMPEG_SOURCE_OFFER.md`,
    `THIRD_PARTY_NOTICES.md`, `.github/workflows/release.yml`).
 8. **Inactive dashboard control.** The project filter/settings glyph beside the
@@ -338,12 +338,10 @@ WASM path, then verify Whisper and MCP analysis in each packaged artifact.
 - macOS publishing requires the Developer ID and notarization credentials
   documented in `README.md`. The release verification script must pass for both
   updater ZIPs.
-- Windows v1.0.2 distribution is blocked because the selected Gyan/
-  `ffmpeg-static` binary lacks independently verified complete corresponding
-  source and reproducible build provenance. Code continues to be tested on
-  Windows, but the release workflow must not publish Windows installers until a
-  source-complete FFmpeg input replaces it. Authenticode signing remains a
-  separate requirement when publishing resumes.
+- Windows v1.0.2 uses the pinned BtbN FFmpeg 8.1.2 static GPL build, verifies
+  both the archive and extracted executable hashes, and publishes its exact
+  build scripts plus dependency source cache. Authenticode credentials are not
+  configured, so the Windows artifacts are explicitly labeled unsigned.
 - The current macOS artifacts are Developer ID direct-download builds, not Mac
   App Store packages. An App Store submission needs a separate sandboxed `mas`
   target, Store-managed updates, App Store entitlements, and a fresh legal
@@ -384,15 +382,14 @@ Cargo was not available for that single step in the local environment.
 2. Run typechecking, the full unit suite, production build, and MCP smoke test.
 3. Confirm the full and production dependency audits have no unaccepted
    advisories.
-4. Build Intel and Arm macOS artifacts from the exact tagged commit; keep
-   Windows publishing disabled until its FFmpeg source-provenance gate passes.
+4. Build Intel and Arm macOS plus Windows x64 artifacts from the exact tagged
+   commit using their platform-specific pinned FFmpeg inputs.
 5. Verify each packaged FFmpeg executable has the correct architecture, expected
    hash/provenance, and no `--enable-nonfree` configuration.
 6. Verify macOS signatures, team identity, notarization, stapling, updater YAML,
    archive hashes, and Gatekeeper acceptance.
-7. Confirm the release contains no Windows executable while its source gate is
-   active. When Windows resumes, require complete source provenance and verify
-   Authenticode before publication.
+7. Verify the Windows Setup and Portable artifacts, updater metadata, bundled
+   FFmpeg architecture/capabilities, and clearly disclosed unsigned status.
 8. Verify the release contains the FFmpeg source-offer bundle and that the
    in-package source link resolves to that asset.
 9. Smoke-test recording, project reopen, subtitle timeline edits, export/cancel,

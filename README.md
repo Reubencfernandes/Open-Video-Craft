@@ -141,11 +141,10 @@ Grab the latest installer from the
 [**Releases page**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest):
 
 - **macOS** — `.dmg` (Apple Silicon and Intel; signed and notarized)
-- **Windows** — v1.0.2 installers are withheld while the bundled FFmpeg input is
-  replaced with one that has independently verified, complete source and build
-  provenance.
+- **Windows** — x64 Setup and Portable `.exe` builds. Version 1.0.2 is unsigned,
+  so Windows may display a SmartScreen warning during installation.
 
-The downloadable `.dmg` installers are attached directly to that release.
+The downloadable installers are attached directly to that release.
 `SHA256SUMS.txt` is an optional integrity check for those files; it is not a
 substitute for the installer downloads.
 
@@ -208,8 +207,9 @@ subtitle timeline rather than design mockups.
 ## Releases
 
 Releases are tag-triggered: pushing a `v*` tag that matches `package.json`
-builds, signs, and publishes the release-approved platform matrix through
-GitHub Actions. Version 1.0.2 publishes macOS Intel and Apple Silicon builds.
+builds and publishes the release-approved platform matrix through GitHub
+Actions. Version 1.0.2 publishes macOS Intel/Apple Silicon and Windows x64
+builds.
 
 The public stable line remains 1.x: v1.0.2 follows the published v1.0.1 build.
 Earlier 2.x tags were beta-test builds and are not used for this stable release.
@@ -218,6 +218,7 @@ Earlier 2.x tags were beta-test builds and are not used for this stable release.
 npm run dist:win           # local Windows build
 npm run dist:mac           # local macOS build (signed + notarized)
 npm run verify:mac-release # required shipping gate for macOS artifacts
+npm run verify:windows-release # required shipping gate for Windows artifacts
 ```
 
 macOS release builds need a Developer ID Application certificate and one of
@@ -227,11 +228,10 @@ these notarization credential groups:
 - `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
 - `APPLE_KEYCHAIN_PROFILE` (optionally `APPLE_KEYCHAIN`)
 
-When Windows publishing resumes, release signing can use `WINDOWS_CSC_LINK`
-(a base64 certificate or secure certificate URL) and
-`WINDOWS_CSC_KEY_PASSWORD`. Signing is separate from the current FFmpeg
-source-provenance gate: v1.0.2 does not publish Windows artifacts even when
-signing credentials are available.
+Windows release signing can use `WINDOWS_CSC_LINK` (a base64 certificate or
+secure certificate URL) and `WINDOWS_CSC_KEY_PASSWORD`. Those secrets are not
+currently configured, so v1.0.2 Windows artifacts are published unsigned and
+are labeled accordingly in the release notes.
 
 The GitHub macOS artifacts are direct-download Developer ID builds. A future
 Mac App Store submission requires a separate sandboxed `mas` target, App Store

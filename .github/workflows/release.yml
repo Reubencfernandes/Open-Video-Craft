@@ -105,8 +105,9 @@ jobs:
           --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus
           --enable-libvorbis --enable-libtheora
 
-          Windows artifacts are intentionally absent from v${package_version}.
-          See FFMPEG_SOURCE_OFFER.md for the compliance gate.
+          Windows binary FFmpeg: 8.1.2, GPLv3-or-later
+          Windows build scripts: 8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665
+          Windows FFmpeg revision: 703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d
           EOF
 
           (
@@ -121,12 +122,90 @@ jobs:
             --file "release-source/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz" \
             --directory "$source_dir" .
 
+      - name: Assemble Windows FFmpeg corresponding source
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+        timeout-minutes: 60
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(node -p 'require("./package.json").version')"
+          source_dir="release-source/windows-source-offer"
+          archive_dir="$source_dir/upstream-archives"
+          checkout_dir="$source_dir/btbn-build-scripts"
+          mkdir -p "$archive_dir" "$checkout_dir"
+
+          : > "$source_dir/SOURCE_SHA256SUMS.txt"
+          while read -r expected_hash filename url; do
+            case "$expected_hash" in
+              ""|'#'*) continue ;;
+            esac
+            # The binary archive is verified in the Windows build job. This
+            # job assembles the corresponding source and build inputs only.
+            if [[ "$filename" == ffmpeg-n8.1.2-*-win64-gpl-8.1.zip ]]; then
+              continue
+            fi
+            curl --fail --location --retry 3 --retry-all-errors \
+              --output "$archive_dir/$filename" \
+              "$url"
+            echo "$expected_hash  $archive_dir/$filename" | sha256sum --check
+            echo "$expected_hash  upstream-archives/$filename" \
+              >> "$source_dir/SOURCE_SHA256SUMS.txt"
+          done < .github/ffmpeg-windows-sources.txt
+
+          tar -xzf "$archive_dir/btbn-ffmpeg-builds-8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665.tar.gz" \
+            -C "$checkout_dir" --strip-components=1
+
+          # BtbN's pinned download recipes materialize the exact dependency
+          # source checkouts consumed by its static GPL build. Preserve the
+          # cache as a separate uncompressed tar because its members are
+          # already xz-compressed source archives.
+          (
+            cd "$checkout_dir"
+            GITHUB_REPOSITORY=BtbN/FFmpeg-Builds ./download.sh
+          )
+          (
+            cd "$checkout_dir/.cache"
+            find downloads -type f -print0 \
+              | sort -z \
+              | xargs -0 sha256sum
+          ) > "$source_dir/DEPENDENCY_SOURCE_SHA256SUMS.txt"
+
+          cp .github/ffmpeg-windows-sources.txt \
+            FFMPEG_SOURCE_OFFER.md \
+            FFMPEG_WINDOWS_BUILD_NOTES.md \
+            THIRD_PARTY_NOTICES.md \
+            "$source_dir/"
+          cat > "$source_dir/RELEASE_METADATA.txt" <<EOF
+          Open Video Craft ${package_version} Windows FFmpeg source bundle
+          Release tag: ${GITHUB_REF_NAME:-workflow-dispatch}
+          Repository revision: ${GITHUB_SHA}
+          BtbN build scripts: 8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665
+          FFmpeg source: 703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d
+          Build variant: win64-gpl 8.1
+          Binary archive SHA-256: ebf57e8b1a10b176b88c3cbc66e68a4aed472cf47520b0fbf003e892fb3be642
+          Extracted ffmpeg.exe SHA-256: 070be6f5202e71a5e0bec88312230eebf2708f9b9ee3694596babf20902dddd2
+          EOF
+
+          tar --create --gzip \
+            --file "release-source/Open-Video-Craft-${package_version}-Windows-FFmpeg-Build-Sources.tar.gz" \
+            --directory "$source_dir" \
+            upstream-archives SOURCE_SHA256SUMS.txt RELEASE_METADATA.txt \
+            ffmpeg-windows-sources.txt FFMPEG_SOURCE_OFFER.md \
+            FFMPEG_WINDOWS_BUILD_NOTES.md THIRD_PARTY_NOTICES.md
+          tar --create \
+            --file "release-source/Open-Video-Craft-${package_version}-Windows-FFmpeg-Dependency-Sources.tar" \
+            --directory "$checkout_dir/.cache" downloads \
+            --directory "${GITHUB_WORKSPACE}/$source_dir" DEPENDENCY_SOURCE_SHA256SUMS.txt
+
       - name: Upload FFmpeg source offer
         uses: actions/upload-artifact@v4
         with:
           name: open-video-craft-source-offer
-          path: release-source/*.tar.gz
+          path: |
+            release-source/*.tar.gz
+            release-source/*.tar
           if-no-files-found: error
+          compression-level: 0
 
   build:
     name: Build ${{ matrix.name }}
@@ -140,6 +219,11 @@ jobs:
             os: macos-latest
             builder_args: "--x64 --arm64 --publish never"
             artifact_name: open-video-craft-mac
+          - name: Windows
+            npm_script: dist:win
+            os: windows-latest
+            builder_args: "--x64 --publish never"
+            artifact_name: open-video-craft-windows
 
     steps:
       - name: Checkout
@@ -166,6 +250,10 @@ jobs:
         run: npm ci --no-audit --no-fund
         timeout-minutes: 20
 
+      - name: Prepare pinned Windows FFmpeg
+        if: matrix.name == 'Windows'
+        run: npm run prepare:ffmpeg:win
+
       - name: Verify FFmpeg input
         run: npm run verify:ffmpeg
 
@@ -177,9 +265,9 @@ jobs:
 
       - name: Build installers
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          CSC_NAME: ${{ secrets.CSC_NAME }}
+          CSC_LINK: ${{ matrix.name == 'macOS' && secrets.CSC_LINK || secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'macOS' && secrets.CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ matrix.name == 'macOS' && secrets.CSC_NAME || '' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -194,12 +282,17 @@ jobs:
           OVC_MAC_TEAM_ID: "3XX79RB95N"
         run: npm run verify:mac-release
 
+      - name: Verify Windows release artifacts
+        if: matrix.name == 'Windows'
+        run: npm run verify:windows-release
+
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
           path: |
             release/*/*.dmg
+            release/*/*.exe
             release/*/*.zip
             release/*/*.blockmap
             release/*/latest*.yml
@@ -268,11 +361,11 @@ jobs:
           ## Downloads and signing
 
           - macOS Intel and Apple Silicon builds are signed with Developer ID and notarized by Apple.
-          - Windows installers are not published in this release. Distribution remains blocked until the Windows FFmpeg binary has independently verified, complete corresponding source and reproducible build provenance.
+          - Windows x64 Setup and Portable builds are published. They are unsigned unless the release repository is configured with `WINDOWS_CSC_LINK` and `WINDOWS_CSC_KEY_PASSWORD`, so Windows may display a SmartScreen warning.
 
           ## FFmpeg source-code offer
 
-          The macOS installers contain GPLv3-or-later FFmpeg executables. Complete corresponding source—including all enabled external-library sources, locked rav1e crate sources, the exact x264 revision, pinned build scripts, and checksums—is published as [Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz).
+          The macOS and Windows installers contain GPLv3-or-later FFmpeg executables. macOS corresponding source is published as [Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz). Windows build scripts and FFmpeg source are published as [Open-Video-Craft-${package_version}-Windows-FFmpeg-Build-Sources.tar.gz](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-Windows-FFmpeg-Build-Sources.tar.gz), with all statically linked dependency sources in [Open-Video-Craft-${package_version}-Windows-FFmpeg-Dependency-Sources.tar](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-Windows-FFmpeg-Dependency-Sources.tar).
 
           Installer checksums are listed in [SHA256SUMS.txt](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/SHA256SUMS.txt); updater checksums are also recorded in the uploaded YAML metadata.
           EOF

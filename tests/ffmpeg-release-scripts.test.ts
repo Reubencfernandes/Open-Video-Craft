@@ -19,6 +19,10 @@ import {
   getEmbeddedFfmpegTargets,
   validateMacUpdateMetadataShape,
 } from "../scripts/verify-mac-release.mjs";
+// @ts-expect-error The JavaScript release script intentionally has no declaration file.
+import { getPeArchitecture, WINDOWS_FFMPEG } from "../scripts/prepare-windows-ffmpeg.mjs";
+// @ts-expect-error The JavaScript release script intentionally has no declaration file.
+import { validateWindowsUpdateMetadataShape } from "../scripts/verify-windows-release.mjs";
 
 const require = createRequire(import.meta.url);
 const afterPack = require("../scripts/after-pack.cjs") as {
@@ -49,11 +53,13 @@ type UpdateFile = {
   info: { url: string };
 };
 
-const { MacUpdater } = require("electron-updater/out/MacUpdater.js") as {
+const MacUpdater = process.platform === "darwin"
+  ? (require("electron-updater/out/MacUpdater.js") as {
   MacUpdater: {
     filterFilesForArch(files: UpdateFile[], isArm64Mac: boolean): UpdateFile[];
   };
-};
+  }).MacUpdater
+  : null;
 
 const validOutputs = {
   versionOutput: "configuration: --enable-gpl --enable-libx264 --enable-libvpx",
@@ -291,7 +297,7 @@ describe("macOS release archive routing", () => {
     )).toThrow(/do not exactly match/);
   });
 
-  it("keeps updater-critical artifact names selectable by Mac architecture", () => {
+  it.runIf(process.platform === "darwin")("keeps updater-critical artifact names selectable by Mac architecture", () => {
     const files: UpdateFile[] = [
       {
         url: new URL("https://example.test/Open-Video-Craft-1.0.2-mac-x64.zip"),
@@ -303,11 +309,41 @@ describe("macOS release archive routing", () => {
       },
     ];
 
-    expect(MacUpdater.filterFilesForArch(files, true).map(({ info }) => info.url)).toEqual([
+    expect(MacUpdater?.filterFilesForArch(files, true).map(({ info }) => info.url)).toEqual([
       "Open-Video-Craft-1.0.2-mac-arm64.zip",
     ]);
-    expect(MacUpdater.filterFilesForArch(files, false).map(({ info }) => info.url)).toEqual([
+    expect(MacUpdater?.filterFilesForArch(files, false).map(({ info }) => info.url)).toEqual([
       "Open-Video-Craft-1.0.2-mac-x64.zip",
     ]);
+  });
+});
+
+describe("Windows release inputs", () => {
+  it("pins the BtbN archive and extracted executable", () => {
+    expect(WINDOWS_FFMPEG).toMatchObject({
+      archiveSha256: "ebf57e8b1a10b176b88c3cbc66e68a4aed472cf47520b0fbf003e892fb3be642",
+      binarySha256: "070be6f5202e71a5e0bec88312230eebf2708f9b9ee3694596babf20902dddd2",
+      version: "8.1.2"
+    });
+  });
+
+  it("recognizes Windows x64 PE headers", () => {
+    const header = Buffer.alloc(512);
+    header.write("MZ", 0, "ascii");
+    header.writeUInt32LE(128, 0x3c);
+    header.write("PE\0\0", 128, "ascii");
+    header.writeUInt16LE(0x8664, 132);
+    expect(getPeArchitecture(header)).toBe("x64");
+    header.writeUInt16LE(0xaa64, 132);
+    expect(getPeArchitecture(header)).toBe("arm64");
+  });
+
+  it("requires Setup, Portable, and updater metadata", () => {
+    const setup = "Open-Video-Craft-Setup-1.0.2-win-x64.exe";
+    const portable = "Open-Video-Craft-Portable-1.0.2-win-x64.exe";
+    expect(validateWindowsUpdateMetadataShape(
+      [setup, portable],
+      `version: 1.0.2\npath: ${setup}\nfiles:\n  - url: ${setup}`
+    )).toEqual({ setupName: setup, portableName: portable });
   });
 });
