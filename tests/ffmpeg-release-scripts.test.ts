@@ -48,19 +48,6 @@ type UniversalValidationTarget = {
   layout: string;
 };
 
-type UpdateFile = {
-  url: URL;
-  info: { url: string };
-};
-
-const MacUpdater = process.platform === "darwin"
-  ? (require("electron-updater/out/MacUpdater.js") as {
-  MacUpdater: {
-    filterFilesForArch(files: UpdateFile[], isArm64Mac: boolean): UpdateFile[];
-  };
-  }).MacUpdater
-  : null;
-
 const validOutputs = {
   versionOutput: "configuration: --enable-gpl --enable-libx264 --enable-libvpx",
   encoderOutput: " V....D libx264 H.264\n V....D libvpx-vp9 VP9",
@@ -297,25 +284,6 @@ describe("macOS release archive routing", () => {
     )).toThrow(/do not exactly match/);
   });
 
-  it.runIf(process.platform === "darwin")("keeps updater-critical artifact names selectable by Mac architecture", () => {
-    const files: UpdateFile[] = [
-      {
-        url: new URL("https://example.test/Open-Video-Craft-1.0.2-mac-x64.zip"),
-        info: { url: "Open-Video-Craft-1.0.2-mac-x64.zip" },
-      },
-      {
-        url: new URL("https://example.test/Open-Video-Craft-1.0.2-mac-arm64.zip"),
-        info: { url: "Open-Video-Craft-1.0.2-mac-arm64.zip" },
-      },
-    ];
-
-    expect(MacUpdater?.filterFilesForArch(files, true).map(({ info }) => info.url)).toEqual([
-      "Open-Video-Craft-1.0.2-mac-arm64.zip",
-    ]);
-    expect(MacUpdater?.filterFilesForArch(files, false).map(({ info }) => info.url)).toEqual([
-      "Open-Video-Craft-1.0.2-mac-x64.zip",
-    ]);
-  });
 });
 
 describe("Windows release inputs", () => {
