@@ -6,7 +6,7 @@
 
 **Record your screen, camera, and audio — then cut, mix, subtitle, and export locally. No required account or upload.**
 
-[**Download Open Video Craft for macOS →**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
+[**Download Open Video Craft for macOS & Windows →**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
 
 [![Latest release](https://img.shields.io/github/v/release/Reubencfernandes/Open-Video-Craft?label=download&color=34d399)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
 [![Source platforms](https://img.shields.io/badge/source-macOS%20%7C%20Windows-6366f1)](#development)
