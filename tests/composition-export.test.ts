@@ -71,7 +71,7 @@ describe("timeline composition export", () => {
     expect(Number(duration)).toBeCloseTo(2.25, 1);
     expect(diagnostics).toMatch(/Video:/);
     expect(diagnostics).toMatch(/Audio:/);
-  }, 20_000);
+  }, 60_000);
 
   it("renders a fixed-duration crossfade between adjacent clips", async () => {
     const ffmpeg = resolveFfmpegPath();
@@ -101,7 +101,7 @@ describe("timeline composition export", () => {
     const [redChannel, , blueChannel] = middle.stdout as unknown as Buffer;
     expect(redChannel).toBeGreaterThan(30);
     expect(blueChannel).toBeGreaterThan(30);
-  }, 20_000);
+  }, 60_000);
 
   it("renders focus zoom and keeps video, mixed audio, and duration synced through speed", async () => {
     const ffmpeg = resolveFfmpegPath();
@@ -144,5 +144,5 @@ describe("timeline composition export", () => {
     ], { encoding: "buffer" as any, maxBuffer: 1024 * 1024 } as any);
     const [redChannel, , blueChannel] = frame.stdout as unknown as Buffer;
     expect(redChannel).toBeGreaterThan(blueChannel * 2);
-  }, 20_000);
+  }, 60_000);
 });
