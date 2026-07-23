@@ -27,6 +27,7 @@ export type {
   SubtitleStyle,
   SubtitleWord,
   TextAnimation,
+  TextFontFamily,
   TextOverlay,
   TimelineSegment,
   TimelineTrackKind,

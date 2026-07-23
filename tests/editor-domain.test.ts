@@ -54,6 +54,49 @@ describe("editor document migration", () => {
     });
     expect(loaded?.state.textOverlays ?? []).toEqual([]);
   });
+
+  it("keeps older text overlays valid while accepting saved typography controls", () => {
+    const state = createDefaultEditorState();
+    state.textOverlays = [{
+      id: "legacy-title",
+      start: 1,
+      end: 4,
+      text: "Legacy title",
+      x: 50,
+      y: 30,
+      size: 64,
+      color: "#ffffff",
+      weight: 700,
+      animation: "none"
+    }, {
+      id: "styled-title",
+      start: 5,
+      end: 8,
+      text: "Styled title",
+      x: 50,
+      y: 70,
+      size: 72,
+      color: "#ff4b73",
+      fontFamily: "serif",
+      opacity: 82,
+      weight: 600,
+      animation: "fade"
+    }];
+    const loaded = parseEditorDocument({
+      schemaVersion: 2,
+      revision: 6,
+      savedAt: "2026-01-01T00:00:00.000Z",
+      state,
+      imports: [],
+      lastMutation: { source: "editor", at: "2026-01-01T00:00:00.000Z", editId: null, summary: null }
+    });
+
+    expect(loaded?.state.textOverlays).toHaveLength(2);
+    expect(loaded?.state.textOverlays?.[1]).toMatchObject({
+      fontFamily: "serif",
+      opacity: 82
+    });
+  });
 });
 
 describe("agent edit operations", () => {

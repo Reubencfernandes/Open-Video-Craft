@@ -54,7 +54,8 @@ describe("editor AI and audio panels", () => {
 
     expect(html).toContain("Lyria 3 Clip (cloud)");
     expect(html).toContain("Lyria 3 Pro (cloud)");
-    expect(html.match(/<option/g)).toHaveLength(2);
+    expect(html).toContain("data-floating-select");
+    expect(html.match(/role="option"/g)).toHaveLength(2);
     expect(html).not.toMatch(/ACE-Step|Get Python|Duration \(s\)|Seed \(blank/);
     expect(latestRelease.changes.join(" ")).not.toMatch(/ACE-Step/i);
   });

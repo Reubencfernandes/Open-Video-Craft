@@ -90,6 +90,7 @@ export function EditorToolPanel(props: {
   subtitleDuration: number;
   currentTime: number;
   textOverlays: TextOverlay[];
+  selectedTextOverlayId: string | null;
   selectedTextOverlay: TextOverlay | null;
   activeBackgroundCategory: BackgroundCategory;
   backgroundStyle: BackgroundStyle;
@@ -121,6 +122,7 @@ export function EditorToolPanel(props: {
   onSubtitleStyleChange: (style: SubtitleStyle) => void;
   onUpdateSubtitle: (id: string, updates: Partial<SubtitleSegment>) => void;
   onSelectSubtitle: (subtitleId: string | null) => void;
+  onAddTextOverlay: () => void;
   onSelectTextOverlay: (id: string) => void;
   onUpdateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
   onRemoveTextOverlay: (id: string) => void;
@@ -258,7 +260,9 @@ export function EditorToolPanel(props: {
       {props.activeTool === "text" ? (
         <TextPanel
           overlays={props.textOverlays}
+          selectedOverlayId={props.selectedTextOverlayId}
           selectedOverlay={props.selectedTextOverlay}
+          onAdd={props.onAddTextOverlay}
           onSelect={props.onSelectTextOverlay}
           onUpdate={props.onUpdateTextOverlay}
           onRemove={props.onRemoveTextOverlay}

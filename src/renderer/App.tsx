@@ -76,9 +76,16 @@ export function App() {
     await runLaunchAction("edit", () => window.openVideoCraft.windows.openEditor(project.id));
   }
 
-  async function deleteRecentProject(projectId: string) {
+  async function deleteRecentProject(project: ProjectLibraryEntry) {
     await runLaunchAction("remove-recent", async () => {
-      await window.openVideoCraft.projects.delete(projectId);
+      if (project.available) {
+        await window.openVideoCraft.projects.delete(project.id);
+      } else {
+        // Unsupported legacy, missing, and corrupt folders must never be
+        // deleted as if they were a current project. Forget only the launcher
+        // entry and leave the user's files untouched.
+        await window.openVideoCraft.projects.removeFromRecent(project.id);
+      }
       await loadRecentProjects();
       return true;
     });
@@ -201,7 +208,7 @@ export function App() {
 
               <PermissionOnboarding loading={permissionsLoading} status={permissionStatus} onOpenGuide={openPermissionGuide} onOpenSettings={openPermissionSettings} onRefresh={() => void loadPermissionsStatus()} onRequestMedia={requestMediaPermission} />
 
-              <RecentProjectsSection projects={visibleProjects} loading={recentProjectsLoading} disabled={busyAction !== null} onRefresh={() => void loadRecentProjects()} onOpen={(project) => void openRecentProject(project)} onDelete={(projectId) => void deleteRecentProject(projectId)} />
+              <RecentProjectsSection projects={visibleProjects} loading={recentProjectsLoading} disabled={busyAction !== null} onRefresh={() => void loadRecentProjects()} onOpen={(project) => void openRecentProject(project)} onDelete={(project) => void deleteRecentProject(project)} />
             </div>
           </div>
         </div>

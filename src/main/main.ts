@@ -1373,9 +1373,18 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("projects:delete", async (_event, projectId: string): Promise<boolean> => {
-    const entry = await getProjectLibrary().get(projectId);
+    const projectLibrary = getProjectLibrary();
+    const entry = await projectLibrary.get(projectId);
     if (!entry) {
       return false;
+    }
+
+    // A legacy, missing, or corrupt project cannot pass the deletion safety
+    // check. Treat the launcher trash action as "forget this unavailable
+    // entry" and preserve the unknown folder on disk.
+    if (!entry.available) {
+      projectStore.forgetProject(projectId);
+      return projectLibrary.remove(projectId);
     }
 
     const parentWindow = getDialogParentWindow();
@@ -1410,7 +1419,7 @@ function registerIpc(): void {
     }
 
     projectStore.forgetProject(projectId);
-    await getProjectLibrary().remove(projectId);
+    await projectLibrary.remove(projectId);
     return true;
   });
 

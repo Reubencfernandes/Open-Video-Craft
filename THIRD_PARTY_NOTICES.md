@@ -33,15 +33,15 @@ the published archive SHA-256 before use and rejects any binary configured with
 
 The complete corresponding source, statically linked library sources, vendored
 rav1e crate sources, pinned x264 revision, and build scripts for the FFmpeg
-executables in the v1.0.2 macOS installers are mirrored in one release asset
+executables in the v1.0.3 macOS installers are mirrored in one release asset
 beside the app installers:
 
-<https://github.com/Reubencfernandes/Open-Video-Craft/releases/download/v1.0.2/Open-Video-Craft-1.0.2-FFmpeg-Source-Offer.tar.gz>
+<https://github.com/Reubencfernandes/Open-Video-Craft/releases/download/v1.0.3/Open-Video-Craft-1.0.3-FFmpeg-Source-Offer.tar.gz>
 
 The Windows build’s exact scripts and FFmpeg source are published as
-`Open-Video-Craft-1.0.2-Windows-FFmpeg-Build-Sources.tar.gz`; all statically
+`Open-Video-Craft-1.0.3-Windows-FFmpeg-Build-Sources.tar.gz`; all statically
 linked dependency sources are published as
-`Open-Video-Craft-1.0.2-Windows-FFmpeg-Dependency-Sources.tar`.
+`Open-Video-Craft-1.0.3-Windows-FFmpeg-Dependency-Sources.tar`.
 
 See [FFMPEG_SOURCE_OFFER.md](FFMPEG_SOURCE_OFFER.md) for the bundle contents and
 committed, SHA-256-pinned source manifests.

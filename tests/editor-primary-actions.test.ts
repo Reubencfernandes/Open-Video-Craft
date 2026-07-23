@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { SpeedPanel } from "../src/renderer/editor/panels/SpeedPanel";
 import { StylePanel } from "../src/renderer/editor/panels/StylePanel";
 import { SubtitlesPanel } from "../src/renderer/editor/panels/SubtitlesPanel";
+import { TextPanel } from "../src/renderer/editor/panels/TextPanel";
 import { ToolRail } from "../src/renderer/editor/ToolRail";
 import { ZoomPanel } from "../src/renderer/editor/panels/ZoomPanel";
 
@@ -21,6 +22,78 @@ describe("editor primary actions", () => {
     expect(mediaHtml).toContain("data-tool-rail-indicator");
     expect(mediaHtml).toContain("translateY(0rem)");
     expect(subtitlesHtml).toContain("translateY(14.6rem)");
+  });
+
+  it("adds text to the viewport and uses shared responsive editor controls", () => {
+    const selected = {
+      id: "title",
+      start: 4.125,
+      end: 7.125,
+      text: "Product update",
+      x: 50,
+      y: 24,
+      size: 64,
+      color: "#ff4b73",
+      fontFamily: "rounded" as const,
+      opacity: 85,
+      weight: 700 as const,
+      animation: "pop" as const
+    };
+    const html = renderToStaticMarkup(createElement(TextPanel, {
+      overlays: [selected],
+      selectedOverlayId: selected.id,
+      selectedOverlay: selected,
+      onAdd: () => undefined,
+      onSelect: () => undefined,
+      onUpdate: () => undefined,
+      onRemove: () => undefined
+    }));
+
+    expect(html).toContain("data-add-text-to-viewport");
+    expect(html).toContain("data-bubble-action-button");
+    expect(html).toContain("Add text to viewport");
+    expect(html).toContain("data-text-layer-stack");
+    expect(html).toContain("data-text-layer-option");
+    expect(html).toContain('data-selected="true"');
+    expect(html).not.toContain("lucide-type");
+    expect(html).not.toContain("Drag onto the timeline");
+    expect(html).not.toContain('type="number"');
+    expect(html).toContain('aria-label="Text animation"');
+    expect(html).toContain('aria-label="Text font"');
+    expect(html).toContain('aria-label="Text weight"');
+    expect(html).toContain('aria-label="Text hue"');
+    expect(html).toContain('aria-label="Text opacity"');
+    expect(html.indexOf("Remove text")).toBeLessThan(html.indexOf("Animation"));
+  });
+
+  it("only marks the explicitly selected text layer in the layer index", () => {
+    const overlay = {
+      id: "title",
+      start: 1,
+      end: 4,
+      text: "Readable layer name",
+      x: 50,
+      y: 50,
+      size: 48,
+      color: "#ffffff",
+      fontFamily: "sans" as const,
+      opacity: 100,
+      weight: 700 as const,
+      animation: "none" as const
+    };
+    const html = renderToStaticMarkup(createElement(TextPanel, {
+      overlays: [overlay],
+      selectedOverlayId: null,
+      selectedOverlay: overlay,
+      onAdd: () => undefined,
+      onSelect: () => undefined,
+      onUpdate: () => undefined,
+      onRemove: () => undefined
+    }));
+
+    expect(html).toContain("Readable layer name");
+    expect(html).toContain('data-selected="false"');
+    expect(html).not.toContain('data-selected="true"');
   });
 
   it("uses the shared pink bubble action for speed, zoom, and subtitle creation", () => {

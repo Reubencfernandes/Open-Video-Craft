@@ -4,6 +4,42 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-23
+
+Text overlays are easier to add and style, legacy project entries are safer to
+remove, and the launcher updater now communicates download and restart states
+without overflowing its sidebar.
+
+### Added
+
+- A responsive text color editor with hue, opacity, HSB values, a native color
+  picker, font-family choices, and export-aware typography.
+- A readable line-and-dot text-layer index whose red selected state follows
+  selections made in the inspector, preview viewport, or timeline.
+- Regression coverage for text styling, updater transitions, legacy-project
+  removal, and rounded-corner fill layouts.
+
+### Changed
+
+- Text overlays are added directly to the current viewport time; timing remains
+  owned by draggable and trimmable timeline clips.
+- Text, Music AI, and transition menus share the same floating selector and
+  logo-red field focus styling used elsewhere in the editor.
+- The launcher update card shows green download progress, collapses cleanly,
+  and reveals a contained animated Restart control when ready.
+- The Mac App Store screenshots are stored with the release source, while Store
+  distribution remains blocked until the bundled GPLv3 FFmpeg executable is
+  replaced with an App Store-compatible media pipeline.
+
+### Fixed
+
+- Missing, corrupt, and incompatible legacy projects can be removed from
+  Recents without deleting their unknown on-disk folders.
+- Bubble on filled screen no longer falls back to fit when Slight or Rounded
+  video corners are selected.
+- Text-layer labels no longer disappear inside a nested scrolling container or
+  extend their selected background outside the inspector.
+
 ## [1.0.2] - 2026-07-22
 
 Timeline editing is more predictable, subtitle timing stays anchored to the

@@ -1,5 +1,5 @@
 /** Search-filtered project grid plus the compact latest-project row. */
-import { AlertTriangle, FolderOpen, Grid2X2, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, FolderOpen, Grid2X2, RefreshCw, Trash2, X } from "lucide-react";
 import type { ProjectLibraryEntry } from "../../shared/types";
 import { ProjectArtwork } from "./ProjectArtwork";
 import { formatMediaAvailability, formatProjectDuration, formatProjectUpdatedAt } from "./project-formatters";
@@ -10,7 +10,7 @@ export function RecentProjectsSection(props: {
   disabled: boolean;
   onRefresh: () => void;
   onOpen: (project: ProjectLibraryEntry) => void;
-  onDelete: (projectId: string) => void;
+  onDelete: (project: ProjectLibraryEntry) => void;
 }) {
   return (
     <section className="grid gap-3" data-home-project-grid>
@@ -36,7 +36,16 @@ export function RecentProjectsSection(props: {
               <p className="m-0 truncate px-1 text-[0.64rem] text-neutral-600">{formatProjectUpdatedAt(project.updatedAt)} · {formatMediaAvailability(project)}</p>
               <div className="grid grid-cols-[1fr_auto] gap-1.5">
                 <button className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl bg-white/[0.055] text-xs font-semibold text-neutral-300 transition hover:bg-white/[0.1] hover:text-white disabled:opacity-35" type="button" disabled={props.disabled || !project.available} onClick={() => props.onOpen(project)}><FolderOpen size={14} /> Open</button>
-                <button className="grid size-9 place-items-center rounded-xl bg-white/[0.035] text-neutral-600 transition hover:bg-red-500/10 hover:text-red-300 disabled:opacity-35" type="button" title="Delete project" disabled={props.disabled} onClick={() => props.onDelete(project.id)}><Trash2 size={13} /></button>
+                <button
+                  className="grid size-9 place-items-center rounded-xl bg-white/[0.035] text-neutral-600 transition hover:bg-red-500/10 hover:text-red-300 disabled:opacity-35"
+                  type="button"
+                  title={project.available ? "Delete project" : "Remove from Recents"}
+                  aria-label={project.available ? `Delete ${project.name}` : `Remove ${project.name} from Recents`}
+                  disabled={props.disabled}
+                  onClick={() => props.onDelete(project)}
+                >
+                  {project.available ? <Trash2 size={13} /> : <X size={14} />}
+                </button>
               </div>
             </article>
           ))}

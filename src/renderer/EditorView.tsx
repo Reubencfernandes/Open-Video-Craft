@@ -388,6 +388,8 @@ export function EditorView() {
       y: 50,
       size: 64,
       color: "#ffffff",
+      fontFamily: "sans",
+      opacity: 100,
       weight: 700,
       animation: "none"
     };
@@ -930,6 +932,7 @@ export function EditorView() {
             subtitleDuration={timelineDuration}
             currentTime={currentTime}
             textOverlays={textOverlays}
+            selectedTextOverlayId={selectedTextOverlayId}
             selectedTextOverlay={selectedTextOverlay}
             activeBackgroundCategory={activeBackgroundCategory}
             backgroundStyle={backgroundStyle}
@@ -979,6 +982,7 @@ export function EditorView() {
             onSubtitleStyleChange={setSubtitleStyle}
             onUpdateSubtitle={updateSubtitle}
             onSelectSubtitle={setSelectedSubtitleId}
+            onAddTextOverlay={() => addTextOverlayAt(currentTime)}
             onSelectTextOverlay={setSelectedTextOverlayId}
             onUpdateTextOverlay={updateTextOverlay}
             onRemoveTextOverlay={removeTextOverlay}

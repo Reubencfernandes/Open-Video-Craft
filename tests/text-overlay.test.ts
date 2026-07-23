@@ -11,6 +11,8 @@ const overlay: TextOverlay = {
   y: 20,
   size: 72,
   color: "#38bdf8",
+  fontFamily: "mono",
+  opacity: 70,
   weight: 700,
   animation: "pop"
 };
@@ -22,9 +24,10 @@ describe("text overlay preview animation", () => {
 
     expect(entering.left).toBe("35%");
     expect(entering.top).toBe("20%");
-    expect(entering.opacity).toBeCloseTo(0.5);
+    expect(entering.fontFamily).toContain("SFMono");
+    expect(entering.opacity).toBeCloseTo(0.35);
     expect(entering.transform).toContain("scale(0.86");
-    expect(settled.opacity).toBe(1);
+    expect(settled.opacity).toBe(0.7);
     expect(settled.transform).toContain("scale(1)");
   });
 });

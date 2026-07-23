@@ -49,8 +49,10 @@ export function FloatingSelect<T extends string>(props: {
     <div className="relative min-w-0" data-floating-select ref={rootRef}>
       <button
         ref={triggerRef}
-        className={`flex h-10 w-full min-w-0 items-center justify-between gap-3 rounded-xl bg-white/[0.055] px-3 text-left text-xs font-semibold text-white shadow-[0_8px_22px_rgb(0_0_0_/_0.14)] transition-[background-color,transform,opacity] duration-200 hover:bg-white/[0.085] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 ${
-          open ? "bg-white/[0.09]" : ""
+        className={`flex h-10 w-full min-w-0 items-center justify-between gap-3 rounded-xl border bg-white/[0.055] px-3 text-left text-xs font-semibold text-white shadow-[0_8px_22px_rgb(0_0_0_/_0.14)] outline-none transition-[background-color,border-color,box-shadow,transform,opacity] duration-200 hover:bg-white/[0.085] focus-visible:border-[#ff4b73]/75 focus-visible:ring-2 focus-visible:ring-[#ff3b72]/15 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45 ${
+          open
+            ? "border-[#ff4b73]/70 bg-[#ff3b72]/[0.08] shadow-[0_0_0_3px_rgb(255_59_114_/_0.11),0_8px_22px_rgb(0_0_0_/_0.2)]"
+            : "border-white/[0.08]"
         }`}
         type="button"
         aria-label={props.ariaLabel}
@@ -76,7 +78,7 @@ export function FloatingSelect<T extends string>(props: {
 
       <div
         id={listboxId}
-        className={`absolute left-0 right-0 top-[calc(100%+0.45rem)] z-40 max-h-64 overflow-y-auto rounded-xl bg-[#19191c] p-1.5 shadow-[0_18px_46px_rgb(0_0_0_/_0.52)] transition-[opacity,transform,visibility] duration-200 ease-out ${
+        className={`absolute left-0 right-0 top-[calc(100%+0.45rem)] z-40 max-h-64 overflow-y-auto rounded-xl border border-white/[0.08] bg-[#19191c] p-1.5 shadow-[0_18px_46px_rgb(0_0_0_/_0.52)] transition-[opacity,transform,visibility] duration-200 ease-out ${
           open
             ? "visible translate-y-0 opacity-100"
             : "invisible pointer-events-none -translate-y-1.5 opacity-0"
@@ -91,7 +93,7 @@ export function FloatingSelect<T extends string>(props: {
             <button
               className={`flex min-h-9 w-full items-center justify-between gap-3 rounded-lg px-2.5 text-left text-xs font-semibold transition-colors ${
                 selected
-                  ? "bg-white/[0.09] text-white"
+                  ? "bg-[#ff3b72]/[0.12] text-white"
                   : "text-neutral-400 hover:bg-white/[0.055] hover:text-white"
               }`}
               type="button"

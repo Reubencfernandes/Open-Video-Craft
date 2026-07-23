@@ -60,6 +60,23 @@ describe("home dashboard", () => {
     expect(gridHtml).toContain("data-home-project-grid");
     expect(gridHtml).toContain("Product walkthrough");
     expect(gridHtml).toContain("min(100%,260px)");
+    expect(gridHtml).toContain('title="Delete project"');
+  });
+
+  it("offers a non-destructive Recents removal for incompatible projects", () => {
+    const html = renderToStaticMarkup(createElement(RecentProjectsSection, {
+      projects: [{ ...project, available: false }],
+      loading: false,
+      disabled: false,
+      onRefresh: () => undefined,
+      onOpen: () => undefined,
+      onDelete: () => undefined
+    }));
+
+    expect(html).toContain('title="Remove from Recents"');
+    expect(html).toContain('aria-label="Remove Product walkthrough from Recents"');
+    expect(html).toContain("lucide-x");
+    expect(html).not.toContain('title="Delete project"');
   });
 
   it("keeps project artwork empty until the actual thumbnail loads", () => {

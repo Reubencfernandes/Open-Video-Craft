@@ -1,8 +1,10 @@
-/** Controls for adding, styling, positioning, and timing freeform text. */
-import { GripVertical, Trash2, Type } from "lucide-react";
+/** Controls for adding, styling, and positioning freeform text. */
+import { Plus, Trash2 } from "lucide-react";
+import { BubbleActionButton } from "../../BubbleActionButton";
+import { FloatingSelect } from "../FloatingSelect";
 import { RangeControl } from "../controls";
-import { textDragType } from "../types";
-import type { TextAnimation, TextOverlay } from "../types";
+import type { TextAnimation, TextFontFamily, TextOverlay } from "../types";
+import { TextColorPicker } from "./TextColorPicker";
 
 const animationOptions: Array<{ value: TextAnimation; label: string }> = [
   { value: "none", label: "None" },
@@ -11,9 +13,25 @@ const animationOptions: Array<{ value: TextAnimation; label: string }> = [
   { value: "slide-up", label: "Slide up" }
 ];
 
+const fontOptions: Array<{ value: TextFontFamily; label: string }> = [
+  { value: "sans", label: "Modern sans" },
+  { value: "rounded", label: "Rounded" },
+  { value: "serif", label: "Editorial serif" },
+  { value: "mono", label: "Monospace" }
+];
+
+const weightOptions = [
+  { value: "400", label: "Regular" },
+  { value: "600", label: "Semibold" },
+  { value: "700", label: "Bold" },
+  { value: "800", label: "Extra bold" }
+] as const;
+
 export function TextPanel(props: {
   overlays: TextOverlay[];
+  selectedOverlayId: string | null;
   selectedOverlay: TextOverlay | null;
+  onAdd: () => void;
   onSelect: (id: string) => void;
   onUpdate: (id: string, updates: Partial<TextOverlay>) => void;
   onRemove: (id: string) => void;
@@ -21,132 +39,124 @@ export function TextPanel(props: {
   const selected = props.selectedOverlay;
 
   return (
-    <div className="grid min-h-0 content-start gap-3 overflow-auto">
-      {/* Text is placed by dropping this tile onto the timeline's Text track,
-          matching how media assets are added. */}
-      <div
-        className="grid cursor-move justify-items-center gap-1 rounded-lg border border-dashed border-white/15 bg-white/[0.055] px-3 py-3 text-center active:cursor-grabbing hover:bg-white/10"
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData(textDragType, "new");
-          event.dataTransfer.effectAllowed = "copy";
-        }}
+    <div className="grid min-h-0 min-w-0 content-start gap-3 overflow-auto">
+      <BubbleActionButton
+        className="min-h-11 w-full min-w-0 rounded-xl px-4 text-sm font-extrabold"
+        data-add-text-to-viewport
+        onClick={props.onAdd}
       >
-        <span className="inline-flex items-center gap-2 text-sm font-bold text-white">
-          <GripVertical size={16} className="text-slate-500" />
-          <Type size={16} className="text-sky-300" /> Text
-        </span>
-        <span className="text-[0.68rem] font-semibold text-slate-400">
-          Drag onto the timeline to add
-        </span>
-      </div>
+        <Plus size={17} strokeWidth={2.5} />
+        <span className="truncate">Add text to viewport</span>
+      </BubbleActionButton>
 
-      <div className="grid gap-1.5">
-        {props.overlays.map((overlay) => (
-          <button
-            className={`editor-choice-button flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs ${
-              selected?.id === overlay.id
-                ? "bg-sky-400/15 text-white ring-1 ring-sky-300/40"
-                : "bg-white/[0.035] text-slate-400 hover:bg-white/[0.07] hover:text-white"
-            }`}
-            type="button"
-            key={overlay.id}
-            aria-pressed={selected?.id === overlay.id}
-            onClick={() => props.onSelect(overlay.id)}
-          >
-            <Type size={14} className="flex-none text-sky-300" />
-            <span className="min-w-0 flex-1 truncate">{overlay.text || "Empty text"}</span>
-            <span className="flex-none tabular-nums text-[0.62rem] text-slate-500">
-              {overlay.start.toFixed(1)}s
-            </span>
-          </button>
-        ))}
-      </div>
+      {props.overlays.length > 0 ? (
+        <div
+          className="text-layer-list"
+          data-text-layer-stack
+        >
+          {props.overlays.map((overlay) => {
+            const isSelected = props.selectedOverlayId === overlay.id;
+
+            return (
+              <button
+                className="text-layer-list-item"
+                data-selected={isSelected}
+                data-text-layer-option
+                type="button"
+                key={overlay.id}
+                aria-label={`Select text layer: ${overlay.text || "Empty text"}`}
+                aria-pressed={isSelected}
+                onClick={() => props.onSelect(overlay.id)}
+              >
+                <span className="text-layer-list-dot" aria-hidden="true" />
+                <span className="min-w-0 truncate">{overlay.text || "Empty text"}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       {!selected ? (
         <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-xs leading-5 text-slate-500">
-          Drag the text tile onto the timeline, or select a text layer to edit it.
+          Add text to the current frame, then style and position it here.
         </div>
       ) : (
-        <div className="grid gap-3 border-t border-white/10 pt-3">
-          <label className="grid gap-1.5 text-[0.68rem] font-semibold text-slate-400">
+        <div className="grid min-w-0 gap-3 border-t border-white/10 pt-3">
+          <label className="grid min-w-0 gap-1.5 text-[0.68rem] font-semibold text-slate-400">
             Text
             <textarea
-              className="min-h-20 resize-y rounded-lg border border-white/10 bg-black/20 p-2.5 text-sm font-semibold text-white outline-none focus:border-sky-400"
+              className="editor-field min-h-24 w-full min-w-0 resize-y p-3 text-sm font-semibold leading-5 text-white"
               value={selected.text}
               onChange={(event) => props.onUpdate(selected.id, { text: event.target.value })}
             />
           </label>
 
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
-            <NumberField label="Start" value={selected.start} onChange={(start) => props.onUpdate(selected.id, { start })} />
-            <NumberField label="End" value={selected.end} onChange={(end) => props.onUpdate(selected.id, { end })} />
-          </div>
-
-          <label className="grid gap-1.5 text-[0.68rem] font-semibold text-slate-400">
-            Animation
-            <select
-              className="h-9 rounded-lg text-xs font-semibold"
-              value={selected.animation}
-              onChange={(event) => props.onUpdate(selected.id, { animation: event.target.value as TextAnimation })}
-            >
-              {animationOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
-            </select>
-          </label>
-
-          <RangeField label="Horizontal" value={selected.x} min={0} max={100} suffix="%" onChange={(x) => props.onUpdate(selected.id, { x })} />
-          <RangeField label="Vertical" value={selected.y} min={0} max={100} suffix="%" onChange={(y) => props.onUpdate(selected.id, { y })} />
-          <RangeField label="Size" value={selected.size} min={12} max={160} suffix="px" onChange={(size) => props.onUpdate(selected.id, { size })} />
-
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">
-            <label className="grid gap-1.5 text-[0.68rem] font-semibold text-slate-400">
-              Color
-              <input
-                className="h-9 w-full rounded-lg border border-white/10 bg-black/20 p-1"
-                type="color"
-                value={selected.color}
-                onChange={(event) => props.onUpdate(selected.id, { color: event.target.value })}
-              />
-            </label>
-            <label className="grid gap-1.5 text-[0.68rem] font-semibold text-slate-400">
-              Weight
-              <select
-                className="h-9 rounded-lg text-xs font-semibold"
-                value={selected.weight}
-                onChange={(event) => props.onUpdate(selected.id, { weight: Number(event.target.value) as TextOverlay["weight"] })}
-              >
-                <option value={400}>Regular</option>
-                <option value={600}>Semibold</option>
-                <option value={700}>Bold</option>
-                <option value={800}>Extra bold</option>
-              </select>
-            </label>
-          </div>
-
           <button
-            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg bg-rose-500/10 text-xs font-bold text-rose-300 hover:bg-rose-500/20"
+            className="editor-choice-button inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-white px-3 text-xs font-bold text-[#111114] transition hover:bg-neutral-200"
             type="button"
             onClick={() => props.onRemove(selected.id)}
           >
             <Trash2 size={14} /> Remove text
           </button>
+
+          <LabeledSelect
+            label="Animation"
+            ariaLabel="Text animation"
+            value={selected.animation}
+            options={animationOptions}
+            onChange={(animation) => props.onUpdate(selected.id, { animation })}
+          />
+
+          <RangeField label="Horizontal" value={selected.x} min={0} max={100} suffix="%" onChange={(x) => props.onUpdate(selected.id, { x })} />
+          <RangeField label="Vertical" value={selected.y} min={0} max={100} suffix="%" onChange={(y) => props.onUpdate(selected.id, { y })} />
+          <RangeField label="Size" value={selected.size} min={12} max={160} suffix="px" onChange={(size) => props.onUpdate(selected.id, { size })} />
+
+          <TextColorPicker
+            color={selected.color}
+            opacity={selected.opacity ?? 100}
+            onColorChange={(color) => props.onUpdate(selected.id, { color })}
+            onOpacityChange={(opacity) => props.onUpdate(selected.id, { opacity })}
+          />
+
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(8.5rem,100%),1fr))] gap-2">
+            <LabeledSelect
+              label="Font"
+              ariaLabel="Text font"
+              value={selected.fontFamily ?? "sans"}
+              options={fontOptions}
+              onChange={(fontFamily) => props.onUpdate(selected.id, { fontFamily })}
+            />
+            <LabeledSelect
+              label="Weight"
+              ariaLabel="Text weight"
+              value={String(selected.weight) as "400" | "600" | "700" | "800"}
+              options={weightOptions}
+              onChange={(weight) => props.onUpdate(selected.id, {
+                weight: Number(weight) as TextOverlay["weight"]
+              })}
+            />
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function NumberField(props: { label: string; value: number; onChange: (value: number) => void }) {
+function LabeledSelect<T extends string>(props: {
+  label: string;
+  ariaLabel: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+}) {
   return (
-    <label className="grid gap-1.5 text-[0.68rem] font-semibold text-slate-400">
+    <label className="grid min-w-0 gap-1.5 text-[0.68rem] font-semibold text-slate-400">
       {props.label}
-      <input
-        className="h-9 min-w-0 rounded-lg border border-white/10 bg-black/20 px-2 text-xs text-white outline-none focus:border-sky-400"
-        type="number"
-        min={0}
-        step={0.1}
+      <FloatingSelect
+        ariaLabel={props.ariaLabel}
         value={props.value}
-        onChange={(event) => props.onChange(Number(event.target.value))}
+        options={props.options}
+        onChange={props.onChange}
       />
     </label>
   );

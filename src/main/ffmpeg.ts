@@ -76,6 +76,8 @@ export interface TimelineCompositionTextOverlay {
   y: number;
   size: number;
   color: string;
+  fontFamily?: "sans" | "rounded" | "serif" | "mono";
+  opacity?: number;
   weight: 400 | 600 | 700 | 800;
   animation: "none" | "fade" | "pop" | "slide-up";
 }
@@ -546,6 +548,12 @@ function appendTextOverlayFilters(
   width: number,
   height: number
 ): void {
+  const fontNames: Record<NonNullable<TimelineCompositionTextOverlay["fontFamily"]>, string> = {
+    sans: "sans-serif",
+    rounded: "Trebuchet MS",
+    serif: "serif",
+    mono: "monospace"
+  };
   let currentLabel = inputLabel;
   overlays.forEach((overlay, index) => {
     const nextLabel = index === overlays.length - 1 ? outputLabel : `vtext${index}`;
@@ -562,11 +570,13 @@ function appendTextOverlayFilters(
     const y = overlay.animation === "slide-up"
       ? `${baseY}+(1-${progress})*${formatFfmpegNumber(height * 0.04)}`
       : baseY;
-    const alpha = overlay.animation === "none" ? "1" : `'${progress}'`;
+    const opacity = formatFfmpegNumber(Math.max(0, Math.min(100, overlay.opacity ?? 100)) / 100);
+    const alpha = overlay.animation === "none" ? opacity : `'${opacity}*${progress}'`;
     const borderWidth = overlay.weight >= 700 ? 1 : 0;
+    const fontName = fontNames[overlay.fontFamily ?? "sans"];
     filters.push(
       `[${currentLabel}]drawtext=text='${escapeDrawtextText(overlay.text)}':` +
-      `fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
+      `font='${fontName}':fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
       `alpha=${alpha}:borderw=${borderWidth}:bordercolor=black@0.55:` +
       `enable='between(t,${start},${end})'[${nextLabel}]`
     );

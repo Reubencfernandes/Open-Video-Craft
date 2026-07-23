@@ -4,6 +4,13 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { TextOverlay } from "./types";
 import { clampNumber } from "./utils";
 
+const textFontStacks: Record<NonNullable<TextOverlay["fontFamily"]>, string> = {
+  sans: "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+  rounded: "'SF Pro Rounded', 'Arial Rounded MT Bold', ui-rounded, system-ui, sans-serif",
+  serif: "'Iowan Old Style', 'Palatino Linotype', Georgia, serif",
+  mono: "'SFMono-Regular', Consolas, 'Liberation Mono', monospace"
+};
+
 export function TextOverlayLayer(props: {
   overlays: TextOverlay[];
   currentTime: number;
@@ -91,8 +98,9 @@ export function getTextOverlayStyle(overlay: TextOverlay, currentTime: number): 
     top: `${overlay.y}%`,
     color: overlay.color,
     fontSize: `${overlay.size / 10.8}cqh`,
+    fontFamily: textFontStacks[overlay.fontFamily ?? "sans"],
     fontWeight: overlay.weight,
-    opacity,
+    opacity: opacity * ((overlay.opacity ?? 100) / 100),
     transform: `translate(-50%, -50%) translateY(${translateY}px) scale(${scale})`
   };
 }

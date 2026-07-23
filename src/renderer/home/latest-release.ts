@@ -2,20 +2,19 @@
 import heroImageUrl from "../assets/release-1.0.0-hero.jpg";
 
 export const latestRelease = {
-  version: "1.0.2",
-  title: "Timeline editing and release reliability",
-  releasedAt: "July 22, 2026",
+  version: "1.0.3",
+  title: "Text tools, safer projects, and updater polish",
+  releasedAt: "July 23, 2026",
   summary:
-    "A more predictable editing release with timeline-owned subtitle timing, safer Cut behavior, stronger export safeguards, and complete build validation.",
+    "A focused editor update with clearer text controls, safer handling of legacy projects, consistent menus, and a responsive download-to-restart experience.",
   heroImageUrl,
   changes: [
-    "Capture screen, camera, microphone, and system audio as separate project tracks from the floating recorder.",
-    "Arrange cuts, transitions, zoom and speed effects, text, subtitles, and lane-aware audio on the multi-track timeline.",
-    "Subtitle cues stay in timeline order while a fast red playback beam sweeps into the next cue and the active card is highlighted; cue-card timing remains read-only because the timeline is the timing source of truth.",
-    "Native text undo/redo, exact subtitle boundary handoffs, and multi-selection Cut behavior are safer and more predictable.",
-    "Generate multilingual subtitles with local Whisper or optional cloud providers, with word-level karaoke highlighting in preview.",
-    "Gemini and Claude Code can inspect and edit the validated project surface, with one-click rollback for agent edits.",
-    "Export timeline composition to MP4, WebM, or MOV with mixed audio and burned-in or sidecar subtitles; preview-only camera and layout styling remains clearly scoped.",
-    "Production bundles and the bundled MCP server now run as required CI release checks on both supported desktop platforms."
+    "Add text directly to the viewport, then customize its font, weight, position, size, color, opacity, and entrance animation from one consistent inspector.",
+    "The text-layer index now mirrors the timeline with readable labels and a red dot-and-text state that follows selection from the list, viewport, or timeline.",
+    "Text font and opacity choices are preserved in saved projects and carried into FFmpeg export while remaining compatible with older project files.",
+    "Legacy, missing, or incompatible project entries can be removed safely from Recents without deleting an unknown folder from disk.",
+    "Bubble on filled screen keeps its fill composition when Slight or Rounded video corners are selected.",
+    "Music AI, text, and transition menus now use the same floating selector and logo-red field focus treatment as the subtitle model picker.",
+    "Update downloads use a responsive green progress card that collapses into a contained animated Restart control when installation is ready."
   ]
 } as const;

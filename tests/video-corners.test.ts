@@ -3,6 +3,7 @@ import {
   getVideoCornerScale,
   getVideoCornerStyles
 } from "../src/renderer/editor/useEditorDerivedData";
+import { getScreenFrameForAspectRatio } from "../src/renderer/editor/layout-geometry";
 
 describe("video corner styles", () => {
   it("maps Flat, Slight, and Rounded to progressively rounder corners", () => {
@@ -20,10 +21,16 @@ describe("video corner styles", () => {
     });
   });
 
-  it("reveals the selected background around a rounded filled screen", () => {
-    expect(getVideoCornerScale("bubble-fill", "soft")).toBe(0.97);
-    expect(getVideoCornerScale("bubble-fill", "round")).toBe(0.94);
-    expect(getVideoCornerScale("bubble-fill", "flat")).toBe(1);
-    expect(getVideoCornerScale("bubble", "soft")).toBe(1);
+  it("keeps the filled-screen frame full-size for every corner style", () => {
+    for (const style of ["flat", "soft", "round"] as const) {
+      expect(getVideoCornerScale("bubble-fill", style)).toBe(1);
+      expect(getScreenFrameForAspectRatio("bubble-fill", "4:3")).toEqual({
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100
+      });
+      expect(getVideoCornerStyles(style)).toBeDefined();
+    }
   });
 });

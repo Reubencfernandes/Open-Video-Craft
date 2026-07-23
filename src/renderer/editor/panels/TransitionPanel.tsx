@@ -1,6 +1,7 @@
 import { Blend, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { RangeControl } from "../controls";
+import { FloatingSelect } from "../FloatingSelect";
 import type { ClipTransition, ClipTransitionType, TimelineMediaClip } from "../types";
 import { transitionDragType } from "../types";
 import {
@@ -63,17 +64,15 @@ export function TransitionPanel(props: {
 
       <label className="grid gap-1.5 text-xs text-slate-400">
         Cut
-        <select
-          className="h-9 rounded-lg border border-white/10 bg-[#101012] px-2 text-xs text-white outline-none focus:border-white/40"
+        <FloatingSelect
+          ariaLabel="Transition cut"
           value={boundary.key}
-          onChange={(event) => setSelectedKey(event.target.value)}
-        >
-          {boundaries.map((item, index) => (
-            <option key={item.key} value={item.key}>
-              {index + 1}. {item.from.item.name} → {item.to.item.name}
-            </option>
-          ))}
-        </select>
+          options={boundaries.map((item, index) => ({
+            value: item.key,
+            label: `${index + 1}. ${item.from.item.name} → ${item.to.item.name}`
+          }))}
+          onChange={setSelectedKey}
+        />
       </label>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2">

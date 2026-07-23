@@ -34,7 +34,7 @@ describe("ChangelogDialog", () => {
       .join(" ");
 
     expect(latestRelease.version).toBe(packageJson.version);
-    expect(latestRelease.version).toBe("1.0.2");
+    expect(latestRelease.version).toBe("1.0.3");
     expect(releaseText).toMatch(/timeline/i);
     expect(releaseText).not.toMatch(/start and end timecodes|timecode inputs?|editable timestamps?/i);
   });

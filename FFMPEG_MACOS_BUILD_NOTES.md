@@ -1,6 +1,6 @@
 # Rebuilding the bundled macOS FFmpeg
 
-Open Video Craft 1.0.2 uses the Martin Riedl FFmpeg 8.1.2 macOS archives with
+Open Video Craft 1.0.3 uses the Martin Riedl FFmpeg 8.1.2 macOS archives with
 build identifiers `1783011502_8.1.2` (Apple Silicon) and
 `1783018342_8.1.2` (Intel). Their published archive checksums and the exact
 `ffmpeg -buildconf` output are recorded in `RELEASE_METADATA.txt` in the source
@@ -20,7 +20,7 @@ July 2, 2026 binary build time, that branch resolved to:
 `0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee`
 
 That commit predates the build and remained the branch head through the
-v1.0.2 source-bundle preparation. Its exact archive is included as:
+v1.0.3 source-bundle preparation. Its exact archive is included as:
 
 `upstream-archives/x264-0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee.tar.gz`
 

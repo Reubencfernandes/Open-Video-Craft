@@ -118,6 +118,8 @@ export function isTextOverlay(value: unknown): value is TextOverlay {
     finite(value.y) && value.y >= 0 && value.y <= 100 &&
     finite(value.size) && value.size >= 12 && value.size <= 240 &&
     typeof value.color === "string" && /^#[0-9a-f]{6}$/i.test(value.color) &&
+    (value.fontFamily === undefined || oneOf(value.fontFamily, ["sans", "rounded", "serif", "mono"])) &&
+    (value.opacity === undefined || (finite(value.opacity) && value.opacity >= 0 && value.opacity <= 100)) &&
     [400, 600, 700, 800].includes(value.weight as number) &&
     oneOf(value.animation, ["none", "fade", "pop", "slide-up"]);
 }

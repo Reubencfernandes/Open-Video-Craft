@@ -15,7 +15,7 @@
 
 </div>
 
-![The editor with the timeline, subtitle lanes, and karaoke subtitle overlay](docs/screenshots/editor-timeline.png)
+![The editor with the timeline, subtitle lanes, and camera composition](build/app-store/screenshots/01-editor.png)
 
 ## What it does
 
@@ -34,7 +34,7 @@ Recording, editing, Whisper transcription, and export run locally. Optional
 Gemini, Cohere, and Claude Code connections are used only when you explicitly
 invoke their AI features.
 
-## Screenshots — v1.0.2
+## Screenshots — v1.0.3
 
 | Launcher | Floating recorder |
 | :---: | :---: |
@@ -42,7 +42,7 @@ invoke their AI features.
 
 | Editor workspace | Timeline & subtitles |
 | :---: | :---: |
-| ![Editor with the media library, preview, and multi-lane timeline](docs/screenshots/editor.png) | ![Timeline with clips and subtitle lane](docs/screenshots/editor-timeline.png) |
+| ![Editor with backgrounds, preview, and multi-lane timeline](build/app-store/screenshots/01-editor.png) | ![Timeline and multilingual subtitle inspector](build/app-store/screenshots/02-timeline-subtitles.png) |
 
 ### Latest improvements
 
@@ -64,6 +64,11 @@ invoke their AI features.
   timeline clip.
 - AI prompts can be copied, concurrent requests are guarded cleanly, and Gemini
   errors are presented as concise messages instead of IPC implementation text.
+- Text overlays can be added directly to the viewport and styled with consistent
+  font, weight, color, opacity, position, size, and animation controls. Their
+  readable layer index follows viewport and timeline selection in red.
+- Unsupported legacy project entries can be removed safely from Recents without
+  deleting an unknown or incompatible folder from disk.
 - The export dialog is wider and more compact, video corners now offer clear
   Flat, Slight, and Rounded choices, and selected clips remain
   visible over bright filmstrip frames.
@@ -210,17 +215,17 @@ license, source, and build provenance are recorded in
 [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 The screenshots above were captured from the running desktop app during the
-v1.0.2 release check. They document the actual launcher, recorder, editor, and
+v1.0.3 release check. They document the actual launcher, recorder, editor, and
 subtitle timeline rather than design mockups.
 
 ## Releases
 
 Releases are tag-triggered: pushing a `v*` tag that matches `package.json`
 builds and publishes the release-approved platform matrix through GitHub
-Actions. Version 1.0.2 publishes macOS Intel/Apple Silicon and Windows x64
+Actions. Version 1.0.3 publishes macOS Intel/Apple Silicon and Windows x64
 builds.
 
-The public stable line remains 1.x: v1.0.2 follows the published v1.0.1 build.
+The public stable line remains 1.x: v1.0.3 follows the published v1.0.2 build.
 Earlier 2.x tags were beta-test builds and are not used for this stable release.
 
 ```sh
@@ -239,13 +244,16 @@ these notarization credential groups:
 
 Windows release signing can use `WINDOWS_CSC_LINK` (a base64 certificate or
 secure certificate URL) and `WINDOWS_CSC_KEY_PASSWORD`. Those secrets are not
-currently configured, so v1.0.2 Windows artifacts are published unsigned and
+currently configured, so v1.0.3 Windows artifacts are published unsigned and
 are labeled accordingly in the release notes.
 
-The GitHub macOS artifacts are direct-download Developer ID builds. A future
-Mac App Store submission requires a separate sandboxed `mas` target, App Store
-entitlements, Store-managed updates, and a fresh review of bundled-code license
-compatibility; this release does not claim Mac App Store readiness.
+The GitHub macOS artifacts are direct-download Developer ID builds. The
+sandboxed `mas` target, App Store signing identities, and provisioning profile
+exist, but the submitted bundle would still contain a GPLv3-or-later FFmpeg
+executable. A source offer covers GitHub distribution; it does not remove the
+additional-distribution-terms conflict for the Mac App Store or TestFlight.
+Store upload remains disabled until that binary is replaced by an
+App-Store-compatible media pipeline and the resulting package passes review.
 
 `verify:mac-release` validates the updater ZIP: `latest-mac.yml` checksum,
 Developer ID team, designated requirement, strict signature, and the stapled

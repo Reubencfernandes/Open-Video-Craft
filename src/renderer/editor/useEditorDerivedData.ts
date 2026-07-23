@@ -59,14 +59,12 @@ export function getVideoCornerStyles(style: VideoCornerStyle): Pick<
   };
 }
 
-/** Rounded filled-screen layouts need a small reveal for the chosen background. */
+/** Corner styling clips the existing frame and must never change its size. */
 export function getVideoCornerScale(
-  layoutMode: LayoutMode,
-  style: VideoCornerStyle
+  _layoutMode: LayoutMode,
+  _style: VideoCornerStyle
 ): number {
-  if (layoutMode !== "bubble-fill") return 1;
-  if (style === "soft") return 0.97;
-  return style === "round" ? 0.94 : 1;
+  return 1;
 }
 
 type UseEditorDerivedDataParams = {

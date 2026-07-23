@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import packageJson from "../package.json";
 
 // @ts-expect-error The JavaScript release script intentionally has no declaration file.
 import { getPeArchitecture, WINDOWS_FFMPEG } from "../scripts/prepare-windows-ffmpeg.mjs";
@@ -26,11 +27,11 @@ describe("Windows release inputs", () => {
   });
 
   it("requires Setup, Portable, and updater metadata", () => {
-    const setup = "Open-Video-Craft-Setup-1.0.2-win-x64.exe";
-    const portable = "Open-Video-Craft-Portable-1.0.2-win-x64.exe";
+    const setup = `Open-Video-Craft-Setup-${packageJson.version}-win-x64.exe`;
+    const portable = `Open-Video-Craft-Portable-${packageJson.version}-win-x64.exe`;
     expect(validateWindowsUpdateMetadataShape(
       [setup, portable],
-      `version: 1.0.2\npath: ${setup}\nfiles:\n  - url: ${setup}`
+      `version: ${packageJson.version}\npath: ${setup}\nfiles:\n  - url: ${setup}`
     )).toEqual({ setupName: setup, portableName: portable });
   });
 });

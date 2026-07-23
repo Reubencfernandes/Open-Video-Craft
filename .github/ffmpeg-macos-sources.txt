@@ -2,7 +2,7 @@
 #
 # These are the corresponding source archives for the statically linked
 # libraries enabled in the two Martin Riedl FFmpeg 8.1.2 macOS binaries used
-# by Open Video Craft 1.0.2. The release workflow refuses to publish unless
+# by Open Video Craft 1.0.3. The release workflow refuses to publish unless
 # every archive matches this manifest.
 44bf90dbd23e734d50e70a8c41c285193922938bd0d3bc2ee56764d181d55ef5  aom-3.14.1.tar.gz  https://storage.googleapis.com/aom-releases/libaom-3.14.1.tar.gz
 cbe212b02faf8c6eed5b6d55ef8a6e363aaab83f15112e960701a9c3df813686  dav1d-1.5.3.tar.gz  https://code.videolan.org/videolan/dav1d/-/archive/1.5.3/dav1d-1.5.3.tar.gz

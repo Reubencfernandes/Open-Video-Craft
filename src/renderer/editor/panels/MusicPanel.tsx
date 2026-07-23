@@ -11,6 +11,7 @@ import type {
   MusicGenerationState
 } from "../useMusicGeneration";
 import type { MusicGenerateProgressEvent } from "../../../shared/types";
+import { FloatingSelect } from "../FloatingSelect";
 
 const engineOptions: Array<{ id: MusicEngine; label: string; hint: string }> = [
   {
@@ -61,18 +62,16 @@ export function MusicPanel(props: {
     <div className="grid min-h-0 content-start gap-3 overflow-auto">
       <label className="grid gap-1 text-xs">
         <span className="font-bold text-slate-400">Engine</span>
-        <select
-          className="h-9 w-full min-w-0 rounded-md border border-white/10 bg-black/20 px-2 font-semibold text-white outline-none focus:border-violet-400"
+        <FloatingSelect
+          ariaLabel="Music generation engine"
           value={engine}
+          options={engineOptions.map((option) => ({
+            value: option.id,
+            label: option.label
+          }))}
           disabled={generating}
-          onChange={(event) => setEngine(event.target.value as MusicEngine)}
-        >
-          {engineOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onChange={setEngine}
+        />
       </label>
       <p className="text-[0.68rem] leading-4 text-slate-500">{selectedEngine?.hint}</p>
 
@@ -89,7 +88,7 @@ export function MusicPanel(props: {
       <label className="grid gap-1 text-xs">
         <span className="font-bold text-slate-400">Describe the music</span>
         <textarea
-          className="min-h-20 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-violet-400"
+          className="editor-field min-h-20 resize-y p-3 text-sm font-semibold text-white"
           placeholder="lo-fi hip hop, mellow Rhodes piano, 85 BPM, dusty vinyl crackle, instrumental"
           value={prompt}
           disabled={generating}
@@ -99,7 +98,7 @@ export function MusicPanel(props: {
       <label className="grid gap-1 text-xs">
         <span className="font-bold text-slate-400">Lyrics (optional)</span>
         <textarea
-          className="min-h-16 resize-y rounded-lg border border-white/10 bg-black/20 p-3 text-sm font-semibold text-white outline-none focus:border-violet-400"
+          className="editor-field min-h-16 resize-y p-3 text-sm font-semibold text-white"
           placeholder={"[verse]\nWalking through the neon glow…"}
           value={lyrics}
           disabled={generating}

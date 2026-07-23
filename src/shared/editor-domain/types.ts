@@ -31,6 +31,7 @@ export type ZoomEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "cu
 export type SpeedRate = 1 | 2 | 3 | 4 | 5;
 export type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";
 export type TextAnimation = "none" | "fade" | "pop" | "slide-up";
+export type TextFontFamily = "sans" | "rounded" | "serif" | "mono";
 export type ClipTransitionType = "crossfade" | "fade-black" | "slide-left" | "wipe-left";
 export type PreviewQuality = "high" | "low";
 export type AgentMediaPlacement = "media-bin" | "timeline" | "background-audio" | "custom-background";
@@ -93,6 +94,10 @@ export interface TextOverlay {
   y: number;
   size: number;
   color: string;
+  /** Optional for compatibility with projects saved before typography controls. */
+  fontFamily?: TextFontFamily;
+  /** Percentage opacity; older projects default to 100. */
+  opacity?: number;
   weight: 400 | 600 | 700 | 800;
   animation: TextAnimation;
 }

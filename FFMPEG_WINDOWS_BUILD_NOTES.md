@@ -1,6 +1,6 @@
 # Rebuilding the bundled Windows FFmpeg
 
-Open Video Craft 1.0.2 uses BtbN’s static Windows x64 GPL build of FFmpeg
+Open Video Craft 1.0.3 uses BtbN’s static Windows x64 GPL build of FFmpeg
 8.1.2 from release `autobuild-2026-07-21-13-38`:
 
 - Build scripts: `BtbN/FFmpeg-Builds` commit
