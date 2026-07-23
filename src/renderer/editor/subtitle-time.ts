@@ -23,7 +23,8 @@ export interface SubtitleTimelineProgressPosition {
   progress: number;
 }
 
-export const subtitleTimelineProgressDuration = 0.55;
+/** A short, deliberate sweep makes the playback connection feel like a beam. */
+export const subtitleTimelineProgressDuration = 0.28;
 
 /**
  * Locate the growing progress line that arrives at the next cue marker. The

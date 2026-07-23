@@ -547,7 +547,7 @@ select,
   border-radius: 999px;
   background: rgb(255 59 92);
   transform: translateX(-50%);
-  transition: height 48ms linear;
+  transition: height 32ms linear;
 }
 
 @media (prefers-reduced-motion: reduce) {

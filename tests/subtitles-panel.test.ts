@@ -146,7 +146,7 @@ describe("SubtitlesPanel", () => {
         { id: "second", start: 10, end: 12, text: "Second subtitle" },
         { id: "third", start: 20, end: 22, text: "Third subtitle" }
       ],
-      currentTime: 9.725
+      currentTime: 9.86
     });
 
     const progress = host.querySelector<HTMLElement>("[data-subtitle-progress]");

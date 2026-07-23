@@ -25,12 +25,12 @@ describe("subtitle timecodes", () => {
     const second = { id: "second", start: 20, end: 22, text: "Second" };
     const third = { id: "third", start: 30, end: 32, text: "Third" };
 
-    expect(getSubtitleTimelineProgressPosition([third, first, second], 19.725)).toEqual({
+    expect(getSubtitleTimelineProgressPosition([third, first, second], 19.86)).toEqual({
       fromId: "first",
       toId: "second",
       progress: 0.5
     });
-    expect(getSubtitleTimelineProgressPosition([third, first, second], 29.725)).toEqual({
+    expect(getSubtitleTimelineProgressPosition([third, first, second], 29.86)).toEqual({
       fromId: "second",
       toId: "third",
       progress: 0.5
