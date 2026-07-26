@@ -14,7 +14,7 @@ import {
   type SecurityScopedBookmarkHandler
 } from "./file-dialogs";
 import { exportVideo } from "./ffmpeg";
-import { exportEditorProjectToPath } from "./composition-export";
+import { exportEditorProjectToPath, retimeTextOverlaysForSpeed } from "./composition-export";
 import type { ProjectStore } from "./project-store";
 import type { ExportJobControl } from "./export-jobs";
 import {
@@ -94,6 +94,18 @@ async function exportEditorVideoToPath(
   }
 
   const subtitleMode = request.subtitleMode ?? "burn-in";
+  const trimStart = Math.max(0, request.trimStart);
+  const trimEnd =
+    request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null;
+  // FFmpeg seeks the input to trimStart, so t=0 in the output is trimStart on
+  // the timeline. Rebase the overlays onto that clock and drop the ones the
+  // trim excludes. This path applies no speed effects, hence the empty list.
+  const textOverlays = retimeTextOverlaysForSpeed(
+    request.textOverlays ?? [],
+    [],
+    trimStart,
+    trimEnd ?? Number.POSITIVE_INFINITY
+  );
   const temporarySubtitles = subtitleMode === "burn-in"
     ? await writeTemporarySubtitleSidecar(request)
     : null;
@@ -119,12 +131,12 @@ async function exportEditorVideoToPath(
       outputPath,
       format: request.format,
       resolution: request.resolution,
-      trimStart: Math.max(0, request.trimStart),
-      trimEnd:
-        request.trimEnd && request.trimEnd > request.trimStart ? request.trimEnd : null,
+      trimStart,
+      trimEnd,
       sourceAudioVolume: request.volume,
       preserveSourceAudio: source.preserveSourceAudio,
-      subtitlePath: subtitleMode === "burn-in" ? temporarySubtitles?.path ?? null : null
+      subtitlePath: subtitleMode === "burn-in" ? temporarySubtitles?.path ?? null : null,
+      textOverlays
     }, context.control);
     exportCompleted = true;
   } finally {

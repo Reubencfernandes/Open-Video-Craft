@@ -14,6 +14,7 @@ import type {
   ExportVideoRequest,
   ProjectView
 } from "../../shared/types";
+import type { TextOverlay } from "../../shared/editor-domain";
 import type { EditorMediaItem } from "./types";
 import type { SubtitleSegment } from "./types";
 import { formatBytes } from "./utils";
@@ -28,6 +29,7 @@ type UseEditorExportParams = {
   setError: Dispatch<SetStateAction<string | null>>;
   setExportMessage: Dispatch<SetStateAction<string | null>>;
   subtitles: SubtitleSegment[];
+  textOverlays: TextOverlay[];
   trimRange: { start: number; end: number };
   beforeExport: () => Promise<void>;
 };
@@ -43,6 +45,7 @@ export function useEditorExport(params: UseEditorExportParams) {
     setError,
     setExportMessage,
     subtitles,
+    textOverlays,
     trimRange
   } = params;
   const [exportFormat, setExportFormat] = useState<ExportVideoFormat>("mp4");
@@ -109,7 +112,10 @@ export function useEditorExport(params: UseEditorExportParams) {
         audioLevels,
         backgroundAudioImportIds: backgroundAudioIds,
         subtitles: subtitles.map(({ start, end, text }) => ({ start, end, text })),
-        subtitleMode: exportSubtitleMode
+        subtitleMode: exportSubtitleMode,
+        // The project export path reads overlays from the saved document; the
+        // import path has no document, so they travel with the request.
+        textOverlays
       });
 
       if (result) {

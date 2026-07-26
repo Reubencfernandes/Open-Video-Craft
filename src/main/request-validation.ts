@@ -17,7 +17,7 @@ import type {
   SttTranscribeSource,
   UpdateProviderKeysRequest
 } from "../shared/types";
-import { validateEditorStateSnapshot } from "../shared/editor-domain";
+import { isTextOverlay, validateEditorStateSnapshot } from "../shared/editor-domain";
 
 export function assertStartRecordingRequest(
   value: unknown
@@ -90,7 +90,9 @@ export function assertExportVideoRequest(value: unknown): asserts value is Expor
       Number.isFinite(subtitle.end) &&
       subtitle.end >= subtitle.start
     ) ||
-    (request.subtitleMode !== undefined && !["burn-in", "sidecar", "none"].includes(request.subtitleMode))
+    (request.subtitleMode !== undefined && !["burn-in", "sidecar", "none"].includes(request.subtitleMode)) ||
+    (request.textOverlays !== undefined &&
+      (!Array.isArray(request.textOverlays) || !request.textOverlays.every(isTextOverlay)))
   ) {
     throw new Error("Invalid video export request.");
   }

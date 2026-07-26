@@ -31,6 +31,8 @@ export interface ExportVideoJob {
   sourceAudioVolume: number;
   preserveSourceAudio: boolean;
   subtitlePath?: string | null;
+  /** Timeline text overlays, already rebased to output time. */
+  textOverlays?: TimelineCompositionTextOverlay[];
 }
 
 export interface TimelineCompositionVideoSegment {
@@ -241,7 +243,15 @@ export async function exportVideo(
     args.push("-t", formatFfmpegNumber(outputDuration));
   }
 
-  const videoFilter = createVideoFilter(job.resolution, job.subtitlePath);
+  const sourceHeight = job.textOverlays?.length && job.resolution === "source"
+    ? await probeMediaHeight(job.videoPath)
+    : null;
+  const videoFilter = createVideoFilter(
+    job.resolution,
+    job.subtitlePath,
+    job.textOverlays,
+    sourceHeight
+  );
   const audioInputs = [
     ...(job.preserveSourceAudio
       ? [{ inputIndex: 0, volume: job.sourceAudioVolume }]
@@ -540,6 +550,46 @@ function appendSpeedAudioFilters(
   filters.push(`${outputs.join("")}concat=n=${outputs.length}:v=0:a=1[${outputLabel}]`);
 }
 
+/**
+ * Build the `drawtext` filter for a single overlay, without stream labels so
+ * that it works in both a labelled `-filter_complex` chain (the timeline
+ * composition) and a plain `-vf` chain (the single-source export).
+ */
+export function createTextOverlayDrawtext(
+  overlay: TimelineCompositionTextOverlay,
+  height: number
+): string {
+  const fontNames: Record<NonNullable<TimelineCompositionTextOverlay["fontFamily"]>, string> = {
+    sans: "sans-serif",
+    rounded: "Trebuchet MS",
+    serif: "serif",
+    mono: "monospace"
+  };
+  const start = formatFfmpegNumber(overlay.start);
+  const end = formatFfmpegNumber(overlay.end);
+  const ramp = formatFfmpegNumber(Math.min(0.4, Math.max(0.08, (overlay.end - overlay.start) / 2)));
+  const progress = `clip((t-${start})/${ramp},0,1)`;
+  const baseFontSize = Math.max(12, Math.round(overlay.size * height / 1080));
+  const fontSize = overlay.animation === "pop"
+    ? `'${baseFontSize}*(0.72+0.28*${progress})'`
+    : String(baseFontSize);
+  const x = `${formatFfmpegNumber(overlay.x / 100)}*w-text_w/2`;
+  const baseY = `${formatFfmpegNumber(overlay.y / 100)}*h-text_h/2`;
+  const y = overlay.animation === "slide-up"
+    ? `${baseY}+(1-${progress})*${formatFfmpegNumber(height * 0.04)}`
+    : baseY;
+  const opacity = formatFfmpegNumber(Math.max(0, Math.min(100, overlay.opacity ?? 100)) / 100);
+  const alpha = overlay.animation === "none" ? opacity : `'${opacity}*${progress}'`;
+  const borderWidth = overlay.weight >= 700 ? 1 : 0;
+  const fontName = fontNames[overlay.fontFamily ?? "sans"];
+  return (
+    `drawtext=text='${escapeDrawtextText(overlay.text)}':` +
+    `font='${fontName}':fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
+    `alpha=${alpha}:borderw=${borderWidth}:bordercolor=black@0.55:` +
+    `enable='between(t,${start},${end})'`
+  );
+}
+
 function appendTextOverlayFilters(
   filters: string[],
   inputLabel: string,
@@ -548,37 +598,11 @@ function appendTextOverlayFilters(
   width: number,
   height: number
 ): void {
-  const fontNames: Record<NonNullable<TimelineCompositionTextOverlay["fontFamily"]>, string> = {
-    sans: "sans-serif",
-    rounded: "Trebuchet MS",
-    serif: "serif",
-    mono: "monospace"
-  };
   let currentLabel = inputLabel;
   overlays.forEach((overlay, index) => {
     const nextLabel = index === overlays.length - 1 ? outputLabel : `vtext${index}`;
-    const start = formatFfmpegNumber(overlay.start);
-    const end = formatFfmpegNumber(overlay.end);
-    const ramp = formatFfmpegNumber(Math.min(0.4, Math.max(0.08, (overlay.end - overlay.start) / 2)));
-    const progress = `clip((t-${start})/${ramp},0,1)`;
-    const baseFontSize = Math.max(12, Math.round(overlay.size * height / 1080));
-    const fontSize = overlay.animation === "pop"
-      ? `'${baseFontSize}*(0.72+0.28*${progress})'`
-      : String(baseFontSize);
-    const x = `${formatFfmpegNumber(overlay.x / 100)}*w-text_w/2`;
-    const baseY = `${formatFfmpegNumber(overlay.y / 100)}*h-text_h/2`;
-    const y = overlay.animation === "slide-up"
-      ? `${baseY}+(1-${progress})*${formatFfmpegNumber(height * 0.04)}`
-      : baseY;
-    const opacity = formatFfmpegNumber(Math.max(0, Math.min(100, overlay.opacity ?? 100)) / 100);
-    const alpha = overlay.animation === "none" ? opacity : `'${opacity}*${progress}'`;
-    const borderWidth = overlay.weight >= 700 ? 1 : 0;
-    const fontName = fontNames[overlay.fontFamily ?? "sans"];
     filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(overlay.text)}':` +
-      `font='${fontName}':fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
-      `alpha=${alpha}:borderw=${borderWidth}:bordercolor=black@0.55:` +
-      `enable='between(t,${start},${end})'[${nextLabel}]`
+      `[${currentLabel}]${createTextOverlayDrawtext(overlay, height)}[${nextLabel}]`
     );
     currentLabel = nextLabel;
   });
@@ -699,6 +723,24 @@ export async function probeMediaDurationMs(filePath: string): Promise<number | n
   return parseFfmpegDurationMs(output);
 }
 
+/** Frame height of the first video stream, used to size text overlays. */
+export async function probeMediaHeight(filePath: string): Promise<number | null> {
+  let output = "";
+  try {
+    output = await runProcessCapture(resolveFfmpegPath(), ["-i", filePath]);
+  } catch (error) {
+    output = error instanceof Error ? error.message : String(error);
+  }
+  return parseFfmpegHeight(output);
+}
+
+export function parseFfmpegHeight(output: string): number | null {
+  const match = /Stream #\S+: Video:.*?,\s*(\d+)x(\d+)/iu.exec(output);
+  if (!match) return null;
+  const height = Number(match[2]);
+  return Number.isFinite(height) && height > 0 ? height : null;
+}
+
 export function parseFfmpegDurationMs(output: string): number | null {
   const match = /Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/iu.exec(output);
   if (!match) return null;
@@ -719,7 +761,9 @@ function addInput(args: string[], inputPath: string, trimStart: number): void {
 
 export function createVideoFilter(
   resolution: ExportResolution,
-  subtitlePath?: string | null
+  subtitlePath?: string | null,
+  textOverlays?: TimelineCompositionTextOverlay[] | null,
+  sourceHeight?: number | null
 ): string {
   const dimensions = getResolutionDimensions(resolution);
   const filters: string[] = [];
@@ -733,6 +777,16 @@ export function createVideoFilter(
   }
 
   filters.push("setsar=1");
+  // Overlays are sized against the frame they are drawn on. With an explicit
+  // export resolution that is the padded output; at "source" resolution it is
+  // the probed input height, falling back to 1080p so text stays legible when
+  // the probe fails.
+  const overlayHeight = dimensions?.[1] ?? sourceHeight ?? 1080;
+  for (const overlay of textOverlays ?? []) {
+    filters.push(createTextOverlayDrawtext(overlay, overlayHeight));
+  }
+  // Subtitles last so burned-in captions stay above overlay text, matching the
+  // layering the timeline composition produces.
   if (subtitlePath) {
     filters.push(`subtitles='${escapeFilterPath(subtitlePath)}'`);
   }
@@ -796,7 +850,9 @@ export function canStreamCopy(job: ExportVideoJob): boolean {
     job.audioTracks.length === 0 &&
     job.preserveSourceAudio &&
     job.sourceAudioVolume === 1 &&
-    !job.subtitlePath
+    !job.subtitlePath &&
+    // Overlays are drawn by a filter, which a stream copy would skip entirely.
+    !job.textOverlays?.length
   );
 }
 

@@ -597,6 +597,7 @@ export function EditorView() {
     setError,
     setExportMessage,
     subtitles,
+    textOverlays,
     trimRange,
     beforeExport: saveState
   });
