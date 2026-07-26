@@ -9,6 +9,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import type { ExportResolution, ExportVideoFormat } from "../shared/types";
+import { createTextOverlayFontArgument } from "./overlay-fonts";
 import {
   calculateExportPercent,
   calculateExportTimeoutMs,
@@ -559,12 +560,6 @@ export function createTextOverlayDrawtext(
   overlay: TimelineCompositionTextOverlay,
   height: number
 ): string {
-  const fontNames: Record<NonNullable<TimelineCompositionTextOverlay["fontFamily"]>, string> = {
-    sans: "sans-serif",
-    rounded: "Trebuchet MS",
-    serif: "serif",
-    mono: "monospace"
-  };
   const start = formatFfmpegNumber(overlay.start);
   const end = formatFfmpegNumber(overlay.end);
   const ramp = formatFfmpegNumber(Math.min(0.4, Math.max(0.08, (overlay.end - overlay.start) / 2)));
@@ -580,12 +575,16 @@ export function createTextOverlayDrawtext(
     : baseY;
   const opacity = formatFfmpegNumber(Math.max(0, Math.min(100, overlay.opacity ?? 100)) / 100);
   const alpha = overlay.animation === "none" ? opacity : `'${opacity}*${progress}'`;
-  const borderWidth = overlay.weight >= 700 ? 1 : 0;
-  const fontName = fontNames[overlay.fontFamily ?? "sans"];
+  // Mirrors the preview's `text-shadow: 0 2px 10px rgb(0 0 0 / 0.9)`. drawtext
+  // has no blur, so the offset is scaled with the frame and the colour carries
+  // the softness. Without it, light text on light footage is unreadable in the
+  // export while looking fine in the editor.
+  const shadowOffset = Math.max(1, Math.round(height * 2 / 1080));
   return (
     `drawtext=text='${escapeDrawtextText(overlay.text)}':` +
-    `font='${fontName}':fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
-    `alpha=${alpha}:borderw=${borderWidth}:bordercolor=black@0.55:` +
+    `${createTextOverlayFontArgument(overlay)}:` +
+    `fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
+    `alpha=${alpha}:shadowx=0:shadowy=${shadowOffset}:shadowcolor=black@0.9:` +
     `enable='between(t,${start},${end})'`
   );
 }

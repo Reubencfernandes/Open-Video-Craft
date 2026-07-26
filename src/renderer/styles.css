@@ -1,3 +1,40 @@
+/* Inter is bundled rather than merely requested by name. The font-family below
+   already asked for it, but nothing shipped it, so every surface silently fell
+   back to the system UI font -- and text overlays then exported in whatever
+   font FFmpeg happened to resolve. Loading the same files the export uses is
+   what makes the preview and the rendered video agree. */
+@font-face {
+  font-family: Inter;
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+  src: url("../../resources/fonts/Inter-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: Inter;
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+  src: url("../../resources/fonts/Inter-SemiBold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: Inter;
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+  src: url("../../resources/fonts/Inter-Bold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: Inter;
+  font-weight: 800;
+  font-style: normal;
+  font-display: block;
+  src: url("../../resources/fonts/Inter-ExtraBold.ttf") format("truetype");
+}
+
 /* This is a desktop app, not a document: chrome text (button labels, panel
    headings, timecodes) should not be selectable and should not show an I-beam
    cursor when the pointer passes over it. Genuinely editable surfaces opt back
