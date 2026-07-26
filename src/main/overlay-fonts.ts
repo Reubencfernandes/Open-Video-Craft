@@ -76,17 +76,28 @@ export function resolveOverlayFontFile(weight: TextOverlay["weight"]): string | 
 export function createTextOverlayFontArgument(
   overlay: Pick<TextOverlay, "weight"> & Partial<Pick<TextOverlay, "fontFamily">>
 ): string {
+  return resolveOverlayFont(overlay).argument;
+}
+
+/**
+ * The drawtext font argument plus the file backing it, when there is one. Line
+ * wrapping needs the file itself to measure glyph widths, so the two are
+ * resolved together to guarantee we measure the font we actually draw with.
+ */
+export function resolveOverlayFont(
+  overlay: Pick<TextOverlay, "weight"> & Partial<Pick<TextOverlay, "fontFamily">>
+): { argument: string; filePath: string | null } {
   const family = overlay.fontFamily ?? "sans";
   const fontconfigName = fontconfigNameByFamily[family];
 
   if (fontconfigName === null) {
     const fontFile = resolveOverlayFontFile(overlay.weight);
     if (fontFile) {
-      return `fontfile='${escapeFontPath(fontFile)}'`;
+      return { argument: `fontfile='${escapeFontPath(fontFile)}'`, filePath: fontFile };
     }
   }
 
-  return `font='${fontconfigName ?? "sans-serif"}'`;
+  return { argument: `font='${fontconfigName ?? "sans-serif"}'`, filePath: null };
 }
 
 /**

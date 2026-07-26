@@ -9,7 +9,8 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import type { ExportResolution, ExportVideoFormat } from "../shared/types";
-import { createTextOverlayFontArgument } from "./overlay-fonts";
+import { loadFontMetrics, wrapTextToWidth } from "./font-metrics";
+import { resolveOverlayFont } from "./overlay-fonts";
 import {
   calculateExportPercent,
   calculateExportTimeoutMs,
@@ -244,14 +245,14 @@ export async function exportVideo(
     args.push("-t", formatFfmpegNumber(outputDuration));
   }
 
-  const sourceHeight = job.textOverlays?.length && job.resolution === "source"
-    ? await probeMediaHeight(job.videoPath)
+  const sourceSize = job.textOverlays?.length && job.resolution === "source"
+    ? await probeMediaSize(job.videoPath)
     : null;
   const videoFilter = createVideoFilter(
     job.resolution,
     job.subtitlePath,
     job.textOverlays,
-    sourceHeight
+    sourceSize
   );
   const audioInputs = [
     ...(job.preserveSourceAudio
@@ -558,7 +559,8 @@ function appendSpeedAudioFilters(
  */
 export function createTextOverlayDrawtext(
   overlay: TimelineCompositionTextOverlay,
-  height: number
+  height: number,
+  width: number
 ): string {
   const start = formatFfmpegNumber(overlay.start);
   const end = formatFfmpegNumber(overlay.end);
@@ -580,13 +582,62 @@ export function createTextOverlayDrawtext(
   // the softness. Without it, light text on light footage is unreadable in the
   // export while looking fine in the editor.
   const shadowOffset = Math.max(1, Math.round(height * 2 / 1080));
+  const font = resolveOverlayFont(overlay);
+  const layout = layOutOverlayText(overlay, font.filePath, baseFontSize, width);
   return (
-    `drawtext=text='${escapeDrawtextText(overlay.text)}':` +
-    `${createTextOverlayFontArgument(overlay)}:` +
+    `drawtext=text='${escapeDrawtextText(layout.text)}':` +
+    `${font.argument}:` +
     `fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
     `alpha=${alpha}:shadowx=0:shadowy=${shadowOffset}:shadowcolor=black@0.9:` +
+    `text_align=C:line_spacing=${layout.lineSpacing}:` +
     `enable='between(t,${start},${end})'`
   );
+}
+
+/**
+ * The preview wraps overlay text and centres the lines; drawtext does neither,
+ * so the line breaks are computed here against the same font the filter draws
+ * with.
+ *
+ * Without bundled metrics -- a non-sans family, or a missing font file -- the
+ * text is passed through unwrapped, which is how it behaved before.
+ */
+function layOutOverlayText(
+  overlay: TimelineCompositionTextOverlay,
+  fontFilePath: string | null,
+  fontSize: number,
+  width: number
+): { text: string; lineSpacing: number } {
+  const metrics = fontFilePath ? loadFontMetrics(fontFilePath) : null;
+  if (!metrics || width <= 0) {
+    return { text: overlay.text, lineSpacing: 0 };
+  }
+
+  // `leading-tight` in the preview is a 1.25 line height. drawtext stacks lines
+  // at the font's own baseline distance, so line_spacing carries the remainder.
+  const naturalLineHeight = metrics.lineHeight / metrics.unitsPerEm;
+  return {
+    text: wrapTextToWidth(overlay.text, resolveOverlayWrapWidth(overlay.x, width), fontSize, metrics),
+    lineSpacing: Math.round((1.25 - naturalLineHeight) * fontSize)
+  };
+}
+
+/**
+ * Width the preview wraps within, reproduced rather than idealised.
+ *
+ * The overlay is an absolutely positioned element with `left: x%`, no width and
+ * `max-w-[90%]`, so CSS shrink-to-fit gives it whatever room is left between
+ * `left` and the right edge, capped at 90%. The `translate(-50%)` that centres
+ * it on the anchor runs after layout and does not widen the box. Text placed at
+ * x=75% therefore wraps within a quarter of the frame, and only text at x=0
+ * ever gets the full 90%.
+ *
+ * Using a flat 90% here would wrap the export differently from the editor,
+ * which is the mismatch this is meant to remove.
+ */
+function resolveOverlayWrapWidth(x: number, width: number): number {
+  const availableRatio = Math.max(0, 1 - Math.max(0, Math.min(100, x)) / 100);
+  return width * Math.min(0.9, availableRatio);
 }
 
 function appendTextOverlayFilters(
@@ -601,7 +652,7 @@ function appendTextOverlayFilters(
   overlays.forEach((overlay, index) => {
     const nextLabel = index === overlays.length - 1 ? outputLabel : `vtext${index}`;
     filters.push(
-      `[${currentLabel}]${createTextOverlayDrawtext(overlay, height)}[${nextLabel}]`
+      `[${currentLabel}]${createTextOverlayDrawtext(overlay, height, width)}[${nextLabel}]`
     );
     currentLabel = nextLabel;
   });
@@ -722,22 +773,27 @@ export async function probeMediaDurationMs(filePath: string): Promise<number | n
   return parseFfmpegDurationMs(output);
 }
 
-/** Frame height of the first video stream, used to size text overlays. */
-export async function probeMediaHeight(filePath: string): Promise<number | null> {
+/** Frame size of the first video stream, used to size and wrap text overlays. */
+export async function probeMediaSize(
+  filePath: string
+): Promise<{ width: number; height: number } | null> {
   let output = "";
   try {
     output = await runProcessCapture(resolveFfmpegPath(), ["-i", filePath]);
   } catch (error) {
     output = error instanceof Error ? error.message : String(error);
   }
-  return parseFfmpegHeight(output);
+  return parseFfmpegSize(output);
 }
 
-export function parseFfmpegHeight(output: string): number | null {
+export function parseFfmpegSize(
+  output: string
+): { width: number; height: number } | null {
   const match = /Stream #\S+: Video:.*?,\s*(\d+)x(\d+)/iu.exec(output);
   if (!match) return null;
+  const width = Number(match[1]);
   const height = Number(match[2]);
-  return Number.isFinite(height) && height > 0 ? height : null;
+  return width > 0 && height > 0 ? { width, height } : null;
 }
 
 export function parseFfmpegDurationMs(output: string): number | null {
@@ -762,7 +818,7 @@ export function createVideoFilter(
   resolution: ExportResolution,
   subtitlePath?: string | null,
   textOverlays?: TimelineCompositionTextOverlay[] | null,
-  sourceHeight?: number | null
+  sourceSize?: { width: number; height: number } | null
 ): string {
   const dimensions = getResolutionDimensions(resolution);
   const filters: string[] = [];
@@ -776,13 +832,14 @@ export function createVideoFilter(
   }
 
   filters.push("setsar=1");
-  // Overlays are sized against the frame they are drawn on. With an explicit
-  // export resolution that is the padded output; at "source" resolution it is
-  // the probed input height, falling back to 1080p so text stays legible when
-  // the probe fails.
-  const overlayHeight = dimensions?.[1] ?? sourceHeight ?? 1080;
+  // Overlays are sized and wrapped against the frame they are drawn on. With an
+  // explicit export resolution that is the padded output; at "source"
+  // resolution it is the probed input, falling back to 1080p so text stays
+  // legible and wraps sanely when the probe fails.
+  const overlayWidth = dimensions?.[0] ?? sourceSize?.width ?? 1920;
+  const overlayHeight = dimensions?.[1] ?? sourceSize?.height ?? 1080;
   for (const overlay of textOverlays ?? []) {
-    filters.push(createTextOverlayDrawtext(overlay, overlayHeight));
+    filters.push(createTextOverlayDrawtext(overlay, overlayHeight, overlayWidth));
   }
   // Subtitles last so burned-in captions stay above overlay text, matching the
   // layering the timeline composition produces.
@@ -914,7 +971,10 @@ function escapeDrawtextText(text: string): string {
     .replace(/'/g, "\\'")
     .replace(/:/g, "\\:")
     .replace(/%/g, "\\%")
-    .replace(/\r?\n/g, "\\n");
+    // A real newline is what drawtext breaks a line on. The filter-argument
+    // parser treats a backslash as escaping the next character, so the "\n"
+    // this used to emit arrived at drawtext as a bare "n" and printed as one.
+    .replace(/\r\n/g, "\n");
 }
 
 // In-flight FFmpeg children, so the app can kill them on quit instead of
