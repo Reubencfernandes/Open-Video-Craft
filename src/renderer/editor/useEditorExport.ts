@@ -15,7 +15,7 @@ import type {
   ProjectView
 } from "../../shared/types";
 import type { TextOverlay } from "../../shared/editor-domain";
-import type { EditorMediaItem } from "./types";
+import type { EditorMediaItem, TimelineSegment } from "./types";
 import type { SubtitleSegment } from "./types";
 import { formatBytes } from "./utils";
 
@@ -30,6 +30,7 @@ type UseEditorExportParams = {
   setExportMessage: Dispatch<SetStateAction<string | null>>;
   subtitles: SubtitleSegment[];
   textOverlays: TextOverlay[];
+  timelineSegments: TimelineSegment[];
   trimRange: { start: number; end: number };
   beforeExport: () => Promise<void>;
 };
@@ -46,6 +47,7 @@ export function useEditorExport(params: UseEditorExportParams) {
     setExportMessage,
     subtitles,
     textOverlays,
+    timelineSegments,
     trimRange
   } = params;
   const [exportFormat, setExportFormat] = useState<ExportVideoFormat>("mp4");
@@ -61,6 +63,17 @@ export function useEditorExport(params: UseEditorExportParams) {
   }), []);
 
   function getExportSource(): ExportVideoRequest["source"] | null {
+    // A project whose timeline holds video must render through the compositor:
+    // it is the only path that lays out every clip. This outranks the selected
+    // clip below, which renders that one file alone — with a clip selected, an
+    // edit built from several imports silently exported just the selected one.
+    if (project && timelineSegments.some((segment) => segment.track === "video")) {
+      return {
+        kind: "project",
+        projectId: project.id
+      };
+    }
+
     if (selectedItem?.origin === "imported" && selectedItem.kind === "video") {
       return {
         kind: "import",

@@ -598,6 +598,7 @@ export function EditorView() {
     setExportMessage,
     subtitles,
     textOverlays,
+    timelineSegments,
     trimRange,
     beforeExport: saveState
   });

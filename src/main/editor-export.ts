@@ -39,14 +39,47 @@ type ExportSource = {
   preserveSourceAudio: boolean;
 };
 
+type ProjectTimelinePlan = {
+  kind: "timeline";
+  name: string;
+  project: ReturnType<ProjectStore["getProject"]>;
+  document: NonNullable<Awaited<ReturnType<ProjectStore["readEditorState"]>>>;
+};
+
+type ExportPlan = ProjectTimelinePlan | { kind: "source"; name: string; source: ExportSource };
+
+/**
+ * Decide which renderer an export goes through before anything touches disk.
+ *
+ * The timeline check has to come first. `resolveExportSource` demands a screen
+ * recording for a project source, but a project assembled entirely from
+ * imported clips has none, so asking it first threw "This project does not have
+ * a screen recording to export." and the compositor was never reached.
+ */
+async function planExport(
+  request: ExportVideoRequest,
+  context: EditorExportContext
+): Promise<ExportPlan> {
+  if (request.source.kind === "project") {
+    const document = await context.projectStore.readEditorState(request.source.projectId);
+    if (document?.state.timelineSegments.some((segment) => segment.track === "video")) {
+      const project = context.projectStore.getProject(request.source.projectId);
+      return { kind: "timeline", name: project.name, project, document };
+    }
+  }
+
+  const source = resolveExportSource(request, context);
+  return { kind: "source", name: source.name, source };
+}
+
 export async function exportEditorVideo(
   request: ExportVideoRequest,
   context: EditorExportContext
 ): Promise<ExportVideoResult | null> {
-  const source = resolveExportSource(request, context);
+  const plan = await planExport(request, context);
   const outputPath = await showExportPathDialog(context.getDialogParentWindow(), {
     format: request.format,
-    name: source.name
+    name: plan.name
   }, context.activateSecurityScopedResource);
 
   if (!outputPath) {
@@ -54,7 +87,9 @@ export async function exportEditorVideo(
   }
 
   try {
-    const result = await exportEditorVideoToPath(request, context, source, outputPath);
+    const result = plan.kind === "timeline"
+      ? await exportProjectTimelineToPath(request, context, plan, outputPath)
+      : await exportEditorVideoToPath(request, context, plan.source, outputPath);
     context.control?.onProgress(100, "Export complete.");
     return result;
   } catch (error) {
@@ -68,31 +103,32 @@ export async function exportEditorVideo(
   }
 }
 
+function exportProjectTimelineToPath(
+  request: ExportVideoRequest,
+  context: EditorExportContext,
+  plan: ProjectTimelinePlan,
+  outputPath: string
+): Promise<ExportVideoResult> {
+  return exportEditorProjectToPath({
+    rootPath: plan.project.rootPath,
+    project: plan.project,
+    document: plan.document,
+    outputPath,
+    format: request.format,
+    resolution: request.resolution,
+    subtitleMode: request.subtitleMode ?? "burn-in",
+    trimStart: request.trimStart,
+    trimEnd: request.trimEnd,
+    control: context.control
+  });
+}
+
 async function exportEditorVideoToPath(
   request: ExportVideoRequest,
   context: EditorExportContext,
   source: ExportSource,
   outputPath: string
 ): Promise<ExportVideoResult> {
-  if (request.source.kind === "project") {
-    const document = await context.projectStore.readEditorState(request.source.projectId);
-    if (document?.state.timelineSegments.some((segment) => segment.track === "video")) {
-      const project = context.projectStore.getProject(request.source.projectId);
-      return exportEditorProjectToPath({
-        rootPath: project.rootPath,
-        project,
-        document,
-        outputPath,
-        format: request.format,
-        resolution: request.resolution,
-        subtitleMode: request.subtitleMode ?? "burn-in",
-        trimStart: request.trimStart,
-        trimEnd: request.trimEnd,
-        control: context.control
-      });
-    }
-  }
-
   const subtitleMode = request.subtitleMode ?? "burn-in";
   const trimStart = Math.max(0, request.trimStart);
   const trimEnd =
