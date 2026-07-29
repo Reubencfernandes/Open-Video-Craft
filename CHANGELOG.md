@@ -4,6 +4,40 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-29
+
+Project saving and exported text overlays are more reliable, full-timeline
+exports include every intended clip, and the macOS app can reopen its main
+window from the Window menu.
+
+### Added
+
+- Bundled Inter font files and font-metric helpers so exported overlay text
+  uses the same typography, wrapping, and centering shown in the editor.
+- A **Window → Open Main Window** command with the **Command–0** shortcut on
+  macOS.
+- A dedicated support document with community, bug-reporting, privacy, and
+  common macOS troubleshooting guidance.
+- Automatic discovery and embedding of the matching Mac App Store
+  provisioning profile during production Store builds.
+
+### Changed
+
+- Direct-download installations on the stable 1.x line—including 1.0.0,
+  1.0.1, 1.0.2, and 1.0.3—can update directly to 1.0.4 through the existing
+  GitHub update channel. Mac App Store installations remain on the App
+  Store-managed update channel.
+
+### Fixed
+
+- Clicking Save creates a new project reliably and continues working after a
+  background autosave.
+- Single-source exports burn in configured text overlays.
+- Timeline exports render the complete composition instead of exporting only
+  the selected clip.
+- Mac users can recreate the launcher after closing its main window without
+  quitting and reopening the application.
+
 ## [1.0.3] - 2026-07-23
 
 Text overlays are easier to add and style, legacy project entries are safer to

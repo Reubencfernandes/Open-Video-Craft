@@ -1,6 +1,6 @@
 {
   "name": "open-video-craft",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Build Tech Demo Videos",
   "private": true,
   "license": "ISC",
@@ -21,11 +21,12 @@
     "build": "npm run build:main && npm run build:renderer",
     "prepare:ffmpeg:mac": "node scripts/prepare-ffmpeg.mjs --all-mac",
     "prepare:ffmpeg:win": "node scripts/prepare-windows-ffmpeg.mjs",
+    "prepare:mas-profile": "node scripts/prepare-mas-profile.mjs",
     "verify:ffmpeg": "node scripts/verify-ffmpeg.mjs",
     "dist": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder",
     "dist:win": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --win",
     "dist:mac": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac",
-    "dist:mas": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas",
+    "dist:mas": "npm run prepare:ffmpeg:mac && npm run prepare:mas-profile && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas",
     "dist:mas:dev": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas-dev",
     "verify:mac-release": "node scripts/verify-mac-release.mjs",
     "verify:windows-release": "node scripts/verify-windows-release.mjs",
@@ -122,6 +123,8 @@
     "mas": {
       "entitlements": "build/entitlements.mas.plist",
       "entitlementsInherit": "build/entitlements.mas.inherit.plist",
+      "provisioningProfile": "build/mas.provisionprofile",
+      "timestamp": "none",
       "notarize": false,
       "hardenedRuntime": false
     },

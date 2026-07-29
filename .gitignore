@@ -5,6 +5,7 @@ release/
 coverage/
 .vite/
 .ffmpeg-bin/
+/build/mas.provisionprofile
 
 *.log
 .env

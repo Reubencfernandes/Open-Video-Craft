@@ -2,19 +2,18 @@
 import heroImageUrl from "../assets/release-1.0.0-hero.jpg";
 
 export const latestRelease = {
-  version: "1.0.3",
-  title: "Text tools, safer projects, and updater polish",
-  releasedAt: "July 23, 2026",
+  version: "1.0.4",
+  title: "Reliable saves, faithful text exports, and macOS polish",
+  releasedAt: "July 29, 2026",
   summary:
-    "A focused editor update with clearer text controls, safer handling of legacy projects, consistent menus, and a responsive download-to-restart experience.",
+    "Projects save when you ask, exports match the editor more closely, full timelines render completely, and a closed Mac window is easy to reopen.",
   heroImageUrl,
   changes: [
-    "Add text directly to the viewport, then customize its font, weight, position, size, color, opacity, and entrance animation from one consistent inspector.",
-    "The text-layer index now mirrors the timeline with readable labels and a red dot-and-text state that follows selection from the list, viewport, or timeline.",
-    "Text font and opacity choices are preserved in saved projects and carried into FFmpeg export while remaining compatible with older project files.",
-    "Legacy, missing, or incompatible project entries can be removed safely from Recents without deleting an unknown folder from disk.",
-    "Bubble on filled screen keeps its fill composition when Slight or Rounded video corners are selected.",
-    "Music AI, text, and transition menus now use the same floating selector and logo-red field focus treatment as the subtitle model picker.",
-    "Update downloads use a responsive green progress card that collapses into a contained animated Restart control when installation is ready."
+    "Clicking Save now creates a new project reliably and keeps working after a background autosave.",
+    "Single-source exports burn in configured text overlays instead of omitting them.",
+    "Bundled Inter fonts, measured wrapping, and centered layout make exported overlay text match the editor preview.",
+    "Exports render the complete timeline composition instead of only the selected clip.",
+    "On macOS, choose Window → Open Main Window or press Command–0 to recreate a closed launcher window.",
+    "Mac App Store builds now discover and embed the matching provisioning profile automatically."
   ]
 } as const;
