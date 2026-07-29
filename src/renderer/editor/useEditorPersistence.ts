@@ -165,6 +165,34 @@ export function settleEditorSessionAfterSave(input: {
   return dirty;
 }
 
+/**
+ * Park an in-flight save in `ref` and clear it once that save settles.
+ *
+ * Clearing cannot live in the save's own `finally`. An async function body runs
+ * synchronously up to its first `await`, and the silent-autosave path returns
+ * before it ever awaits: for that save the `finally` runs *before* the caller
+ * gets to store the promise, so the store lands last and leaves an
+ * already-resolved promise parked in the ref forever. Every later save then
+ * short-circuits on the guard, which is what made the Save button and
+ * Ctrl/Cmd+S go dead — no folder dialog, no error, no confirmation.
+ *
+ * `.finally()` always defers its callback to a microtask, so the ref is set by
+ * the time it runs regardless of where the save awaited. The identity check
+ * keeps a settling save from clearing a newer one that already replaced it.
+ */
+export function trackSaveInFlight(
+  ref: { current: Promise<void> | null },
+  operation: Promise<void>
+): Promise<void> {
+  ref.current = operation;
+  void operation.finally(() => {
+    if (ref.current === operation) {
+      ref.current = null;
+    }
+  });
+  return operation;
+}
+
 export function useEditorPersistence(params: UseEditorPersistenceParams) {
   const {
     activeBackgroundCategory,
@@ -558,14 +586,12 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         setError(saveError instanceof Error ? saveError.message : "Could not save the project state.");
       } finally {
         setSaving(false);
-        saveInFlightRef.current = null;
         if (saved && dirtyRef.current) {
           window.setTimeout(() => void saveStateRef.current(true), 100);
         }
       }
     })();
-    saveInFlightRef.current = operation;
-    return operation;
+    return trackSaveInFlight(saveInFlightRef, operation);
   };
   saveStateRef.current = saveState;
 
