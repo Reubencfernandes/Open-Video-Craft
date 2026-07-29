@@ -3,6 +3,18 @@
 Open Video Craft is distributed under the ISC License. Its installers also
 contain third-party software under separate licenses.
 
+## Inter
+
+Open Video Craft bundles the Inter typeface. The editor renders text overlays
+with it, and the export passes the same font files to FFmpeg's `drawtext`
+filter, so the preview and the rendered video agree. Inter is licensed under
+the SIL Open Font License 1.1, which permits bundling and redistribution.
+
+- Inter project: <https://rsms.me/inter/>
+- Version 4.1: <https://github.com/rsms/inter/releases/tag/v4.1>
+- License text: `resources/fonts/LICENSE.txt`, packaged as `fonts/LICENSE.txt`
+- Bundled weights: Regular (400), SemiBold (600), Bold (700), ExtraBold (800)
+
 ## FFmpeg
 
 Open Video Craft invokes FFmpeg as a separate executable for recording remux,

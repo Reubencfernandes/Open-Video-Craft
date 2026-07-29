@@ -1,6 +1,7 @@
 import type {
   EditorMutation,
-  EditorStateSnapshot
+  EditorStateSnapshot,
+  TextOverlay
 } from "./editor-domain";
 
 /**
@@ -367,6 +368,11 @@ export interface ExportVideoRequest {
   backgroundAudioImportIds: string[];
   subtitles: Array<{ start: number; end: number; text: string }>;
   subtitleMode?: ExportSubtitleMode;
+  /**
+   * Timeline text overlays, in timeline time. Only the import export path
+   * needs these: the project path reads them from the persisted document.
+   */
+  textOverlays?: TextOverlay[];
 }
 
 export interface ExportVideoResult {

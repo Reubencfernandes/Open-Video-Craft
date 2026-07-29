@@ -597,6 +597,8 @@ export function EditorView() {
     setError,
     setExportMessage,
     subtitles,
+    textOverlays,
+    timelineSegments,
     trimRange,
     beforeExport: saveState
   });
@@ -820,7 +822,7 @@ export function EditorView() {
           onRename={renameProject}
           onOpenExport={openExportDialog}
           onOpenAi={() => setAiDialogOpen(true)}
-          onSave={() => void saveState(true)}
+          onSave={() => void saveState()}
         />
 
         <AiConnectionDialog

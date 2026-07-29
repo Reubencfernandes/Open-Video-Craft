@@ -75,6 +75,10 @@
         "to": "acestep_generate.py"
       },
       {
+        "from": "resources/fonts",
+        "to": "fonts"
+      },
+      {
         "from": "THIRD_PARTY_NOTICES.md",
         "to": "THIRD_PARTY_NOTICES.md"
       },

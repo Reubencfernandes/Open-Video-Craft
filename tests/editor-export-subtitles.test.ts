@@ -18,7 +18,10 @@ vi.mock("../src/main/ffmpeg", () => ({
   exportVideo: mocks.exportVideo
 }));
 
-vi.mock("../src/main/composition-export", () => ({
+// Only the project-export entry point is stubbed. The retiming helpers are
+// pure, and editor-export calls them on the import path under test.
+vi.mock("../src/main/composition-export", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/main/composition-export")>()),
   exportEditorProjectToPath: mocks.exportEditorProjectToPath
 }));
 
