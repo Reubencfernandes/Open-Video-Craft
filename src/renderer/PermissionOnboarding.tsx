@@ -71,7 +71,7 @@ export function PermissionOnboarding({
           <div className="min-w-0">
             <h2 className="m-0 text-base font-extrabold text-white">macOS permissions</h2>
             <p className="m-0 mt-1 max-w-[48rem] text-sm font-semibold leading-5 text-slate-300">
-              Allow Screen Recording in System Settings, then restart Open Video Craft.
+              Enable Screen Recording in System Settings, then restart Open Video Craft.
             </p>
           </div>
         </div>
@@ -183,7 +183,7 @@ function PermissionRow({
                 : onOpenSettings(kind)
           }
         >
-          {canRequest ? "Allow" : kind === "screen" && canShowGuide ? "Guide" : "Settings"}
+          {canRequest ? "Continue" : kind === "screen" && canShowGuide ? "Guide" : "Settings"}
           <ExternalLink size={13} />
         </button>
       )}

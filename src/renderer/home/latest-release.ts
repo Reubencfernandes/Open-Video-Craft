@@ -2,18 +2,15 @@
 import heroImageUrl from "../assets/release-1.0.0-hero.jpg";
 
 export const latestRelease = {
-  version: "1.0.4",
-  title: "Reliable saves, faithful text exports, and macOS polish",
+  version: "1.0.5",
+  title: "Clearer macOS permission guidance",
   releasedAt: "July 29, 2026",
   summary:
-    "Projects save when you ask, exports match the editor more closely, full timelines render completely, and a closed Mac window is easy to reopen.",
+    "Camera and microphone setup now uses a neutral continuation step before macOS presents its permission request.",
   heroImageUrl,
   changes: [
-    "Clicking Save now creates a new project reliably and keeps working after a background autosave.",
-    "Single-source exports burn in configured text overlays instead of omitting them.",
-    "Bundled Inter fonts, measured wrapping, and centered layout make exported overlay text match the editor preview.",
-    "Exports render the complete timeline composition instead of only the selected clip.",
-    "On macOS, choose Window → Open Main Window or press Command–0 to recreate a closed launcher window.",
-    "Mac App Store builds now discover and embed the matching provisioning profile automatically."
+    "Camera and microphone permission cards now say Continue before the macOS system prompt appears.",
+    "Screen Recording guidance uses neutral enablement wording while still directing users to the required System Settings pane.",
+    "All reliability, export, updater, support, and macOS window fixes from version 1.0.4 remain included."
   ]
 } as const;

@@ -4,6 +4,23 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-07-29
+
+### Changed
+
+- Camera and microphone permission cards now use a neutral **Continue**
+  action before macOS presents its system permission request.
+- Screen Recording guidance now uses neutral enablement wording while still
+  directing users to the required System Settings pane.
+
+### Fixed
+
+- The macOS permission onboarding flow now follows App Store privacy guidance
+  by leaving the actual allow-or-deny choice to the system permission dialog.
+- Direct-download installations on the stable 1.x line can update directly to
+  1.0.5 through the existing GitHub update channel. Mac App Store
+  installations remain on the App Store-managed update channel.
+
 ## [1.0.4] - 2026-07-29
 
 Project saving and exported text overlays are more reliable, full-timeline
