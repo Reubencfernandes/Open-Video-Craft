@@ -222,11 +222,14 @@ subtitle timeline rather than design mockups.
 
 Releases are tag-triggered: pushing a `v*` tag that matches `package.json`
 builds and publishes the release-approved platform matrix through GitHub
-Actions. Version 1.0.3 publishes macOS Intel/Apple Silicon and Windows x64
+Actions. Version 1.0.4 publishes macOS Intel/Apple Silicon and Windows x64
 builds.
 
-The public stable line remains 1.x: v1.0.3 follows the published v1.0.2 build.
+The public stable line remains 1.x: v1.0.4 follows the published v1.0.3 build.
 Earlier 2.x tags were beta-test builds and are not used for this stable release.
+Installed direct-download builds from v1.0.0 onward use the same stable GitHub
+update feed and can move directly to v1.0.4; no intermediate installation is
+required. Mac App Store builds update through the App Store instead.
 
 ```sh
 npm run dist:win           # local Windows build
@@ -244,16 +247,15 @@ these notarization credential groups:
 
 Windows release signing can use `WINDOWS_CSC_LINK` (a base64 certificate or
 secure certificate URL) and `WINDOWS_CSC_KEY_PASSWORD`. Those secrets are not
-currently configured, so v1.0.3 Windows artifacts are published unsigned and
+currently configured, so v1.0.4 Windows artifacts are published unsigned and
 are labeled accordingly in the release notes.
 
 The GitHub macOS artifacts are direct-download Developer ID builds. The
-sandboxed `mas` target, App Store signing identities, and provisioning profile
-exist, but the submitted bundle would still contain a GPLv3-or-later FFmpeg
-executable. A source offer covers GitHub distribution; it does not remove the
-additional-distribution-terms conflict for the Mac App Store or TestFlight.
-Store upload remains disabled until that binary is replaced by an
-App-Store-compatible media pipeline and the resulting package passes review.
+sandboxed `mas` target is built separately with App Store signing identities
+and an automatically selected provisioning profile, then submitted through
+Transporter. It is not published by the GitHub release workflow. The Store
+bundle still includes GPLv3-or-later FFmpeg, so its compatibility with the Mac
+App Store distribution terms must be confirmed before public distribution.
 
 `verify:mac-release` validates the updater ZIP: `latest-mac.yml` checksum,
 Developer ID team, designated requirement, strict signature, and the stapled

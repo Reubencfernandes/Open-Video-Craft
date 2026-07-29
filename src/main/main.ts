@@ -19,6 +19,7 @@ import {
 import { promises as fs, watch as watchFs } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { createMacApplicationMenuTemplate } from "./application-menu";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
 import { AiConnectionManager } from "./ai-connection";
 import { registerAppStatusIpc } from "./app-status-ipc";
@@ -1687,24 +1688,35 @@ function getDialogParentWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow() ?? mainWindow ?? recorderWindow;
 }
 
+function showMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow();
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 // On macOS the clipboard/window key-equivalents (Cmd+C/V/X/A/Z, Cmd+Q/W/H/M)
 // are routed through the application menu. Setting the menu to null there
 // silently disables copy/paste/select-all in every text input (subtitle
-// editing, project search). A minimal role-based menu restores those without
-// adding any custom app chrome. Windows/Linux need no app menu — clipboard
-// shortcuts work without one and autoHideMenuBar keeps the bar hidden.
+// editing, project search). The Window menu also provides a discoverable way
+// to recreate the main window after it is closed. Windows/Linux need no app
+// menu — clipboard shortcuts work without one and autoHideMenuBar keeps the
+// bar hidden.
 function applyApplicationMenu(): void {
   if (process.platform !== "darwin") {
     Menu.setApplicationMenu(null);
     return;
   }
 
-  const template: Electron.MenuItemConstructorOptions[] = [
-    { role: "appMenu" },
-    { role: "editMenu" },
-    { role: "windowMenu" }
-  ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(createMacApplicationMenuTemplate(showMainWindow))
+  );
 }
 
 function delay(ms: number): Promise<void> {
@@ -1732,19 +1744,13 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow();
+      showMainWindow();
     }
   });
 });
 
 app.on("second-instance", () => {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    void createWindow();
-    return;
-  }
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+  showMainWindow();
 });
 
 app.on("before-quit", () => {
