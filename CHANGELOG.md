@@ -4,6 +4,46 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-09-25
+
+Timeline editing now keeps a recording's voice in sync with its picture, and
+selecting, cutting, and trimming clips behave like other video editors.
+
+### Changed
+
+- A screen recording's microphone and system audio now follow its video
+  through split, delete, move, trim, and cut and paste. Audio that moves with
+  the selected clip shows a dashed outline and a link icon. Hold **Alt** while
+  dragging, or press **Alt+Delete**, to edit the video on its own.
+- Clicking a clip selects it without moving the playhead. Zoom, speed,
+  subtitle, and text clips no longer jump the playhead when selected.
+- Dragging the time ruler scrubs the playhead. **Alt**+drag still extends the
+  visible duration.
+- Audio tracks sit directly under the video track.
+- Clip edges snap to the playhead and neighboring clips at a fixed on-screen
+  distance at every zoom level. Trimming previews the edge frame, then returns
+  the playhead to where it was.
+- Brief confirmations such as "Clip copied" dismiss themselves.
+
+### Fixed
+
+- Deleting or moving part of a recording no longer leaves its audio playing
+  from the wrong point.
+- Ctrl/Cmd+B and arrow-key seeking work right after clicking a clip.
+- Ctrl/Shift-click adds clips to the selection, and the selected clip shows
+  its outline.
+- Pasting a clip selects it, so Delete removes the pasted clip rather than the
+  previous selection.
+- Trimming the last clip no longer rescales the timeline under the cursor.
+- Video trims stop at neighboring clips instead of overlapping them.
+- Playback lands on the next clip's first frame at a cut and keeps its audio
+  aligned with the picture, including after the editor window is minimized.
+- End-trimming a clip short is no longer undone when media metadata reloads.
+- Exporting with background music no longer fails when the source video has
+  no audio track, and cancelled exports wait for FFmpeg to exit before cleanup.
+- Project media, analysis, and export paths reject links that point outside
+  the project folder, and saving provider keys can no longer race itself.
+
 ## [1.0.5] - 2026-07-29
 
 ### Changed
