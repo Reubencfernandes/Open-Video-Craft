@@ -66,6 +66,7 @@ export function EditorTimelineSection(props: {
   textOverlays: TextOverlay[];
   selectedSegmentId: string | null;
   selectedSegmentIds: string[];
+  linkedSegmentIds?: string[];
   rangeSelection: TimelineRangeSelection | null;
   selectedZoomId: string | null;
   selectedSpeedId: string | null;
@@ -167,6 +168,7 @@ export function EditorTimelineSection(props: {
       textOverlays={props.textOverlays}
       selectedSegmentId={props.selectedSegmentId}
       selectedSegmentIds={props.selectedSegmentIds}
+      linkedSegmentIds={props.linkedSegmentIds}
       rangeSelection={props.rangeSelection}
       selectedZoomId={props.selectedZoomId}
       selectedSpeedId={props.selectedSpeedId}

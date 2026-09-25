@@ -28,7 +28,10 @@ import {
   getTimelineSegmentIdsInRange
 } from "./timeline-utils";
 import { useTimelineEffectDragInteractions } from "./useTimelineEffectDragInteractions";
-import { useTimelineMediaDragInteractions } from "./useTimelineMediaDragInteractions";
+import {
+  type ApplyTimelineClipSelection,
+  useTimelineMediaDragInteractions
+} from "./useTimelineMediaDragInteractions";
 import type {
   EditorTool,
   SpeedEffect,
@@ -43,6 +46,7 @@ import type {
 } from "./types";
 
 type UseTimelineDragInteractionsParams = {
+  applyTimelineClipSelection: ApplyTimelineClipSelection;
   beginPlaybackInteraction: () => void;
   clearMediaSelection: () => void;
   currentTimeRef: MutableRefObject<number>;
@@ -63,6 +67,7 @@ type UseTimelineDragInteractionsParams = {
   setSelectedZoomId: Dispatch<SetStateAction<string | null>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTimelineContextMenu: Dispatch<SetStateAction<TimelineContextMenu>>;
+  setTimelineDragActive?: Dispatch<SetStateAction<boolean>>;
   setTimelineRangeSelection: Dispatch<SetStateAction<TimelineRangeSelection | null>>;
   setTimelineRedoStack: Dispatch<SetStateAction<TimelineSegment[][]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
@@ -85,6 +90,7 @@ type UseTimelineDragInteractionsParams = {
 
 export function useTimelineDragInteractions(params: UseTimelineDragInteractionsParams) {
   const {
+    applyTimelineClipSelection,
     beginPlaybackInteraction,
     clearMediaSelection,
     currentTimeRef,
@@ -105,6 +111,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     setSelectedZoomId,
     setSubtitles,
     setTimelineContextMenu,
+    setTimelineDragActive,
     setTimelineRangeSelection,
     setTimelineRedoStack,
     setTimelineSegments,
@@ -128,6 +135,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   // One ref per drag kind; at most one is non-null at a time. Plain playhead
   // scrubbing uses the boolean ref.
   const timelineDragRef = useRef(false);
+  const clipDragFlagRef = useRef(false);
   const rangeSelectionDragRef = useRef<{
     anchorClientX: number;
     anchorClientY: number;
@@ -142,6 +150,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     isMediaClipDragActive,
     updateMediaClipDrag
   } = useTimelineMediaDragInteractions({
+    applyTimelineClipSelection,
     beginPlaybackInteraction,
     currentTimeRef,
     getTimelineTimeFromClientX,
@@ -149,8 +158,6 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     scheduleTimelinePlaybackSync,
     seek,
     selectedTimelineSegmentIds,
-    setSelectedTimelineSegmentId,
-    setSelectedTimelineSegmentIds,
     setTimelineRangeSelection,
     setTimelineRedoStack,
     setTimelineSegments,
@@ -172,7 +179,6 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     beginPlaybackInteraction,
     clearMediaSelection,
     getTimelineTimeFromClientX,
-    seek,
     setActiveTool,
     setSelectedSpeedId,
     setSelectedSubtitleId,
@@ -214,14 +220,9 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       findTimelineSegmentAtTime(timelineSegments, time)?.id ??
       null;
 
-    if (targetSegmentId) {
-      setSelectedTimelineSegmentId(targetSegmentId);
-      setSelectedTimelineSegmentIds([targetSegmentId]);
-      setTimelineRangeSelection(null);
-      const targetSegment = timelineSegments.find((segment) => segment.id === targetSegmentId);
-      if (targetSegment) {
-        setSelectedItemId(targetSegment.itemId);
-      }
+    // Right-clicking inside a multi-selection keeps it, like other editors.
+    if (targetSegmentId && !selectedTimelineSegmentIds.includes(targetSegmentId)) {
+      applyTimelineClipSelection([targetSegmentId], targetSegmentId);
     }
 
     setTimelineContextMenu({
@@ -384,6 +385,10 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     // so it follows the pointer exactly (the transition animates drops instead).
     if (anyClipDragActive()) {
       timelineBodyRef.current?.setAttribute("data-interacting", "true");
+      if (!clipDragFlagRef.current) {
+        clipDragFlagRef.current = true;
+        setTimelineDragActive?.(true);
+      }
     }
 
     if (updateEffectClipDrag(event.clientX)) {
@@ -430,6 +435,10 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     finishEffectClipDrags();
     // Re-enable clip reflow animation so the drop settles smoothly.
     timelineBodyRef.current?.removeAttribute("data-interacting");
+    if (clipDragFlagRef.current) {
+      clipDragFlagRef.current = false;
+      setTimelineDragActive?.(false);
+    }
     timelineDragRef.current = false;
     setScrubbingTimeline(false);
     endPlaybackInteraction();

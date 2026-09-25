@@ -11,6 +11,8 @@ export type ClipPlaybackTiming = {
 };
 
 export const primaryVideoDriftToleranceSeconds = 0.3;
+/** Within this, the next clip already continues from the decoder's frame. */
+export const cutContinuityToleranceSeconds = 0.05;
 export const secondaryDriftSeekCooldownMs = 350;
 
 export function getSafeMediaSeekTarget(
@@ -78,20 +80,35 @@ export function shouldSeekPrimaryVideo(input: {
     return !input.isPlaying && hasMediaDrift(input);
   }
 
-  if (input.reason === "play-start" || input.reason === "seek" || input.reason === "clip-change") {
+  if (input.reason === "play-start" || input.reason === "seek") {
     return true;
+  }
+
+  if (input.reason === "clip-change") {
+    // A tick may already have landed the playing decoder on this clip's first
+    // frame; seeking it again would only stall playback at the cut.
+    return (
+      input.clipChanged ||
+      !input.isPlaying ||
+      hasMediaDrift({ ...input, driftTolerance: cutContinuityToleranceSeconds })
+    );
   }
 
   if (input.reason === "pause") {
     return false;
   }
 
-  // Never hard-seek the primary decoder during ordinary playback. Recorded
+  // Never drift-correct the primary decoder during ordinary playback. Recorded
   // WebM files often have sparse keyframes; repeatedly assigning currentTime
   // while they are playing can keep Chromium in a permanent seek/buffer loop.
-  // Explicit user seeks and clip changes are handled above.
+  // Crossing a cut is the exception: it is one seek per clip, and waiting for
+  // React to report the new clip first shows frames the edit removed. A cut
+  // whose next clip continues from the same frame needs no seek at all.
   if (input.reason === "tick") {
-    return !input.isPlaying && hasMediaDrift(input);
+    return input.isPlaying
+      ? input.clipChanged &&
+          hasMediaDrift({ ...input, driftTolerance: cutContinuityToleranceSeconds })
+      : hasMediaDrift(input);
   }
 
   return !input.isPlaying && (input.clipChanged || hasMediaDrift(input));

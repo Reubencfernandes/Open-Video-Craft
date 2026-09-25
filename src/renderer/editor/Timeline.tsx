@@ -97,6 +97,8 @@ export function Timeline(props: {
   textOverlays: TextOverlay[];
   selectedSegmentId: string | null;
   selectedSegmentIds: string[];
+  /** Recording audio that follows the selected picture (highlighted, not selected). */
+  linkedSegmentIds?: string[];
   rangeSelection: TimelineRangeSelection | null;
   selectedZoomId: string | null;
   selectedSpeedId: string | null;
@@ -251,11 +253,12 @@ export function Timeline(props: {
           className="grid min-w-full content-start gap-1"
           style={{ width: `${props.timelineZoom * 100}%` }}
         >
-          {/* Dragging changes visible duration; horizontal zoom remains a
-              separate concern handled by the toolbar and Ctrl/Cmd + wheel. */}
+          {/* Clicking or dragging the ruler scrubs the playhead, as in other
+              editors. Alt+drag stretches the visible duration; horizontal zoom
+              stays on the toolbar and Ctrl/Cmd + wheel. */}
           <div
-            className="cursor-ew-resize touch-none select-none"
-            title="Drag left to shorten or right to extend visible timeline duration · Double-click to fit content · Click to move the playhead"
+            className="cursor-pointer touch-none select-none"
+            title="Click or drag to move the playhead · Alt+drag to extend the visible duration · Double-click to fit content"
             role="slider"
             aria-label="Visible timeline duration"
             aria-valuemin={Math.max(1, Math.ceil(props.contentDuration))}
@@ -328,6 +331,7 @@ export function Timeline(props: {
           subtitleProcessingRanges={props.subtitleProcessingRanges}
           textOverlays={props.textOverlays}
           selectedSegmentIds={props.selectedSegmentIds}
+          linkedSegmentIds={props.linkedSegmentIds ?? []}
           selectedCount={rangeSelectionCount}
           selectedNoun={rangeTimedItemCount > 0 ? "item" : "clip"}
           rangeSelection={props.rangeSelection}

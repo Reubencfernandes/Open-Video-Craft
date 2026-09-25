@@ -12,9 +12,12 @@ import type {
 import { clampNumber } from "./utils";
 
 type UseTimelineViewportParams = {
+  beginPlaybackInteraction?: () => void;
   contentDuration: number;
+  endPlaybackInteraction?: () => void;
   renderDuration: number;
   seek: (time: number) => void;
+  setScrubbingTimeline?: (scrubbing: boolean) => void;
   timelineZoom: number;
   setTimelineZoom: Dispatch<SetStateAction<number>>;
   setTimelineViewDuration: Dispatch<SetStateAction<number>>;
@@ -62,7 +65,9 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
     startClientY: number;
     startHeight: number;
   } | null>(null);
-  const rulerDurationDragRef = useRef<{
+  const rulerDragRef = useRef<{
+    /** Plain drags scrub the playhead; Alt+drag stretches the visible duration. */
+    mode: "scrub" | "duration";
     moved: boolean;
     startClientX: number;
     startDuration: number;
@@ -147,23 +152,36 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
     setTimelinePanelHeight(getDefaultTimelinePanelHeight());
   }
 
-  function beginTimelineRulerDurationResize(event: ReactPointerEvent<HTMLElement>) {
+  function beginTimelineRulerPointer(event: ReactPointerEvent<HTMLElement>) {
     if (event.button !== 0) return;
 
     event.preventDefault();
-    rulerDurationDragRef.current = {
+    const mode = event.altKey ? "duration" : "scrub";
+    rulerDragRef.current = {
+      mode,
       moved: false,
       startClientX: event.clientX,
       startDuration: renderDuration
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-    document.body.style.cursor = "ew-resize";
+    document.body.style.cursor = mode === "duration" ? "ew-resize" : "";
     document.body.style.userSelect = "none";
+    if (mode === "scrub") {
+      params.beginPlaybackInteraction?.();
+      params.setScrubbingTimeline?.(true);
+      seekTimelinePointer(event.clientX);
+    }
   }
 
-  function moveTimelineRulerDurationResize(event: ReactPointerEvent<HTMLElement>) {
-    const drag = rulerDurationDragRef.current;
+  function moveTimelineRulerPointer(event: ReactPointerEvent<HTMLElement>) {
+    const drag = rulerDragRef.current;
     if (!drag) return;
+
+    if (drag.mode === "scrub") {
+      drag.moved = true;
+      seekTimelinePointer(event.clientX);
+      return;
+    }
 
     const deltaX = event.clientX - drag.startClientX;
     if (!drag.moved && Math.abs(deltaX) < 3) return;
@@ -173,26 +191,26 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
     );
   }
 
-  function finishTimelineRulerDurationResize(
-    event: ReactPointerEvent<HTMLElement>,
-    seekOnClick: boolean
-  ) {
-    const drag = rulerDurationDragRef.current;
+  function finishTimelineRulerPointer(event: ReactPointerEvent<HTMLElement>) {
+    const drag = rulerDragRef.current;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    rulerDurationDragRef.current = null;
+    rulerDragRef.current = null;
     document.body.style.cursor = "";
     document.body.style.userSelect = "";
-    if (drag && !drag.moved && seekOnClick) seekTimelinePointer(event.clientX);
+    if (drag?.mode === "scrub") {
+      params.setScrubbingTimeline?.(false);
+      params.endPlaybackInteraction?.();
+    }
   }
 
-  function endTimelineRulerDurationResize(event: ReactPointerEvent<HTMLElement>) {
-    finishTimelineRulerDurationResize(event, true);
+  function endTimelineRulerPointer(event: ReactPointerEvent<HTMLElement>) {
+    finishTimelineRulerPointer(event);
   }
 
-  function cancelTimelineRulerDurationResize(event: ReactPointerEvent<HTMLElement>) {
-    finishTimelineRulerDurationResize(event, false);
+  function cancelTimelineRulerPointer(event: ReactPointerEvent<HTMLElement>) {
+    finishTimelineRulerPointer(event);
   }
 
   function contractTimelineRulerDuration() {
@@ -250,17 +268,17 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
   }
 
   return {
-    beginTimelineRulerDurationResize,
+    beginTimelineRulerPointer,
     beginTimelinePanelResize,
     bodyRef,
-    cancelTimelineRulerDurationResize,
+    cancelTimelineRulerPointer,
     contractTimelineRulerDuration,
     endTimelinePanelResize,
-    endTimelineRulerDurationResize,
+    endTimelineRulerPointer,
     expandTimelineRulerDuration,
     getTimelineTimeFromClientX,
     moveTimelinePanelResize,
-    moveTimelineRulerDurationResize,
+    moveTimelineRulerPointer,
     resetTimelinePanelHeight,
     resetTimelineRulerDuration,
     resetTimelineZoom,

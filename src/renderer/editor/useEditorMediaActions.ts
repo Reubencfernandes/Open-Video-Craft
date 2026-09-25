@@ -196,7 +196,8 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
             lane,
             start,
             end,
-            sourceStart: 0
+            sourceStart: 0,
+            ...(!item.duration && item.kind !== "image" ? { pendingDuration: true } : {})
           });
         }
 

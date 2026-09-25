@@ -1,7 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
-import { settleEditorSessionAfterSave, trackSaveInFlight } from "../src/renderer/editor/useEditorPersistence";
+import { mergeSavedEditorImports, settleEditorSessionAfterSave, trackSaveInFlight } from "../src/renderer/editor/useEditorPersistence";
+import { createDefaultEditorState } from "../src/shared/editor-domain";
+import type { EditorMediaItem } from "../src/renderer/editor/types";
 
 describe("editor persistence flush state", () => {
+  it("preserves media additions, deletions, and metadata edits made during a save", () => {
+    const item: EditorMediaItem = { id: "a", name: "A", kind: "video", origin: "imported", track: "imported", duration: 3, url: "old.mp4" };
+    const removed = { ...item, id: "removed" };
+    const changed = { ...item, id: "changed" };
+    const newItem = { ...item, id: "new" };
+    const updated = { ...changed, duration: 6 };
+    const merged = mergeSavedEditorImports([item, updated, newItem], [item, removed, changed], {
+      revision: 1, savedAt: "now", state: createDefaultEditorState(),
+      lastMutation: { source: "editor", at: "now", editId: null, summary: null },
+      imports: [item, removed, changed].map((entry) => ({ id: entry.id, name: entry.name, kind: "video", extension: "mp4", duration: 3, url: "saved.mp4" }))
+    });
+    expect(merged.map((entry) => entry.id)).toEqual(["a", "changed", "new"]);
+    expect(merged[0].url).toBe("saved.mp4");
+    expect(merged[1]).toBe(updated);
+    expect(merged[2]).toBe(newItem);
+  });
+
   it("stays dirty when a newer snapshot was queued during a save", () => {
     const notifySession = vi.fn();
 

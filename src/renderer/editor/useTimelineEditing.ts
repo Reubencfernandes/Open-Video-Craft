@@ -27,6 +27,7 @@ import {
   resolveAudioLane,
   syncTimelineSegments
 } from "./timeline-utils";
+import { removeTimelineSegmentsWithLinkedAudio } from "./timeline-links";
 import { splitTimelineSegments } from "./timeline-split";
 import { createId } from "./utils";
 import { mediaDragType, textDragType } from "./types";
@@ -62,11 +63,19 @@ type UseTimelineEditingParams = {
   setTimelineViewDuration: Dispatch<SetStateAction<number>>;
   setTrimRange: Dispatch<SetStateAction<{ start: number; end: number }>>;
   timelineDuration: number;
+  /** True while a clip or effect drag owns the pointer. */
+  timelineDragActive?: boolean;
   timelineEditableItems: EditorMediaItem[];
   timelineRenderDuration: number;
   timelineSegments: TimelineSegment[];
+  timelineViewDuration?: number;
   updateMediaDuration: (itemId: string, duration: number | null) => void;
 };
+
+// Split ids keep the load-bearing "itemId:segment-" prefix of their source.
+function createSplitSegmentId(sourceId: string): string {
+  return `${sourceId}-split-${createId("clip")}`;
+}
 
 export function useTimelineEditing(params: UseTimelineEditingParams) {
   const {
@@ -94,15 +103,20 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     setTimelineViewDuration,
     setTrimRange,
     timelineDuration,
+    timelineDragActive = false,
     timelineEditableItems,
     timelineRenderDuration,
     timelineSegments,
+    timelineViewDuration = 0,
     updateMediaDuration
   } = params;
 
   const [timelineUndoStack, setTimelineUndoStack] = useState<TimelineSegment[][]>([]);
   const [timelineRedoStack, setTimelineRedoStack] = useState<TimelineSegment[][]>([]);
   const previousTimelineDurationRef = useRef(0);
+  // Whether the visible ruler hugs the content end, as opposed to a deliberate
+  // user extension. Only sampled between drags, so a drag cannot change it.
+  const viewFittedToContentRef = useRef(true);
 
   // ---------------------------------------------------------------------------
   // Library housekeeping effects.
@@ -188,20 +202,33 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timelineEditableItems]);
 
+  useEffect(() => {
+    if (!timelineDragActive) {
+      viewFittedToContentRef.current =
+        timelineViewDuration <= 0 || Math.abs(timelineViewDuration - timelineDuration) < 0.05;
+    }
+    // Sampled when the view changes, never because the content did.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timelineViewDuration]);
+
   // Follow the content end in both directions while the ruler is fitted to
   // the composition. Preserve a deliberate user extension, but never let the
   // ruler become shorter than the current content.
+  //
+  // While a drag is active the ruler may grow but never shrink: shrinking
+  // rescales time under the pointer, so trimming the last clip's end made the
+  // edge run away from the cursor. It refits once the drag ends.
   useEffect(() => {
-    const previousTimelineDuration = previousTimelineDurationRef.current;
     setTimelineViewDuration((current) => {
-      const wasFittedToContent =
-        current <= 0 || Math.abs(current - previousTimelineDuration) < 0.05;
-      return wasFittedToContent
+      if (timelineDragActive) {
+        return Math.max(current, timelineDuration);
+      }
+      return current <= 0 || viewFittedToContentRef.current
         ? timelineDuration
         : Math.max(current, timelineDuration);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineDuration]);
+  }, [timelineDuration, timelineDragActive]);
 
   // Keep the export trim range sensible as the timeline duration changes.
   useEffect(() => {
@@ -282,21 +309,38 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
   // Delete + split.
   // ---------------------------------------------------------------------------
 
-  function deleteTimelineSegment(segmentId: string | null) {
+  type DeleteOptions = { linked?: boolean };
+
+  // Deleting a recording's picture also removes the audio that played under
+  // it (unless `linked` is false), so the remaining clips stay in sync.
+  function removeTimelineSegments(ids: readonly string[], options: DeleteOptions = {}) {
+    const result = removeTimelineSegmentsWithLinkedAudio(
+      timelineSegments,
+      ids,
+      createSplitSegmentId,
+      options
+    );
+    for (const id of [...ids, ...result.removedIds]) {
+      audioElsRef.current.get(id)?.pause();
+    }
+    commitTimelineSegments((segments) =>
+      removeTimelineSegmentsWithLinkedAudio(segments, ids, createSplitSegmentId, options).segments
+    );
+  }
+
+  function deleteTimelineSegment(segmentId: string | null, options: DeleteOptions = {}) {
     if (!segmentId) {
       return;
     }
 
-    const audioElement = audioElsRef.current.get(segmentId);
-    audioElement?.pause();
-    commitTimelineSegments((segments) => segments.filter((segment) => segment.id !== segmentId));
+    removeTimelineSegments([segmentId], options);
     setSelectedTimelineSegmentId((current) => (current === segmentId ? null : current));
     setSelectedTimelineSegmentIds((current) => current.filter((id) => id !== segmentId));
     setTimelineRangeSelection(null);
     setTimelineContextMenu(null);
   }
 
-  function deleteSelectedTimelineSegment() {
+  function deleteSelectedTimelineSegment(options: DeleteOptions = {}) {
     const ids = selectedTimelineSegmentIds.length > 0
       ? selectedTimelineSegmentIds
       : selectedTimelineSegmentId
@@ -306,13 +350,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
       return;
     }
 
-    const selectedIds = new Set(ids);
-    for (const id of selectedIds) {
-      audioElsRef.current.get(id)?.pause();
-    }
-    commitTimelineSegments((segments) =>
-      segments.filter((segment) => !selectedIds.has(segment.id))
-    );
+    removeTimelineSegments(ids, options);
     setSelectedTimelineSegmentId(null);
     setSelectedTimelineSegmentIds([]);
     setTimelineRangeSelection(null);
@@ -324,7 +362,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
       timelineSegments,
       segmentId,
       time,
-      (sourceId) => `${sourceId}-split-${createId("clip")}`
+      createSplitSegmentId
     );
     if (!result) {
       setTimelineContextMenu(null);
@@ -386,11 +424,9 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     }
 
     const track = getTimelineTrackKind(item);
-    const itemDuration = Math.max(
-      0.1,
-      mediaDurationById.get(item.id) ??
-      getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId)
-    );
+    const knownDuration = mediaDurationById.get(item.id) ??
+      getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId);
+    const itemDuration = knownDuration > 0 ? knownDuration : 1;
     const start = Math.max(0, dropTime);
     const end = start + itemDuration;
     // The "itemId:segment-" id format is load-bearing: selection code maps a
@@ -406,7 +442,8 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
         lane: track === "audio" ? resolveAudioLane(segments, segmentId, start, end, 0) : 0,
         start,
         end,
-        sourceStart: 0
+        sourceStart: 0,
+        ...(knownDuration > 0 ? {} : { pendingDuration: true })
       };
       // Route through the move logic so drops snap to clip edges like drags do.
       return moveTimelineSegment([...segments, draft], segmentId, start, timelineRenderDuration);
@@ -419,6 +456,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
 
   return {
     commitTimelineSegments,
+    createSplitSegmentId,
     deleteSelectedTimelineSegment,
     deleteTimelineSegment,
     handleTimelineDragOver,

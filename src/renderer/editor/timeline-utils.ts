@@ -37,7 +37,7 @@ export function getTimelineMediaDuration(
     return 5;
   }
 
-  return 1;
+  return 0;
 }
 
 export function getTimelineTrackKind(item: EditorMediaItem): TimelineTrackKind {
@@ -52,32 +52,28 @@ export function syncTimelineSegments(
 ): TimelineSegment[] {
   const itemIds = new Set(items.map((item) => item.id));
   const retainedSegments = currentSegments.filter((segment) => itemIds.has(segment.itemId));
-  const segmentCountByItemId = retainedSegments.reduce((counts, segment) => {
-    counts.set(segment.itemId, (counts.get(segment.itemId) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
   const nextSegments = retainedSegments
     .map((segment) => {
-      const itemDuration = mediaDurationById.get(segment.itemId) ?? 1;
+      const itemDuration = mediaDurationById.get(segment.itemId);
       const track = segment.track;
       const lane = track === "audio" ? normalizeTimelineLane(segment.lane) : 0;
+      // Unknown metadata must never collapse a saved trim or source offset.
+      if (!itemDuration || !Number.isFinite(itemDuration) || itemDuration <= 0) {
+        return { ...segment, lane };
+      }
       const sourceStart = clampNumber(segment.sourceStart, 0, Math.max(0, itemDuration - 0.1));
       // A clip's timeline length can never exceed the media left after sourceStart,
       // but its end lives in timeline space and may sit well past itemDuration once
       // the clip has been moved, so clamp against start + remaining source, not
       // against the raw media duration.
       const maxEnd = segment.start + Math.max(0.1, itemDuration - sourceStart);
-      const wasPlaceholderFullClip =
-        segmentCountByItemId.get(segment.itemId) === 1 &&
-        segment.sourceStart === 0 &&
-        segment.end - segment.start <= 1.05 &&
-        itemDuration > 1.05;
-      const end = wasPlaceholderFullClip
+      const end = segment.pendingDuration
         ? maxEnd
         : clampNumber(segment.end, segment.start + 0.1, maxEnd);
 
       return {
         ...segment,
+        ...(segment.pendingDuration ? { pendingDuration: false } : {}),
         track,
         lane,
         end,
@@ -97,7 +93,9 @@ export function syncTimelineSegments(
     const trackEnd = nextSegments
       .filter((segment) => segment.track === track)
       .reduce((max, segment) => Math.max(max, segment.end), 0);
-    const itemDuration = mediaDurationById.get(item.id) ?? 1;
+    const knownDuration = mediaDurationById.get(item.id);
+    const pendingDuration = !knownDuration || !Number.isFinite(knownDuration) || knownDuration <= 0;
+    const itemDuration = pendingDuration ? 1 : knownDuration;
     const segmentId = `${item.id}:segment-0`;
     const start = track === "audio" ? 0 : trackEnd;
     const end = start + itemDuration;
@@ -111,7 +109,8 @@ export function syncTimelineSegments(
       lane,
       start,
       end,
-      sourceStart: 0
+      sourceStart: 0,
+      ...(pendingDuration ? { pendingDuration: true } : {})
     });
   }
 
@@ -304,11 +303,25 @@ export function trimTimelineSegment(
       return segment;
     }
 
-    const mediaDuration = mediaDurationById.get(segment.itemId) ?? segment.end;
+    const knownDuration = mediaDurationById.get(segment.itemId);
+    const mediaDuration = knownDuration && knownDuration > 0
+      ? knownDuration
+      : segment.sourceStart + segment.end - segment.start;
     const minDuration = 0.15;
+    // The video track is a single lane: a trim stops against its neighbors
+    // instead of sliding underneath them.
+    const neighbors = segment.track === "video"
+      ? getVideoNeighborBounds(segments, segment)
+      : { previousEnd: 0, nextStart: Number.POSITIVE_INFINITY };
 
     if (edge === "start") {
-      const nextStart = clampNumber(time, 0, segment.end - minDuration);
+      // A clip already shorter than the minimum may grow but never shrink.
+      const earliestStart = Math.min(
+        Math.max(0, segment.start - segment.sourceStart, neighbors.previousEnd),
+        segment.start
+      );
+      const latestStart = Math.max(segment.end - minDuration, segment.start);
+      const nextStart = clampNumber(time, earliestStart, latestStart);
       const sourceStart = clampNumber(
         segment.sourceStart + (nextStart - segment.start),
         0,
@@ -316,19 +329,43 @@ export function trimTimelineSegment(
       );
       return {
         ...segment,
+        ...(segment.pendingDuration ? { pendingDuration: false } : {}),
         start: nextStart,
         sourceStart
       };
     }
 
-    const maxEnd = segment.start + Math.max(minDuration, mediaDuration - segment.sourceStart);
+    const earliestEnd = Math.min(segment.start + minDuration, segment.end);
+    const latestEnd = Math.max(
+      Math.min(
+        segment.start + Math.max(minDuration, mediaDuration - segment.sourceStart),
+        neighbors.nextStart
+      ),
+      earliestEnd
+    );
     return {
       ...segment,
-      end: clampNumber(time, segment.start + minDuration, maxEnd)
+      ...(segment.pendingDuration ? { pendingDuration: false } : {}),
+      end: clampNumber(time, earliestEnd, latestEnd)
     };
   });
 
   return resolveSegmentAudioLane(nextSegments, segmentId);
+}
+
+/** Closest video edges on either side of a clip, ignoring legacy overlaps. */
+function getVideoNeighborBounds(
+  segments: TimelineSegment[],
+  segment: TimelineSegment
+): { previousEnd: number; nextStart: number } {
+  let previousEnd = 0;
+  let nextStart = Number.POSITIVE_INFINITY;
+  for (const other of segments) {
+    if (other.id === segment.id || other.track !== "video") continue;
+    if (other.end <= segment.start + 0.01) previousEnd = Math.max(previousEnd, other.end);
+    if (other.start >= segment.end - 0.01) nextStart = Math.min(nextStart, other.start);
+  }
+  return { previousEnd, nextStart };
 }
 
 export function moveTimelineSegment(
@@ -344,7 +381,7 @@ export function moveTimelineSegment(
   }
 
   const length = segment.end - segment.start;
-  const snapThreshold = Math.max(0.08, timelineDuration * 0.01);
+  const snapThreshold = getDefaultSnapThreshold(timelineDuration);
   const snapTargets = [0, ...extraSnapTargets];
   for (const other of segments) {
     if (other.id === segmentId || other.track !== segment.track) {
@@ -400,7 +437,8 @@ export function moveTimelineSegmentGroup(
   segmentIds: readonly string[],
   rawDelta: number,
   timelineDuration: number,
-  extraSnapTargets: number[] = []
+  extraSnapTargets: number[] = [],
+  snapThresholdSeconds?: number
 ): TimelineSegment[] {
   const selectedIds = new Set(segmentIds);
   const selected = segments.filter((segment) => selectedIds.has(segment.id));
@@ -410,7 +448,7 @@ export function moveTimelineSegmentGroup(
 
   const minimumStart = selected.reduce((min, segment) => Math.min(min, segment.start), Infinity);
   let delta = Math.max(-minimumStart, rawDelta);
-  const snapThreshold = Math.max(0.08, timelineDuration * 0.01);
+  const snapThreshold = snapThresholdSeconds ?? getDefaultSnapThreshold(timelineDuration);
   const targets = [
     0,
     ...extraSnapTargets,
@@ -479,6 +517,28 @@ export function moveTimelineSegmentGroup(
       : segment
   );
   return normalizeAudioLanes(moved);
+}
+
+function getDefaultSnapThreshold(timelineDuration: number): number {
+  return Math.max(0.08, timelineDuration * 0.01);
+}
+
+/** Pull a time onto the closest target within `threshold`, if any. */
+export function snapTimelineTime(
+  time: number,
+  targets: readonly number[],
+  threshold: number
+): number {
+  let best = time;
+  let bestDistance = threshold;
+  for (const target of targets) {
+    const distance = Math.abs(target - time);
+    if (distance <= bestDistance) {
+      best = target;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 // Video clips live on a single lane, so a drag must never create an overlap:
@@ -554,10 +614,7 @@ export function normalizeAudioLanes(segments: TimelineSegment[]): TimelineSegmen
   for (const segment of normalized
     .filter((item) => item.track === "audio")
     .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id))) {
-    let lane = normalizeTimelineLane(segment.lane);
-    while (audioLaneHasOverlap(processedAudioSegments, segment.id, lane, segment.start, segment.end)) {
-      lane += 1;
-    }
+    const lane = resolveAudioLane(processedAudioSegments, segment.id, segment.start, segment.end, segment.lane);
 
     laneById.set(segment.id, lane);
     processedAudioSegments.push({ ...segment, lane });
@@ -588,23 +645,16 @@ export function resolveAudioLane(
   end: number,
   preferredLane: number
 ): number {
-  const maxLane = segments.reduce(
-    (max, segment) =>
-      segment.track === "audio" ? Math.max(max, normalizeTimelineLane(segment.lane)) : max,
-    0
-  );
-  const candidates = [
-    normalizeTimelineLane(preferredLane),
-    ...Array.from({ length: maxLane + 2 }, (_value, index) => index)
-  ];
-
-  for (const lane of [...new Set(candidates)]) {
-    if (!audioLaneHasOverlap(segments, segmentId, lane, start, end)) {
-      return lane;
-    }
-  }
-
-  return maxLane + 1;
+  const occupied = new Set(segments.filter((segment) =>
+    segment.id !== segmentId && segment.track === "audio" &&
+    rangesOverlap(start, end, segment.start, segment.end)
+  ).map((segment) => normalizeTimelineLane(segment.lane)));
+  const preferred = normalizeTimelineLane(preferredLane);
+  if (!occupied.has(preferred)) return preferred;
+  // Scan occupied lanes, never allocate an array sized by persisted lane IDs.
+  let lane = 0;
+  while (occupied.has(lane)) lane += 1;
+  return lane;
 }
 
 function audioLaneHasOverlap(

@@ -16,7 +16,7 @@ export type EditorShortcutsParams = {
   pasteClip: () => void;
   splitAtPlayhead: (segmentId: string | null, time: number) => void;
   togglePlayback: () => void;
-  deleteSelected: () => void;
+  deleteSelected: (options?: { linked?: boolean }) => void;
 };
 
 /**
@@ -39,7 +39,13 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
     function handleKeyDown(event: KeyboardEvent) {
       const p = paramsRef.current;
       const isTyping = isKeyboardTextTarget(event.target);
-      const isInteractive = isKeyboardInteractiveTarget(event.target);
+      // Timeline clips are buttons for accessibility, and pressing one focuses
+      // it. That focus must not swallow split or arrow seeking, or the most
+      // common gesture — click a clip, then Ctrl/Cmd+B — silently does nothing.
+      const isTimelineClip =
+        event.target instanceof Element &&
+        Boolean(event.target.closest("[data-timeline-body]"));
+      const isInteractive = isKeyboardInteractiveTarget(event.target) && !isTimelineClip;
       const accel = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
@@ -72,9 +78,10 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
 
       // Timeline regions are rendered as accessible buttons. Delete must still
       // remove the selected timeline item when one of those buttons has focus.
+      // Alt+Delete removes a recording's picture but keeps its audio.
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
-        p.deleteSelected();
+        p.deleteSelected(event.altKey ? { linked: false } : undefined);
         return;
       }
 

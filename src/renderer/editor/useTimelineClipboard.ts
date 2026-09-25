@@ -6,18 +6,32 @@
  * and drops the clip at the playhead, routed through the shared move logic so
  * it snaps to neighbors and never overlaps on the video track (audio clips
  * resolve onto a free lane instead).
+ *
+ * A screen recording clip is copied with the slice of its linked mic/system
+ * audio, and pasted back in sync, so Cut + Paste moves the voice with it.
  */
 import { useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { moveTimelineSegment, resolveAudioLane } from "./timeline-utils";
+import { getLinkedRecordingAudioIds } from "./timeline-links";
+import { moveTimelineSegment, normalizeAudioLanes, resolveAudioLane } from "./timeline-utils";
 import { createId } from "./utils";
 import type { EditorMediaItem, TimelineSegment, TimelineTrackKind } from "./types";
+
+type ClipboardAudio = {
+  itemId: string;
+  sourceStart: number;
+  duration: number;
+  /** Start relative to the copied clip's start. */
+  offset: number;
+  lane: number;
+};
 
 type ClipboardEntry = {
   itemId: string;
   track: TimelineTrackKind;
   sourceStart: number;
   duration: number;
+  linkedAudio: ClipboardAudio[];
 };
 
 type UseTimelineClipboardParams = {
@@ -30,6 +44,7 @@ type UseTimelineClipboardParams = {
   setExportMessage: Dispatch<SetStateAction<string | null>>;
   setSelectedItemId: Dispatch<SetStateAction<string | null>>;
   setSelectedTimelineSegmentId: Dispatch<SetStateAction<string | null>>;
+  setSelectedTimelineSegmentIds?: Dispatch<SetStateAction<string[]>>;
   timelineRenderDuration: number;
   timelineSegments: TimelineSegment[];
 };
@@ -45,6 +60,7 @@ export function useTimelineClipboard(params: UseTimelineClipboardParams) {
     setExportMessage,
     setSelectedItemId,
     setSelectedTimelineSegmentId,
+    setSelectedTimelineSegmentIds,
     timelineRenderDuration,
     timelineSegments
   } = params;
@@ -61,7 +77,23 @@ export function useTimelineClipboard(params: UseTimelineClipboardParams) {
       itemId: segment.itemId,
       track: segment.track,
       sourceStart: segment.sourceStart,
-      duration: Math.max(0.1, segment.end - segment.start)
+      duration: Math.max(0.1, segment.end - segment.start),
+      linkedAudio: getLinkedRecordingAudioIds(timelineSegments, segment.id).flatMap((id) => {
+        const audio = timelineSegments.find((item) => item.id === id);
+        if (!audio) return [];
+        // Only the part of the audio that plays under this clip.
+        const start = Math.max(segment.start, audio.start);
+        const end = Math.min(segment.end, audio.end);
+        return end - start > 0
+          ? [{
+              itemId: audio.itemId,
+              sourceStart: audio.sourceStart + (start - audio.start),
+              duration: end - start,
+              offset: start - segment.start,
+              lane: audio.lane
+            }]
+          : [];
+      })
     };
     setExportMessage("Clip copied");
     return segment.id;
@@ -102,10 +134,24 @@ export function useTimelineClipboard(params: UseTimelineClipboardParams) {
       };
       // Route through move logic so the paste snaps and never overlaps a
       // neighbor on the video track (audio resolves onto a free lane).
-      return moveTimelineSegment([...segments, draft], segmentId, start, timelineRenderDuration);
+      const placed = moveTimelineSegment([...segments, draft], segmentId, start, timelineRenderDuration);
+      const pastedStart = placed.find((segment) => segment.id === segmentId)?.start ?? start;
+      const linkedAudio = clip.linkedAudio
+        .filter((audio) => mediaById.has(audio.itemId))
+        .map((audio): TimelineSegment => ({
+          id: `${audio.itemId}:segment-${createId("paste")}`,
+          itemId: audio.itemId,
+          track: "audio",
+          lane: audio.lane,
+          start: pastedStart + audio.offset,
+          end: pastedStart + audio.offset + audio.duration,
+          sourceStart: audio.sourceStart
+        }));
+      return linkedAudio.length > 0 ? normalizeAudioLanes([...placed, ...linkedAudio]) : placed;
     });
     setSelectedItemId(clip.itemId);
     setSelectedTimelineSegmentId(segmentId);
+    setSelectedTimelineSegmentIds?.([segmentId]);
     setExportMessage("Clip pasted");
   }
 

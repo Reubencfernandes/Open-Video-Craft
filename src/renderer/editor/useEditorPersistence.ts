@@ -276,6 +276,8 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   const savedSignatureRef = useRef<string | null>(null);
   const latestSignatureRef = useRef<string | null>(null);
   const dirtyRef = useRef(false);
+  const createdProjectRef = useRef<ProjectView | null>(null);
+  const lastSaveErrorRef = useRef<unknown>(null);
   // Set right before an intentional in-app navigation (e.g. "Back to main
   // menu") so the beforeunload guard doesn't cancel it. Electron silently
   // aborts a main-process loadURL when beforeunload prevents the unload, which
@@ -288,6 +290,9 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
   };
 
   useEffect(() => {
+    // First save assigns an ID to this same editor. Reloading at this point
+    // races the write and can replace edits made while the folder dialog ran.
+    if (projectId && createdProjectRef.current?.id === projectId) return;
     let cancelled = false;
     savedSignatureRef.current = null;
     dirtyRef.current = false;
@@ -533,6 +538,8 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     const signatureBeingSaved = persistenceSignature;
     const snapshotBeingSaved = snapshot;
     const importsBeingSaved = toEditorProjectImports(importedMedia);
+    const mediaBeingSaved = importedMedia;
+    lastSaveErrorRef.current = null;
     setSaving(true);
     const operation = (async () => {
       let saved = false;
@@ -551,6 +558,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             importedMedia.find((item) => item.kind === "video")?.name ||
             "Untitled Edit";
           activeProject = await window.openVideoCraft.projects.create({ name });
+          createdProjectRef.current = activeProject;
           setProject(activeProject);
           onProjectCreated(activeProject.id);
         }
@@ -565,7 +573,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         revisionRef.current = result.revision;
         setRevision(result.revision);
         setLastAgentEdit(result.lastMutation.source === "agent" ? result.lastMutation : null);
-        setImportedMedia(result.imports.map(toEditorMediaItem));
+        setImportedMedia((current) => mergeSavedEditorImports(current, mediaBeingSaved, result));
         savedSignatureRef.current = signatureBeingSaved;
         // A save that was already in flight may have persisted an older
         // snapshot while the user kept editing. Keep the cross-process dirty
@@ -583,6 +591,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
           setExportMessage("Project saved");
         }
       } catch (saveError) {
+        lastSaveErrorRef.current = saveError;
         setError(saveError instanceof Error ? saveError.message : "Could not save the project state.");
       } finally {
         setSaving(false);
@@ -738,8 +747,29 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     revision,
     saving,
     saveState,
+    flushState: async () => {
+      await saveStateRef.current();
+      if (lastSaveErrorRef.current) throw lastSaveErrorRef.current;
+      if (dirtyRef.current) {
+        await saveStateRef.current();
+        if (lastSaveErrorRef.current) throw lastSaveErrorRef.current;
+      }
+      if (dirtyRef.current) throw new Error("The project changed while saving. Please retry the export.");
+      return project ?? createdProjectRef.current;
+    },
     undoLastAgentEdit
   };
+}
+
+/** Apply saved file locations only to items unchanged since this save began. */
+export function mergeSavedEditorImports(
+  current: EditorMediaItem[],
+  saving: EditorMediaItem[],
+  result: EditorProjectStateView
+): EditorMediaItem[] {
+  const previous = new Map(saving.map((item) => [item.id, item]));
+  const persisted = new Map(result.imports.map((item) => [item.id, toEditorMediaItem(item)]));
+  return current.map((item) => previous.get(item.id) === item ? persisted.get(item.id) ?? item : item);
 }
 
 function applySavedState(

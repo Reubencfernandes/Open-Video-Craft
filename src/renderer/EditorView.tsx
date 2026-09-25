@@ -49,6 +49,8 @@ import {
   whisperTranscriptionModelLabel
 } from "./editor/subtitle-transcription";
 import { canSplitTimelineSegmentAt, findSplittableTimelineSegment } from "./editor/timeline-utils";
+import { getLinkedRecordingAudioIdsForSelection } from "./editor/timeline-links";
+import { resolveTimelineClipPress } from "./editor/timeline-selection";
 import { clampNumber, createId } from "./editor/utils";
 import { getZoomPreviewTime } from "./editor/zoom-utils";
 import { sanitizeClipTransitions, validateClipTransitions } from "../shared/editor-domain";
@@ -152,6 +154,7 @@ export function EditorView() {
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [scrubbingTimeline, setScrubbingTimeline] = useState(false);
+  const [timelineDragActive, setTimelineDragActive] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [timelineViewDuration, setTimelineViewDuration] = useState(0);
@@ -169,6 +172,7 @@ export function EditorView() {
 
   const {
     allowUnload,
+    flushState,
     hasUnsavedChanges,
     isReady: isEditorStateReady,
     lastAgentEdit,
@@ -457,17 +461,17 @@ export function EditorView() {
   });
 
   const {
-    beginTimelineRulerDurationResize,
+    beginTimelineRulerPointer,
     beginTimelinePanelResize,
     bodyRef: timelineBodyRef,
-    cancelTimelineRulerDurationResize,
+    cancelTimelineRulerPointer,
     contractTimelineRulerDuration,
     endTimelinePanelResize,
-    endTimelineRulerDurationResize,
+    endTimelineRulerPointer,
     expandTimelineRulerDuration,
     getTimelineTimeFromClientX,
     moveTimelinePanelResize,
-    moveTimelineRulerDurationResize,
+    moveTimelineRulerPointer,
     resetTimelinePanelHeight,
     resetTimelineRulerDuration,
     resetTimelineZoom,
@@ -477,9 +481,12 @@ export function EditorView() {
     zoomTimelineIn,
     zoomTimelineOut
   } = useTimelineViewport({
+    beginPlaybackInteraction,
     contentDuration: timelineDuration,
+    endPlaybackInteraction,
     renderDuration: timelineRenderDuration,
     seek,
+    setScrubbingTimeline,
     setTimelineViewDuration,
     timelineZoom,
     setTimelineZoom
@@ -600,7 +607,8 @@ export function EditorView() {
     textOverlays,
     timelineSegments,
     trimRange,
-    beforeExport: saveState
+    hasVideoTimeline: timelineSegments.some((segment) => segment.track === "video"),
+    beforeExport: flushState
   });
 
   const {
@@ -664,6 +672,7 @@ export function EditorView() {
   } = useTimelineController({
     activeDuration,
     activeTool,
+    applyTimelineClipSelection,
     allMedia,
     audioElsRef,
     audioLevels,
@@ -710,6 +719,7 @@ export function EditorView() {
     setSubtitles,
     setTextOverlays,
     setTimelineContextMenu,
+    setTimelineDragActive,
     setTimelineRangeSelection,
     setTimelineSegments,
     setTimelineViewDuration,
@@ -720,16 +730,46 @@ export function EditorView() {
     syncMediaToTime,
     textOverlays,
     timelineBodyRef,
+    timelineDragActive,
     timelineDuration,
     timelineRangeSelection,
     timelineEditableItems,
     timelineRenderDuration,
     timelineSegments,
+    timelineViewDuration,
     togglePlayback: () => void togglePlayback(),
     updateMediaDuration,
     updateTextOverlay,
     zoomEffects
   });
+
+  // The single write path for media clip selection: pointer presses, keyboard
+  // activation, right-click, and trims all land here so the inspector item,
+  // the other timed selections, and the marquee stay consistent.
+  function applyTimelineClipSelection(
+    segmentIds: string[],
+    primaryId: string | null,
+    options: { keepRange?: boolean } = {}
+  ) {
+    setSelectedZoomId(null);
+    setSelectedSpeedId(null);
+    setSelectedSubtitleId(null);
+    setSelectedTextOverlayId(null);
+    setSelectedTransitionId(null);
+    setTimelineContextMenu(null);
+    setSelectedTimelineSegmentIds(segmentIds);
+    setSelectedTimelineSegmentId(primaryId);
+    if (!options.keepRange) setTimelineRangeSelection(null);
+    const primary = primaryId
+      ? timelineSegments.find((segment) => segment.id === primaryId)
+      : null;
+    if (primary) setSelectedItemId(primary.itemId);
+  }
+
+  const linkedTimelineSegmentIds = getLinkedRecordingAudioIdsForSelection(
+    timelineSegments,
+    selectedTimelineSegmentIds
+  );
 
   // ---------------------------------------------------------------------------
   // Render.
@@ -1080,10 +1120,10 @@ export function EditorView() {
           onZoomOut={zoomTimelineOut}
           onZoomReset={resetTimelineZoom}
           onZoomWheel={zoomTimelineWithWheel}
-          onRulerPointerDown={beginTimelineRulerDurationResize}
-          onRulerPointerMove={moveTimelineRulerDurationResize}
-          onRulerPointerUp={endTimelineRulerDurationResize}
-          onRulerPointerCancel={cancelTimelineRulerDurationResize}
+          onRulerPointerDown={beginTimelineRulerPointer}
+          onRulerPointerMove={moveTimelineRulerPointer}
+          onRulerPointerUp={endTimelineRulerPointer}
+          onRulerPointerCancel={cancelTimelineRulerPointer}
           onRulerContract={contractTimelineRulerDuration}
           onRulerExpand={expandTimelineRulerDuration}
           onRulerReset={resetTimelineRulerDuration}
@@ -1109,6 +1149,7 @@ export function EditorView() {
           textOverlays={textOverlays}
           selectedSegmentId={selectedTimelineSegmentId}
           selectedSegmentIds={selectedTimelineSegmentIds}
+          linkedSegmentIds={linkedTimelineSegmentIds}
           rangeSelection={timelineRangeSelection}
           selectedZoomId={selectedZoomId}
           selectedSpeedId={selectedSpeedId}
@@ -1130,31 +1171,14 @@ export function EditorView() {
           onSplitAtPlayhead={() =>
             splitTimelineSegment(selectedTimelineSegmentId, currentTime)
           }
-          onDeleteSelected={deleteSelectedTimelineSegment}
+          onDeleteSelected={() => deleteSelectedTimelineSegment()}
           onSelectClip={(clip, additive) => {
-            setSelectedZoomId(null);
-            setSelectedSpeedId(null);
-            setSelectedSubtitleId(null);
-            setSelectedTextOverlayId(null);
-            setSelectedTransitionId(null);
-            setSelectedItemId(clip.item.id);
-            setSelectedTimelineSegmentIds((current) => {
-              if (additive) {
-                const next = current.includes(clip.id)
-                  ? current.filter((id) => id !== clip.id)
-                  : [...current, clip.id];
-                setSelectedTimelineSegmentId(next[0] ?? null);
-                setTimelineRangeSelection(null);
-                return next;
-              }
-              if (current.length > 1 && current.includes(clip.id)) {
-                setSelectedTimelineSegmentId(clip.id);
-                return current;
-              }
-              setSelectedTimelineSegmentId(clip.id);
-              setTimelineRangeSelection(null);
-              return [clip.id];
-            });
+            // Keyboard activation; pointer presses select through the drag hook.
+            const press = resolveTimelineClipPress(selectedTimelineSegmentIds, clip.id, additive);
+            applyTimelineClipSelection(
+              press.collapseOnRelease ? [clip.id] : press.ids,
+              press.primaryId
+            );
           }}
           onSelectZoom={(effect) => {
             setSelectedTimelineSegmentId(null);
@@ -1166,7 +1190,6 @@ export function EditorView() {
             setSelectedTextOverlayId(null);
             setSelectedTransitionId(null);
             setActiveTool("zoom");
-            seek((effect.start + effect.end) / 2);
           }}
           onSelectSpeed={(effect) => {
             setSelectedTimelineSegmentId(null);
@@ -1178,7 +1201,6 @@ export function EditorView() {
             setSelectedTextOverlayId(null);
             setSelectedTransitionId(null);
             setActiveTool("speed");
-            seek((effect.start + effect.end) / 2);
           }}
           onSelectTransition={(transition) => {
             setSelectedTransitionId(transition.id);
@@ -1202,10 +1224,6 @@ export function EditorView() {
             setSelectedTextOverlayId(null);
             setSelectedTransitionId(null);
             setActiveTool("subtitles");
-            const subtitle = subtitles.find((item) => item.id === subtitleId);
-            if (subtitle) {
-              seek((subtitle.start + subtitle.end) / 2);
-            }
           }}
           onSelectTextOverlay={(overlay) => {
             setSelectedTimelineSegmentId(null);
@@ -1217,7 +1235,6 @@ export function EditorView() {
             setSelectedTextOverlayId(overlay.id);
             setSelectedTransitionId(null);
             setActiveTool("text");
-            seek((overlay.start + overlay.end) / 2);
           }}
           onTrimPointerDown={beginTimelineClipTrim}
           onMovePointerDown={beginTimelineClipMove}
@@ -1237,7 +1254,14 @@ export function EditorView() {
             }
           }}
           onContextMenuDelete={() => {
-            if (timelineContextMenu) {
+            if (!timelineContextMenu) return;
+            // Right-clicking inside a selection acts on the whole selection.
+            if (
+              timelineContextMenu.segmentId &&
+              selectedTimelineSegmentIds.includes(timelineContextMenu.segmentId)
+            ) {
+              deleteSelectedTimelineSegment();
+            } else {
               deleteTimelineSegment(timelineContextMenu.segmentId);
             }
           }}

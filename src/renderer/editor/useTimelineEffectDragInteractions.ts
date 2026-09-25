@@ -3,6 +3,9 @@
  * and text clips all share the same move/start/end interaction shape, so they
  * live here instead of making the main media timeline drag hook responsible
  * for every editable track.
+ *
+ * Like media clips, a press only selects: the playhead stays put, and nothing
+ * moves until the pointer travels past the drag threshold.
  */
 import { useRef } from "react";
 import type {
@@ -16,6 +19,7 @@ import {
   constrainZoomMove,
   constrainZoomStart
 } from "../zoom-timing";
+import { timelineDragThresholdPx } from "./timeline-selection";
 import { clampNumber } from "./utils";
 import type {
   EditorTool,
@@ -30,9 +34,21 @@ type EffectDragMode = "move" | "start" | "end";
 type EffectDrag = {
   id: string;
   mode: EffectDragMode;
+  pointerStartClientX: number;
   pointerStartTime: number;
+  /** Grabbed edge minus pointer time, so a trim edge never jumps. */
+  grabOffset: number;
   origStart: number;
   origEnd: number;
+  moved: boolean;
+};
+
+type TimedItemDrag<T> = {
+  mode: EffectDragMode;
+  pointerStartClientX: number;
+  pointerStartTime: number;
+  grabOffset: number;
+  original: T;
   moved: boolean;
 };
 
@@ -40,7 +56,6 @@ type UseTimelineEffectDragInteractionsParams = {
   beginPlaybackInteraction: () => void;
   clearMediaSelection: () => void;
   getTimelineTimeFromClientX: (clientX: number) => number | null;
-  seek: (time: number) => void;
   setActiveTool: Dispatch<SetStateAction<EditorTool>>;
   setSelectedSpeedId: Dispatch<SetStateAction<string | null>>;
   setSelectedSubtitleId: Dispatch<SetStateAction<string | null>>;
@@ -64,18 +79,24 @@ export function useTimelineEffectDragInteractions(
 ) {
   const zoomDragRef = useRef<EffectDrag | null>(null);
   const speedDragRef = useRef<EffectDrag | null>(null);
-  const subtitleDragRef = useRef<{
-    mode: EffectDragMode;
-    pointerStartTime: number;
-    original: SubtitleSegment;
-    moved: boolean;
-  } | null>(null);
-  const textOverlayDragRef = useRef<{
-    mode: EffectDragMode;
-    pointerStartTime: number;
-    original: TextOverlay;
-    moved: boolean;
-  } | null>(null);
+  const subtitleDragRef = useRef<TimedItemDrag<SubtitleSegment> | null>(null);
+  const textOverlayDragRef = useRef<TimedItemDrag<TextOverlay> | null>(null);
+
+  function getGrabOffset(mode: EffectDragMode, start: number, end: number, time: number) {
+    return mode === "start" ? start - time : mode === "end" ? end - time : 0;
+  }
+
+  /** False until the pointer passes the drag threshold; pauses playback once it does. */
+  function passDragThreshold(
+    drag: { moved: boolean; pointerStartClientX: number },
+    clientX: number
+  ) {
+    if (drag.moved) return true;
+    if (Math.abs(clientX - drag.pointerStartClientX) < timelineDragThresholdPx) return false;
+    drag.moved = true;
+    params.beginPlaybackInteraction();
+    return true;
+  }
 
   function selectExclusiveTimedItem(
     kind: "zoom" | "speed" | "subtitles" | "text",
@@ -106,26 +127,25 @@ export function useTimelineEffectDragInteractions(
     zoomDragRef.current = {
       id,
       mode,
+      pointerStartClientX: event.clientX,
       pointerStartTime: time,
+      grabOffset: getGrabOffset(mode, effect.start, effect.end, time),
       origStart: effect.start,
       origEnd: effect.end,
       moved: false
     };
-    params.beginPlaybackInteraction();
     selectExclusiveTimedItem("zoom", id);
-    if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
   function updateZoomClipDrag(clientX: number) {
     const drag = zoomDragRef.current;
-    const time = params.getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) return;
+    const pointerTime = params.getTimelineTimeFromClientX(clientX);
+    if (!drag || pointerTime === null || !passDragThreshold(drag, clientX)) return;
+    const time = pointerTime + drag.grabOffset;
 
     if (drag.mode === "move") {
-      const delta = time - drag.pointerStartTime;
-      if (!drag.moved && Math.abs(delta) < 0.02) return;
-      drag.moved = true;
+      const delta = pointerTime - drag.pointerStartTime;
       const constrained = constrainZoomMove(
         params.zoomEffects,
         drag.id,
@@ -168,26 +188,25 @@ export function useTimelineEffectDragInteractions(
     speedDragRef.current = {
       id,
       mode,
+      pointerStartClientX: event.clientX,
       pointerStartTime: time,
+      grabOffset: getGrabOffset(mode, effect.start, effect.end, time),
       origStart: effect.start,
       origEnd: effect.end,
       moved: false
     };
-    params.beginPlaybackInteraction();
     selectExclusiveTimedItem("speed", id);
-    if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
   function updateSpeedClipDrag(clientX: number) {
     const drag = speedDragRef.current;
-    const time = params.getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) return;
+    const pointerTime = params.getTimelineTimeFromClientX(clientX);
+    if (!drag || pointerTime === null || !passDragThreshold(drag, clientX)) return;
+    const time = pointerTime + drag.grabOffset;
 
     if (drag.mode === "move") {
-      const delta = time - drag.pointerStartTime;
-      if (!drag.moved && Math.abs(delta) < 0.02) return;
-      drag.moved = true;
+      const delta = pointerTime - drag.pointerStartTime;
       const constrained = constrainZoomMove(
         params.speedEffects,
         drag.id,
@@ -229,26 +248,25 @@ export function useTimelineEffectDragInteractions(
 
     subtitleDragRef.current = {
       mode,
+      pointerStartClientX: event.clientX,
       pointerStartTime: time,
+      grabOffset: getGrabOffset(mode, subtitle.start, subtitle.end, time),
       original: subtitle,
       moved: false
     };
-    params.beginPlaybackInteraction();
     selectExclusiveTimedItem("subtitles", id);
-    if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
   function updateSubtitleClipDrag(clientX: number) {
     const drag = subtitleDragRef.current;
-    const time = params.getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) return;
+    const pointerTime = params.getTimelineTimeFromClientX(clientX);
+    if (!drag || pointerTime === null || !passDragThreshold(drag, clientX)) return;
+    const time = pointerTime + drag.grabOffset;
 
     const original = drag.original;
     if (drag.mode === "move") {
-      const delta = time - drag.pointerStartTime;
-      if (!drag.moved && Math.abs(delta) < 0.02) return;
-      drag.moved = true;
+      const delta = pointerTime - drag.pointerStartTime;
       const start = Math.max(0, original.start + delta);
       const shift = start - original.start;
       params.setSubtitles((current) =>
@@ -296,26 +314,25 @@ export function useTimelineEffectDragInteractions(
 
     textOverlayDragRef.current = {
       mode,
+      pointerStartClientX: event.clientX,
       pointerStartTime: time,
+      grabOffset: getGrabOffset(mode, overlay.start, overlay.end, time),
       original: overlay,
       moved: false
     };
-    params.beginPlaybackInteraction();
     selectExclusiveTimedItem("text", id);
-    if (mode === "move") params.seek(time);
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
   function updateTextOverlayClipDrag(clientX: number) {
     const drag = textOverlayDragRef.current;
-    const time = params.getTimelineTimeFromClientX(clientX);
-    if (!drag || time === null) return;
+    const pointerTime = params.getTimelineTimeFromClientX(clientX);
+    if (!drag || pointerTime === null || !passDragThreshold(drag, clientX)) return;
+    const time = pointerTime + drag.grabOffset;
 
     const original = drag.original;
     if (drag.mode === "move") {
-      const delta = time - drag.pointerStartTime;
-      if (!drag.moved && Math.abs(delta) < 0.02) return;
-      drag.moved = true;
+      const delta = pointerTime - drag.pointerStartTime;
       const start = Math.max(0, original.start + delta);
       params.updateTextOverlay(original.id, {
         start,

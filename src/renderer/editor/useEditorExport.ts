@@ -25,6 +25,7 @@ type UseEditorExportParams = {
   masterVolume: number;
   project: ProjectView | null;
   projectScreen: EditorMediaItem | null;
+  hasVideoTimeline: boolean;
   selectedItem: EditorMediaItem | null;
   setError: Dispatch<SetStateAction<string | null>>;
   setExportMessage: Dispatch<SetStateAction<string | null>>;
@@ -32,7 +33,7 @@ type UseEditorExportParams = {
   textOverlays: TextOverlay[];
   timelineSegments: TimelineSegment[];
   trimRange: { start: number; end: number };
-  beforeExport: () => Promise<void>;
+  beforeExport: () => Promise<ProjectView | null>;
 };
 
 export function useEditorExport(params: UseEditorExportParams) {
@@ -57,21 +58,19 @@ export function useEditorExport(params: UseEditorExportParams) {
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const activeExportJobIdRef = useRef<string | null>(null);
+  const cancelledExportJobIdRef = useRef<string | null>(null);
 
   useEffect(() => window.openVideoCraft.editor.onExportProgress((progress) => {
     if (progress.jobId === activeExportJobIdRef.current) setExportProgress(progress);
   }), []);
 
-  function getExportSource(): ExportVideoRequest["source"] | null {
+  function getExportSource(savedProject = project): ExportVideoRequest["source"] | null {
     // A project whose timeline holds video must render through the compositor:
     // it is the only path that lays out every clip. This outranks the selected
     // clip below, which renders that one file alone — with a clip selected, an
     // edit built from several imports silently exported just the selected one.
-    if (project && timelineSegments.some((segment) => segment.track === "video")) {
-      return {
-        kind: "project",
-        projectId: project.id
-      };
+    if (savedProject && params.hasVideoTimeline) {
+      return { kind: "project", projectId: savedProject.id };
     }
 
     if (selectedItem?.origin === "imported" && selectedItem.kind === "video") {
@@ -98,9 +97,10 @@ export function useEditorExport(params: UseEditorExportParams) {
   }
 
   async function exportCurrentVideo() {
+    if (activeExportJobIdRef.current) return;
     const source = getExportSource();
 
-    if (!source) {
+    if (!source && !params.hasVideoTimeline) {
       setError("Select a video clip before exporting.");
       return;
     }
@@ -113,14 +113,17 @@ export function useEditorExport(params: UseEditorExportParams) {
     setExportProgress({ jobId, percent: 0, message: "Preparing export…" });
 
     try {
-      await params.beforeExport();
+      const savedProject = await params.beforeExport();
+      const savedSource = getExportSource(savedProject);
+      if (!savedSource) throw new Error("Add a video clip to the timeline before exporting.");
+      if (cancelledExportJobIdRef.current === jobId) return;
       const result = await window.openVideoCraft.editor.exportVideo({
         jobId,
-        source,
+        source: savedSource,
         format: exportFormat,
         resolution: exportResolution,
-        trimStart: trimRange.start,
-        trimEnd: trimRange.end > trimRange.start ? trimRange.end : null,
+        trimStart: savedSource.kind === "import" ? 0 : trimRange.start,
+        trimEnd: savedSource.kind === "import" ? null : trimRange.end > trimRange.start ? trimRange.end : null,
         volume: masterVolume / 100,
         audioLevels,
         backgroundAudioImportIds: backgroundAudioIds,
@@ -147,12 +150,13 @@ export function useEditorExport(params: UseEditorExportParams) {
   async function cancelExport() {
     const jobId = activeExportJobIdRef.current;
     if (!jobId) return;
+    cancelledExportJobIdRef.current = jobId;
     setExportProgress((current) => current ? { ...current, message: "Cancelling export…" } : current);
     await window.openVideoCraft.editor.cancelExport(jobId);
   }
 
   return {
-    canExport: Boolean(getExportSource()),
+    canExport: params.hasVideoTimeline || Boolean(getExportSource()),
     cancelExport,
     closeExportDialog,
     exportCurrentVideo,

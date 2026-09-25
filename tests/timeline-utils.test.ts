@@ -3,6 +3,7 @@ import {
   calculateTimelineDuration,
   findSplittableTimelineSegment,
   syncTimelineSegments,
+  resolveAudioLane,
   trimTimelineSegment
 } from "../src/renderer/editor/timeline-utils";
 import { splitTimelineSegments } from "../src/renderer/editor/timeline-split";
@@ -15,6 +16,40 @@ const videoSegments: TimelineSegment[] = [
 ];
 
 describe("timeline trim and split geometry", () => {
+  const item: EditorMediaItem = { id: "video-a", name: "A", url: "a.mp4", kind: "video", origin: "imported", track: "imported", duration: 60 };
+
+  it("preserves deliberate short trims when media metadata resynchronizes", () => {
+    const trimmed = trimTimelineSegment([videoSegments[0]], "first", "end", 0.5, new Map([[item.id, 60]]));
+    expect(syncTimelineSegments(trimmed, [item], new Map([[item.id, 60]]), new Set())[0].end).toBe(0.5);
+  });
+
+  it("preserves source offsets and lengths while metadata is unknown", () => {
+    const segment = { ...videoSegments[0], start: 50, end: 110, sourceStart: 30 };
+    for (const durations of [new Map<string, number>(), new Map([[item.id, 0]])]) {
+      expect(syncTimelineSegments([segment], [item], durations, new Set())[0]).toEqual(segment);
+    }
+  });
+
+  it("only expands explicitly marked placeholders once metadata arrives", () => {
+    const pending = syncTimelineSegments([], [{ ...item, duration: null }], new Map(), new Set([item.id]));
+    expect(pending[0]).toMatchObject({ end: 1, pendingDuration: true });
+    const resolved = syncTimelineSegments(pending, [item], new Map([[item.id, 60]]), new Set());
+    expect(resolved[0]).toMatchObject({ end: 60, pendingDuration: false });
+    const trimmed = trimTimelineSegment(pending, pending[0].id, "end", 0.5, new Map());
+    expect(syncTimelineSegments(trimmed, [item], new Map([[item.id, 60]]), new Set())[0].end).toBe(0.5);
+  });
+
+  it("does not extend a start trim before the source begins", () => {
+    const result = trimTimelineSegment([videoSegments[1]], "second", "start", 0, new Map([["video-b", 12]]));
+    expect(result[0]).toMatchObject({ start: 3, sourceStart: 0, end: 10 });
+  });
+
+  it("assigns sparse audio lanes without allocating by the largest lane ID", () => {
+    const segments = [0, 1_000_000_000].map((lane) => ({ ...videoSegments[0], id: `audio-${lane}`, track: "audio" as const, lane }));
+    expect(resolveAudioLane(segments, "new", 0, 2, 0)).toBe(1);
+    expect(resolveAudioLane(segments, "new", 0, 2, 3)).toBe(3);
+  });
+
   it("trims a clip start and advances its source offset by the same amount", () => {
     const result = trimTimelineSegment(
       videoSegments,

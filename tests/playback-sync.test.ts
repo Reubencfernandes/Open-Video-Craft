@@ -41,6 +41,44 @@ describe("playback sync", () => {
     ).toBe(false);
   });
 
+  it("seeks a playing primary video once when a tick crosses into a different clip", () => {
+    // After a cut the decoder is still on the removed frames; wait for React
+    // and those frames reach the screen.
+    expect(
+      shouldSeekPrimaryVideo({
+        reason: "tick",
+        isPlaying: true,
+        clipChanged: true,
+        canSeek: true,
+        currentMediaTime: 5.02,
+        desiredMediaTime: 10
+      })
+    ).toBe(true);
+  });
+
+  it("plays straight through a split whose next clip continues from the same frame", () => {
+    expect(
+      shouldSeekPrimaryVideo({
+        reason: "tick",
+        isPlaying: true,
+        clipChanged: true,
+        canSeek: true,
+        currentMediaTime: 5.01,
+        desiredMediaTime: 5
+      })
+    ).toBe(false);
+    expect(
+      shouldSeekPrimaryVideo({
+        reason: "clip-change",
+        isPlaying: true,
+        clipChanged: false,
+        canSeek: true,
+        currentMediaTime: 5.01,
+        desiredMediaTime: 5
+      })
+    ).toBe(false);
+  });
+
   it("still seeks the primary video for explicit seeks and clip changes", () => {
     expect(
       shouldSeekPrimaryVideo({

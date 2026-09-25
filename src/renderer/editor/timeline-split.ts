@@ -2,6 +2,7 @@
  * Pure split geometry. Keeping this outside the React hook makes the source
  * offsets easy to verify and prevents UI state from changing the edit math.
  */
+import { splitLinkedRecordingAudioAt } from "./timeline-links";
 import { findSplittableTimelineSegment } from "./timeline-utils";
 import type { TimelineSegment } from "./types";
 import { clampNumber } from "./utils";
@@ -27,20 +28,25 @@ export function splitTimelineSegments(
 
   const splitTime = clampNumber(time, source.start + 0.1, source.end - 0.1);
   const elapsedSourceTime = splitTime - source.start;
-  const left: TimelineSegment = { ...source, end: splitTime };
+  const resolvedSource = { ...source, ...(source.pendingDuration ? { pendingDuration: false } : {}) };
+  const left: TimelineSegment = { ...resolvedSource, end: splitTime };
   const right: TimelineSegment = {
-    ...source,
+    ...resolvedSource,
     id: createSegmentId(source.id),
     start: splitTime,
     // The right clip continues from the exact source frame after the left one.
     sourceStart: source.sourceStart + elapsedSourceTime
   };
 
+  // Blading a recording's picture also cuts the voice underneath it, so the
+  // two halves can be deleted or moved without the audio drifting.
+  const withLinkedAudio = splitLinkedRecordingAudioAt(segments, source, splitTime, createSegmentId);
+
   return {
     left,
     right,
     splitTime,
-    segments: segments.flatMap((segment) =>
+    segments: withLinkedAudio.flatMap((segment) =>
       segment.id === source.id ? [left, right] : [segment]
     )
   };

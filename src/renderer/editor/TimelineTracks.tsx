@@ -45,6 +45,7 @@ type TimelineTracksProps = {
   subtitleProcessingRanges?: SubtitleActivityRange[];
   textOverlays: TextOverlay[];
   selectedSegmentIds: string[];
+  linkedSegmentIds: string[];
   selectedCount: number;
   selectedNoun: "clip" | "item";
   rangeSelection: TimelineRangeSelection | null;
@@ -93,13 +94,16 @@ type TimelineTracksProps = {
 };
 
 export function TimelineTracks(props: TimelineTracksProps) {
+  // Audio sits directly under the picture it belongs to, like other editors;
+  // effect lanes follow. The DOM order below must match this list because the
+  // marquee maps lanes by index.
   const orderedLaneIds: TimelineLaneId[] = [
     "video",
+    ...props.audioTracks.map((track) => getAudioTimelineLaneId(track.lane)),
     "zoom",
     "speed",
     "subtitles",
-    "text",
-    ...props.audioTracks.map((track) => getAudioTimelineLaneId(track.lane))
+    "text"
   ];
   const rangeSelectionSettled = Boolean(
     props.rangeSelection && !props.rangeSelection.dragging
@@ -158,6 +162,69 @@ export function TimelineTracks(props: TimelineTracksProps) {
           ) : null;
         })}
       </TimelineTrack>
+
+      {props.audioTracks.map((track) => {
+        const laneId = getAudioTimelineLaneId(track.lane);
+        const itemIds = [...new Set(track.clips.map((clip) => clip.item.id))];
+        const laneLevelKey = getAudioLaneLevelKey(track.lane);
+        const laneMuted = props.audioLevels[laneLevelKey]?.muted ?? false;
+        const hasInheritedSourceMute = itemIds.some(
+          (itemId) => props.audioLevels[itemId]?.muted ?? false
+        );
+        const pressed = laneMuted ? true : hasInheritedSourceMute ? "mixed" : false;
+        const action = laneMuted ? "Unmute" : "Mute";
+
+        return (
+          <TimelineTrack
+            key={track.lane}
+            laneId={laneId}
+            label={`Audio ${track.lane + 1}`}
+            icon={<AudioLines size={14} />}
+            labelControl={
+              <button
+                className="grid size-6 flex-none place-items-center rounded text-neutral-400 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
+                type="button"
+                aria-label={`${action} Audio ${track.lane + 1}`}
+                aria-pressed={pressed}
+                title={`${action} Audio ${track.lane + 1}`}
+                data-timeline-audio-mute={track.lane}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => {
+                  props.onSetAudioLevel(laneLevelKey, { muted: !laneMuted });
+                }}
+              >
+                {laneMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+              </button>
+            }
+          >
+            {track.clips.map((clip) => (
+              <TimelineClip
+                key={clip.id}
+                clip={clip}
+                audioLevel={getEffectiveAudioLevel(
+                  props.audioLevels,
+                  clip.item.id,
+                  track.lane
+                )}
+                timelineDuration={props.renderDuration}
+                selected={
+                  (!props.rangeSelection || rangeSelectionSettled) &&
+                  props.selectedSegmentIds.includes(clip.id)
+                }
+                rangeSelected={
+                  rangeSelectionSettled && props.selectedSegmentIds.includes(clip.id)
+                }
+                linked={props.linkedSegmentIds.includes(clip.id)}
+                onSelect={(additive) => props.onSelectClip(clip, additive)}
+                onTrimPointerDown={props.onTrimPointerDown}
+                onMovePointerDown={props.onMovePointerDown}
+                onInteractionPointerMove={props.onInteractionPointerMove}
+                onInteractionPointerUp={props.onInteractionPointerUp}
+              />
+            ))}
+          </TimelineTrack>
+        );
+      })}
 
       <TimelineTrack laneId="zoom" label="Zoom" icon={<ZoomIn size={14} />}>
         {getOrderedZoomTimingItems(props.zoomEffects).map((effect) => (
@@ -288,67 +355,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
         ))}
       </TimelineTrack>
 
-      {props.audioTracks.map((track) => {
-        const laneId = getAudioTimelineLaneId(track.lane);
-        const itemIds = [...new Set(track.clips.map((clip) => clip.item.id))];
-        const laneLevelKey = getAudioLaneLevelKey(track.lane);
-        const laneMuted = props.audioLevels[laneLevelKey]?.muted ?? false;
-        const hasInheritedSourceMute = itemIds.some(
-          (itemId) => props.audioLevels[itemId]?.muted ?? false
-        );
-        const pressed = laneMuted ? true : hasInheritedSourceMute ? "mixed" : false;
-        const action = laneMuted ? "Unmute" : "Mute";
-
-        return (
-          <TimelineTrack
-            key={track.lane}
-            laneId={laneId}
-            label={`Audio ${track.lane + 1}`}
-            icon={<AudioLines size={14} />}
-            labelControl={
-              <button
-                className="grid size-6 flex-none place-items-center rounded text-neutral-400 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
-                type="button"
-                aria-label={`${action} Audio ${track.lane + 1}`}
-                aria-pressed={pressed}
-                title={`${action} Audio ${track.lane + 1}`}
-                data-timeline-audio-mute={track.lane}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => {
-                  props.onSetAudioLevel(laneLevelKey, { muted: !laneMuted });
-                }}
-              >
-                {laneMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-              </button>
-            }
-          >
-            {track.clips.map((clip) => (
-              <TimelineClip
-                key={clip.id}
-                clip={clip}
-                audioLevel={getEffectiveAudioLevel(
-                  props.audioLevels,
-                  clip.item.id,
-                  track.lane
-                )}
-                timelineDuration={props.renderDuration}
-                selected={
-                  (!props.rangeSelection || rangeSelectionSettled) &&
-                  props.selectedSegmentIds.includes(clip.id)
-                }
-                rangeSelected={
-                  rangeSelectionSettled && props.selectedSegmentIds.includes(clip.id)
-                }
-                onSelect={(additive) => props.onSelectClip(clip, additive)}
-                onTrimPointerDown={props.onTrimPointerDown}
-                onMovePointerDown={props.onMovePointerDown}
-                onInteractionPointerMove={props.onInteractionPointerMove}
-                onInteractionPointerUp={props.onInteractionPointerUp}
-              />
-            ))}
-          </TimelineTrack>
-        );
-      })}
     </div>
   );
 }

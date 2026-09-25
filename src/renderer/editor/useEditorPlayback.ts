@@ -38,6 +38,9 @@ import { isZoomActiveAtTime } from "./zoom-utils";
 
 type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
 
+/** How far ahead an upcoming audio clip is parked on its first sample. */
+const audioPreRollSeconds = 1.5;
+
 type UseEditorPlaybackParams = {
   activeDuration: number;
   activeVideoClip: TimelineMediaClip | null;
@@ -111,6 +114,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const currentTimeRef = useRef(0);
   const playingRef = useRef(false);
   const rafRef = useRef<number | null>(null);
+  const hiddenTickRef = useRef<number | null>(null);
   const videoClipsRef = useRef<TimelineMediaClip[]>([]);
   const audioClipsRef = useRef<TimelineMediaClip[]>([]);
   const zoomEffectsRef = useRef<ZoomEffect[]>([]);
@@ -224,8 +228,20 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
     let last = performance.now();
     let lastUiUpdate = 0;
+    // requestAnimationFrame stops while the window is minimized or covered, but
+    // the media elements keep playing. Keep ticking on a timer so cuts are
+    // still honored and playback still stops at the end.
+    const scheduleStep = () => {
+      if (document.hidden) {
+        hiddenTickRef.current = window.setTimeout(() => step(performance.now()), 50);
+      } else {
+        rafRef.current = requestAnimationFrame(step);
+      }
+    };
     const step = (now: number) => {
-      const dt = Math.min(0.1, (now - last) / 1000);
+      rafRef.current = null;
+      hiddenTickRef.current = null;
+      const dt = Math.min(document.hidden ? 1 : 0.1, (now - last) / 1000);
       last = now;
       const previous = currentTimeRef.current;
       const next = getNextPlaybackTime(dt);
@@ -246,14 +262,18 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
         lastUiUpdate = now;
         setCurrentTime(next);
       }
-      rafRef.current = requestAnimationFrame(step);
+      scheduleStep();
     };
 
-    rafRef.current = requestAnimationFrame(step);
+    scheduleStep();
     return () => {
       if (rafRef.current) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
+      }
+      if (hiddenTickRef.current) {
+        window.clearTimeout(hiddenTickRef.current);
+        hiddenTickRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -571,6 +591,19 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       pendingCameraSeekKeyRef.current = null;
     }
 
+    // The picture is the timeline clock: while it seeks or buffers (after every
+    // cut, and at play start) the clock holds, so hold the audio as well or the
+    // voice runs ahead of the video by the decoder's seek latency.
+    const clockElement =
+      videoClip?.item.kind === "video" ? getPrimaryPlaybackVideoElement() : null;
+    const holdAudioForPicture = Boolean(
+      isPlaying &&
+        clockElement &&
+        !clockElement.ended &&
+        (clockElement.seeking ||
+          clockElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+    );
+
     for (const clip of audioClipsRef.current) {
       const element = audioElsRef.current.get(clip.id);
       if (!element) {
@@ -583,7 +616,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
           element,
           clip,
           timelineTime: time,
-          isPlaying,
+          isPlaying: isPlaying && !holdAudioForPicture,
           reason,
           syncKey: clip.id,
           clipChanged: false,
@@ -591,8 +624,26 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
           label: "audio",
           useEngine: true
         });
-      } else if (!element.paused) {
-        element.pause();
+      } else {
+        if (!element.paused) {
+          element.pause();
+        }
+        // Park the next clip on its first sample ahead of time. Cuts through a
+        // recording split its audio into pieces, and a piece that only seeks
+        // once it becomes active leaves an audible gap at every edit.
+        const lead = clip.start - time;
+        if (
+          isPlaying &&
+          lead > 0 &&
+          lead <= audioPreRollSeconds &&
+          canSetMediaTime(element) &&
+          !element.seeking
+        ) {
+          const target = getSafeMediaSeekTarget(clip.sourceStart, element.duration);
+          if (Math.abs(element.currentTime - target) > 0.05) {
+            trySetMediaTime(element, target);
+          }
+        }
       }
     }
   }

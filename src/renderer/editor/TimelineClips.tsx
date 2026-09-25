@@ -2,8 +2,11 @@
  * Clip components for every lane (media, zoom, speed, subtitle) and the
  * cubic-Bézier audio waveform.
  */
-import { Blend, Captions, Music2, Type, ZoomIn } from "lucide-react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { Blend, Captions, Link2, Music2, Type, ZoomIn } from "lucide-react";
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent
+} from "react";
 import type { SubtitleActivityRange } from "../../shared/subtitle-activity";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
@@ -90,13 +93,38 @@ function transitionLabel(type: ClipTransition["type"]): string {
  * differs by lane.
  */
 const clipBaseClassName =
-  "group absolute top-[0.15rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-move items-center gap-1.5 overflow-hidden rounded-md border border-black/40 px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110 active:cursor-grabbing";
+  "group absolute top-[0.15rem] z-[1] inline-flex h-[2.2rem] min-w-0 cursor-move items-center gap-1.5 overflow-hidden rounded-md px-2 text-left text-[0.68rem] font-semibold text-white transition-[left,width] duration-200 ease-out hover:brightness-110 active:cursor-grabbing";
+/**
+ * Border colors live in exactly one class per state. With both `border-black/40`
+ * and the pink selection border present, Tailwind's stylesheet order let the
+ * black border win and selected clips showed no outline at all.
+ */
+const idleBorderClassName = "border border-black/40";
 
 /** A crisp branded border and flat tint keep selection visible without a glow. */
 const selectedOutlineClassName =
   "z-[2] border-2 border-[#ff4b93] shadow-none after:pointer-events-none after:absolute after:inset-0 after:z-[1] after:rounded-[inherit] after:bg-[#ff4b93]/10 after:content-['']";
 const rangeSelectedOutlineClassName =
   "outline outline-2 -outline-offset-2 outline-pink-200 shadow-none";
+/** Recording audio that will follow the selected picture through every edit. */
+const linkedOutlineClassName =
+  "outline outline-1 -outline-offset-1 outline-dashed outline-[#ff4b93]/80";
+
+function getClipSelectionClassName(selected: boolean, rangeSelected?: boolean): string {
+  if (!selected) return idleBorderClassName;
+  return rangeSelected
+    ? `${idleBorderClassName} ${rangeSelectedOutlineClassName}`
+    : selectedOutlineClassName;
+}
+
+/**
+ * Mouse presses select through the timeline's pointer handlers (the body
+ * captures the pointer, so a native click never reaches the clip). Only a
+ * keyboard activation, which reports `detail === 0`, selects here.
+ */
+function isKeyboardActivation(event: ReactMouseEvent<HTMLElement>): boolean {
+  return event.detail === 0;
+}
 
 /** Blurred clip placeholders positioned only where the audio likely contains speech. */
 export function TimelineSubtitleGenerationPlaceholders(props: {
@@ -168,6 +196,8 @@ export function TimelineClip(props: {
   timelineDuration: number;
   selected: boolean;
   rangeSelected?: boolean;
+  /** Follows the selected recording picture through edits. */
+  linked?: boolean;
   audioLevel?: { volume: number; muted: boolean };
   onSelect: (additive: boolean) => void;
   onTrimPointerDown: (
@@ -193,17 +223,21 @@ export function TimelineClip(props: {
       className={cx(
         clipBaseClassName,
         fillClassName,
-        props.selected &&
-          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+        getClipSelectionClassName(props.selected, props.rangeSelected),
+        !props.selected && props.linked && linkedOutlineClassName
       )}
       type="button"
       data-segment-id={props.clip.id}
       data-selected={props.selected ? "true" : undefined}
+      data-linked={props.linked ? "true" : undefined}
       aria-pressed={props.selected}
+      title={props.linked ? `${item.name} · moves with the selected recording` : item.name}
       style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
-      onClick={(event) =>
-        props.onSelect(event.metaKey || event.ctrlKey || event.shiftKey)
-      }
+      onClick={(event) => {
+        if (isKeyboardActivation(event)) {
+          props.onSelect(event.metaKey || event.ctrlKey || event.shiftKey);
+        }
+      }}
       onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
     >
       {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}
@@ -216,7 +250,11 @@ export function TimelineClip(props: {
         />
       ) : null}
       {item.kind === "audio" ? (
-        <Music2 className="relative z-[2] flex-none" size={13} />
+        props.linked ? (
+          <Link2 className="relative z-[2] flex-none" size={13} aria-label="Linked" />
+        ) : (
+          <Music2 className="relative z-[2] flex-none" size={13} />
+        )
       ) : null}
       <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
       <ClipTrimEdges
@@ -246,8 +284,7 @@ export function TimelineZoomClip(props: {
       className={cx(
         clipBaseClassName,
         "bg-[#7c3aed]",
-        props.selected &&
-          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+        getClipSelectionClassName(props.selected, props.rangeSelected)
       )}
       type="button"
       data-zoom-effect-id={props.effect.id}
@@ -257,7 +294,9 @@ export function TimelineZoomClip(props: {
         props.effect.end - props.effect.start,
         props.duration
       )}
-      onClick={props.onSelect}
+      onClick={(event) => {
+        if (isKeyboardActivation(event)) props.onSelect();
+      }}
       onPointerDown={(event) => props.onDragPointerDown(event, props.effect.id, "move")}
     >
       <ZoomIn className="relative z-[2] flex-none" size={13} />
@@ -287,8 +326,7 @@ export function TimelineSpeedClip(props: {
       className={cx(
         clipBaseClassName,
         "bg-[#5b21b6]",
-        props.selected &&
-          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+        getClipSelectionClassName(props.selected, props.rangeSelected)
       )}
       type="button"
       data-speed-effect-id={props.effect.id}
@@ -298,7 +336,9 @@ export function TimelineSpeedClip(props: {
         props.effect.end - props.effect.start,
         props.duration
       )}
-      onClick={props.onSelect}
+      onClick={(event) => {
+        if (isKeyboardActivation(event)) props.onSelect();
+      }}
       onPointerDown={(event) => props.onDragPointerDown(event, props.effect.id, "move")}
     >
       <SpeedIcon className="relative z-[2]" size={13} />
@@ -329,8 +369,7 @@ export function TimelineSubtitleClip(props: {
       className={cx(
         clipBaseClassName,
         "bg-[#15803d]",
-        props.selected &&
-          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+        getClipSelectionClassName(props.selected, props.rangeSelected)
       )}
       type="button"
       data-subtitle-id={props.subtitle.id}
@@ -340,7 +379,9 @@ export function TimelineSubtitleClip(props: {
         props.subtitle.end - props.subtitle.start,
         props.duration
       )}
-      onClick={props.onSelect}
+      onClick={(event) => {
+        if (isKeyboardActivation(event)) props.onSelect();
+      }}
       onPointerDown={(event) => props.onDragPointerDown(event, props.subtitle.id, "move")}
     >
       <Captions className="relative z-[2] flex-none" size={14} />
@@ -371,8 +412,7 @@ export function TimelineTextClip(props: {
       className={cx(
         clipBaseClassName,
         "bg-[#0e7490]",
-        props.selected &&
-          (props.rangeSelected ? rangeSelectedOutlineClassName : selectedOutlineClassName)
+        getClipSelectionClassName(props.selected, props.rangeSelected)
       )}
       type="button"
       data-text-overlay-clip-id={props.overlay.id}
@@ -382,7 +422,9 @@ export function TimelineTextClip(props: {
         props.overlay.end - props.overlay.start,
         props.duration
       )}
-      onClick={props.onSelect}
+      onClick={(event) => {
+        if (isKeyboardActivation(event)) props.onSelect();
+      }}
       onPointerDown={(event) => props.onDragPointerDown(event, props.overlay.id, "move")}
     >
       <Type className="relative z-[2] flex-none" size={13} />

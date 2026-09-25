@@ -22,6 +22,7 @@ import { useSubtitleGeneration } from "./useSubtitleGeneration";
 import { useTimelineClipboard } from "./useTimelineClipboard";
 import { useTimelineDragInteractions } from "./useTimelineDragInteractions";
 import { useTimelineEditing } from "./useTimelineEditing";
+import type { ApplyTimelineClipSelection } from "./useTimelineMediaDragInteractions";
 import { isTimelineTimedItemInRange } from "./timeline-utils";
 import type {
   EditorMediaItem,
@@ -38,6 +39,7 @@ import type {
 
 type UseTimelineControllerParams = {
   activeDuration: number;
+  applyTimelineClipSelection: ApplyTimelineClipSelection;
   activeTool: EditorTool;
   allMedia: EditorMediaItem[];
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
@@ -85,6 +87,7 @@ type UseTimelineControllerParams = {
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTextOverlays: Dispatch<SetStateAction<TextOverlay[]>>;
   setTimelineContextMenu: Dispatch<SetStateAction<TimelineContextMenu>>;
+  setTimelineDragActive: Dispatch<SetStateAction<boolean>>;
   setTimelineRangeSelection: Dispatch<SetStateAction<TimelineRangeSelection | null>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setTimelineViewDuration: Dispatch<SetStateAction<number>>;
@@ -95,11 +98,13 @@ type UseTimelineControllerParams = {
   syncMediaToTime: (time: number, isPlaying: boolean, reason?: PlaybackSyncReason) => void;
   textOverlays: TextOverlay[];
   timelineBodyRef: RefObject<HTMLDivElement | null>;
+  timelineDragActive: boolean;
   timelineDuration: number;
   timelineRangeSelection: TimelineRangeSelection | null;
   timelineEditableItems: EditorMediaItem[];
   timelineRenderDuration: number;
   timelineSegments: TimelineSegment[];
+  timelineViewDuration: number;
   togglePlayback: () => void;
   updateMediaDuration: (itemId: string, duration: number | null) => void;
   updateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
@@ -131,10 +136,12 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setTimelineSegments: params.setTimelineSegments,
     setTimelineViewDuration: params.setTimelineViewDuration,
     setTrimRange: params.setTrimRange,
+    timelineDragActive: params.timelineDragActive,
     timelineDuration: params.timelineDuration,
     timelineEditableItems: params.timelineEditableItems,
     timelineRenderDuration: params.timelineRenderDuration,
     timelineSegments: params.timelineSegments,
+    timelineViewDuration: params.timelineViewDuration,
     updateMediaDuration: params.updateMediaDuration
   });
 
@@ -169,6 +176,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
   });
 
   const drags = useTimelineDragInteractions({
+    applyTimelineClipSelection: params.applyTimelineClipSelection,
     beginPlaybackInteraction: params.beginPlaybackInteraction,
     clearMediaSelection: () => {
       params.setSelectedTimelineSegmentId(null);
@@ -193,6 +201,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setSelectedZoomId: params.setSelectedZoomId,
     setSubtitles: params.setSubtitles,
     setTimelineContextMenu: params.setTimelineContextMenu,
+    setTimelineDragActive: params.setTimelineDragActive,
     setTimelineRangeSelection: params.setTimelineRangeSelection,
     setTimelineRedoStack: editing.setTimelineRedoStack,
     setTimelineSegments: params.setTimelineSegments,
@@ -223,15 +232,20 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setExportMessage: params.setExportMessage,
     setSelectedItemId: params.setSelectedItemId,
     setSelectedTimelineSegmentId: params.setSelectedTimelineSegmentId,
+    setSelectedTimelineSegmentIds: (ids) => {
+      params.setSelectedTimelineSegmentIds(ids);
+      params.setTimelineRangeSelection(null);
+    },
     timelineRenderDuration: params.timelineRenderDuration,
     timelineSegments: params.timelineSegments
   });
 
-  function deleteSelectedTimelineItems() {
+  /** `linked: false` (Alt+Delete) keeps a recording's audio when its picture is deleted. */
+  function deleteSelectedTimelineItems(options: { linked?: boolean } = {}) {
     const selection = params.timelineRangeSelection;
     if (!selection) {
       if (params.selectedTimelineSegmentIds.length > 0 || params.selectedTimelineSegmentId) {
-        editing.deleteSelectedTimelineSegment();
+        editing.deleteSelectedTimelineSegment(options);
         return;
       }
       if (params.selectedZoomId) {
@@ -288,7 +302,7 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     );
 
     if (params.selectedTimelineSegmentIds.length > 0 || params.selectedTimelineSegmentId) {
-      editing.deleteSelectedTimelineSegment();
+      editing.deleteSelectedTimelineSegment(options);
     } else {
       params.setSelectedTimelineSegmentId(null);
       params.setSelectedTimelineSegmentIds([]);
