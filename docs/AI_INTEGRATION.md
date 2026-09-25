@@ -153,7 +153,10 @@ while a dirty renderer rejects them and explains the conflict.
 - Analysis is local, but requested transcripts, timeline metadata, and contact
   sheets enter the connected provider's context.
 - The UI requires a one-time acknowledgement before configuration.
-- No provider API keys are stored.
+- CLI connections do not store provider API keys. Optional cloud providers store
+  user-supplied keys locally with Electron safeStorage when available; the UI
+  reports when encryption is unavailable. Cloud requests use these keys only
+  when the user invokes the corresponding feature.
 - There is no arbitrary JSON replacement, shell tool, or arbitrary path input.
 
 ## Adding an edit operation

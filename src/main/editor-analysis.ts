@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { resolveFfmpegPath } from "./ffmpeg";
+import { resolveContainedProjectPath } from "./project-containment";
 import type { EditorProjectStateFile, ProjectFile } from "../shared/types";
 import type { SubtitleSegment, SubtitleWord } from "../shared/editor-domain";
 
@@ -72,7 +73,7 @@ export function getProjectAnalysisJob(jobId: string): AnalysisJobStatus | null {
 
 export async function readCachedAnalysis(rootPath: string): Promise<ProjectAnalysis | null> {
   try {
-    const value = JSON.parse(await fs.readFile(path.join(rootPath, ".ovc", "analysis", "latest.json"), "utf8")) as ProjectAnalysis;
+    const value = JSON.parse(await fs.readFile(resolveContainedProjectPath(rootPath, ".ovc/analysis/latest.json"), "utf8")) as ProjectAnalysis;
     return value?.schemaVersion === 2 && value.status === "complete" ? value : null;
   } catch { return null; }
 }
@@ -81,9 +82,7 @@ export async function readContactSheet(rootPath: string, page: number): Promise<
   const analysis = await readCachedAnalysis(rootPath);
   const sheet = analysis?.contactSheets.find((item) => item.page === page);
   if (!sheet) throw new Error(`Contact-sheet page ${page} is unavailable.`);
-  const absolute = path.resolve(rootPath, sheet.relativePath);
-  const allowedRoot = `${path.resolve(rootPath)}${path.sep}`;
-  if (!absolute.startsWith(allowedRoot)) throw new Error("Invalid contact-sheet path.");
+  const absolute = resolveContainedProjectPath(rootPath, sheet.relativePath);
   return fs.readFile(absolute);
 }
 
@@ -93,7 +92,7 @@ async function runAnalysis(
   fingerprint: string
 ) {
   job.status = "analyzing"; job.progress = 5; job.message = "Preparing local media analysis.";
-  const analysisDirectory = path.join(input.rootPath, ".ovc", "analysis");
+  const analysisDirectory = resolveContainedProjectPath(input.rootPath, ".ovc/analysis");
   await fs.mkdir(analysisDirectory, { recursive: true });
   const audioPath = resolveTrack(input.rootPath, input.project, ["micWav", "micWebm", "systemWav", "systemWebm"])
     ?? resolveImportedAnalysisSource(input.rootPath, input.editor, ["audio", "video"]);
@@ -212,11 +211,11 @@ async function createFingerprint(rootPath: string, project: ProjectFile, editor:
   const hash = createHash("sha256");
   for (const track of Object.values(project.tracks)) {
     if (!track) continue;
-    const stats = await fs.stat(path.join(rootPath, track.path)).catch(() => null);
+    const stats = await fs.stat(resolveContainedProjectPath(rootPath, track.path)).catch(() => null);
     hash.update(`${track.path}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0};`);
   }
   for (const imported of editor?.imports ?? []) {
-    const stats = await fs.stat(path.join(rootPath, imported.relativePath)).catch(() => null);
+    const stats = await fs.stat(resolveContainedProjectPath(rootPath, imported.relativePath)).catch(() => null);
     hash.update(`${imported.relativePath}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0};`);
   }
   return hash.digest("hex").slice(0, 20);
@@ -224,7 +223,7 @@ async function createFingerprint(rootPath: string, project: ProjectFile, editor:
 function resolveTrack(rootPath: string, project: ProjectFile, keys: string[]): string | null {
   for (const key of keys) {
     const track = project.tracks[key as keyof typeof project.tracks];
-    if (track?.path) return path.join(rootPath, track.path);
+    if (track?.path) return resolveContainedProjectPath(rootPath, track.path);
   }
   return null;
 }
@@ -235,8 +234,7 @@ function resolveImportedAnalysisSource(
 ): string | null {
   const imported = editor?.imports.find((item) => kinds.includes(item.kind));
   if (!imported) return null;
-  const absolute = path.resolve(rootPath, imported.relativePath);
-  return absolute.startsWith(`${path.resolve(rootPath)}${path.sep}`) ? absolute : null;
+  return resolveContainedProjectPath(rootPath, imported.relativePath);
 }
 function runProcess(command: string, args: string[]) { return capture(command, args).then(() => undefined); }
 function captureStdout(command: string, args: string[]) { return capture(command, args).then((result) => result.stdout); }

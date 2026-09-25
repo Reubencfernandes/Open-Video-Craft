@@ -28,6 +28,8 @@ import {
   writeJsonFileAtomic
 } from "./project-file";
 import { readEditorDocument, saveEditorDocument } from "./editor-document-store";
+import { assertProjectDeletionTarget } from "./project-deletion";
+import { resolveContainedProjectPath } from "./project-containment";
 import type { EditorStateSnapshot } from "../shared/editor-domain";
 import type {
   EditorProjectImport,
@@ -61,6 +63,7 @@ export class ProjectStore {
   private readonly appVersion: string;
   private readonly clock: () => Date;
   private readonly records = new Map<string, ProjectRecord>();
+  private readonly createdProjectIds = new Set<string>();
   private readonly projectOperationQueues = new Map<string, Promise<void>>();
 
   constructor(options: ProjectStoreOptions) {
@@ -75,12 +78,11 @@ export class ProjectStore {
     const nowDate = this.clock();
     const now = nowDate.toISOString();
     const safeName = input.name.trim() || "Untitled Recording";
-    const folderName = await this.getAvailableFolderName(
+    const rootPath = await this.reserveProjectFolder(
       input.baseDirectory,
       createProjectFolderName(safeName, nowDate)
     );
     const id = randomUUID();
-    const rootPath = path.resolve(input.baseDirectory, folderName);
 
     await Promise.all([
       fs.mkdir(path.join(rootPath, mediaDirectoryName), { recursive: true }),
@@ -95,9 +97,9 @@ export class ProjectStore {
     });
 
     const record: ProjectRecord = { rootPath, file };
-    this.records.set(id, record);
-
     await this.writeProjectFiles(record);
+    this.records.set(id, record);
+    this.createdProjectIds.add(id);
     return this.toView(record);
   }
 
@@ -114,7 +116,7 @@ export class ProjectStore {
         name: safeName,
         updatedAt: this.clock().toISOString()
       };
-      await this.writeProjectFiles(record);
+      await this.writeProject(record);
       return this.toView(record);
     });
   }
@@ -147,13 +149,18 @@ export class ProjectStore {
   // later lookup does not resurrect a stale record.
   forgetProject(projectId: string): void {
     this.records.delete(projectId);
+    this.createdProjectIds.delete(projectId);
   }
 
   async discardProject(projectId: string): Promise<boolean> {
     return this.runProjectOperation(projectId, async () => {
       const record = this.getRecord(projectId);
-      this.records.delete(projectId);
+      if (!this.createdProjectIds.has(projectId) || !["created", "recording"].includes(record.file.status)) {
+        throw new Error("Only an unfinished recording created in this session can be discarded. Use Move to Trash for saved projects.");
+      }
+      await assertProjectDeletionTarget(record.rootPath, projectId);
       await fs.rm(record.rootPath, { recursive: true, force: true });
+      this.forgetProject(projectId);
       return true;
     });
   }
@@ -351,18 +358,7 @@ export class ProjectStore {
 
   resolveProjectFile(projectId: string, relativePath: string): string {
     const record = this.getRecord(projectId);
-    const normalizedRelative = relativePath.replace(/^[/\\]+/, "");
-    const absolutePath = path.resolve(record.rootPath, normalizedRelative);
-    const rootPath = path.resolve(record.rootPath);
-    const rootWithSeparator = rootPath.endsWith(path.sep)
-      ? rootPath
-      : `${rootPath}${path.sep}`;
-
-    if (absolutePath !== rootPath && !absolutePath.startsWith(rootWithSeparator)) {
-      throw new Error("Requested project path is outside of the project folder.");
-    }
-
-    return absolutePath;
+    return resolveContainedProjectPath(record.rootPath, relativePath);
   }
 
   getMicWebmPath(projectId: string): string | null {
@@ -481,19 +477,27 @@ export class ProjectStore {
     });
   }
 
-  private async getAvailableFolderName(
+  private async reserveProjectFolder(
     baseDirectory: string,
     requestedName: string
   ): Promise<string> {
     let candidate = requestedName;
     let suffix = 1;
 
-    while (await exists(path.join(baseDirectory, candidate))) {
-      suffix += 1;
-      candidate = `${requestedName}-${suffix}`;
+    await fs.mkdir(baseDirectory, { recursive: true });
+    while (true) {
+      const rootPath = path.resolve(baseDirectory, candidate);
+      try {
+        // Exclusive directory creation reserves the name even when two windows
+        // create identically named projects in the same millisecond.
+        await fs.mkdir(rootPath);
+        return rootPath;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        suffix += 1;
+        candidate = `${requestedName}-${suffix}`;
+      }
     }
-
-    return candidate;
   }
 
   private getRecord(projectId: string): ProjectRecord {

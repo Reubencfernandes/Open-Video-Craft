@@ -43,6 +43,18 @@ describe("ProviderKeysManager", () => {
     expect(raw).toContain("safeStorage");
   });
 
+  it("keeps both providers when settings are updated concurrently", async () => {
+    const manager = new ProviderKeysManager({ userDataPath: directory, safeStorage: fakeSafeStorage(true) });
+    await Promise.all([
+      manager.update({ geminiApiKey: "gemini" }),
+      manager.update({ cohereApiKey: "cohere" }),
+      manager.update({ sttProvider: "cohere", cohereLanguage: "fr" })
+    ]);
+    expect(await manager.getGeminiKey()).toBe("gemini");
+    expect(await manager.getCohereKey()).toBe("cohere");
+    expect(await manager.getView()).toMatchObject({ sttProvider: "cohere", cohereLanguage: "fr" });
+  });
+
   it("falls back to obfuscated storage when encryption is unavailable", async () => {
     const manager = new ProviderKeysManager({
       userDataPath: directory,

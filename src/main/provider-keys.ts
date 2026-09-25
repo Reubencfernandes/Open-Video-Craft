@@ -62,6 +62,7 @@ export interface SafeStorageLike {
 const sttProviders: SttProviderId[] = ["whisper-local", "cohere", "gemini"];
 
 export class ProviderKeysManager {
+  private updateQueue: Promise<unknown> = Promise.resolve();
   constructor(
     private readonly input: {
       userDataPath: string;
@@ -81,6 +82,12 @@ export class ProviderKeysManager {
   }
 
   async update(request: UpdateProviderKeysRequest): Promise<ProviderKeysView> {
+    const update = this.updateQueue.then(() => this.updateFile(request));
+    this.updateQueue = update.catch(() => undefined);
+    return update;
+  }
+
+  private async updateFile(request: UpdateProviderKeysRequest): Promise<ProviderKeysView> {
     const file = await this.readFile();
 
     if (request.sttProvider && sttProviders.includes(request.sttProvider)) {

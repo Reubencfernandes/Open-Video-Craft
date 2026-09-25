@@ -24,6 +24,7 @@ export async function readProjectFile(rootPath: string): Promise<ProjectFile> {
   const parsed = JSON.parse(raw) as Partial<ProjectFile>;
 
   if (
+    !parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
     parsed.schemaVersion !== 1 ||
     !isNonEmptyString(parsed.id) ||
     !isNonEmptyString(parsed.name) ||
@@ -94,7 +95,7 @@ function isValidProjectTracks(value: unknown): value is ProjectFile["tracks"] {
   }
 
   for (const [key, track] of Object.entries(value)) {
-    if (!(key in mediaTrackRelativePaths) || !isValidProjectTrack(key as MediaTrackKey, track)) {
+    if (!Object.hasOwn(mediaTrackRelativePaths, key) || !isValidProjectTrack(key as MediaTrackKey, track)) {
       return false;
     }
   }

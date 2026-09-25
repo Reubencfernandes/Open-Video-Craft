@@ -17,6 +17,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { resolveContainedProjectPath } from "./project-containment";
 import {
   applyAgentEdit,
   hasFreshDirtySession,
@@ -522,7 +523,7 @@ export class GeminiAgentManager {
     if (!track?.path) {
       return null;
     }
-    const absolutePath = path.join(record.rootPath, track.path);
+    const absolutePath = resolveContainedProjectPath(record.rootPath, track.path);
     if (session.videoFile && session.videoFile.trackPath === absolutePath) {
       return session.videoFile;
     }

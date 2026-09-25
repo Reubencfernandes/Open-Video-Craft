@@ -254,8 +254,9 @@ export async function exportVideo(
     job.textOverlays,
     sourceSize
   );
+  const sourceHasAudio = job.preserveSourceAudio && await mediaHasAudio(job.videoPath);
   const audioInputs = [
-    ...(job.preserveSourceAudio
+    ...(sourceHasAudio
       ? [{ inputIndex: 0, volume: job.sourceAudioVolume }]
       : []),
     ...job.audioTracks.map((track, index) => ({ inputIndex: index + 1, volume: track.volume }))
@@ -1010,6 +1011,7 @@ function runProcess(
     let stderr = "";
     let stdoutRemainder = "";
     let settled = false;
+    let terminationError: Error | null = null;
     let lastPercent = 0;
     const finish = (error?: Error) => {
       if (settled) return;
@@ -1020,16 +1022,16 @@ function runProcess(
       if (error) reject(error); else resolve();
     };
     const abort = () => {
+      terminationError = new Error("Export cancelled.");
       child.kill("SIGKILL");
-      finish(new Error("Export cancelled."));
     };
     const timeoutMs = options.durationSeconds
       ? calculateExportTimeoutMs(options.durationSeconds)
       : null;
     const timeout = timeoutMs
       ? setTimeout(() => {
+          terminationError = new Error("Export timed out before FFmpeg completed.");
           child.kill("SIGKILL");
-          finish(new Error("Export timed out before FFmpeg completed."));
         }, timeoutMs)
       : null;
 
@@ -1068,6 +1070,9 @@ function runProcess(
       finish(new Error(`Failed to start FFmpeg at "${command}". ${reason}`));
     });
     child.on("close", (code) => {
+      // Wait for close before callers remove the partial output, especially
+      // on Windows where the child may still hold the output file open.
+      if (terminationError) { finish(terminationError); return; }
       if (code === 0) {
         if (lastPercent < 100) options.onProgress?.(100, "Finalizing export…");
         finish();

@@ -377,11 +377,11 @@ function runCommand(
     };
     const onChunk = (chunk: Buffer) => {
       const text = chunk.toString();
-      output += text;
+      output = (output + text).slice(-16_000);
       if (onLine) {
         lineBuffer += text;
         const lines = lineBuffer.split(/\r?\n/);
-        lineBuffer = lines.pop() ?? "";
+        lineBuffer = (lines.pop() ?? "").slice(-16_000);
         for (const line of lines) {
           if (line.trim()) onLine(line.trim());
         }

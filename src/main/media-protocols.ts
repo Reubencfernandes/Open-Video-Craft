@@ -98,7 +98,7 @@ async function createLocalMediaResponse(filePath: string, request: Request): Pro
 
   const start = range?.start ?? 0;
   const end = range?.end ?? Math.max(0, stats.size - 1);
-  headers.set("Content-Length", String(Math.max(0, end - start + 1)));
+  headers.set("Content-Length", String(stats.size === 0 ? 0 : Math.max(0, end - start + 1)));
   if (range) {
     headers.set("Content-Range", `bytes ${start}-${end}/${stats.size}`);
   }

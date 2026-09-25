@@ -207,6 +207,7 @@ npm run typecheck  # main + renderer TypeScript
 npm test           # vitest unit tests
 npm run build      # production build
 npm run test:mcp   # bundled MCP server smoke test
+npm audit          # dependency security advisories
 ```
 
 Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. A verified

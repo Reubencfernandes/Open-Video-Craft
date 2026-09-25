@@ -15,8 +15,9 @@ import type {
   EditorStateSnapshot
 } from "../shared/editor-domain";
 import type { EditorProjectImport, EditorProjectStateFile } from "../shared/types";
-import { writeJsonFileAtomic } from "./project-file";
+import { parseEditorProjectStateFile, writeJsonFileAtomic } from "./project-file";
 import { editorStateFileName } from "./project-paths";
+import { resolveContainedProjectPath } from "./project-containment";
 
 const metadataDirectoryName = ".ovc";
 const historyLimit = 20;
@@ -38,8 +39,12 @@ export class EditorDirtyError extends Error {
 
 export async function readEditorDocument(rootPath: string): Promise<EditorProjectStateFile | null> {
   try {
-    const raw = JSON.parse(await fs.readFile(path.join(rootPath, editorStateFileName), "utf8")) as unknown;
-    return parseEditorDocument(raw) as EditorProjectStateFile | null;
+    const raw = JSON.parse(await fs.readFile(resolveContainedProjectPath(rootPath, editorStateFileName), "utf8")) as unknown;
+    const document = parseEditorProjectStateFile(raw);
+    if (!document) {
+      throw new Error("This project's editor.json is invalid or from an unsupported version. The existing file has been preserved; repair it or restore a backup before saving.");
+    }
+    return document;
   } catch (error) {
     if ((error as { code?: string }).code === "ENOENT") return null;
     throw error;
@@ -73,6 +78,7 @@ export async function saveEditorDocument(input: {
       imports: structuredClone(input.imports),
       lastMutation: { source: input.source, at: now, editId, summary: input.summary ?? null }
     };
+    if (!parseEditorProjectStateFile(next)) throw new Error("Cannot save invalid editor document metadata.");
     if (input.checkpoint && current && editId) {
       await writeCheckpoint(input.rootPath, editId, next.revision, current);
     }
@@ -156,20 +162,14 @@ export async function hasFreshDirtySession(rootPath: string): Promise<boolean> {
 }
 
 export async function withEditorLock<T>(rootPath: string, operation: () => Promise<T>): Promise<T> {
-  const directory = path.join(rootPath, metadataDirectoryName);
+  const directory = resolveContainedProjectPath(rootPath, metadataDirectoryName);
   const lockPath = path.join(directory, "editor.lock");
   await fs.mkdir(directory, { recursive: true });
   const startedAt = Date.now();
   while (true) {
+    let handle;
     try {
-      const handle = await fs.open(lockPath, "wx");
-      await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: Date.now() }));
-      try {
-        return await operation();
-      } finally {
-        await handle.close();
-        await fs.rm(lockPath, { force: true }).catch(() => undefined);
-      }
+      handle = await fs.open(lockPath, "wx");
     } catch (error) {
       if ((error as { code?: string }).code !== "EEXIST") throw error;
       const stale = await isStaleLock(lockPath);
@@ -179,20 +179,35 @@ export async function withEditorLock<T>(rootPath: string, operation: () => Promi
       }
       if (Date.now() - startedAt > 5_000) throw new Error("Timed out waiting for the editor project lock.");
       await new Promise((resolve) => setTimeout(resolve, 60));
+      continue;
+    }
+    // Only acquisition errors are retried. Retrying an operation that throws
+    // EEXIST could repeat a partially completed mutation.
+    try {
+      await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: Date.now() }));
+      return await operation();
+    } finally {
+      await handle.close();
+      await fs.rm(lockPath, { force: true }).catch(() => undefined);
     }
   }
 }
 
-function sessionPath(rootPath: string) { return path.join(rootPath, metadataDirectoryName, "session.json"); }
-function historyPath(rootPath: string) { return path.join(rootPath, metadataDirectoryName, "history"); }
-function checkpointPath(rootPath: string, editId: string) { return path.join(historyPath(rootPath), `${editId}.json`); }
+function sessionPath(rootPath: string) { return resolveContainedProjectPath(rootPath, `${metadataDirectoryName}/session.json`); }
+function historyPath(rootPath: string) { return resolveContainedProjectPath(rootPath, `${metadataDirectoryName}/history`); }
+function checkpointPath(rootPath: string, editId: string) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(editId)) {
+    throw new Error("Invalid AI checkpoint id.");
+  }
+  return resolveContainedProjectPath(rootPath, `${metadataDirectoryName}/history/${editId}.json`);
+}
 
 async function writeCheckpoint(rootPath: string, editId: string, appliedRevision: number, previous: EditorProjectStateFile) {
   await writeJsonFileAtomic(checkpointPath(rootPath, editId), { editId, appliedRevision, createdAt: new Date().toISOString(), previous });
 }
 async function readCheckpoint(rootPath: string, editId: string): Promise<{ appliedRevision: number; previous: EditorProjectStateFile }> {
   const value = JSON.parse(await fs.readFile(checkpointPath(rootPath, editId), "utf8")) as any;
-  const previous = parseEditorDocument(value.previous);
+  const previous = parseEditorProjectStateFile(value.previous);
   if (!previous || typeof value.appliedRevision !== "number") throw new Error("The AI edit checkpoint is invalid or unavailable.");
   return { appliedRevision: value.appliedRevision, previous: previous as EditorProjectStateFile };
 }
@@ -208,10 +223,19 @@ async function pruneHistory(rootPath: string) {
 async function isStaleLock(lockPath: string): Promise<boolean> {
   try {
     const value = JSON.parse(await fs.readFile(lockPath, "utf8")) as { pid?: unknown; createdAt?: unknown };
-    if (typeof value.createdAt !== "number" || Date.now() - value.createdAt > 30_000) return true;
-    if (typeof value.pid !== "number") return true;
-    try { process.kill(value.pid, 0); return false; } catch { return true; }
-  } catch { return true; }
+    if (Number.isInteger(value.pid) && (value.pid as number) > 0) {
+      // A slow operation still owns its lock. EPERM also means that the
+      // process may be alive; only ESRCH establishes that its owner exited.
+      try { process.kill(value.pid as number, 0); return false; }
+      catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH"; }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+  }
+  // Another writer may have created the lock but not written its metadata yet.
+  // Do not steal a fresh empty or partially written lock.
+  const stats = await fs.stat(lockPath).catch(() => null);
+  return stats !== null && Date.now() - stats.mtimeMs > 30_000;
 }
 
 export type { EditorDocument };

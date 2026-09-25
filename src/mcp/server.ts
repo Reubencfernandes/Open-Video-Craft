@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import path from "node:path";
+import { resolveContainedProjectPath } from "../main/project-containment";
 import { promises as fs } from "node:fs";
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -205,7 +206,7 @@ server.registerTool("export_project", {
     const document = await readEditorDocument(record.rootPath);
     if (!document) throw new Error("The project has no saved editor timeline.");
     if (document.revision !== expectedRevision) throw new Error(`Editor revision changed from ${expectedRevision} to ${document.revision}. Inspect before exporting.`);
-    const outputDirectory = path.join(record.rootPath, "exports");
+    const outputDirectory = resolveContainedProjectPath(record.rootPath, "exports");
     await fs.mkdir(outputDirectory, { recursive: true });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const outputPath = path.join(outputDirectory, `${slugify(record.project.name) || "video"}-${stamp}.${format}`);

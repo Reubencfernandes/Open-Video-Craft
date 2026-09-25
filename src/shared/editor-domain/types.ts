@@ -45,6 +45,8 @@ export interface TimelineSegment {
   start: number;
   end: number;
   sourceStart: number;
+  /** Only automatically created clips awaiting media metadata may grow. */
+  pendingDuration?: boolean;
 }
 
 export interface ZoomEffect {

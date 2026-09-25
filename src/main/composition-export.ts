@@ -11,6 +11,7 @@ import {
   writeSubtitleSidecar,
   writeTemporarySubtitleSidecar
 } from "./subtitle-export";
+import { resolveContainedProjectPath } from "./project-containment";
 import type {
   EditorProjectStateFile,
   ExportResolution,
@@ -45,9 +46,7 @@ export async function exportEditorProjectToPath(input: {
   addProjectSource(sourceById, `${projectId}:audio`, input.rootPath, input.project.tracks.micWav ?? input.project.tracks.micWebm, "audio");
   addProjectSource(sourceById, `${projectId}:system-audio`, input.rootPath, input.project.tracks.systemWav ?? input.project.tracks.systemWebm, "audio");
   for (const imported of input.document.imports) {
-    const absolutePath = path.resolve(input.rootPath, imported.relativePath);
-    const rootPrefix = `${path.resolve(input.rootPath)}${path.sep}`;
-    if (!absolutePath.startsWith(rootPrefix)) throw new Error(`Imported media "${imported.name}" is outside the project folder.`);
+    const absolutePath = resolveContainedProjectPath(input.rootPath, imported.relativePath);
     sourceById.set(imported.id, { path: absolutePath, kind: imported.kind });
   }
 
@@ -202,5 +201,5 @@ function addProjectSource(
   track: ProjectFile["tracks"][keyof ProjectFile["tracks"]] | undefined,
   kind: "video" | "audio"
 ) {
-  if (track) target.set(id, { path: path.join(rootPath, track.path), kind });
+  if (track) target.set(id, { path: resolveContainedProjectPath(rootPath, track.path), kind });
 }

@@ -162,7 +162,8 @@ function isEditorMutation(value: unknown): value is EditorMutation {
 
 function isTimelineSegment(value: unknown): value is TimelineSegment {
   return hasTimedId(value) && typeof value.itemId === "string" && oneOf(value.track, ["video", "audio"]) &&
-    Number.isInteger(value.lane) && finite(value.sourceStart);
+    finite(value.lane) && Number.isSafeInteger(value.lane) && value.lane >= 0 && finite(value.sourceStart) && value.sourceStart >= 0 &&
+    (value.pendingDuration === undefined || typeof value.pendingDuration === "boolean");
 }
 
 function isZoomEffect(value: unknown): value is ZoomEffect {
@@ -177,7 +178,7 @@ function isSpeedEffect(value: unknown): value is SpeedEffect {
 }
 
 function hasTimedId(value: unknown): value is Record<string, unknown> {
-  return isRecord(value) && typeof value.id === "string" && finite(value.start) && finite(value.end) && value.end >= value.start;
+  return isRecord(value) && typeof value.id === "string" && finite(value.start) && value.start >= 0 && finite(value.end) && value.end >= value.start;
 }
 
 function isCameraContentTransform(value: unknown): value is CameraContentTransform {

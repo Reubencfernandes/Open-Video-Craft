@@ -28,6 +28,42 @@ describe("project folder naming", () => {
 });
 
 describe("ProjectStore", () => {
+  it("refuses permanent discard of projects loaded from disk", async () => {
+    const creator = new ProjectStore({ appVersion: "test" });
+    const project = await creator.createProject({ name: "Saved", baseDirectory: tmpDir });
+    const store = new ProjectStore({ appVersion: "test" });
+    await store.loadProject(project.rootPath);
+    await expect(store.discardProject(project.id)).rejects.toThrow(/unfinished recording/);
+    expect(store.hasProject(project.id)).toBe(true);
+    await expect(fs.stat(project.rootPath)).resolves.toBeTruthy();
+    await expect(creator.discardProject(project.id)).resolves.toBe(true);
+  });
+
+  it("reserves separate folders for simultaneous identical project names", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0", clock: () => new Date("2026-01-01T00:00:00Z") });
+    const projects = await Promise.all(Array.from({ length: 4 }, () =>
+      store.createProject({ name: "Same name", baseDirectory: tmpDir })
+    ));
+    expect(new Set(projects.map((project) => project.rootPath)).size).toBe(4);
+    for (const project of projects) {
+      const saved = JSON.parse(await fs.readFile(path.join(project.rootPath, "project.json"), "utf8"));
+      expect(saved.id).toBe(project.id);
+    }
+  });
+
+  it("preserves existing edit and subtitle files when renaming a project", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Original", baseDirectory: tmpDir });
+    const edits = '{"custom":"saved edits"}';
+    const subtitles = '{"segments":[{"text":"Keep me"}]}';
+    await fs.writeFile(path.join(project.rootPath, "edits.json"), edits);
+    await fs.writeFile(path.join(project.rootPath, "subtitles.json"), subtitles);
+    await store.renameProject(project.id, "Renamed");
+    expect(await fs.readFile(path.join(project.rootPath, "edits.json"), "utf8")).toBe(edits);
+    expect(await fs.readFile(path.join(project.rootPath, "subtitles.json"), "utf8")).toBe(subtitles);
+    expect(store.getProject(project.id).name).toBe("Renamed");
+  });
+
   it("creates a transparent project folder with default JSON files", async () => {
     const store = new ProjectStore({
       appVersion: "1.0.0",
