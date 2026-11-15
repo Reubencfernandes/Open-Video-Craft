@@ -279,7 +279,7 @@ jobs:
       - name: Verify macOS update archive
         if: matrix.name == 'macOS'
         env:
-          OVC_MAC_TEAM_ID: "3XX79RB95N"
+          OVC_MAC_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run verify:mac-release
 
       - name: Verify Windows release artifacts

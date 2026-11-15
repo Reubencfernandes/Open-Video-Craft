@@ -8,7 +8,7 @@
   "productName": "Open Video Craft",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Reubencfernandes/Open-Video-Craft.git"
+    "url": "git+https://github.com/micio86dev/openvideocraft.git"
   },
   "type": "commonjs",
   "main": "dist-electron/main/main.js",
@@ -38,7 +38,7 @@
     "start": "electron dist-electron/main/main.js"
   },
   "build": {
-    "appId": "com.openvideocraft.app",
+    "appId": "dev.micio86dev.openvideocraft",
     "productName": "Open Video Craft",
     "copyright": "Copyright (c) 2026 Reuben Chagas Fernandes",
     "asar": true,
@@ -164,8 +164,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Reubencfernandes",
-      "repo": "Open-Video-Craft"
+      "owner": "micio86dev",
+      "repo": "openvideocraft"
     }
   },
   "devDependencies": {

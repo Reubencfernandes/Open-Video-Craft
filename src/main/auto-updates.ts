@@ -134,8 +134,10 @@ export function installDownloadedUpdate(): boolean {
 
 function configureAutoUpdater(): void {
   autoUpdater.logger = updateLogger;
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Off until the fork publishes its own update feed: nothing is fetched or
+  // installed automatically.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.autoRunAppAfterInstall = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.fullChangelog = false;
@@ -156,11 +158,11 @@ function registerAutoUpdateEvents(): void {
     setUpdateStatus({
       state: "available",
       latestVersion: info.version,
-      message: `Update ${info.version} is available. Downloading...`,
+      message: `Update ${info.version} is available.`,
       checkedAt: new Date().toISOString(),
       downloadProgress: null
     });
-    updateLogger.info(`Update ${info.version} is available. Downloading.`);
+    updateLogger.info(`Update ${info.version} is available. Automatic download is disabled.`);
   });
 
   autoUpdater.on("update-not-available", (info) => {
