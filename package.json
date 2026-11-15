@@ -115,9 +115,20 @@
         "NSMicrophoneUsageDescription": "Open Video Craft uses the microphone when recording audio.",
         "NSScreenCaptureDescription": "Open Video Craft records the selected screen or window."
       },
+      "minimumSystemVersion": "26.5.2",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ]
     },
     "mas": {

@@ -21,6 +21,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createMacApplicationMenuTemplate } from "./application-menu";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
+import { resolveRendererBaseUrl } from "./renderer-url";
 import { AiConnectionManager } from "./ai-connection";
 import { registerAppStatusIpc } from "./app-status-ipc";
 import { getProductVersion } from "./app-version";
@@ -464,10 +465,13 @@ async function loadRendererView(
   view: "main" | "controller" | "editor" | "permission-guide",
   params: Record<string, string> = {}
 ): Promise<void> {
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
-  const url = devServerUrl
-    ? new URL(devServerUrl)
-    : new URL(pathToFileURL(path.join(__dirname, "../../dist-renderer/index.html")).toString());
+  const url = new URL(
+    resolveRendererBaseUrl({
+      isPackaged: app.isPackaged,
+      devServerUrl: process.env.VITE_DEV_SERVER_URL,
+      fileUrl: pathToFileURL(path.join(__dirname, "../../dist-renderer/index.html")).toString()
+    })
+  );
 
   url.searchParams.set("view", view);
 
