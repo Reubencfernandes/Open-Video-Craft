@@ -3,11 +3,13 @@ dist-electron/
 dist-renderer/
 release/
 coverage/
+/bench/
 .vite/
 .ffmpeg-bin/
 /build/mas.provisionprofile
 
 *.log
+!docs/baseline/**/*.log
 .env
 .env.*
 !.env.example

@@ -7,6 +7,7 @@ import type {
   AiConnectionStatus,
   AiProvider,
   AppInfo,
+  BenchSnapshot,
   ConfigureAiProviderRequest,
   CreateProjectRequest,
   DesktopPermissionKind,
@@ -251,5 +252,11 @@ const api = {
 };
 
 contextBridge.exposeInMainWorld("openVideoCraft", api);
+
+if (process.env.OVC_BENCH_MODE === "1") {
+  contextBridge.exposeInMainWorld("ovcBench", {
+    snapshot: (): Promise<BenchSnapshot> => ipcRenderer.invoke("bench:snapshot")
+  });
+}
 
 export type OpenVideoCraftApi = typeof api;

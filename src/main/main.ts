@@ -25,6 +25,12 @@ import { resolveRendererBaseUrl } from "./renderer-url";
 import { AiConnectionManager } from "./ai-connection";
 import { registerAppStatusIpc } from "./app-status-ipc";
 import { getProductVersion } from "./app-version";
+import {
+  attachBenchInstrumentation,
+  configureBenchMode,
+  isBenchMode,
+  registerBenchIpc
+} from "./bench";
 import { startAutoUpdates } from "./auto-updates";
 import { shouldEnableDevTools } from "./dev-tools";
 import {
@@ -116,6 +122,9 @@ import type {
   UpdateProviderKeysRequest,
   WriteChunkRequest
 } from "../shared/types";
+
+const benchMode = isBenchMode({ argv: process.argv, isPackaged: app.isPackaged });
+configureBenchMode(benchMode);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -295,6 +304,8 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false
     }
   });
+
+  attachBenchInstrumentation(mainWindow, benchMode);
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -864,6 +875,16 @@ function registerRecordingPowerHandlers(): void {
 
 function registerIpc(): void {
   registerAppStatusIpc();
+  registerBenchIpc({
+    enabled: benchMode,
+    ipc: ipcMain,
+    getAppMetrics: () => app.getAppMetrics().map((metric) => ({
+      workingSetSize: metric.memory.workingSetSize
+    })),
+    getMainWebContentsId: () => mainWindow?.webContents.id ?? -1,
+    now: () => new Date().toISOString(),
+    uptime: () => process.uptime()
+  });
 
   ipcMain.handle("ai:get-status", (): Promise<AiConnectionStatus> =>
     getAiConnectionManager().getStatus()

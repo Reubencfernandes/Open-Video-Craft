@@ -58,6 +58,14 @@ export interface AppInfo {
   platform: NodePlatform;
 }
 
+export interface BenchSnapshot {
+  schemaVersion: 1;
+  capturedAt: string;
+  uptimeSeconds: number;
+  processCount: number;
+  workingSetMb: number;
+}
+
 export type NodePlatform =
   | "aix"
   | "android"

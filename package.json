@@ -19,6 +19,7 @@
     "build:main": "tsc -p tsconfig.electron.json",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
+    "bench:startup": "node scripts/bench/startup.mjs",
     "prepare:ffmpeg:mac": "node scripts/prepare-ffmpeg.mjs --all-mac",
     "prepare:ffmpeg:win": "node scripts/prepare-windows-ffmpeg.mjs",
     "prepare:mas-profile": "node scripts/prepare-mas-profile.mjs",

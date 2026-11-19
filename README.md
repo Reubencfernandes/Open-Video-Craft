@@ -207,8 +207,15 @@ npm run typecheck  # main + renderer TypeScript
 npm test           # vitest unit tests
 npm run build      # production build
 npm run test:mcp   # bundled MCP server smoke test
+npm run bench:startup -- --out bench/startup/latest # isolated startup/idle metrics
 npm audit          # dependency security advisories
 ```
+
+`bench:startup` requires a prior `npm run build`. It launches an unpackaged app
+with the development-only `--bench` IPC channel, uses a temporary user-data
+profile, and writes CSV/JSON metrics without opening real projects. Packaged
+builds ignore the flag and do not register the channel. The in-repo startup
+harness supports macOS, Linux and Windows Electron binary layouts.
 
 Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. A verified
 FFmpeg executable is bundled for remuxing, audio conversion, and export; its
