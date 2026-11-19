@@ -1,0 +1,7 @@
+# Gentleman Guardian Angel pre-commit configuration
+PROVIDER="claude"
+FILE_PATTERNS="*.ts,*.tsx,*.js,*.jsx,*.mjs,*.py,*.go"
+EXCLUDE_PATTERNS="*.test.ts,*.test.tsx,*.spec.ts,*.spec.tsx,*.test.js,*.test.jsx,*.spec.js,*.spec.jsx,*.d.ts,dist/*,build/*,node_modules/*"
+RULES_FILE="AGENTS.md"
+STRICT_MODE="true"
+TIMEOUT="300"
