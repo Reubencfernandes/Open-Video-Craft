@@ -240,24 +240,12 @@ export function assertMusicGenerateRequest(
     !request ||
     typeof request !== "object" ||
     !isUuid(request.jobId) ||
-    !["acestep", "lyria-clip", "lyria-pro"].includes(request.engine ?? "") ||
+    !["lyria-clip", "lyria-pro"].includes(request.engine ?? "") ||
     typeof request.prompt !== "string" ||
     request.prompt.trim().length === 0 ||
     request.prompt.length > 2000 ||
     typeof request.lyrics !== "string" ||
-    request.lyrics.length > 10000 ||
-    typeof request.durationSeconds !== "number" ||
-    !Number.isFinite(request.durationSeconds) ||
-    request.durationSeconds < 5 ||
-    request.durationSeconds > 240 ||
-    !Number.isInteger(request.inferSteps) ||
-    (request.inferSteps ?? 0) < 10 ||
-    (request.inferSteps ?? 0) > 100 ||
-    typeof request.guidanceScale !== "number" ||
-    !Number.isFinite(request.guidanceScale) ||
-    request.guidanceScale < 1 ||
-    request.guidanceScale > 30 ||
-    !(request.seed === null || (Number.isInteger(request.seed) && (request.seed ?? -1) >= 0))
+    request.lyrics.length > 10000
   ) {
     throw new Error("Invalid music generation request.");
   }

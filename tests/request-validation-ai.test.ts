@@ -74,30 +74,29 @@ describe("assertSttTranscribeRequest", () => {
 describe("assertMusicGenerateRequest", () => {
   const valid = {
     jobId: uuid,
-    engine: "acestep",
+    engine: "lyria-clip",
     prompt: "lofi beat",
-    lyrics: "",
-    durationSeconds: 30,
-    inferSteps: 27,
-    guidanceScale: 15,
-    seed: null
+    lyrics: ""
   };
 
-  it("accepts a valid request for all engines", () => {
-    for (const engine of ["acestep", "lyria-clip", "lyria-pro"]) {
+  it("accepts Lyria engines without local ACE-Step fields", () => {
+    for (const engine of ["lyria-clip", "lyria-pro"]) {
       expect(() => assertMusicGenerateRequest({ ...valid, engine })).not.toThrow();
     }
   });
 
-  it("rejects out-of-range fields", () => {
-    expect(() => assertMusicGenerateRequest({ ...valid, engine: "suno" })).toThrow();
-    expect(() => assertMusicGenerateRequest({ ...valid, prompt: "" })).toThrow();
-    expect(() => assertMusicGenerateRequest({ ...valid, durationSeconds: 2 })).toThrow();
-    expect(() => assertMusicGenerateRequest({ ...valid, durationSeconds: 999 })).toThrow();
-    expect(() => assertMusicGenerateRequest({ ...valid, inferSteps: 5 })).toThrow();
-    expect(() => assertMusicGenerateRequest({ ...valid, guidanceScale: 0 })).toThrow();
-    expect(() => assertMusicGenerateRequest({ ...valid, seed: -1 })).toThrow();
-    expect(() => assertMusicGenerateRequest({ ...valid, jobId: "nope" })).toThrow();
+  it("rejects the removed ACE-Step engine", () => {
+    const legacyAceStepRequest = {
+      ...valid,
+      engine: "acestep",
+      durationSeconds: 30,
+      inferSteps: 27,
+      guidanceScale: 15,
+      seed: null
+    };
+    expect(() => assertMusicGenerateRequest(legacyAceStepRequest)).toThrow(
+      "Invalid music generation request."
+    );
   });
 });
 

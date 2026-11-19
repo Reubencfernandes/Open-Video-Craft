@@ -63,7 +63,6 @@ import {
 import { exportEditorVideo } from "./editor-export";
 import { ExportJobRegistry } from "./export-jobs";
 import { GeminiAgentManager } from "./gemini-agent";
-import { MusicGenerationManager } from "./music-generation";
 import { generateLyria } from "./music-lyria";
 import { ProviderKeysManager } from "./provider-keys";
 import {
@@ -83,10 +82,7 @@ import { assertProjectDeletionTarget } from "./project-deletion";
 import { setEditorSessionState, undoAgentEdit } from "./editor-document-store";
 import { writeJsonFileAtomic } from "./project-file";
 import { createMediaUrl, ProjectStore } from "./project-store";
-import {
-  isMacAppStoreBuild,
-  SecurityScopedResourceManager
-} from "./security-scoped-resources";
+import { SecurityScopedResourceManager } from "./security-scoped-resources";
 import type {
   AiConnectionStatus,
   AiProvider,
@@ -105,7 +101,6 @@ import type {
   MusicGenerateProgressEvent,
   MusicGenerateRequest,
   MusicGenerateResult,
-  MusicSetupStatus,
   ProjectLibraryEntry,
   ProjectView,
   ProviderKeyId,
@@ -178,7 +173,6 @@ let projectLibrary: ProjectLibrary | null = null;
 let securityScopedResources: SecurityScopedResourceManager | null = null;
 let aiConnectionManager: AiConnectionManager | null = null;
 let providerKeysManager: ProviderKeysManager | null = null;
-let musicGenerationManager: MusicGenerationManager | null = null;
 let geminiAgentManager: GeminiAgentManager | null = null;
 const sttJobs = new Map<string, AbortController>();
 const lyriaJobs = new Map<string, AbortController>();
@@ -267,16 +261,6 @@ function getGeminiAgentManager(): GeminiAgentManager {
     }
   });
   return geminiAgentManager;
-}
-
-function getMusicGenerationManager(): MusicGenerationManager {
-  musicGenerationManager ??= new MusicGenerationManager({
-    userDataPath: app.getPath("userData"),
-    wrapperScriptPath: app.isPackaged
-      ? path.join(process.resourcesPath, "acestep_generate.py")
-      : path.join(app.getAppPath(), "resources", "acestep_generate.py")
-  });
-  return musicGenerationManager;
 }
 
 function getAiConnectionManager(): AiConnectionManager {
@@ -950,28 +934,6 @@ function registerIpc(): void {
     return Boolean(control);
   });
 
-  ipcMain.handle("music:get-status", (): Promise<MusicSetupStatus> => {
-    if (isMacAppStoreBuild()) {
-      return Promise.resolve({
-        pythonPath: null,
-        pythonVersion: null,
-        venvReady: false,
-        acestepInstalled: false,
-        checkpointsDownloaded: false,
-        installing: false,
-        generatingJobId: null
-      });
-    }
-    return getMusicGenerationManager().getStatus();
-  });
-  ipcMain.handle("music:install", (event): Promise<MusicSetupStatus> => {
-    if (isMacAppStoreBuild()) {
-      return Promise.reject(new Error("Local music setup is unavailable in the Mac App Store build."));
-    }
-    return getMusicGenerationManager().install((progress) => {
-      if (!event.sender.isDestroyed()) event.sender.send("music:setup-progress", progress);
-    });
-  });
   ipcMain.handle(
     "music:generate",
     async (event, request: MusicGenerateRequest): Promise<MusicGenerateResult> => {
@@ -979,82 +941,63 @@ function registerIpc(): void {
       const sendProgress = (progress: MusicGenerateProgressEvent) => {
         if (!event.sender.isDestroyed()) event.sender.send("music:generate-progress", progress);
       };
-
-      let outputPath: string;
-      let extension: string;
-      let lyrics: string | null = null;
-
-      if (request.engine === "acestep") {
-        if (isMacAppStoreBuild()) {
-          throw new Error("Local ACE-Step music generation is unavailable in the Mac App Store build.");
-        }
-        const generated = await getMusicGenerationManager().generateAceStep(request, sendProgress);
-        outputPath = generated.outputPath;
-        extension = "wav";
-      } else {
-        const apiKey = await getProviderKeysManager().getGeminiKey();
-        if (!apiKey) {
-          throw new Error("No Gemini API key is saved. Add one in the AI settings.");
-        }
-        const control = new AbortController();
-        lyriaJobs.set(request.jobId, control);
-        try {
-          sendProgress({
-            jobId: request.jobId,
-            phase: "generating",
-            percent: null,
-            message: "Composing with Lyria…"
-          });
-          const output = await generateLyria({
-            model: request.engine === "lyria-clip" ? "lyria-3-clip-preview" : "lyria-3-pro-preview",
-            prompt: request.prompt,
-            lyrics: request.lyrics,
-            apiKey,
-            signal: control.signal
-          });
-          extension = output.mimeType.includes("wav") ? "wav" : "mp3";
-          outputPath = path.join(
-            app.getPath("userData"), "acestep", "output", `${request.jobId}.${extension}`
-          );
-          await fs.mkdir(path.dirname(outputPath), { recursive: true });
-          await fs.writeFile(outputPath, output.audio);
-          lyrics = output.lyrics;
-        } finally {
-          lyriaJobs.delete(request.jobId);
-        }
+      const apiKey = await getProviderKeysManager().getGeminiKey();
+      if (!apiKey) {
+        throw new Error("No Gemini API key is saved. Add one in the AI settings.");
       }
-
-      sendProgress({
-        jobId: request.jobId,
-        phase: "saving",
-        percent: 100,
-        message: "Adding to timeline…"
-      });
-
-      const durationMs = await probeMediaDurationMs(outputPath).catch(() => null);
-      const importId = request.jobId;
-      importedMediaCache.set(importId, outputPath);
-      const promptSlug = request.prompt.trim().slice(0, 40) || "AI music";
-      return {
-        id: importId,
-        name: `${promptSlug}.${extension}`,
-        path: outputPath,
-        url: `ovc-import://file/${encodeURIComponent(importId)}`,
-        kind: "audio",
-        extension,
-        duration: durationMs === null ? null : durationMs / 1000,
-        lyrics
-      };
+      const control = new AbortController();
+      lyriaJobs.set(request.jobId, control);
+      try {
+        sendProgress({
+          jobId: request.jobId,
+          phase: "generating",
+          percent: null,
+          message: "Composing with Lyria…"
+        });
+        const output = await generateLyria({
+          model: request.engine === "lyria-clip" ? "lyria-3-clip-preview" : "lyria-3-pro-preview",
+          prompt: request.prompt,
+          lyrics: request.lyrics,
+          apiKey,
+          signal: control.signal
+        });
+        const extension = output.mimeType.includes("wav") ? "wav" : "mp3";
+        const outputPath = path.join(
+          app.getPath("userData"), "lyria", "output", `${request.jobId}.${extension}`
+        );
+        await fs.mkdir(path.dirname(outputPath), { recursive: true });
+        await fs.writeFile(outputPath, output.audio);
+        sendProgress({
+          jobId: request.jobId,
+          phase: "saving",
+          percent: 100,
+          message: "Adding to timeline…"
+        });
+        const durationMs = await probeMediaDurationMs(outputPath).catch(() => null);
+        const importId = request.jobId;
+        importedMediaCache.set(importId, outputPath);
+        const promptSlug = request.prompt.trim().slice(0, 40) || "AI music";
+        return {
+          id: importId,
+          name: `${promptSlug}.${extension}`,
+          path: outputPath,
+          url: `ovc-import://file/${encodeURIComponent(importId)}`,
+          kind: "audio",
+          extension,
+          duration: durationMs === null ? null : durationMs / 1000,
+          lyrics: output.lyrics
+        };
+      } finally {
+        lyriaJobs.delete(request.jobId);
+      }
     }
   );
   ipcMain.handle("music:cancel", (_event, jobId: unknown): boolean => {
     if (typeof jobId !== "string") return false;
-    const lyria = lyriaJobs.get(jobId);
-    if (lyria) {
-      lyria.abort();
-      return true;
-    }
-    return getMusicGenerationManager().cancel(jobId);
+    const control = lyriaJobs.get(jobId);
+    if (!control) return false;
+    control.abort();
+    return true;
   });
 
   ipcMain.handle(
@@ -1789,7 +1732,6 @@ app.on("will-quit", () => {
   closePermissionGuideWindow();
   killActiveFfmpegProcesses();
   killActiveSttProcesses();
-  musicGenerationManager?.killActiveProcesses();
   globalShortcut.unregisterAll();
   securityScopedResources?.stopAll();
 });

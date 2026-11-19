@@ -568,11 +568,7 @@ export function EditorView() {
     void musicGeneration.generate({
       engine: request.engine,
       prompt: request.prompt,
-      lyrics: request.lyrics,
-      durationSeconds: 30,
-      inferSteps: 60,
-      guidanceScale: 15,
-      seed: null
+      lyrics: request.lyrics
     });
   }, [isEditorStateReady, pendingMusicGeneration, musicGeneration]);
 

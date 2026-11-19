@@ -73,10 +73,6 @@
         "to": "app.png"
       },
       {
-        "from": "resources/acestep_generate.py",
-        "to": "acestep_generate.py"
-      },
-      {
         "from": "resources/fonts",
         "to": "fonts"
       },

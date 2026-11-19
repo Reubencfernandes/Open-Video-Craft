@@ -25,8 +25,6 @@ import type {
   MusicGenerateProgressEvent,
   MusicGenerateRequest,
   MusicGenerateResult,
-  MusicSetupProgressEvent,
-  MusicSetupStatus,
   ProjectLibraryEntry,
   ProjectView,
   ProviderKeyId,
@@ -85,12 +83,9 @@ const api = {
     onProgress: subscribe<SttProgressEvent>("stt:progress")
   },
   music: {
-    getStatus: (): Promise<MusicSetupStatus> => ipcRenderer.invoke("music:get-status"),
-    install: (): Promise<MusicSetupStatus> => ipcRenderer.invoke("music:install"),
     generate: (request: MusicGenerateRequest): Promise<MusicGenerateResult> =>
       ipcRenderer.invoke("music:generate", request),
     cancel: (jobId: string): Promise<boolean> => ipcRenderer.invoke("music:cancel", jobId),
-    onSetupProgress: subscribe<MusicSetupProgressEvent>("music:setup-progress"),
     onGenerateProgress: subscribe<MusicGenerateProgressEvent>("music:generate-progress")
   },
   gemini: {

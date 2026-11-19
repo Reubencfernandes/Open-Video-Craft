@@ -207,21 +207,10 @@ const api = {
     onProgress: () => () => undefined
   },
   music: {
-    getStatus: async () => ({
-      pythonPath: "/usr/local/bin/python3.12",
-      pythonVersion: "3.12",
-      venvReady: true,
-      acestepInstalled: true,
-      checkpointsDownloaded: true,
-      installing: false,
-      generatingJobId: null
-    }),
-    install: async () => api.music.getStatus(),
     generate: async () => {
       throw new Error("Music generation is unavailable in the screenshot harness.");
     },
     cancel: async () => true,
-    onSetupProgress: () => () => undefined,
     onGenerateProgress: () => () => undefined
   },
   gemini: {

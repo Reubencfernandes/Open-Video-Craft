@@ -28,8 +28,6 @@ const engineOptions: Array<{ id: MusicEngine; label: string; hint: string }> = [
 
 const phaseLabels: Record<MusicGenerateProgressEvent["phase"], string> = {
   starting: "Starting…",
-  "downloading-checkpoints": "Preparing music…",
-  "loading-model": "Preparing music…",
   generating: "Generating music…",
   saving: "Adding to timeline…"
 };
@@ -114,13 +112,7 @@ export function MusicPanel(props: {
           props.onGenerate({
             engine,
             prompt: prompt.trim(),
-            lyrics,
-            // These fields remain in the shared request contract for the
-            // legacy local engine; Lyria ignores them.
-            durationSeconds: 30,
-            inferSteps: 27,
-            guidanceScale: 15,
-            seed: null
+            lyrics
           })
         }
       >

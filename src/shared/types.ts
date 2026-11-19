@@ -457,46 +457,21 @@ export interface SttProgressEvent {
 }
 
 /* ------------------------------------------------------------------ */
-/* AI music generation (ACE-Step local + Lyria cloud)                  */
+/* AI music generation (Lyria cloud)                                   */
 /* ------------------------------------------------------------------ */
 
-export type MusicEngine = "acestep" | "lyria-clip" | "lyria-pro";
-
-export interface MusicSetupStatus {
-  pythonPath: string | null;
-  pythonVersion: string | null;
-  venvReady: boolean;
-  acestepInstalled: boolean;
-  checkpointsDownloaded: boolean;
-  installing: boolean;
-  generatingJobId: string | null;
-}
-
-export interface MusicSetupProgressEvent {
-  phase: "venv" | "pip";
-  line: string;
-}
+export type MusicEngine = "lyria-clip" | "lyria-pro";
 
 export interface MusicGenerateRequest {
   jobId: string;
   engine: MusicEngine;
   prompt: string;
   lyrics: string;
-  /** Seconds; ACE-Step only (Lyria Clip is fixed 30 s, Pro is prompt-driven). */
-  durationSeconds: number;
-  inferSteps: number;
-  guidanceScale: number;
-  seed: number | null;
 }
 
 export interface MusicGenerateProgressEvent {
   jobId: string;
-  phase:
-    | "starting"
-    | "downloading-checkpoints"
-    | "loading-model"
-    | "generating"
-    | "saving";
+  phase: "starting" | "generating" | "saving";
   percent: number | null;
   message: string;
 }
