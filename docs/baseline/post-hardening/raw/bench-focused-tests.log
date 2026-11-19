@@ -1,0 +1,73 @@
+
+ RUN  v4.1.9 <repository root>
+
+ ✓ tests/bench.test.ts > bench mode > enables only the exact --bench flag in an unpackaged app 1ms
+ ✓ tests/bench.test.ts > bench mode > overwrites an inherited environment flag 0ms
+ ✓ tests/bench.test.ts > bench IPC > returns aggregate app memory and uptime only to the main renderer 1ms
+ ✓ tests/bench.test.ts > bench IPC > rejects every sender while the main window is unavailable 0ms
+ ✓ tests/bench.test.ts > bench IPC > reports zero when Electron supplies no process metrics 0ms
+ ✓ tests/bench.test.ts > bench IPC > does not register the channel outside bench mode 0ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --samples 0 22ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --samples 1.5 21ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --settle=-1 21ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  22:47:04
+   Duration  150ms (transform 12ms, setup 0ms, import 17ms, tests 66ms, environment 0ms)
+
+
+> open-video-craft@1.0.6 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+
+
+> open-video-craft@1.0.6 build
+> npm run build:main && npm run build:renderer
+
+
+> open-video-craft@1.0.6 build:main
+> tsc -p tsconfig.electron.json
+
+
+> open-video-craft@1.0.6 build:renderer
+> vite build
+
+vite v8.1.2 building client environment for production...
+[2K
+transforming...✓ 491 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-renderer/index.html                                             0.85 kB │ gzip:     0.44 kB
+dist-renderer/ort-wasm-simd-threaded.jsep.mjs                       44.48 kB
+dist-renderer/assets/style-marble-BYtPWWQA.jpg                     165.47 kB
+dist-renderer/assets/style-chrome-C5G3ud_p.jpg                     231.84 kB
+dist-renderer/assets/gradient-silver-D-XkJH5i.jpg                  236.79 kB
+dist-renderer/assets/gradient-dawn-Dy78wWEb.jpg                    257.46 kB
+dist-renderer/assets/release-1.0.0-hero-D2JtxGDJ.jpg               280.28 kB
+dist-renderer/assets/gradient-ultraviolet-CUFI9fx2.jpg             283.11 kB
+dist-renderer/assets/style-florals-CeieTKtL.jpg                    365.06 kB
+dist-renderer/assets/scene-skyline-DkP0PyUX.jpg                    400.06 kB
+dist-renderer/assets/Inter-Regular-BOoJxjxf.ttf                    411.64 kB
+dist-renderer/assets/Inter-SemiBold-ipl4pJhC.ttf                   419.74 kB
+dist-renderer/assets/Inter-Bold-SlGuY_v7.ttf                       420.42 kB
+dist-renderer/assets/Inter-ExtraBold-QrqRPPK_.ttf                  421.79 kB
+dist-renderer/assets/scene-coast-Cn8sjJub.jpg                      508.71 kB
+dist-renderer/assets/scene-cityscape-BxEKnAui.jpg                  754.24 kB
+dist-renderer/assets/subtitle-transcription.worker-DTonqFlN.js     886.49 kB
+dist-renderer/assets/app-Cez-ML-U.png                            1,368.75 kB
+dist-renderer/assets/ort-wasm-simd-threaded.jsep-B0T3yYHD.wasm  21,596.01 kB │ gzip: 5,168.67 kB
+dist-renderer/ort-wasm-simd-threaded.jsep.wasm                  21,596.01 kB │ gzip: 5,168.67 kB
+dist-renderer/assets/index-DHCcFcn5.css                            135.64 kB │ gzip:    22.30 kB
+dist-renderer/assets/index-BXL45IEI.js                             735.18 kB │ gzip:   214.97 kB
+
+✓ built in 548ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+> open-video-craft@1.0.6 bench:startup
+> node scripts/bench/startup.mjs --out /tmp/ovc-p0c-bench-smoke --settle 0 --samples 2
+
+{"schemaVersion":1,"scenario":"startup-idle","launchMode":"unpackaged --bench","settleSeconds":0,"sampleCount":2,"medianWorkingSetMb":451.484375,"minWorkingSetMb":434.96875,"maxWorkingSetMb":468,"mainFirstUptimeSeconds":0.443427583,"benchErrors":[]}

@@ -1,0 +1,52 @@
+======================================================================
+Electron [65339]: 64-bit    Footprint: 63 MB (16384 bytes per page)
+======================================================================
+
+  Dirty      Clean  Reclaimable    Regions    Category
+    ---        ---          ---        ---    ---
+  32 MB        0 B      5840 KB       1080    App-Specific Tag 14
+  12 MB        0 B       336 KB      11291    App-Specific Tag 16
+6160 KB        0 B          0 B          1    CG Image
+2813 KB     112 KB          0 B       1038    __DATA
+1997 KB        0 B          0 B       1014    __DATA_DIRTY
+1632 KB        0 B          0 B         13    Malloc Metadata
+1312 KB        0 B          0 B         56    Untagged
+1266 KB        0 B          0 B          1    page table
+1264 KB        0 B       128 KB          7    Malloc Small
+1232 KB        0 B          0 B         96    Stack
+ 611 KB        0 B          0 B        545    __AUTH
+ 400 KB        0 B          0 B         24    CoreAnimation
+ 256 KB        0 B          0 B          2    Accelerate Framework
+ 255 KB        0 B          0 B       2747    unused dyld shared cache area
+ 208 KB        0 B          0 B          3    CoreUI Image Data
+ 128 KB        0 B          0 B          4    Mach Message
+  96 KB        0 B          0 B          1    Malloc Tiny
+  96 KB        0 B          0 B          4    __TPRO_CONST
+  64 KB        0 B          0 B          2    IOAccelerator
+  48 KB        0 B          0 B          3    IOKit
+  36 KB        0 B          0 B          1    __OBJC_RW
+  32 KB        0 B          0 B          1    Activity Tracing
+  32 KB        0 B          0 B          2    OS Alloc Once
+  32 KB        0 B          0 B          2    CoreGraphics
+  16 KB        0 B        16 KB          2    Foundation
+  16 KB        0 B          0 B          1    Deferred Reclaim
+  16 KB        0 B          0 B          1    Malloc Nano
+  16 KB        0 B          0 B          1    IOAccelerator (graphics)
+  16 KB        0 B          0 B          1    ColorSync
+    0 B        0 B      6160 KB          1    Malloc Large
+    0 B      55 MB          0 B       1171    __TEXT
+    0 B      19 MB          0 B         52    mapped file
+    0 B    2816 KB          0 B       1083    __DATA_CONST
+    0 B    1264 KB          0 B          8    __LINKEDIT
+    0 B        0 B          0 B          1    __OBJC_RO
+    0 B        0 B          0 B          1    __FONT_DATA
+    0 B        0 B          0 B          1    PROTECTED_MEMORY
+    0 B        0 B          0 B          1    __CTF
+    0 B        0 B          0 B       1072    __AUTH_CONST
+    ---        ---          ---        ---    ---
+  63 MB      79 MB        12 MB      21337    TOTAL
+
+Auxiliary data:
+    phys_footprint: 63 MB
+    phys_footprint_peak: 75 MB
+

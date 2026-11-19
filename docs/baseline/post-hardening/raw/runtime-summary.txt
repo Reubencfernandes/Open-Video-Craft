@@ -1,0 +1,3 @@
+run=1 renderer_appeared_s=0.545535 rss_median_mb=491.1 rss_range_mb=483.9-501.5 cpu_median_pct=9.3 cpu_max_pct=21.2
+run=2 renderer_appeared_s=0.297959 rss_median_mb=466.6 rss_range_mb=462.0-471.9 cpu_median_pct=8.0 cpu_max_pct=19.7
+run=3 renderer_appeared_s=0.296171 rss_median_mb=470.6 rss_range_mb=469.0-480.3 cpu_median_pct=8.4 cpu_max_pct=15.5

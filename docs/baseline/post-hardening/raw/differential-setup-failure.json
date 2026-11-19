@@ -1,0 +1,17 @@
+{
+  "scenario": "normal startup without --bench",
+  "durationSecondsPerSide": 3,
+  "before": {
+    "code": 0,
+    "signal": null,
+    "stdout": "",
+    "stderr": "(node:73778) electron: Failed to load URL: file:///private/tmp/ovc-p0c-diff.ysgYIN/base/dist-renderer/index.html?view=main with error: ERR_FILE_NOT_FOUND\n(Use `Electron --trace-warnings ...` to show where the warning was created)\n(node:73778) UnhandledPromiseRejectionWarning: Error: ERR_FILE_NOT_FOUND (-6) loading 'file:///private/tmp/ovc-p0c-diff.ysgYIN/base/dist-renderer/index.html?view=main'\n    at rejectAndCleanup (node:electron/js2c/browser_init:2:96575)\n    at WebContents.finishListener (node:electron/js2c/browser_init:2:96737)\n    at WebContents.emit (node:events:514:28)\n(node:73778) UnhandledPromiseRejectionWarning: Unhandled promise rejection. This error originated either by throwing inside of an async function without a catch block, or by rejecting a promise which was not handled with .catch(). To terminate the node process on unhandled promise rejection, use the CLI flag `--unhandled-rejections=strict` (see https://nodejs.org/api/cli.html#cli_unhandled_rejections_mode). (rejection id: 1)\n"
+  },
+  "after": {
+    "code": 0,
+    "signal": null,
+    "stdout": "[auto-update] Skipping update checks in development.\n",
+    "stderr": ""
+  },
+  "identical": false
+}

@@ -1,0 +1,4 @@
+run=1 renderer_appeared_s=10.817933000 footprint=[    phys_footprint: 6754 KB Summary Footprint: 198 MB ]
+run=2 renderer_appeared_s=1.817509000 footprint=[    phys_footprint: 6786 KB Summary Footprint: 197 MB ]
+run=3 renderer_appeared_s=1.940021000 footprint=[    phys_footprint: 6818 KB Summary Footprint: 196 MB ]
+done

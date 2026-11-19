@@ -1,0 +1,10 @@
+{
+  "scenario": "startup-idle",
+  "externalMetric": "process-tree RSS median of three run medians",
+  "internalMetric": "Electron app.getAppMetrics working-set median over 40 IPC snapshots",
+  "externalMedianMb": 470.6,
+  "internalMedianMb": 467.328125,
+  "differencePct": 0.6952560560986023,
+  "thresholdPct": 5,
+  "pass": true
+}

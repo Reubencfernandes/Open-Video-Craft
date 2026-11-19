@@ -1,0 +1,1 @@
+electron-install exit=0

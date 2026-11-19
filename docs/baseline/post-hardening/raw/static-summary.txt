@@ -1,0 +1,9 @@
+verify-ffmpeg exit=0 seconds=1
+typecheck exit=0 seconds=2
+vitest-1 exit=0 seconds=3
+vitest-2 exit=0 seconds=2
+vitest-3 exit=0 seconds=1
+build exit=0 seconds=2
+test-mcp exit=0 seconds=1
+videotoolbox-exit=0 lines=3
+git-status-lines=4

@@ -1,0 +1,10 @@
+verify-ffmpeg exit=0 seconds=0
+typecheck exit=0 seconds=6
+vitest-1 exit=0 seconds=10
+vitest-2 exit=0 seconds=8
+vitest-3 exit=0 seconds=6
+build exit=0 seconds=4
+test-mcp exit=0 seconds=2
+videotoolbox lines:        3
+git status lines:        0
+/dev/disk3s1   228Gi   191Gi   8.6Gi    96%    5.2M   91M    5%   /System/Volumes/Data
