@@ -211,6 +211,17 @@ npm run bench:startup -- --out bench/startup/latest # isolated startup/idle metr
 npm audit          # dependency security advisories
 ```
 
+The isolated capture and render PoCs have their own dry-run harnesses:
+
+```sh
+node scripts/bench/g1/run.mjs --dry-run --duration 5 --out /tmp/ovc-g1
+node scripts/bench/g2/run.mjs --self-test
+node scripts/bench/g2/run.mjs --quick --out /tmp/ovc-g2 --report /tmp/ovc-g2/report.json
+```
+
+They never request screen/camera/microphone permission or claim a hardware GO.
+See `docs/baseline/g1-g2-pocs/REPORT.md` for the exact verified status.
+
 `bench:startup` requires a prior `npm run build`. It launches an unpackaged app
 with the development-only `--bench` IPC channel, uses a temporary user-data
 profile, and writes CSV/JSON metrics without opening real projects. Packaged

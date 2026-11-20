@@ -6,6 +6,7 @@ All notable changes to Open Video Craft are documented here.
 
 ### Changed
 
+- Added isolated G1-CAPTURE and G2-RENDER proof-of-concept harnesses with exact tick arithmetic, protocol v1, deterministic scene scheduling, bounded frame accounting and explicit PARTIAL/BLOCKED_EXTERNAL gate reporting. Hardware, TCC and notarization gates remain external; see `docs/baseline/g1-g2-pocs/REPORT.md`.
 - macOS DMG/ZIP targets cover Apple Silicon (arm64) and Intel (x64), with a
   universal build script restored after native review. CI and release workflows
   are SHA-pinned, least-privilege, and run a runtime dependency audit.

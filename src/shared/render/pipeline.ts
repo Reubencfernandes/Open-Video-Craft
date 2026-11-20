@@ -139,8 +139,6 @@ export function packetsFromTimes(times: readonly bigint[], fps: number): readonl
   if (!Number.isInteger(fps) || fps <= 0) throw new RenderError("UNSUPPORTED_FPS", String(fps));
   const fpsBigInt = BigInt(fps);
   if ((705_600_000n % fpsBigInt) !== 0n) throw new RenderError("UNSUPPORTED_FPS", String(fps));
-  const perFrame = 705_600_000n / fpsBigInt;
-  if (perFrame <= 0n) throw new RenderError("UNSUPPORTED_FPS", String(fps));
   return times.map((time, index) => ({
     ptsTicks: time,
     dtsTicks: time,
