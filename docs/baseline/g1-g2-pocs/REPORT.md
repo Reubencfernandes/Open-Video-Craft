@@ -63,6 +63,7 @@ that are not present on this machine.
 | In-app Claude Max assistant | implemented with CLI print mode, no built-in tools, strict app-only MCP config, project binding, minimal environment and real cancellation |
 | `gga` with `opencode` | PASS after two Codex review rounds were fully addressed |
 | Live Claude Max edit | not reattempted: account reported `You've hit your 5-hour limit`; the app now shows a clear usage-limit message |
+| Final packaged smoke | arm64 app alive after 9 s; no update/GitHub request; bundle contains `Claude Max` selector and `Ask Claude Max to edit this project`; MCP still `Connected` |
 | `git diff --check b8428aa..9c70142` | exit 0 |
 | Independent `gentle-ai-verify` | DROPPED by owner; the earlier quota failure produced no finding |
 | Remote CI for `cf0563c` | run `44783126468`: `completed/success`, all steps green |
@@ -97,6 +98,9 @@ l'app funzioni su questo mac studio M5 Max con 36gb di ram".
   gate is required for this outcome. Update checks are disabled until a real
   release feed is published, so the private-fork 404 modal no longer appears.
   Claude Code is connected to the bundled MCP server through the user's Max
-  plan; no Gemini or Anthropic API key is used for that connection.
+  plan; no Gemini or Anthropic API key is used for that connection. The editor
+  assistant defaults to Claude Max, with Gemini available separately. A live
+  Claude edit could not be completed because the account hit its 5-hour usage
+  limit; this is reported clearly in the UI and is not a code failure.
 
 No threshold was weakened and no external gate was reported as a pass.
