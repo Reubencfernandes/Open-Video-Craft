@@ -7,7 +7,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   source-offer:
@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -35,7 +35,7 @@ jobs:
           }
 
       - name: Set up Rust for locked rav1e sources
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: actions-rust-lang/setup-rust-toolchain@46268bd060767258de96ed93c1251119784f2ab6 # v1.16.1
         with:
           toolchain: stable
 
@@ -62,9 +62,6 @@ jobs:
               >> "$source_dir/SOURCE_SHA256SUMS.txt"
           done < .github/ffmpeg-macos-sources.txt
 
-          # rav1e is a Rust static library. Its release archive contains a
-          # Cargo.lock, but not the locked crate sources compiled into it.
-          # Vendor those immutable, checksummed crates into the source asset.
           rav1e_dir="$source_dir/rav1e-0.8.1-complete"
           mkdir -p "$rav1e_dir/.cargo"
           tar -xzf "$archive_dir/rav1e-0.8.1.tar.gz" \
@@ -94,7 +91,7 @@ jobs:
           Build scripts: bb1d6db29cee948f9685bcd69e6caf17d960662b
           x264 source revision: 0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee
 
-          FFmpeg configuration (both architectures):
+          FFmpeg configuration:
           --pkg-config-flags=--static --enable-gray --enable-libxml2
           --enable-version3 --enable-gpl --enable-openssl --enable-libfreetype
           --enable-fontconfig --enable-libharfbuzz --enable-libsnappy
@@ -104,10 +101,6 @@ jobs:
           --enable-libsvtav1 --enable-libvpx --enable-libvvenc --enable-libwebp
           --enable-libx264 --enable-libx265 --enable-libmp3lame --enable-libopus
           --enable-libvorbis --enable-libtheora
-
-          Windows binary FFmpeg: 8.1.2, GPLv3-or-later
-          Windows build scripts: 8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665
-          Windows FFmpeg revision: 703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d
           EOF
 
           (
@@ -122,112 +115,22 @@ jobs:
             --file "release-source/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz" \
             --directory "$source_dir" .
 
-      - name: Assemble Windows FFmpeg corresponding source
-        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
-        timeout-minutes: 60
-        shell: bash
-        run: |
-          set -euo pipefail
-          package_version="$(node -p 'require("./package.json").version')"
-          source_dir="release-source/windows-source-offer"
-          archive_dir="$source_dir/upstream-archives"
-          checkout_dir="$source_dir/btbn-build-scripts"
-          mkdir -p "$archive_dir" "$checkout_dir"
-
-          : > "$source_dir/SOURCE_SHA256SUMS.txt"
-          while read -r expected_hash filename url; do
-            case "$expected_hash" in
-              ""|'#'*) continue ;;
-            esac
-            # The binary archive is verified in the Windows build job. This
-            # job assembles the corresponding source and build inputs only.
-            if [[ "$filename" == ffmpeg-n8.1.2-*-win64-gpl-8.1.zip ]]; then
-              continue
-            fi
-            curl --fail --location --retry 3 --retry-all-errors \
-              --output "$archive_dir/$filename" \
-              "$url"
-            echo "$expected_hash  $archive_dir/$filename" | sha256sum --check
-            echo "$expected_hash  upstream-archives/$filename" \
-              >> "$source_dir/SOURCE_SHA256SUMS.txt"
-          done < .github/ffmpeg-windows-sources.txt
-
-          tar -xzf "$archive_dir/btbn-ffmpeg-builds-8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665.tar.gz" \
-            -C "$checkout_dir" --strip-components=1
-
-          # BtbN's pinned download recipes materialize the exact dependency
-          # source checkouts consumed by its static GPL build. Preserve the
-          # cache as a separate uncompressed tar because its members are
-          # already xz-compressed source archives.
-          (
-            cd "$checkout_dir"
-            GITHUB_REPOSITORY=BtbN/FFmpeg-Builds ./download.sh
-          )
-          (
-            cd "$checkout_dir/.cache"
-            find downloads -type f -print0 \
-              | sort -z \
-              | xargs -0 sha256sum
-          ) > "$source_dir/DEPENDENCY_SOURCE_SHA256SUMS.txt"
-
-          cp .github/ffmpeg-windows-sources.txt \
-            FFMPEG_SOURCE_OFFER.md \
-            FFMPEG_WINDOWS_BUILD_NOTES.md \
-            THIRD_PARTY_NOTICES.md \
-            "$source_dir/"
-          cat > "$source_dir/RELEASE_METADATA.txt" <<EOF
-          Open Video Craft ${package_version} Windows FFmpeg source bundle
-          Release tag: ${GITHUB_REF_NAME:-workflow-dispatch}
-          Repository revision: ${GITHUB_SHA}
-          BtbN build scripts: 8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665
-          FFmpeg source: 703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d
-          Build variant: win64-gpl 8.1
-          Binary archive SHA-256: ebf57e8b1a10b176b88c3cbc66e68a4aed472cf47520b0fbf003e892fb3be642
-          Extracted ffmpeg.exe SHA-256: 070be6f5202e71a5e0bec88312230eebf2708f9b9ee3694596babf20902dddd2
-          EOF
-
-          tar --create --gzip \
-            --file "release-source/Open-Video-Craft-${package_version}-Windows-FFmpeg-Build-Sources.tar.gz" \
-            --directory "$source_dir" \
-            upstream-archives SOURCE_SHA256SUMS.txt RELEASE_METADATA.txt \
-            ffmpeg-windows-sources.txt FFMPEG_SOURCE_OFFER.md \
-            FFMPEG_WINDOWS_BUILD_NOTES.md THIRD_PARTY_NOTICES.md
-          tar --create \
-            --file "release-source/Open-Video-Craft-${package_version}-Windows-FFmpeg-Dependency-Sources.tar" \
-            --directory "$checkout_dir/.cache" downloads \
-            --directory "${GITHUB_WORKSPACE}/$source_dir" DEPENDENCY_SOURCE_SHA256SUMS.txt
-
       - name: Upload FFmpeg source offer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: open-video-craft-source-offer
           path: |
             release-source/*.tar.gz
-            release-source/*.tar
           if-no-files-found: error
           compression-level: 0
 
   build:
-    name: Build ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS
-            npm_script: dist:mac
-            os: macos-latest
-            builder_args: "--x64 --arm64 --publish never"
-            artifact_name: open-video-craft-mac
-          - name: Windows
-            npm_script: dist:win
-            os: windows-latest
-            builder_args: "--x64 --publish never"
-            artifact_name: open-video-craft-windows
+    name: Build macOS
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Validate release tag version
         if: github.ref_type == 'tag'
@@ -241,7 +144,7 @@ jobs:
           }
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -249,10 +152,6 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
         timeout-minutes: 20
-
-      - name: Prepare pinned Windows FFmpeg
-        if: matrix.name == 'Windows'
-        run: npm run prepare:ffmpeg:win
 
       - name: Verify FFmpeg input
         run: npm run verify:ffmpeg
@@ -265,34 +164,28 @@ jobs:
 
       - name: Build installers
         env:
-          CSC_LINK: ${{ matrix.name == 'macOS' && secrets.CSC_LINK || secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ matrix.name == 'macOS' && secrets.CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
-          CSC_NAME: ${{ matrix.name == 'macOS' && secrets.CSC_NAME || '' }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.CSC_NAME }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-        run: npm run ${{ matrix.npm_script }} -- ${{ matrix.builder_args }}
+        run: npm run dist:mac -- --x64 --arm64 --publish never
 
       - name: Verify macOS update archive
-        if: matrix.name == 'macOS'
         env:
           OVC_MAC_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run verify:mac-release
 
-      - name: Verify Windows release artifacts
-        if: matrix.name == 'Windows'
-        run: npm run verify:windows-release
-
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ${{ matrix.artifact_name }}
+          name: open-video-craft-mac
           path: |
             release/*/*.dmg
-            release/*/*.exe
             release/*/*.zip
             release/*/*.blockmap
             release/*/latest*.yml
@@ -305,13 +198,15 @@ jobs:
       - build
       - source-offer
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout release notes
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Download installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
           merge-multiple: true
@@ -360,12 +255,11 @@ jobs:
           <!-- open-video-craft-release-metadata -->
           ## Downloads and signing
 
-          - macOS Intel and Apple Silicon builds are signed with Developer ID and notarized by Apple.
-          - Windows x64 Setup and Portable builds are published. They are unsigned unless the release repository is configured with `WINDOWS_CSC_LINK` and `WINDOWS_CSC_KEY_PASSWORD`, so Windows may display a SmartScreen warning.
+          - macOS Apple Silicon and Intel builds are produced with Developer ID signing and notarization when release credentials are configured.
 
           ## FFmpeg source-code offer
 
-          The macOS and Windows installers contain GPLv3-or-later FFmpeg executables. macOS corresponding source is published as [Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz). Windows build scripts and FFmpeg source are published as [Open-Video-Craft-${package_version}-Windows-FFmpeg-Build-Sources.tar.gz](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-Windows-FFmpeg-Build-Sources.tar.gz), with all statically linked dependency sources in [Open-Video-Craft-${package_version}-Windows-FFmpeg-Dependency-Sources.tar](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-Windows-FFmpeg-Dependency-Sources.tar).
+          The macOS installer contains a GPLv3-or-later FFmpeg executable. Its corresponding source and build inputs are published as [Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/Open-Video-Craft-${package_version}-FFmpeg-Source-Offer.tar.gz).
 
           Installer checksums are listed in [SHA256SUMS.txt](https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/SHA256SUMS.txt); updater checksums are also recorded in the uploaded YAML metadata.
           EOF
