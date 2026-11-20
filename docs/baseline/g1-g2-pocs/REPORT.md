@@ -48,24 +48,45 @@ that are not present on this machine.
 | `node scripts/bench/g1/run.mjs --dry-run --duration 5 --out <tmp>` | `PASS`, 19 events, 6 tracks, manifest v1, no live capture |
 | `node scripts/bench/g2/run.mjs --self-test` | `PASS`, 1 check |
 | `node scripts/bench/g2/run.mjs --quick --out <tmp> --report <tmp>/g2-report.json` | `PARTIAL`; finalized H.264+AAC MP4, 74,544 B, `faststart: true`, 15 checks |
-| `swift test --package-path native/capture-poc` | BLOCKED: `xcode-select` is Command Line Tools; `no such module 'XCTest'` |
+| `./native/capture-poc/test.sh` | 14/14 Swift tests passed with CLT Swift Testing; no full Xcode install required |
+| `npm test` (Node 22) | 89 files, 436 tests passed |
+| `npm run typecheck` (Node 22) | exit 0 |
+| `npm run build` (Node 22) | exit 0 |
+| `npm run test:mcp` (Node 22) | MCP smoke test passed |
+| `npm audit --omit=dev --audit-level=high` (Node 22) | exit 0; 2 moderate runtime advisories remain below the configured threshold |
+| `npm run dist:mac:adhoc` (Node 22) | exit 0; x64 and arm64 DMG/ZIP/blockmaps produced; ad-hoc signature, TeamIdentifier not set |
+| Packaged arm64 startup smoke | process alive after 8 s with isolated profile and blocked network; only the expected `ERR_PROXY_CONNECTION_FAILED` from the fork update check |
 | `git diff --check b8428aa..9c70142` | exit 0 |
-| Independent `gentle-ai-verify` | BLOCKED: provider quota failure before any finding; parent spot check only |
+| Independent `gentle-ai-verify` | DROPPED by owner; the earlier quota failure produced no finding |
 | Remote CI for `cf0563c` | run `44783126468`: `completed/success`, all steps green |
 | Remote CI for final push `b11b277` | run `44783265923`: `completed/success`, all steps green |
 
-Work-unit commits: `5767b73` (G1), `718944e` (G2), `9c70142` (docs/config), `cf0563c` (verifier blocker), `b11b277` (push record). Each had `gga` PASS. The independent verifier required by the named high-risk items did not run, so the high-risk verification is unmet rather than passed. The branch was pushed as a strict fast-forward to `fork/feat/p0b-min-fork-identity`; no PR or merge was created.
+Work-unit commits: `5767b73` (G1), `718944e` (G2), `9c70142` (docs/config), `cf0563c` (verifier blocker), `b11b277` (push record), `f3f1e10` (final CI results). Each had `gga` PASS. The independent verifier is dropped by owner decision, not reported as passed. The branch was pushed as a strict fast-forward to `fork/feat/p0b-min-fork-identity`; no PR or merge was created.
 
-## Gate status
+## Gate status after owner revision
 
-- `G1-CAPTURE`: **PARTIAL**. Protocol, manifest, arithmetic and dry-run are
-  locally verified. Tier 1 T2/T3/T3E/T3X/T5 scenarios, topology M, drift,
-  recovery and thermal/memory thresholds require the M1 8 GB target topology.
-- `G2-RENDER`: **PARTIAL**. Local deterministic and final-file checks pass;
-  hidden Electron target-runtime execution, OS-level hardware proof, long
-  throughput runs and QuickTime/AVFoundation play remain external.
-- `G-SIGN` / `G-TCC`: **BLOCKED_EXTERNAL** — no Developer ID identity
-  (`0 valid identities found`), no target grants, no built-in camera.
-- `G-DIST`: **BLOCKED_EXTERNAL** — no Team ID, no notarization credentials.
+The owner explicitly dropped T4 and the hardware gates: "T4 lo salti. T6.
+Lascia perdere per il test lo faccio io a mano poi, per ora la app serve a me
+in locale, basta che riusciamo poi a buildarla. Per lo swift test, installa
+tutto ciò che serve come XCTest. I gate hw non so cosa siano, basta che
+l'app funzioni su questo mac studio M5 Max con 36gb di ram".
+
+- Target: **this Mac Studio M5 Max / 36 GB**; the M1/8 GB topology matrix is
+  no longer an active blocker by owner decision.
+- `G1-CAPTURE`: **PARTIAL**. Protocol, manifest, arithmetic, 14 Swift tests and
+  dry-run are locally verified; live capture is not claimed.
+- `G2-RENDER`: **PARTIAL**. Local deterministic checks and final-file mux pass;
+  long runtime measurement and manual playback were not performed.
+- `G-SIGN` / `G-TCC` / `G-DIST`: **not pursued** by owner decision; no
+  notarization result is claimed.
+- Swift tests use Swift Testing, already provided by the installed Command Line
+  Tools; `native/capture-poc/test.sh` configures the framework paths so a full
+  Xcode installation is unnecessary. `./native/capture-poc/test.sh` passes
+  14/14 tests, and the CMTime-to-host-clock conversion remains exact with
+  128-bit integer arithmetic.
+- Local application: `npm run build` produces the renderer, and
+  `npm run dist:mac:adhoc` produces installable ad-hoc artifacts for this
+  Mac Studio. The arm64 packaged binary starts and stays alive; no hardware
+  gate is required for this outcome.
 
 No threshold was weakened and no external gate was reported as a pass.
