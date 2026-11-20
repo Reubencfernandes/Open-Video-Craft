@@ -33,4 +33,15 @@ describe("auto-update configuration", () => {
     stopAutoUpdates?.();
     vi.useRealTimers();
   });
+
+  it("does not check a private fork feed with no published releases", async () => {
+    autoUpdaterMock.checkForUpdates.mockClear();
+    const { startAutoUpdates, getAutoUpdateStatus, stopAutoUpdates } = await import("../src/main/auto-updates");
+    startAutoUpdates();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+    expect(getAutoUpdateStatus().state).toBe("disabled");
+    stopAutoUpdates?.();
+    vi.useRealTimers();
+  });
 });

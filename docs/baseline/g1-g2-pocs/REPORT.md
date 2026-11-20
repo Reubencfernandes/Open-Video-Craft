@@ -56,6 +56,9 @@ that are not present on this machine.
 | `npm audit --omit=dev --audit-level=high` (Node 22) | exit 0; 2 moderate runtime advisories remain below the configured threshold |
 | `npm run dist:mac:adhoc` (Node 22) | exit 0; x64 and arm64 DMG/ZIP/blockmaps produced; ad-hoc signature, TeamIdentifier not set |
 | Packaged arm64 startup smoke | process alive after 8 s with isolated profile and blocked network; only the expected `ERR_PROXY_CONNECTION_FAILED` from the fork update check |
+| `npx vitest run tests/auto-updates-config.test.ts` | 2/2 passed after adding the private-feed regression |
+| Claude Code MCP registration | `claude mcp get open-video-craft`: `Connected`, user scope, stdio, no API key |
+| Rebuilt app update smoke | pending final build |
 | `git diff --check b8428aa..9c70142` | exit 0 |
 | Independent `gentle-ai-verify` | DROPPED by owner; the earlier quota failure produced no finding |
 | Remote CI for `cf0563c` | run `44783126468`: `completed/success`, all steps green |

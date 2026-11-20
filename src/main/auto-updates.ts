@@ -11,6 +11,11 @@ import { isMacAppStoreBuild } from "./security-scoped-resources";
 const STARTUP_UPDATE_CHECK_DELAY_MS = 5_000;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1_000;
 
+// This fork is private and publishes no releases, so its GitHub feed returns
+// 404. Keep update checks off until the owner publishes a real signed release
+// feed; the local app must not surface a failed auto-update modal.
+const UPDATE_CHECKS_ENABLED = false;
+
 let updateCheckDelay: NodeJS.Timeout | null = null;
 let updateCheckInterval: NodeJS.Timeout | null = null;
 let updateCheckRunning = false;
@@ -49,6 +54,16 @@ export function startAutoUpdates(): void {
   configureAutoUpdater();
   registerAutoUpdateEvents();
 
+  if (!UPDATE_CHECKS_ENABLED) {
+    setUpdateStatus({
+      state: "disabled",
+      message: "Updates are unavailable in this local build.",
+      isPackaged: app.isPackaged
+    });
+    updateLogger.info("Skipping update checks: no published fork release feed.");
+    return;
+  }
+
   if (!app.isPackaged) {
     setUpdateStatus({
       state: "disabled",
@@ -78,6 +93,14 @@ export function startAutoUpdates(): void {
 
 export async function checkForAppUpdates(reason = "manual"): Promise<boolean> {
   if (isMacAppStoreBuild()) return false;
+  if (!UPDATE_CHECKS_ENABLED) {
+    setUpdateStatus({
+      state: "disabled",
+      message: "Updates are unavailable in this local build.",
+      isPackaged: app.isPackaged
+    });
+    return false;
+  }
   if (!app.isPackaged) {
     setUpdateStatus({
       state: "disabled",
