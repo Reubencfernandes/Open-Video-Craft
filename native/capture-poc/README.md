@@ -35,10 +35,12 @@ requires the app's TCC grants and the target topology; it is deliberately not
 invoked by the harness on a machine without those grants. The harness reports
 `BLOCKED_EXTERNAL`, never a hardware GO.
 
-`swift test` requires an Xcode toolchain with XCTest. On this machine
-`xcode-select` points to Command Line Tools, which do not ship XCTest, so the
-XCTest target compiles only where Xcode is installed. The TypeScript tests,
-the release build and the dry-run harness are the executable verification here.
+Swift unit tests use Swift Testing, which ships with the installed Command
+Line Tools. Because SwiftPM does not add its framework paths to the test bundle
+automatically on CLT-only systems, run `./native/capture-poc/test.sh`: it sets
+`DYLD_FRAMEWORK_PATH`/`DYLD_LIBRARY_PATH` and the required linker rpaths, then
+executes `swift test`. All 14 Swift tests pass on this Mac Studio without
+installing the full Xcode IDE.
 
 ## G-SIGN / G-TCC status
 

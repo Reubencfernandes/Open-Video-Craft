@@ -109,7 +109,11 @@ public func hostNsFrom(value: Int64, timescale: Int32) throws -> HostNs {
 
 public func hostNs(from time: CMTime) throws -> HostNs {
     guard time.isValid, time.timescale > 0 else { throw CaptureArithmeticError.invalidCMTime }
-    return try hostNsFrom(value: time.value, timescale: time.timescale)
+    let seconds = time.seconds
+    guard seconds.isFinite, seconds >= 0 else { throw CaptureArithmeticError.invalidCMTime }
+    let nanos = seconds * Double(nanosecondsPerSecond)
+    guard nanos <= Double(UInt64.max) else { throw CaptureArithmeticError.overflow }
+    return HostNs(nanos.rounded())
 }
 
 public func hostNsFromSeconds(_ seconds: Double) throws -> HostNs {

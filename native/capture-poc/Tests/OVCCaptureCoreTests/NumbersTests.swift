@@ -1,51 +1,49 @@
-import XCTest
+import Testing
 import OVCCaptureCore
 
-final class NumbersTests: XCTestCase {
-    func testDivRoundRoundsHalfTowardPositiveInfinity() {
-        XCTAssertEqual(divRound(1, 2), 1)
-        XCTAssertEqual(divRound(-1, 2), 0)
-        XCTAssertEqual(divRound(3, 2), 2)
-        XCTAssertEqual(divRound(-3, 2), -1)
-        XCTAssertEqual(divRound(7, 3), 2)
-        XCTAssertEqual(divRound(-7, 3), -2)
-        XCTAssertEqual(divRound(0, 5), 0)
-        XCTAssertEqual(divRound(705_600_000, 705_600_000), 1)
-    }
+@Test func divRoundRoundsHalfTowardPositiveInfinity() {
+    #expect(divRound(1, 2) == 1)
+    #expect(divRound(-1, 2) == 0)
+    #expect(divRound(3, 2) == 2)
+    #expect(divRound(-3, 2) == -1)
+    #expect(divRound(7, 3) == 2)
+    #expect(divRound(-7, 3) == -2)
+    #expect(divRound(0, 5) == 0)
+    #expect(divRound(705_600_000, 705_600_000) == 1)
+}
 
-    func testHostNsToTicksUsesTheExact441Over625Formula() throws {
-        XCTAssertEqual(try hostNsToTicks(0), 0)
-        XCTAssertEqual(try hostNsToTicks(1), 1)
-        XCTAssertEqual(try hostNsToTicks(2), 1)
-        XCTAssertEqual(try hostNsToTicks(1_000_000_000), ticksPerSecond)
-        XCTAssertEqual(try hostNsToTicks(3_600_000_000_000), 3_600 * ticksPerSecond)
-        XCTAssertEqual(try hostNsDeltaToTicks(-1_000_000_000), -ticksPerSecond)
-    }
+@Test func hostNsToTicksUsesTheExact441Over625Formula() throws {
+    #expect(try hostNsToTicks(0) == 0)
+    #expect(try hostNsToTicks(1) == 1)
+    #expect(try hostNsToTicks(2) == 1)
+    #expect(try hostNsToTicks(1_000_000_000) == ticksPerSecond)
+    #expect(try hostNsToTicks(3_600_000_000_000) == 3_600 * ticksPerSecond)
+    #expect(try hostNsDeltaToTicks(-1_000_000_000) == -ticksPerSecond)
+}
 
-    func testTickMicrosRoundTripWithinHalfAMicrosecond() throws {
-        XCTAssertEqual(try ticksToMicros(ticksPerSecond), 1_000_000)
-        XCTAssertEqual(try microsToTicks(1_000_000), ticksPerSecond)
-        for ticks: Ticks in [1, 1_234_567, 2_540_160_000_000, -987_654_321] {
-            let roundTrip = try microsToTicks(ticksToMicros(ticks))
-            XCTAssertLessThanOrEqual(abs(roundTrip - ticks), 353)
-        }
+@Test func tickMicrosRoundTripWithinHalfAMicrosecond() throws {
+    #expect(try ticksToMicros(ticksPerSecond) == 1_000_000)
+    #expect(try microsToTicks(1_000_000) == ticksPerSecond)
+    for ticks: Ticks in [1, 1_234_567, 2_540_160_000_000, -987_654_321] {
+        let roundTrip = try microsToTicks(ticksToMicros(ticks))
+        #expect(abs(roundTrip - ticks) <= 353)
     }
+}
 
-    func testHostNsDecimalStringsSurviveValuesAboveTwoToThe53() throws {
-        let above = "9007199254740993"
-        let parsed = try parseHostNs(above)
-        XCTAssertEqual(parsed, 9_007_199_254_740_993)
-        XCTAssertEqual(serializeHostNs(parsed), above)
-        XCTAssertEqual(serializeHostNs(0), "0")
-        for invalid in ["", " 1", "1 ", "1.0", "1e9", "+1", "0x10", "abc", "1_000"] {
-            XCTAssertThrowsError(try parseHostNs(invalid), "expected \(invalid) to be rejected")
-        }
+@Test func hostNsDecimalStringsSurviveValuesAboveTwoToThe53() throws {
+    let above = "9007199254740993"
+    let parsed = try parseHostNs(above)
+    #expect(parsed == 9_007_199_254_740_993)
+    #expect(serializeHostNs(parsed) == above)
+    #expect(serializeHostNs(0) == "0")
+    for invalid in ["", " 1", "1 ", "1.0", "1e9", "+1", "0x10", "abc", "1_000"] {
+        #expect(throws: (any Error).self) { try parseHostNs(invalid) }
     }
+}
 
-    func testSecondsToHostNsUsesOnlyIntegerArithmetic() throws {
-        XCTAssertEqual(try hostNsFromSeconds(5), 5_000_000_000)
-        XCTAssertEqual(try hostNsFromSeconds(0.001), 1_000_000)
-        XCTAssertEqual(try hostNsFromSeconds(1.5), 1_500_000_000)
-        XCTAssertThrowsError(try hostNsFromSeconds(-1))
-    }
+@Test func secondsToHostNsUsesOnlyIntegerArithmetic() throws {
+    #expect(try hostNsFromSeconds(5) == 5_000_000_000)
+    #expect(try hostNsFromSeconds(0.001) == 1_000_000)
+    #expect(try hostNsFromSeconds(1.5) == 1_500_000_000)
+    #expect(throws: (any Error).self) { try hostNsFromSeconds(-1) }
 }

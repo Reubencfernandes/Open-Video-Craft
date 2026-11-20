@@ -16,7 +16,18 @@ let package = Package(
         .target(name: "OVCCaptureCore"),
         .target(name: "OVCCaptureLive", dependencies: ["OVCCaptureCore"]),
         .executableTarget(name: "ovc-capture-poc", dependencies: ["OVCCaptureCore", "OVCCaptureLive"]),
-        .testTarget(name: "OVCCaptureCoreTests", dependencies: ["OVCCaptureCore"])
+        .testTarget(
+            name: "OVCCaptureCoreTests",
+            dependencies: ["OVCCaptureCore"],
+            swiftSettings: [
+                .unsafeFlags(["-F/Library/Developer/CommandLineTools/Library/Developer/Frameworks"]),
+                .unsafeFlags(["-I/Library/Developer/CommandLineTools/Library/Developer/Frameworks/Testing.framework/Modules"])
+            ],
+            linkerSettings: [
+                .unsafeFlags(["-F/Library/Developer/CommandLineTools/Library/Developer/Frameworks"]),
+                .unsafeFlags(["-framework", "Testing"])
+            ]
+        )
     ],
     swiftLanguageModes: [.v5]
 )
