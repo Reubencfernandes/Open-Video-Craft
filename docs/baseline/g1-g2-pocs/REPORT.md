@@ -51,8 +51,10 @@ that are not present on this machine.
 | `swift test --package-path native/capture-poc` | BLOCKED: `xcode-select` is Command Line Tools; `no such module 'XCTest'` |
 | `git diff --check b8428aa..9c70142` | exit 0 |
 | Independent `gentle-ai-verify` | BLOCKED: provider quota failure before any finding; parent spot check only |
+| Remote CI for `cf0563c` | run `44783126468`: `completed/success`, all steps green |
+| Remote CI for final push `b11b277` | run `44783265923`: `completed/success`, all steps green |
 
-Work-unit commits: `5767b73` (G1), `718944e` (G2), `9c70142` (docs/config). Each had `gga` PASS. The independent verifier required by the named high-risk items did not run, so the high-risk verification is unmet rather than passed.
+Work-unit commits: `5767b73` (G1), `718944e` (G2), `9c70142` (docs/config), `cf0563c` (verifier blocker), `b11b277` (push record). Each had `gga` PASS. The independent verifier required by the named high-risk items did not run, so the high-risk verification is unmet rather than passed. The branch was pushed as a strict fast-forward to `fork/feat/p0b-min-fork-identity`; no PR or merge was created.
 
 ## Gate status
 
