@@ -58,7 +58,8 @@ that are not present on this machine.
 | Packaged arm64 startup smoke | process alive after 8 s with isolated profile and blocked network; only the expected `ERR_PROXY_CONNECTION_FAILED` from the fork update check |
 | `npx vitest run tests/auto-updates-config.test.ts` | 2/2 passed after adding the private-feed regression |
 | Claude Code MCP registration | `claude mcp get open-video-craft`: `Connected`, user scope, stdio, no API key |
-| Rebuilt app update smoke | pending final build |
+| Rebuilt app update smoke | PASS: app alive after 9 s with normal network; only log line is `Skipping update checks: no published fork release feed.`; no 404, GitHub request or update modal |
+| Claude Code MCP after rebuild | `Connected`, stdio, user scope, packaged arm64 path, no API key |
 | `git diff --check b8428aa..9c70142` | exit 0 |
 | Independent `gentle-ai-verify` | DROPPED by owner; the earlier quota failure produced no finding |
 | Remote CI for `cf0563c` | run `44783126468`: `completed/success`, all steps green |
@@ -90,6 +91,9 @@ l'app funzioni su questo mac studio M5 Max con 36gb di ram".
 - Local application: `npm run build` produces the renderer, and
   `npm run dist:mac:adhoc` produces installable ad-hoc artifacts for this
   Mac Studio. The arm64 packaged binary starts and stays alive; no hardware
-  gate is required for this outcome.
+  gate is required for this outcome. Update checks are disabled until a real
+  release feed is published, so the private-fork 404 modal no longer appears.
+  Claude Code is connected to the bundled MCP server through the user's Max
+  plan; no Gemini or Anthropic API key is used for that connection.
 
 No threshold was weakened and no external gate was reported as a pass.
