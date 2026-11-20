@@ -98,22 +98,43 @@ public func serializeHostNs(_ value: HostNs) -> String {
     String(value)
 }
 
+/// Exact `divRound(value · 1e9, timescale)` without routing the product through
+/// `Int64`. `UInt64.multipliedFullWidth` keeps the intermediate 128-bit value,
+/// so host-clock epochs with a large `value` do not overflow.
 public func hostNsFrom(value: Int64, timescale: Int32) throws -> HostNs {
     guard timescale > 0 else { throw CaptureArithmeticError.invalidTimescale }
-    let scaled = value.multipliedReportingOverflow(by: nanosecondsPerSecond)
-    guard !scaled.overflow else { throw CaptureArithmeticError.overflow }
-    let nanos = divRound(scaled.partialValue, Int64(timescale))
-    guard nanos >= 0 else { throw CaptureArithmeticError.overflow }
-    return HostNs(nanos)
+    guard value >= 0 else { throw CaptureArithmeticError.overflow }
+
+    let divisor = UInt64(timescale)
+    let product = UInt64(value).multipliedFullWidth(by: UInt64(nanosecondsPerSecond))
+    guard product.high < divisor else { throw CaptureArithmeticError.overflow }
+
+    var quotient: UInt64 = 0
+    var remainder: UInt64 = 0
+    for bit in stride(from: 127, through: 0, by: -1) {
+        let word = bit >= 64 ? product.high : product.low
+        let shift = bit >= 64 ? bit - 64 : bit
+        let current = ((word >> shift) & 1) as UInt64
+        let shifted = (remainder << 1) | current
+        remainder = shifted
+        if remainder >= divisor {
+            remainder -= divisor
+            if bit < 64 {
+                quotient |= (UInt64(1) << UInt64(bit))
+            }
+        }
+    }
+    if remainder * 2 >= divisor {
+        let (rounded, overflow) = quotient.addingReportingOverflow(1)
+        guard !overflow else { throw CaptureArithmeticError.overflow }
+        quotient = rounded
+    }
+    return HostNs(quotient)
 }
 
 public func hostNs(from time: CMTime) throws -> HostNs {
     guard time.isValid, time.timescale > 0 else { throw CaptureArithmeticError.invalidCMTime }
-    let seconds = time.seconds
-    guard seconds.isFinite, seconds >= 0 else { throw CaptureArithmeticError.invalidCMTime }
-    let nanos = seconds * Double(nanosecondsPerSecond)
-    guard nanos <= Double(UInt64.max) else { throw CaptureArithmeticError.overflow }
-    return HostNs(nanos.rounded())
+    return try hostNsFrom(value: time.value, timescale: time.timescale)
 }
 
 public func hostNsFromSeconds(_ seconds: Double) throws -> HostNs {
