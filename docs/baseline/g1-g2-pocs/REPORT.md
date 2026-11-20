@@ -49,6 +49,10 @@ that are not present on this machine.
 | `node scripts/bench/g2/run.mjs --self-test` | `PASS`, 1 check |
 | `node scripts/bench/g2/run.mjs --quick --out <tmp> --report <tmp>/g2-report.json` | `PARTIAL`; finalized H.264+AAC MP4, 74,544 B, `faststart: true`, 15 checks |
 | `swift test --package-path native/capture-poc` | BLOCKED: `xcode-select` is Command Line Tools; `no such module 'XCTest'` |
+| `git diff --check b8428aa..9c70142` | exit 0 |
+| Independent `gentle-ai-verify` | BLOCKED: provider quota failure before any finding; parent spot check only |
+
+Work-unit commits: `5767b73` (G1), `718944e` (G2), `9c70142` (docs/config). Each had `gga` PASS. The independent verifier required by the named high-risk items did not run, so the high-risk verification is unmet rather than passed.
 
 ## Gate status
 
