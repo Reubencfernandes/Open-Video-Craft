@@ -59,4 +59,13 @@ describe("workflow security", () => {
     expect(adr).toContain("@vitest/coverage-v8");
   });
 
+  it("retires Windows build scripts and packaging", () => {
+    const packageManifest = read("package.json");
+    expect(packageManifest).not.toContain("dist:win");
+    expect(packageManifest).not.toContain("prepare:ffmpeg:win");
+    expect(packageManifest).not.toContain("verify:windows-release");
+    expect(existsSync(path.join(repositoryRoot, "scripts/prepare-windows-ffmpeg.mjs"))).toBe(false);
+    expect(existsSync(path.join(repositoryRoot, "scripts/verify-windows-release.mjs"))).toBe(false);
+    expect(existsSync(path.join(repositoryRoot, "tests/ffmpeg-windows-release-scripts.test.ts"))).toBe(false);
+  });
 });
