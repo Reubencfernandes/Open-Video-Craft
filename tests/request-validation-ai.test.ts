@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertClaudeChatRequest,
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
   assertProviderKeyId,
@@ -8,6 +9,19 @@ import {
 } from "../src/main/request-validation";
 
 const uuid = "123e4567-e89b-42d3-a456-426614174000";
+
+describe("assertClaudeChatRequest", () => {
+  it("accepts a bounded project id and message", () => {
+    expect(() => assertClaudeChatRequest({ projectId: "project-1", message: "Add zooms" })).not.toThrow();
+  });
+
+  it("rejects missing, empty or oversized input", () => {
+    expect(() => assertClaudeChatRequest(null)).toThrow("Invalid Claude chat request");
+    expect(() => assertClaudeChatRequest({ projectId: "", message: "x" })).toThrow();
+    expect(() => assertClaudeChatRequest({ projectId: "p", message: " " })).toThrow();
+    expect(() => assertClaudeChatRequest({ projectId: "p", message: "x".repeat(8_001) })).toThrow();
+  });
+});
 
 describe("assertUpdateProviderKeysRequest", () => {
   it("accepts partial updates and null key clears", () => {

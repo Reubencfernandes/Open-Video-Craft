@@ -8,7 +8,7 @@ import type {
 } from "../../shared/types";
 import type { GeminiChatMessage } from "../../shared/types";
 import type { MusicGenerationForm, MusicGenerationState } from "./useMusicGeneration";
-import { AssistantPanel } from "./panels/AssistantPanel";
+import { AssistantPanel, type AssistantProvider } from "./panels/AssistantPanel";
 import { AudioPanel } from "./panels/AudioPanel";
 import { LayoutPanel } from "./panels/LayoutPanel";
 import { MusicPanel } from "./panels/MusicPanel";
@@ -64,6 +64,8 @@ export function EditorToolPanel(props: {
   sttModelLabel: string;
   sttProvider: SttProviderId;
   providerKeys: ProviderKeysView | null;
+  assistantProvider: AssistantProvider;
+  onAssistantProviderChange: (provider: AssistantProvider) => void;
   onCancelTranscription: () => void;
   onSttProviderChange: (provider: SttProviderId) => void;
   onCohereLanguageChange: (language: string) => void;
@@ -207,6 +209,8 @@ export function EditorToolPanel(props: {
         <AssistantPanel
           projectId={props.assistantProjectId}
           providerKeys={props.providerKeys}
+          provider={props.assistantProvider}
+          onProviderChange={props.onAssistantProviderChange}
           messages={props.assistantMessages}
           sending={props.assistantSending}
           statusMessage={props.assistantStatusMessage}

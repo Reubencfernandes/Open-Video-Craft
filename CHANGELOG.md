@@ -4,6 +4,10 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Claude Max is now selectable in the editor AI assistant. It uses the authenticated Claude Code CLI with only Open Video Craft MCP tools, no built-in shell/file tools and no API key. Gemini remains available as a separate provider.
+
 ### Changed
 
 - Startup update checks are disabled for the private fork until it publishes a release feed, preventing a 404 update modal in local ad-hoc builds.

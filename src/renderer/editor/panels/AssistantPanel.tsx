@@ -18,9 +18,13 @@ const quickActions = [
   "Add transitions between clips"
 ];
 
+export type AssistantProvider = "claude-max" | "gemini";
+
 export function AssistantPanel(props: {
   projectId: string | null;
   providerKeys: ProviderKeysView | null;
+  provider: AssistantProvider;
+  onProviderChange: (provider: AssistantProvider) => void;
   messages: GeminiChatMessage[];
   sending: boolean;
   statusMessage: string | null;
@@ -40,9 +44,10 @@ export function AssistantPanel(props: {
 
   const providerKeysLoading = props.providerKeys === null;
   const hasGeminiKey = props.providerKeys?.hasGeminiKey === true;
-  const missingKey = !providerKeysLoading && !hasGeminiKey;
+  const isClaude = props.provider === "claude-max";
+  const missingKey = !isClaude && !providerKeysLoading && !hasGeminiKey;
   const canSend =
-    props.projectId !== null && !props.sending && hasGeminiKey && draft.trim().length > 0;
+    props.projectId !== null && !props.sending && (isClaude || hasGeminiKey) && draft.trim().length > 0;
 
   const submit = () => {
     if (!canSend) return;
@@ -60,17 +65,35 @@ export function AssistantPanel(props: {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-[#0e0e10] shadow-inner ring-1 ring-white/[0.05]">
-      {providerKeysLoading ? (
-        <p className="m-2.5 flex flex-none items-center gap-2 rounded-lg bg-white/[0.045] px-3 py-2 text-[0.68rem] text-neutral-400">
+      <div className="m-2.5 flex flex-none items-center gap-2" role="group" aria-label="Assistant provider">
+        {(["claude-max", "gemini"] as const).map((provider) => (
+          <button
+            key={provider}
+            type="button"
+            aria-pressed={props.provider === provider}
+            className={`rounded-full px-2.5 py-1 text-[0.62rem] font-bold transition ${
+              props.provider === provider
+                ? "bg-white text-black"
+                : "bg-white/[0.06] text-neutral-400 hover:text-white"
+            }`}
+            onClick={() => props.onProviderChange(provider)}
+          >
+            {provider === "claude-max" ? "Claude Max" : "Gemini"}
+          </button>
+        ))}
+      </div>
+
+      {!isClaude && providerKeysLoading ? (
+        <p className="mx-2.5 mb-2.5 flex flex-none items-center gap-2 rounded-lg bg-white/[0.045] px-3 py-2 text-[0.68rem] text-neutral-400">
           <Loader2 className="animate-spin" size={12} /> Loading Gemini settings…
         </p>
       ) : missingKey ? (
         <ApiKeyPromptPill
-          className="m-2.5 flex-none"
+          className="mx-2.5 mb-2.5 flex-none"
           onClick={props.onOpenAiSettings}
           provider="gemini"
         >
-          Add your Gemini API key to use the assistant
+          Add your Gemini API key to use Gemini
         </ApiKeyPromptPill>
       ) : null}
 
@@ -106,7 +129,7 @@ export function AssistantPanel(props: {
                   className="min-w-0 rounded-full bg-white/[0.06] px-2.5 py-1.5 text-left text-[0.65rem] font-semibold text-neutral-300 transition hover:bg-white/[0.11] hover:text-white disabled:opacity-50"
                   type="button"
                   key={action}
-                  disabled={props.sending || !hasGeminiKey}
+                  disabled={props.sending || (!isClaude && !hasGeminiKey)}
                   onClick={() => props.onSend(action)}
                 >
                   {action}
@@ -151,7 +174,7 @@ export function AssistantPanel(props: {
             <AlertCircle className="mt-0.5 shrink-0 text-rose-300" size={15} />
             <div className="min-w-0">
               <strong className="block text-xs text-rose-100">
-                Gemini couldn’t complete this request
+                {isClaude ? "Claude Max couldn’t complete this request" : "Gemini couldn’t complete this request"}
               </strong>
               <p className="mt-1 break-words text-[0.68rem] leading-4 text-rose-300 [overflow-wrap:anywhere]">
                 {props.chatError}
@@ -169,15 +192,17 @@ export function AssistantPanel(props: {
           aria-label="Message the AI assistant"
           className="max-h-28 min-h-10 w-full min-w-0 resize-none rounded-xl bg-white/[0.07] px-3 py-2.5 text-xs font-semibold leading-5 text-white outline-none ring-1 ring-transparent transition placeholder:text-neutral-500 focus:bg-white/[0.09] focus:ring-white/[0.12] disabled:cursor-not-allowed disabled:opacity-60"
           placeholder={
-            providerKeysLoading
+            !isClaude && providerKeysLoading
               ? "Loading Gemini settings…"
               : missingKey
                 ? "Add a Gemini API key first…"
-                : "Write a message"
+                : isClaude
+                  ? "Ask Claude Max to edit this project…"
+                  : "Write a message"
           }
           rows={1}
           value={draft}
-          disabled={props.sending || !hasGeminiKey}
+          disabled={props.sending || (!isClaude && !hasGeminiKey)}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {

@@ -1,4 +1,5 @@
 /** Pure Node timeline export entry point shared by Electron and the MCP server. */
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { exportTimelineComposition, mediaHasAudio } from "./ffmpeg";
@@ -97,6 +98,7 @@ export async function exportEditorProjectToPath(input: {
     effectiveTrimEnd
   );
   const subtitleRequest: ExportVideoRequest = {
+    jobId: randomUUID(),
     source: { kind: "project", projectId }, format: input.format, resolution: input.resolution,
     trimStart: 0, trimEnd: null, volume: 1, audioLevels: {}, backgroundAudioImportIds: [],
     subtitles: exportSubtitles,

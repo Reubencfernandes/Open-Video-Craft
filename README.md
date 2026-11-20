@@ -118,9 +118,11 @@ invoke their AI features.
 For module boundaries, revision/locking behavior, data flow, privacy guarantees,
 and extension guidance, see [AI integration architecture](docs/AI_INTEGRATION.md).
 
-Open a saved project and select **AI** in the editor top bar. Gemini uses an API
-key encrypted on this computer, while Claude Code connects through the bundled
-user-scoped `open-video-craft` stdio MCP server.
+Open a saved project and select **AI** in the editor top bar. The assistant has
+a **Claude Max** provider that uses the authenticated Claude Code CLI with only
+the bundled `open-video-craft` MCP tools; no Anthropic API key is needed.
+**Gemini** remains available as a separate provider with a locally encrypted API
+key.
 
 The agent can analyze speech, silence, and periodic contact-sheet frames
 locally, then commit a complete edit request as one validated operation plan

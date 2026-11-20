@@ -60,6 +60,9 @@ that are not present on this machine.
 | Claude Code MCP registration | `claude mcp get open-video-craft`: `Connected`, user scope, stdio, no API key |
 | Rebuilt app update smoke | PASS: app alive after 9 s with normal network; only log line is `Skipping update checks: no published fork release feed.`; no 404, GitHub request or update modal |
 | Claude Code MCP after rebuild | `Connected`, stdio, user scope, packaged arm64 path, no API key |
+| In-app Claude Max assistant | implemented with CLI print mode, no built-in tools, strict app-only MCP config, project binding, minimal environment and real cancellation |
+| `gga` with `opencode` | PASS after two Codex review rounds were fully addressed |
+| Live Claude Max edit | not reattempted: account reported `You've hit your 5-hour limit`; the app now shows a clear usage-limit message |
 | `git diff --check b8428aa..9c70142` | exit 0 |
 | Independent `gentle-ai-verify` | DROPPED by owner; the earlier quota failure produced no finding |
 | Remote CI for `cf0563c` | run `44783126468`: `completed/success`, all steps green |

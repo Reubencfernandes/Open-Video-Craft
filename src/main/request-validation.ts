@@ -4,6 +4,7 @@
  * request is asserted before use. These guards are pure (no app state).
  */
 import type {
+  ClaudeChatRequest,
   DeviceSelection,
   ExportVideoRequest,
   GeminiChatSendRequest,
@@ -248,6 +249,20 @@ export function assertMusicGenerateRequest(
     request.lyrics.length > 10000
   ) {
     throw new Error("Invalid music generation request.");
+  }
+}
+
+export function assertClaudeChatRequest(value: unknown): asserts value is ClaudeChatRequest {
+  const request = value as Partial<ClaudeChatRequest> | null;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    typeof request.message !== "string" ||
+    request.message.trim().length === 0 ||
+    request.message.length > 8_000
+  ) {
+    throw new Error("Invalid Claude chat request.");
   }
 }
 

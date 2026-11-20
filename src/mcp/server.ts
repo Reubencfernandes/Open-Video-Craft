@@ -24,6 +24,19 @@ const configuredUserDataPath = readArgument("--user-data") ?? process.env.OVC_US
 if (!configuredUserDataPath) throw new Error("Open Video Craft MCP requires --user-data <directory>.");
 const userDataPath: string = configuredUserDataPath;
 
+// A Claude Max chat starts this server with a single project bound in the
+// environment. This is enforced here, not only in the prompt, so a prompt
+// injection cannot switch to another local project.
+const scopedProjectId = process.env.OVC_MCP_PROJECT_ID;
+
+function assertScopedProject(projectId: string | undefined): string | undefined {
+  if (scopedProjectId === undefined) return projectId;
+  if (projectId !== undefined && projectId !== scopedProjectId) {
+    throw new Error("This assistant session is scoped to one project.");
+  }
+  return scopedProjectId;
+}
+
 const server = new McpServer(
   { name: "open-video-craft", version: serverVersion },
   { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
@@ -39,13 +52,13 @@ server.registerResource("project-timeline", new ResourceTemplate("ovc://projects
   title: "Open Video Craft timeline", mimeType: "application/json"
 }, async (uri, variables) => ({ contents: [{
   uri: uri.href, mimeType: "application/json",
-  text: JSON.stringify(await inspectPayload(String(variables.projectId)), null, 2)
+  text: JSON.stringify(await inspectPayload(assertScopedProject(String(variables.projectId))), null, 2)
 }] }));
 
 server.registerResource("project-analysis", new ResourceTemplate("ovc://projects/{projectId}/analysis", { list: undefined }), {
   title: "Open Video Craft analysis", mimeType: "application/json"
 }, async (uri, variables) => {
-  const project = await resolveCatalogProject(userDataPath, String(variables.projectId));
+  const project = await resolveCatalogProject(userDataPath, assertScopedProject(String(variables.projectId)));
   const analysis = await readCachedAnalysis(project.rootPath);
   return { contents: [{
     uri: uri.href,
@@ -57,7 +70,7 @@ server.registerResource("project-analysis", new ResourceTemplate("ovc://projects
 server.registerResource("analysis-contact-sheet", new ResourceTemplate("ovc://projects/{projectId}/analysis/contact-sheet/{page}", { list: undefined }), {
   title: "Open Video Craft analysis contact sheet", mimeType: "image/jpeg"
 }, async (uri, variables) => {
-  const project = await resolveCatalogProject(userDataPath, String(variables.projectId));
+  const project = await resolveCatalogProject(userDataPath, assertScopedProject(String(variables.projectId)));
   const page = Number(variables.page);
   if (!Number.isInteger(page) || page < 0) throw new Error("Invalid contact-sheet page.");
   const data = await readContactSheet(project.rootPath, page);
@@ -74,7 +87,7 @@ server.registerTool("inspect_project", {
   title: "Inspect video project",
   description: "Read the complete saved editor state, media inventory, revision, and export capabilities.",
   inputSchema: { projectId: projectIdSchema }, annotations: { readOnlyHint: true, destructiveHint: false }
-}, async ({ projectId }) => success(await inspectPayload(projectId)));
+}, async ({ projectId }) => success(await inspectPayload(assertScopedProject(projectId))));
 
 server.registerTool("start_analysis", {
   title: "Analyze video locally",
@@ -83,10 +96,10 @@ server.registerTool("start_analysis", {
   annotations: { readOnlyHint: true, destructiveHint: false }
 }, async ({ projectId, thumbnailIntervalSeconds }) => {
   try {
-    const project = await resolveCatalogProject(userDataPath, projectId);
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const editor = await readEditorDocument(project.rootPath);
     const job = await startProjectAnalysis({ rootPath: project.rootPath, project: project.project, editor, thumbnailIntervalSeconds });
-    return success(job as unknown as Record<string, unknown>);
+    return success(toRecord(job));
   } catch (error) { return failure(error); }
 });
 
@@ -100,11 +113,15 @@ server.registerTool("get_analysis", {
     if (jobId) {
       const job = getProjectAnalysisJob(jobId);
       if (!job) throw new Error(`Unknown analysis job "${jobId}".`);
-      return success(job as unknown as Record<string, unknown>);
+      const scopedId = assertScopedProject(projectId);
+      if (scopedId !== undefined && job.projectId !== scopedId) {
+        throw new Error("This analysis job belongs to a different project.");
+      }
+      return success(toRecord(job));
     }
-    const project = await resolveCatalogProject(userDataPath, projectId);
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const result = await readCachedAnalysis(project.rootPath);
-    return success((result ?? { status: "not-started" }) as unknown as Record<string, unknown>);
+    return success(toRecord(result ?? { status: "not-started" }));
   } catch (error) { return failure(error); }
 });
 
@@ -147,12 +164,13 @@ server.registerTool("apply_edit_plan", {
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, async ({ projectId, baseRevision, userRequest, requestedActions, editingBasis, summary, operations }) => {
   try {
-    const project = await resolveCatalogProject(userDataPath, projectId);
-    const typedOperations = operations as EditorEditOperation[];
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const typedOperations: EditorEditOperation[] = operationSchema.array().parse(operations);
+    const typedActions: EditAction[] = editActionSchema.array().parse(requestedActions);
     await validateEditScope({
       rootPath: project.rootPath,
       userRequest,
-      requestedActions: requestedActions as EditAction[],
+      requestedActions: typedActions,
       editingBasis,
       operations: typedOperations
     });
@@ -183,7 +201,7 @@ server.registerTool("undo_agent_edit", {
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, async ({ projectId, baseRevision, editId }) => {
   try {
-    const project = await resolveCatalogProject(userDataPath, projectId);
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const document = await undoAgentEdit({ rootPath: project.rootPath, baseRevision, editId });
     return success({ projectId: project.project.id, revision: document.revision, undoneEditId: editId });
   } catch (error) { return failure(error); }
@@ -202,7 +220,7 @@ server.registerTool("export_project", {
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
 }, async ({ projectId, expectedRevision, format, resolution, subtitleMode }) => {
   try {
-    const record = await resolveCatalogProject(userDataPath, projectId);
+    const record = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const document = await readEditorDocument(record.rootPath);
     if (!document) throw new Error("The project has no saved editor timeline.");
     if (document.revision !== expectedRevision) throw new Error(`Editor revision changed from ${expectedRevision} to ${document.revision}. Inspect before exporting.`);
@@ -219,7 +237,8 @@ server.registerTool("export_project", {
 });
 
 async function projectListPayload() {
-  const projects = await listCatalogProjects(userDataPath);
+  const projects = (await listCatalogProjects(userDataPath))
+    .filter(({ project }) => scopedProjectId === undefined || project.id === scopedProjectId);
   return { projects: projects.map(({ project, active }) => ({
     id: project.id, name: project.name, status: project.status, durationMs: project.durationMs,
     updatedAt: project.updatedAt, active
@@ -335,6 +354,13 @@ function operationAction(operation: EditorEditOperation): EditAction {
     case "set_export_range":
       return "export_range";
   }
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Expected an object for MCP structured content.");
+  }
+  return Object.fromEntries(Object.entries(value));
 }
 
 function success(value: Record<string, unknown>) {

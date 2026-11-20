@@ -339,6 +339,16 @@ export interface ConfigureAiProviderRequest {
   privacyAccepted: boolean;
 }
 
+export interface ClaudeChatRequest {
+  projectId: string;
+  message: string;
+}
+
+export interface ClaudeChatResult {
+  text: string;
+  provider: "claude-max";
+}
+
 export interface EditorSessionStateRequest {
   projectId: string;
   dirty: boolean;
@@ -357,7 +367,7 @@ export type ExportSubtitleMode = "burn-in" | "sidecar" | "none";
 
 export interface ExportVideoRequest {
   /** Renderer-generated UUID used for progress events and cancellation. */
-  jobId?: string;
+  jobId: string;
   source:
     | {
         kind: "project";

@@ -23,6 +23,7 @@ import { createMacApplicationMenuTemplate } from "./application-menu";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
 import { resolveRendererBaseUrl } from "./renderer-url";
 import { AiConnectionManager } from "./ai-connection";
+import { ClaudeAgentManager } from "./claude-agent";
 import { registerAppStatusIpc } from "./app-status-ipc";
 import { getProductVersion } from "./app-version";
 import {
@@ -66,6 +67,7 @@ import { GeminiAgentManager } from "./gemini-agent";
 import { generateLyria } from "./music-lyria";
 import { ProviderKeysManager } from "./provider-keys";
 import {
+  assertClaudeChatRequest,
   assertExportVideoRequest,
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
@@ -86,6 +88,7 @@ import { SecurityScopedResourceManager } from "./security-scoped-resources";
 import type {
   AiConnectionStatus,
   AiProvider,
+  ClaudeChatResult,
   ConfigureAiProviderRequest,
   CreateProjectRequest,
   DesktopPermissionStatus,
@@ -174,6 +177,7 @@ let securityScopedResources: SecurityScopedResourceManager | null = null;
 let aiConnectionManager: AiConnectionManager | null = null;
 let providerKeysManager: ProviderKeysManager | null = null;
 let geminiAgentManager: GeminiAgentManager | null = null;
+let claudeAgentManager: ClaudeAgentManager | null = null;
 const sttJobs = new Map<string, AbortController>();
 const lyriaJobs = new Map<string, AbortController>();
 let editorStateWatcher: ReturnType<typeof watchFs> | null = null;
@@ -261,6 +265,15 @@ function getGeminiAgentManager(): GeminiAgentManager {
     }
   });
   return geminiAgentManager;
+}
+
+function getClaudeAgentManager(): ClaudeAgentManager {
+  claudeAgentManager ??= new ClaudeAgentManager({
+    userDataPath: app.getPath("userData"),
+    electronExecutable: process.execPath,
+    serverEntrypoint: path.join(__dirname, "../mcp/server.js")
+  });
+  return claudeAgentManager;
 }
 
 function getAiConnectionManager(): AiConnectionManager {
@@ -870,6 +883,18 @@ function registerIpc(): void {
     uptime: () => process.uptime()
   });
 
+  ipcMain.handle("claude:chat", async (_event, request: unknown): Promise<ClaudeChatResult> => {
+    assertClaudeChatRequest(request);
+    return getClaudeAgentManager().send(request);
+  });
+
+  ipcMain.handle("claude:cancel", (_event, projectId: unknown): boolean => {
+    if (typeof projectId !== "string" || projectId.length === 0 || projectId.length > 128) {
+      throw new Error("Invalid Claude chat cancellation request.");
+    }
+    return getClaudeAgentManager().cancel(projectId);
+  });
+
   ipcMain.handle("ai:get-status", (): Promise<AiConnectionStatus> =>
     getAiConnectionManager().getStatus()
   );
@@ -1249,7 +1274,7 @@ function registerIpc(): void {
     "editor:export-video",
     async (event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
       assertExportVideoRequest(request);
-      const jobId = request.jobId as string;
+      const jobId = request.jobId;
       const control = exportJobs.begin(jobId, (progress) => {
         if (!event.sender.isDestroyed()) event.sender.send("editor:export-progress", progress);
       });

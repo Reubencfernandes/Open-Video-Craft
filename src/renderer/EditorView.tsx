@@ -34,7 +34,9 @@ import { MediaPanel } from "./editor/panels/MediaPanel";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
 import { useEditorExport } from "./editor/useEditorExport";
 import { useEditorMediaActions } from "./editor/useEditorMediaActions";
+import { useClaudeChat } from "./editor/useClaudeChat";
 import { useGeminiChat } from "./editor/useGeminiChat";
+import type { AssistantProvider } from "./editor/panels/AssistantPanel";
 import { useMusicGeneration } from "./editor/useMusicGeneration";
 import { useEditorPlayback } from "./editor/useEditorPlayback";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
@@ -573,6 +575,9 @@ export function EditorView() {
   }, [isEditorStateReady, pendingMusicGeneration, musicGeneration]);
 
   const geminiChat = useGeminiChat({ projectId: project?.id ?? null });
+  const claudeChat = useClaudeChat({ projectId: project?.id ?? null });
+  const [assistantProvider, setAssistantProvider] = useState<AssistantProvider>("claude-max");
+  const activeChat = assistantProvider === "claude-max" ? claudeChat : geminiChat;
 
   const {
     canExport,
@@ -940,6 +945,8 @@ export function EditorView() {
             sttModelLabel={whisperTranscriptionModelLabel}
             sttProvider={sttProvider}
             providerKeys={providerKeys}
+            assistantProvider={assistantProvider}
+            onAssistantProviderChange={setAssistantProvider}
             onCancelTranscription={cancelTranscription}
             onSttProviderChange={(provider) =>
               void updateProviderSettings({ sttProvider: provider })
@@ -954,13 +961,13 @@ export function EditorView() {
             onMusicGenerate={(form) => void musicGeneration.generate(form)}
             onMusicCancel={musicGeneration.cancel}
             assistantProjectId={project?.id ?? null}
-            assistantMessages={geminiChat.messages}
-            assistantSending={geminiChat.sending}
-            assistantStatusMessage={geminiChat.statusMessage}
-            assistantError={geminiChat.chatError}
-            onAssistantSend={(message) => void geminiChat.send(message)}
-            onAssistantCancel={geminiChat.cancel}
-            onAssistantReset={() => void geminiChat.reset()}
+            assistantMessages={activeChat.messages}
+            assistantSending={activeChat.sending}
+            assistantStatusMessage={activeChat.statusMessage}
+            assistantError={activeChat.chatError}
+            onAssistantSend={(message) => void activeChat.send(message)}
+            onAssistantCancel={activeChat.cancel}
+            onAssistantReset={() => void activeChat.reset()}
             onAssistantUndoEdit={() => void undoLastAgentEdit()}
             subtitleLanguage={formatSubtitleLanguage(subtitleLanguage)}
             subtitleStyle={subtitleStyle}

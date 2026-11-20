@@ -6,6 +6,8 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
   AiConnectionStatus,
   AiProvider,
+  ClaudeChatRequest,
+  ClaudeChatResult,
   AppInfo,
   BenchSnapshot,
   ConfigureAiProviderRequest,
@@ -64,6 +66,12 @@ const api = {
       ipcRenderer.invoke("ai:configure", request),
     disconnect: (provider: AiProvider): Promise<AiConnectionStatus> =>
       ipcRenderer.invoke("ai:disconnect", provider)
+  },
+  claude: {
+    send: (request: ClaudeChatRequest): Promise<ClaudeChatResult> =>
+      ipcRenderer.invoke("claude:chat", request),
+    cancel: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("claude:cancel", projectId)
   },
   app: {
     getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
