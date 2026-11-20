@@ -4,6 +4,24 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- macOS DMG/ZIP targets cover Apple Silicon (arm64) and Intel (x64), with a
+  universal build script restored after native review. CI and release workflows
+  are SHA-pinned, least-privilege, and run a runtime dependency audit.
+- Runtime dependencies were updated, with no high/critical runtime advisories
+  remaining. Transformers.js v4 resolves its bundled ONNX Runtime assets from
+  `onnxruntime-web`.
+- Local ACE-Step music generation was removed; Lyria cloud generation remains
+  available.
+- A development-only `--bench` startup harness was added and cross-validated
+  against external measurements.
+
+### Removed
+
+- Windows build scripts, release verification, packaging configuration, and
+  Windows CI/release matrix entries.
+
 ## [1.0.6] - 2026-09-25
 
 Timeline editing now keeps a recording's voice in sync with its picture, and
