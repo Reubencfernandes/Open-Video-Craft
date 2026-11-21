@@ -118,7 +118,9 @@ const api = {
     }
   },
   sources: {
-    list: (): Promise<SourceSummary[]> => ipcRenderer.invoke("sources:list")
+    list: (): Promise<SourceSummary[]> => ipcRenderer.invoke("sources:list"),
+    thumbnail: (sourceId: string): Promise<string | null> =>
+      ipcRenderer.invoke("sources:thumbnail", sourceId)
   },
   permissions: {
     getStatus: (): Promise<DesktopPermissionStatus> =>

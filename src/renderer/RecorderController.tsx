@@ -15,6 +15,7 @@ import {
   createDisplayCaptureOptions,
   recordingRuntime
 } from "./recording-runtime";
+import { analyzeAudioSamples, smoothMeterLevel } from "./recorder/audio-meter";
 import { RecorderControllerView } from "./recorder/RecorderControllerView";
 import {
   audioMimeCandidates,
@@ -62,6 +63,8 @@ export function RecorderController() {
   const [project, setProject] = useState<ProjectView | null>(null);
   const [compact, setCompact] = useState(false);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
+  const [microphoneLevel, setMicrophoneLevel] = useState(0);
+  const [sourceThumbnailOverride, setSourceThumbnailOverride] = useState<string | null>(null);
 
   const screenStreamRef = useRef<MediaStream | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
@@ -74,6 +77,7 @@ export function RecorderController() {
   const activeRecordedMsRef = useRef(0);
   const activeSegmentStartedAtRef = useRef<number | null>(null);
   const lastProjectUiSyncAtRef = useRef(0);
+  const meterContextRef = useRef<AudioContext | null>(null);
   const stoppingRef = useRef(false);
   const failingRef = useRef(false);
   const abortStartupRef = useRef(false);
@@ -208,6 +212,18 @@ export function RecorderController() {
     void window.openVideoCraft.capture
       .selectDisplaySource(selectedSourceId)
       .catch(() => undefined);
+
+    let cancelled = false;
+    setSourceThumbnailOverride(null);
+    void window.openVideoCraft.sources
+      .thumbnail(selectedSourceId)
+      .then((thumbnail) => {
+        if (!cancelled && thumbnail) setSourceThumbnailOverride(thumbnail);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [selectedSourceId]);
 
   // Display-sized transparent overlay windows are deliberately not used here.
@@ -233,6 +249,39 @@ export function RecorderController() {
 
     return () => window.clearInterval(timer);
   }, [state]);
+
+  useEffect(() => {
+    const stream = micStreamRef.current;
+    const audioTrack = stream?.getAudioTracks()[0];
+    if (!micEnabled || audioTrack === undefined || audioTrack.readyState !== "live") {
+      setMicrophoneLevel(0);
+      return undefined;
+    }
+
+    const AudioContextConstructor = window.AudioContext;
+    if (!AudioContextConstructor) return undefined;
+    const context = new AudioContextConstructor();
+    meterContextRef.current = context;
+    const source = context.createMediaStreamSource(new MediaStream([audioTrack]));
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    let current = 0;
+    const timer = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(samples);
+      current = smoothMeterLevel(current, analyzeAudioSamples(samples).percent);
+      setMicrophoneLevel(current);
+    }, 80);
+
+    return () => {
+      window.clearInterval(timer);
+      source.disconnect();
+      void context.close();
+      if (meterContextRef.current === context) meterContextRef.current = null;
+      setMicrophoneLevel(0);
+    };
+  }, [micEnabled, micStreamRef.current, state]);
 
   // Live camera preview while idle: whenever the camera is enabled and a device
   // is chosen (and we are not mid-capture), open the camera so the user can see
@@ -730,6 +779,12 @@ export function RecorderController() {
     return activeRecordedMsRef.current + Date.now() - segmentStartedAt;
   }
 
+  const sourcesWithPreview = sourceThumbnailOverride === null
+    ? sources
+    : sources.map((source) => source.id === selectedSourceId
+      ? { ...source, thumbnail: sourceThumbnailOverride }
+      : source);
+
   return (
     <RecorderControllerView
       compact={compact}
@@ -738,7 +793,7 @@ export function RecorderController() {
       elapsedMs={elapsedMs}
       errorMessage={errorMessage}
       systemAudioEnabled={systemAudioEnabled}
-      sources={sources}
+      sources={sourcesWithPreview}
       selectedSourceId={selectedSourceId}
       baseDirectory={baseDirectory}
       microphones={microphones}
@@ -774,6 +829,7 @@ export function RecorderController() {
       onSourceChange={setSelectedSourceId}
       onScreenQualityChange={setScreenQuality}
       onCameraQualityChange={setCameraQuality}
+      microphoneLevel={microphoneLevel}
     />
   );
 }

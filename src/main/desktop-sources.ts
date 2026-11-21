@@ -53,6 +53,24 @@ export async function listDesktopCapturerSources(): Promise<Electron.DesktopCapt
   throw new Error(`Failed to get screen sources. ${detail}`);
 }
 
+/** Real still preview of one selected source; empty result means unavailable. */
+export async function captureSourceThumbnail(
+  sourceId: string,
+  width = 480,
+  height = 270
+): Promise<string | null> {
+  const sources = await desktopCapturer.getSources({
+    types: ["screen", "window"],
+    thumbnailSize: { width, height },
+    fetchWindowIcons: false
+  });
+  const source = sources.find((candidate) => candidate.id === sourceId);
+  if (!source) return null;
+  const thumbnail = source.thumbnail;
+  if (thumbnail.isEmpty()) return null;
+  return `data:image/png;base64,${thumbnail.toPNG().toString("base64")}`;
+}
+
 export function createFallbackThumbnail(label: string): string {
   const safeLabel = label.replace(/[<>&"]/g, "");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270" viewBox="0 0 480 270"><rect width="480" height="270" fill="#18181b"/><rect x="108" y="60" width="264" height="150" rx="10" fill="#27272a" stroke="#3f3f46" stroke-width="2"/><text x="240" y="236" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="#d4d4d8">${safeLabel.slice(0, 36)}</text></svg>`;

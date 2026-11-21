@@ -44,7 +44,11 @@ import {
   requestMediaPermission,
   startAppBundleDrag
 } from "./desktop-permissions";
-import { createFallbackThumbnail, listDesktopCapturerSources } from "./desktop-sources";
+import {
+  captureSourceThumbnail,
+  createFallbackThumbnail,
+  listDesktopCapturerSources
+} from "./desktop-sources";
 import {
   getDisplayOverlayStripBounds,
   resolveDisplayForOverlay
@@ -1098,6 +1102,13 @@ function registerIpc(): void {
       if (replacement) activeDisplayOverlaySourceId = replacement.id;
     }
     return summaries;
+  });
+
+  ipcMain.handle("sources:thumbnail", async (_event, sourceId: unknown): Promise<string | null> => {
+    if (typeof sourceId !== "string" || sourceId.length === 0 || sourceId.length > 256) {
+      throw new Error("Invalid capture source id.");
+    }
+    return captureSourceThumbnail(sourceId);
   });
 
   ipcMain.handle("permissions:get-status", (): DesktopPermissionStatus => {

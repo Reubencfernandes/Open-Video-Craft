@@ -20,6 +20,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { analyzeAudioSamples, smoothMeterLevel } from "./audio-meter";
 import type { SourceSummary } from "../../shared/types";
 import appLogo from "../assets/app.png";
 import { cx } from "../classNames";
@@ -75,6 +76,7 @@ export function RecorderControllerView(props: {
   onSourceChange: (sourceId: string) => void;
   onScreenQualityChange: (quality: ScreenQuality) => void;
   onCameraQualityChange: (quality: CameraQuality) => void;
+  microphoneLevel?: number;
 }) {
   if (props.compact) {
     return <CompactRecorderView {...props} />;
@@ -289,6 +291,49 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
   );
 }
 
+function SelectedSourcePreview(props: { source: SourceSummary | null }) {
+  const source = props.source;
+  if (!source) return null;
+  return (
+    <div
+      className="pointer-events-none absolute bottom-3 left-3 z-10 w-40 overflow-hidden rounded-lg border border-white/10 bg-black/55 p-1.5 backdrop-blur-md"
+      data-selected-source-preview={source.id}
+      aria-label={`Selected source preview: ${source.name}`}
+    >
+      <img
+        className="aspect-video w-full rounded object-cover"
+        src={source.thumbnail}
+        alt=""
+      />
+      <span className="mt-1 block truncate text-[0.6rem] font-bold text-neutral-200">
+        {source.name}
+      </span>
+    </div>
+  );
+}
+
+function MicrophoneMeter(props: { level: number; enabled: boolean }) {
+  const percent = Math.max(0, Math.min(100, Math.round(props.level)));
+  return (
+    <div
+      className="pointer-events-none absolute bottom-3 right-3 z-10 w-28 rounded-lg border border-white/10 bg-black/55 p-2 backdrop-blur-md"
+      data-microphone-meter={percent}
+      aria-label="Microphone level"
+    >
+      <div className="mb-1 flex items-center justify-between text-[0.58rem] font-bold uppercase tracking-wide text-neutral-400">
+        <span>Mic</span>
+        <span>{props.enabled ? `${percent}%` : "off"}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className={props.enabled && percent > 0 ? "h-full bg-emerald-400" : "h-full bg-neutral-600"}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function CameraPreview(props: { stream: MediaStream }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -493,6 +538,12 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
         disabled={!props.canStart}
         onChange={props.onSourceChange}
       />
+
+      <SelectedSourcePreview
+        source={props.sources.find((source) => source.id === props.selectedSourceId) ?? null}
+      />
+
+      <MicrophoneMeter level={props.microphoneLevel ?? 0} enabled={props.micEnabled} />
 
       <div
         className={cx(

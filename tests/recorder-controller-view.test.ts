@@ -99,6 +99,23 @@ describe("recorder controller view", () => {
     expect(html).toContain("Done");
   });
 
+  it("shows a preview of the currently selected capture source", () => {
+    const html = renderRecorder();
+
+    expect(html).toContain('aria-label="Selected source preview: Entire screen"');
+    expect(html).toContain('data-selected-source-preview="screen:0:0"');
+    expect(html).toContain('src="data:image/svg+xml,screen"');
+  });
+
+  it("shows a microphone level meter before and during recording", () => {
+    const idle = renderRecorder();
+    const recording = renderRecorder("recording");
+
+    expect(idle).toContain('aria-label="Microphone level"');
+    expect(idle).toContain("data-microphone-meter=\"0\"");
+    expect(recording).toContain('aria-label="Microphone level"');
+  });
+
   it("renders the camera preview as the full central-panel background", () => {
     const html = renderRecorder("ready", false, true);
 
