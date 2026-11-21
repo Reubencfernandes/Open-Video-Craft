@@ -96,6 +96,13 @@ describe("Claude Max assistant command construction", () => {
       stderr: ""
     });
     expect(message).toContain("usage limit");
+    expect(message).toContain("8:50pm");
+    expect(message).not.toContain("claude -p");
+  });
+
+  it("keeps a clear cause for MCP failures", () => {
+    const message = formatClaudeAgentError({ stderr: "MCP server unavailable: connection refused" });
+    expect(message).toContain("MCP server");
     expect(message).not.toContain("claude -p");
   });
 });

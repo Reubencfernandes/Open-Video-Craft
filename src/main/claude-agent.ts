@@ -135,7 +135,10 @@ export function formatClaudeAgentError(error: unknown): string {
     : String(error);
   const normalized = details.toLowerCase();
   if (/5-hour limit|usage limit|rate limit|weekly limit/.test(normalized)) {
-    return "Claude Max has reached its current usage limit. Wait for the reset shown by Claude, then try again.";
+    const reset = details.match(/resets\s+([^\n"}]+)/iu)?.[1]?.trim();
+    return reset
+      ? `Claude Max has reached its current usage limit. It resets ${reset}.`
+      : "Claude Max has reached its current usage limit. Wait for the reset shown by Claude, then try again.";
   }
   if (/not logged in|authentication|sign in/.test(normalized)) {
     return "Claude Code is not signed in. Sign in with your Claude Max account, then try again.";
@@ -143,7 +146,13 @@ export function formatClaudeAgentError(error: unknown): string {
   if (/mcp|tool/.test(normalized)) {
     return "Claude could not reach the Open Video Craft MCP server. Reopen the app and try again.";
   }
-  return "Claude Max could not complete this request.";
+  const detail = details
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 300);
+  return detail.length > 0
+    ? `Claude Max could not complete this request: ${detail}`
+    : "Claude Max could not complete this request.";
 }
 
 interface ActiveClaudeRun {
