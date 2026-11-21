@@ -8,6 +8,7 @@ import type {
   DeviceSelection,
   ExportVideoRequest,
   GeminiChatSendRequest,
+  MatrixPopupRequest,
   MusicGenerateRequest,
   ProviderKeyId,
   ProjectDevices,
@@ -249,6 +250,44 @@ export function assertMusicGenerateRequest(
     request.lyrics.length > 10000
   ) {
     throw new Error("Invalid music generation request.");
+  }
+}
+
+const MATRIX_POPUP_POSITIONS = [
+  "top-left", "top-center", "top-right", "center",
+  "bottom-left", "bottom-center", "bottom-right"
+] as const;
+const MATRIX_POPUP_TONES = ["info", "success", "warning", "error"] as const;
+
+function isCssPopupValue(value: unknown): boolean {
+  return typeof value === "string" && value.length <= 120
+    && !/[;{}<>\\]/u.test(value) && !/url\s*\(/iu.test(value);
+}
+
+export function assertMatrixPopupRequest(value: unknown): asserts value is MatrixPopupRequest {
+  const request = value as Partial<MatrixPopupRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    typeof request.text !== "string" || request.text.length === 0 || request.text.length > 2_000 ||
+    (request.title !== undefined && (typeof request.title !== "string" || request.title.length > 200)) ||
+    (request.position !== undefined && !MATRIX_POPUP_POSITIONS.includes(request.position)) ||
+    (request.tone !== undefined && !MATRIX_POPUP_TONES.includes(request.tone)) ||
+    (request.durationMs !== undefined && (!Number.isFinite(request.durationMs) || request.durationMs < 0 || request.durationMs > 3_600_000)) ||
+    (request.id !== undefined && (!isNonEmptyBoundedString(request.id, 128))) ||
+    (request.accentColor !== undefined && !isCssPopupValue(request.accentColor)) ||
+    (request.backgroundColor !== undefined && !isCssPopupValue(request.backgroundColor)) ||
+    (request.textColor !== undefined && !isCssPopupValue(request.textColor)) ||
+    (request.fontFamily !== undefined && !isCssPopupValue(request.fontFamily)) ||
+    (request.fontSize !== undefined && (!Number.isInteger(request.fontSize) || request.fontSize < 10 || request.fontSize > 32)) ||
+    (request.fontWeight !== undefined && (!Number.isInteger(request.fontWeight) || request.fontWeight < 400 || request.fontWeight > 900)) ||
+    (request.borderRadius !== undefined && (!Number.isInteger(request.borderRadius) || request.borderRadius < 0 || request.borderRadius > 32)) ||
+    (request.padding !== undefined && (!Number.isInteger(request.padding) || request.padding < 4 || request.padding > 64)) ||
+    (request.width !== undefined && (!Number.isInteger(request.width) || request.width < 180 || request.width > 900)) ||
+    (request.scanlines !== undefined && typeof request.scanlines !== "boolean") ||
+    (request.closable !== undefined && typeof request.closable !== "boolean") ||
+    (request.pauseOnHover !== undefined && typeof request.pauseOnHover !== "boolean")
+  ) {
+    throw new Error("Invalid matrix popup request.");
   }
 }
 

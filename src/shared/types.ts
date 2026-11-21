@@ -339,6 +339,38 @@ export interface ConfigureAiProviderRequest {
   privacyAccepted: boolean;
 }
 
+export type MatrixPopupPosition =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "center"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
+export type MatrixPopupTone = "info" | "success" | "warning" | "error";
+
+export interface MatrixPopupRequest {
+  readonly id?: string;
+  readonly title?: string;
+  readonly text: string;
+  readonly tone?: MatrixPopupTone;
+  readonly position?: MatrixPopupPosition;
+  readonly durationMs?: number;
+  readonly accentColor?: string;
+  readonly backgroundColor?: string;
+  readonly textColor?: string;
+  readonly fontFamily?: string;
+  readonly fontSize?: number;
+  readonly fontWeight?: number;
+  readonly borderRadius?: number;
+  readonly padding?: number;
+  readonly width?: number;
+  readonly scanlines?: boolean;
+  readonly closable?: boolean;
+  readonly pauseOnHover?: boolean;
+}
+
 export interface ClaudeChatRequest {
   projectId: string;
   message: string;

@@ -8,6 +8,7 @@ import { App } from "./App";
 import { EditorView } from "./EditorView";
 import { PermissionGuideOverlay } from "./PermissionGuideOverlay";
 import { RecorderController } from "./RecorderController";
+import { MatrixPopupHostConnected } from "./popups/MatrixPopupHostConnected";
 import "tailwindcss/index.css";
 import "./styles.css";
 
@@ -38,4 +39,8 @@ const component =
     <App />
   );
 
-createRoot(root).render(<React.StrictMode>{component}</React.StrictMode>);
+createRoot(root).render(
+  <React.StrictMode>
+    <MatrixPopupHostConnected>{component}</MatrixPopupHostConnected>
+  </React.StrictMode>
+);

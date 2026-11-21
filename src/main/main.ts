@@ -74,6 +74,7 @@ import {
   assertClaudeChatRequest,
   assertExportVideoRequest,
   assertGeminiChatSendRequest,
+  assertMatrixPopupRequest,
   assertMusicGenerateRequest,
   assertProviderKeyId,
   assertSaveEditorProjectStateRequest,
@@ -108,6 +109,7 @@ import type {
   MusicGenerateProgressEvent,
   MusicGenerateRequest,
   MusicGenerateResult,
+  MatrixPopupRequest,
   ProjectLibraryEntry,
   ProjectView,
   ProviderKeyId,
@@ -885,6 +887,29 @@ function registerIpc(): void {
     getMainWebContentsId: () => mainWindow?.webContents.id ?? -1,
     now: () => new Date().toISOString(),
     uptime: () => process.uptime()
+  });
+
+  function broadcastMatrixPopup(request: MatrixPopupRequest): void {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("popups:show-request", request);
+    }
+  }
+
+  function broadcastMatrixPopupClear(): void {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("popups:clear-request", null);
+    }
+  }
+
+  ipcMain.handle("popups:show", async (_event, request: unknown): Promise<boolean> => {
+    assertMatrixPopupRequest(request);
+    broadcastMatrixPopup(request);
+    return true;
+  });
+
+  ipcMain.handle("popups:clear", async (): Promise<boolean> => {
+    broadcastMatrixPopupClear();
+    return true;
   });
 
   ipcMain.handle("claude:chat", async (_event, request: unknown): Promise<ClaudeChatResult> => {

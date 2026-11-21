@@ -130,6 +130,27 @@ with one-click rollback. Gemini uploads the current video only when you send an
 assistant request. Timeline metadata, transcripts, and contact-sheet images
 requested by a connected provider are handled under that provider's data policy.
 
+### Matrix popups
+
+The renderer exposes a reusable popup system for short status messages. Call
+`showMatrixPopup()` from renderer code, or `window.openVideoCraft.popups.show()`
+from the preload bridge; main-process code can broadcast a validated popup with
+the `popups:show` IPC channel. Popups accept an optional title and fully
+customizable text, colors, font, size, radius, padding, width, position, tone,
+duration and scanline effect. Enter and exit animations respect the system's
+reduced-motion setting.
+
+```ts
+import { showMatrixPopup } from "./popups/matrix-popup-api";
+
+showMatrixPopup({
+  title: "Recording",
+  text: "Sources are ready",
+  tone: "success",
+  position: "top-right"
+});
+```
+
 ### Keyboard shortcuts
 
 | Action | macOS |

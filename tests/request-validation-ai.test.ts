@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertClaudeChatRequest,
+  assertMatrixPopupRequest,
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
   assertProviderKeyId,
@@ -9,6 +10,22 @@ import {
 } from "../src/main/request-validation";
 
 const uuid = "123e4567-e89b-42d3-a456-426614174000";
+
+describe("assertMatrixPopupRequest", () => {
+  it("accepts a text-only popup and rejects unsafe values", () => {
+    expect(() => assertMatrixPopupRequest({ text: "Ready" })).not.toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x".repeat(2001) })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", title: "y".repeat(201) })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", position: "evil" })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", backgroundColor: "url(http://evil)" })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", fontSize: "abc" })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", fontWeight: 1 })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", width: 20 })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", scanlines: "yes" })).toThrow();
+    expect(() => assertMatrixPopupRequest({ text: "x", closable: 1 })).toThrow();
+    expect(() => assertMatrixPopupRequest(null)).toThrow();
+  });
+});
 
 describe("assertClaudeChatRequest", () => {
   it("accepts a bounded project id and message", () => {

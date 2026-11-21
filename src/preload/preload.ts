@@ -27,6 +27,7 @@ import type {
   MusicGenerateProgressEvent,
   MusicGenerateRequest,
   MusicGenerateResult,
+  MatrixPopupRequest,
   ProjectLibraryEntry,
   ProjectView,
   ProviderKeyId,
@@ -76,6 +77,13 @@ const api = {
   app: {
     getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
     openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:open-external", url)
+  },
+  popups: {
+    show: (request: MatrixPopupRequest): Promise<boolean> =>
+      ipcRenderer.invoke("popups:show", request),
+    onShow: subscribe<MatrixPopupRequest>("popups:show-request"),
+    clear: (): Promise<boolean> => ipcRenderer.invoke("popups:clear"),
+    onClear: subscribe<null>("popups:clear-request")
   },
   providers: {
     get: (): Promise<ProviderKeysView> => ipcRenderer.invoke("providers:get"),
