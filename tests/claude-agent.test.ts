@@ -35,6 +35,8 @@ describe("Claude Max assistant command construction", () => {
     expect(args[args.indexOf("--mcp-config") + 1]).toContain("open-video-craft");
     expect(args).toContain("--allowedTools");
     expect(args).toContain("mcp__open-video-craft__query_analysis_transcript");
+    expect(args).toContain("mcp__open-video-craft__query_analysis_silences");
+    expect(args.join(" ")).toContain("query_analysis_silences");
     expect(args[args.length - 2]).toBe("--");
     for (const tool of CLAUDE_MCP_TOOL_NAMES) {
       expect(args).toContain(tool);

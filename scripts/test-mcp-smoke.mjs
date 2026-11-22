@@ -58,7 +58,7 @@ try {
   }
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name);
-  for (const required of ["list_projects", "inspect_project", "start_analysis", "get_analysis", "query_analysis_transcript", "apply_edit_plan", "undo_agent_edit", "export_project"]) {
+  for (const required of ["list_projects", "inspect_project", "start_analysis", "get_analysis", "query_analysis_transcript", "query_analysis_silences", "apply_edit_plan", "undo_agent_edit", "export_project"]) {
     if (!names.includes(required)) throw new Error(`Missing MCP tool: ${required}`);
   }
   const inspect = await client.callTool({ name: "inspect_project", arguments: { projectId: project.id } });
@@ -178,7 +178,11 @@ try {
       { start: 3, end: 4, text: "Today we discuss Python packaging.", words: [] },
       { start: 5, end: 6, text: "The Python API is useful.", words: [] }
     ] },
-    silenceRanges: [],
+    silenceRanges: [
+      { start: 1.5, end: 2.2, duration: 0.7 },
+      { start: 3.1, end: 4.4, duration: 1.3 },
+      { start: 8.2, end: 9.1, duration: 0.9 }
+    ],
     contactSheets: [],
     editCandidates: { fillerWords: [], note: "smoke" },
     warnings: []
@@ -193,6 +197,14 @@ try {
   }
   if (JSON.stringify(excerpts.structuredContent).includes("words")) {
     throw new Error("query_analysis_transcript returned full transcript segments");
+  }
+  const silences = await client.callTool({
+    name: "query_analysis_silences",
+    arguments: { projectId: project.id, startSeconds: 3, endSeconds: 9, limit: 5 }
+  });
+  if (silences.isError) throw new Error(`query_analysis_silences failed: ${JSON.stringify(silences.content)}`);
+  if (silences.structuredContent?.silences?.length !== 2 || silences.structuredContent?.silences?.[0]?.start !== 3.1) {
+    throw new Error("query_analysis_silences did not return the bounded ranges in the clip window");
   }
   process.stdout.write("MCP smoke test passed.\n");
 } finally {

@@ -19,6 +19,7 @@ import type { EditorEditOperation } from "../shared/editor-domain";
 import { operationSchema as sharedOperationSchema } from "../shared/editor-domain/operation-schema";
 import { listCatalogProjects, resolveCatalogProject } from "./project-catalog";
 import { queryTranscriptExcerpts } from "./transcript-excerpt";
+import { querySilenceRanges } from "./silence-ranges";
 
 const { version: serverVersion } = require("../../package.json") as { version: string };
 const configuredUserDataPath = readArgument("--user-data") ?? process.env.OVC_USER_DATA;
@@ -40,7 +41,7 @@ function assertScopedProject(projectId: string | undefined): string | undefined 
 
 const server = new McpServer(
   { name: "open-video-craft", version: serverVersion },
-  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Read transcripts only through query_analysis_transcript; get_analysis returns a large blob for status and fingerprint. For topic callouts, use bounded transcript excerpts to choose timestamps and call set_text_overlay with title and box style. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a conservative local FFmpeg filter applied at export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
+  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Read transcripts only through query_analysis_transcript and silences only through query_analysis_silences; get_analysis returns a large blob for status and fingerprint. For topic callouts, use bounded transcript excerpts to choose timestamps and call set_text_overlay with title and box style. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a conservative local FFmpeg filter applied at export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
 );
 
 const projectIdSchema = z.string().min(1).max(128).optional().describe("Project ID. Omit to use the open or most recent project.");
@@ -140,22 +141,43 @@ server.registerTool("query_analysis_transcript", {
   annotations: { readOnlyHint: true, destructiveHint: false }
 }, async ({ projectId, jobId, query, limit, startSeconds, endSeconds }) => {
   try {
-    let analysis: unknown;
-    if (jobId) {
-      const job = getProjectAnalysisJob(jobId);
-      if (!job) throw new Error(`Unknown analysis job "${jobId}".`);
-      const scopedId = assertScopedProject(projectId);
-      if (scopedId !== undefined && job.projectId !== scopedId) {
-        throw new Error("This analysis job belongs to a different project.");
-      }
-      analysis = job.result ?? { status: job.status };
-    } else {
-      const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
-      analysis = await readCachedAnalysis(project.rootPath) ?? { status: "not-started" };
-    }
+    const analysis = await loadAnalysisResult(projectId, jobId);
     return success(toRecord(queryTranscriptExcerpts({ analysis, query, limit, startSeconds, endSeconds })));
   } catch (error) { return failure(error); }
 });
+
+server.registerTool("query_analysis_silences", {
+  title: "Query silence ranges",
+  description: "Read bounded timestamped silence ranges from the cached analysis. Use the clip's timeline window from inspect_project. Use this instead of get_analysis when choosing speed-up ranges.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    jobId: z.string().optional(),
+    startSeconds: z.number().finite().min(0).optional().describe("Clip start on the project timeline."),
+    endSeconds: z.number().finite().min(0).optional().describe("Clip end on the project timeline."),
+    minDurationSeconds: z.number().finite().min(0).max(60).optional(),
+    limit: z.number().int().min(1).max(40).optional().describe("Maximum number of ranges, at most 40.")
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false }
+}, async ({ projectId, jobId, startSeconds, endSeconds, minDurationSeconds, limit }) => {
+  try {
+    const analysis = await loadAnalysisResult(projectId, jobId);
+    return success(toRecord(querySilenceRanges({ analysis, startSeconds, endSeconds, minDurationSeconds, limit })));
+  } catch (error) { return failure(error); }
+});
+
+async function loadAnalysisResult(projectId: string | undefined, jobId: string | undefined): Promise<unknown> {
+  if (jobId) {
+    const job = getProjectAnalysisJob(jobId);
+    if (!job) throw new Error(`Unknown analysis job "${jobId}".`);
+    const scopedId = assertScopedProject(projectId);
+    if (scopedId !== undefined && job.projectId !== scopedId) {
+      throw new Error("This analysis job belongs to a different project.");
+    }
+    return job.result ?? { status: job.status };
+  }
+  const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+  return await readCachedAnalysis(project.rootPath) ?? { status: "not-started" };
+}
 
 const operationSchema = sharedOperationSchema;
 

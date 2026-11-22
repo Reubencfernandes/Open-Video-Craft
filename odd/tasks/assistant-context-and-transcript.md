@@ -9,12 +9,14 @@ Objective: let the in-app AI assistant read a bounded transcript excerpt instead
 - S4 A follow-up assistant message must retain the prior user/assistant turns for the same project, and a project switch or explicit reset must clear that context.
 - S5 Transcripts, project data and chat history must stay local; no API key, cloud upload or private file access may be introduced.
 - S6 Behavior changes ship with Vitest tests through public interfaces; full verification and an ad-hoc rebuild must pass before the app is relaunched.
+- S7 User request (verbatim): "non riesce ancora a velocizzare le parti di silenzio, dice che non riesce a leggerle nella clip2, ma lo ha fatto su clip 3. l'analisi dice che è troppo grande e non ha un tool per leggerlo a parti." Silence ranges must be readable through bounded MCP queries, scoped to a clip's timeline window.
 
 ## Tasks
 
 - [x] T1 (S1, S3, S5) Add a bounded MCP transcript excerpt tool and update assistant prompts/allowlist. Route: inline. Commit `fa30354`.
 - [x] T2 (S2, S4, S5) Pass bounded chat history from renderer through IPC into each Claude CLI turn. Route: inline. Commit `88043e8`.
 - [x] T3 (S1-S6) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Final rebuild and launch verified.
+- [ ] T4 (S7) Add a bounded MCP silence-range query and wire it into Claude. Route: inline.
 
 ## Log
 
@@ -29,3 +31,6 @@ Objective: let the in-app AI assistant read a bounded transcript excerpt instead
 
 - L8 (evidence): final ad-hoc rebuild at 14:46 produced `release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg`; the launched app is PID `74609`, frontmost `Open Video Craft`, with window `Open Video Craft`.
 - L9 (evidence): a Claude probe against the registered packaged MCP server returned `{"totalSegments":413,"returned":1,"excerpts":[{"start":0.72,"end":2.38,"text":"Here we come often with Carmela, I"}]}`, confirming the fix is inside the shipped bundle.
+
+- L10 (user, verbatim): "non riesce ancora a velocizzare le parti di silenzio, dice che non riesce a leggerle nella clip2, ma lo ha fatto su clip 3. l'analisi dice che è troppo grande e non ha un tool per leggerlo a parti."
+- L11 (evidence): a live packaged probe found 52 silence ranges and clip 2 at 10.26s–402.37s, but the assistant only had `query_analysis_transcript`; `get_analysis` still exceeded 179,080 characters, so it stopped and asked for jq/Read permission.
