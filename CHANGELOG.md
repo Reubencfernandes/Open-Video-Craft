@@ -6,6 +6,9 @@ All notable changes to Open Video Craft are documented here.
 
 ### Added
 
+- Added conservative per-source voice cleanup for wind, room and steady noise. It is stored in the project, available in the Audio panel and applicable by Claude through `set_audio_cleanup`; FFmpeg applies the filter on export.
+- Added 1.25x and 1.5x speed rates across the editor, MCP operations and export.
+- Added a visible timeline zoom slider and Ctrl/Cmd +/-/0 shortcuts.
 - Added a customizable Matrix-style popup system with optional titles, animated entry/exit, configurable theme and position, renderer API and validated IPC broadcast.
 - Claude Max is now selectable in the editor AI assistant. It uses the authenticated Claude Code CLI with only Open Video Craft MCP tools, no built-in shell/file tools and no API key. Gemini remains available as a separate provider.
 

@@ -13,7 +13,7 @@ Objective: make timeline zoom easy to discover and use with visible controls and
 - [x] T1 (S1-S4) Add slider control with accessible label and percentage readout. Route: inline.
 - [x] T2 (S1-S4) Add keyboard shortcuts for zoom in/out/fit. Route: inline.
 - [x] T3 (S1-S4) Test zoom math and controls. Route: inline.
-- [ ] T4 (S1-S4) Include zoom changes in final verification and rebuild. Route: inline; in progress.
+- [ ] T4 (S1-S4) Include zoom changes in final verification and rebuild. Route: inline; done.
 
 ## Log
 

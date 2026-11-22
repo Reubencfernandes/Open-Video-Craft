@@ -13,7 +13,7 @@ Objective: allow timeline speed effects at 1.25x and 1.5x in editor UI, persiste
 - [x] T1 (S1-S4) Add 1.25 and 1.5 to shared speed types, guards and operation schema. Route: inline.
 - [x] T2 (S1-S4) Update speed UI controls and labels. Route: inline.
 - [x] T3 (S1-S4) Add focused RED/GREEN tests for new rates. Route: inline.
-- [ ] T4 (S1-S4) Run full checks, commit and rebuild local app. Route: inline; in progress.
+- [ ] T4 (S1-S4) Run full checks, commit and rebuild local app. Route: inline; done.
 
 ## Log
 

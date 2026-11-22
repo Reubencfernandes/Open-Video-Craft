@@ -130,6 +130,15 @@ with one-click rollback. Gemini uploads the current video only when you send an
 assistant request. Timeline metadata, transcripts, and contact-sheet images
 requested by a connected provider are handled under that provider's data policy.
 
+### Audio cleanup and precise speed
+
+Select an audio source in the Audio tool to enable conservative voice cleanup.
+Wind, Room and Steady presets apply local FFmpeg filters on export; no audio is
+uploaded. Claude can apply the same setting with the `set_audio_cleanup` edit
+operation. Timeline speed supports 1x, 1.25x, 1.5x, 2x, 3x, 4x and 5x. The
+timeline toolbar has a zoom slider; Ctrl/Cmd + `+`, `-` and `0` zoom in, out and
+fit.
+
 ### Matrix popups
 
 The renderer exposes a reusable popup system for short status messages. Call

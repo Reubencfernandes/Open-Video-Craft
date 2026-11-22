@@ -28,7 +28,6 @@ const maxTimelineZoom = 10;
 const timelineZoomStep = 1.5;
 const timelineDurationDragSensitivity = 0.004;
 
-/** Smooth wheel/pinch zoom shared by the handler and unit tests. */
 export type TimelineZoomShortcut = "in" | "out" | "fit";
 
 export function getTimelineZoomAfterShortcut(
@@ -42,6 +41,7 @@ export function getTimelineZoomAfterShortcut(
   return clampNumber(next, minTimelineZoom, maxTimelineZoom);
 }
 
+/** Smooth wheel/pinch zoom shared by the handler and unit tests. */
 export function getTimelineZoomAfterWheel(currentZoom: number, deltaY: number): number {
   const factor = Math.exp(-deltaY * 0.0018);
   return clampNumber(currentZoom * factor, minTimelineZoom, maxTimelineZoom);
@@ -249,11 +249,11 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
   }
 
   function zoomTimelineIn() {
-    setTimelineZoom((zoom) => clampNumber(zoom * timelineZoomStep, minTimelineZoom, maxTimelineZoom));
+    setTimelineZoom((zoom) => getTimelineZoomAfterShortcut(zoom, "in"));
   }
 
   function zoomTimelineOut() {
-    setTimelineZoom((zoom) => clampNumber(zoom / timelineZoomStep, minTimelineZoom, maxTimelineZoom));
+    setTimelineZoom((zoom) => getTimelineZoomAfterShortcut(zoom, "out"));
   }
 
   function resetTimelineZoom() {
