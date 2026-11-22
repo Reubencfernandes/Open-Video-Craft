@@ -382,6 +382,21 @@ export interface ClaudeChatRequest {
   history?: ClaudeChatTurn[];
 }
 
+export interface AudioCleanupPreviewRequest {
+  jobId: string;
+  projectId: string;
+  itemId: string;
+  preset: "wind" | "room" | "steady";
+  strength: number;
+}
+
+export interface AudioCleanupPreviewResult {
+  id: string;
+  url: string;
+  path: string;
+  duration: number | null;
+}
+
 export interface ClaudeChatResult {
   text: string;
   provider: "claude-max";

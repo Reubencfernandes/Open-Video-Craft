@@ -9,6 +9,8 @@ import type {
   ClaudeChatRequest,
   ClaudeChatResult,
   AppInfo,
+  AudioCleanupPreviewRequest,
+  AudioCleanupPreviewResult,
   BenchSnapshot,
   ConfigureAiProviderRequest,
   CreateProjectRequest,
@@ -67,6 +69,10 @@ const api = {
       ipcRenderer.invoke("ai:configure", request),
     disconnect: (provider: AiProvider): Promise<AiConnectionStatus> =>
       ipcRenderer.invoke("ai:disconnect", provider)
+  },
+  audio: {
+    prepareCleanup: (request: AudioCleanupPreviewRequest): Promise<AudioCleanupPreviewResult> =>
+      ipcRenderer.invoke("audio:prepare-cleanup", request)
   },
   claude: {
     send: (request: ClaudeChatRequest): Promise<ClaudeChatResult> =>

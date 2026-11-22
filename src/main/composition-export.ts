@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { exportTimelineComposition, mediaHasAudio } from "./ffmpeg";
+import { resolveArnndnModelPath } from "./audio-model-path";
 import type {
   ExportProcessControl,
   TimelineCompositionAudioSegment,
@@ -70,7 +71,9 @@ export async function exportEditorProjectToPath(input: {
       ? 0
       : Math.max(0, level.volume / 100) * input.document.state.masterVolume / 100;
     const cleanup = input.document.state.audioCleanup?.[segment.itemId];
-    const cleanupFilter = cleanup ? buildAudioCleanupFilter(cleanup) : undefined;
+    const cleanupFilter = cleanup
+      ? buildAudioCleanupFilter(cleanup, resolveArnndnModelPath(process.resourcesPath))
+      : undefined;
     if (segment.track === "video") {
       if (source.kind === "audio") throw new Error(`Audio item "${segment.itemId}" cannot appear on the video track.`);
       videoSegments.push({

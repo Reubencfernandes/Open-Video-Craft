@@ -142,8 +142,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   }
 
   function applyAudioGain(element: HTMLMediaElement, sourceGain: number, itemId?: string) {
-    const cleanup = itemId === undefined ? null : audioCleanupRef.current[itemId] ?? null;
-    const connected = getAudioMeter().setElementGain(element, sourceGain, cleanup);
+    void itemId;
+    const connected = getAudioMeter().setElementGain(element, sourceGain);
     element.volume = connected
       ? 1
       : Math.min(1, Math.max(0, (masterVolumeRef.current / 100) * sourceGain));
@@ -293,8 +293,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     const meter = getAudioMeter();
     meter.setMasterGain(master);
     if (mainVideoRef.current) {
-      const mainCleanup = activeVideoClip ? audioCleanup[activeVideoClip.item.id] ?? null : null;
-      const connected = !mainVideoRef.current.muted && meter.setElementGain(mainVideoRef.current, 1, mainCleanup);
+      const connected = !mainVideoRef.current.muted && meter.setElementGain(mainVideoRef.current, 1);
       mainVideoRef.current.volume = connected ? 1 : Math.min(1, master);
     }
     for (const clip of audioTimelineClips) {
@@ -455,11 +454,10 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
     input.element.muted = input.muted;
     if (input.muted) {
-      audioMeterRef.current?.setElementGain(input.element, 0, null);
+      audioMeterRef.current?.setElementGain(input.element, 0);
       input.element.volume = 0;
     } else {
-      const clipCleanup = audioCleanupRef.current[input.videoClip.item.id] ?? null;
-      const connected = getAudioMeter().setElementGain(input.element, 1, clipCleanup);
+      const connected = getAudioMeter().setElementGain(input.element, 1);
       input.element.volume = connected ? 1 : input.volume;
     }
     input.element.playbackRate = getPlaybackRateForTrack("video", speedEffectsRef.current, input.timelineTime);
@@ -509,7 +507,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     }
 
     if (input.useEngine) {
-      applyAudioGain(input.element, input.volume, input.clip.item.id);
+      applyAudioGain(input.element, input.volume);
     } else {
       input.element.volume = input.volume;
     }

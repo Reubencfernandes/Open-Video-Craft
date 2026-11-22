@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assertAudioCleanupPreviewRequest,
   assertClaudeChatRequest,
   assertMatrixPopupRequest,
   assertGeminiChatSendRequest,
@@ -51,6 +52,20 @@ describe("assertClaudeChatRequest", () => {
     expect(() => assertClaudeChatRequest({
       projectId: "p", message: "x",
       history: Array.from({ length: 13 }, () => ({ role: "user" as const, text: "x" }))
+    })).toThrow();
+  });
+});
+
+describe("assertAudioCleanupPreviewRequest", () => {
+  it("accepts a valid cleanup preview request and rejects bad values", () => {
+    expect(() => assertAudioCleanupPreviewRequest({
+      jobId: uuid, projectId: "project-1", itemId: "audio-1", preset: "wind", strength: 50
+    })).not.toThrow();
+    expect(() => assertAudioCleanupPreviewRequest({
+      jobId: uuid, projectId: "project-1", itemId: "audio-1", preset: "bad", strength: 50
+    })).toThrow();
+    expect(() => assertAudioCleanupPreviewRequest({
+      jobId: uuid, projectId: "project-1", itemId: "audio-1", preset: "wind", strength: 101
     })).toThrow();
   });
 });

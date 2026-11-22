@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { exportTimelineComposition, resolveFfmpegPath } from "../src/main/ffmpeg";
+import { resolveArnndnModelPath } from "../src/main/audio-model-path";
 import { exportEditorProjectToPath, retimeSubtitlesForSpeed, retimeTextOverlaysForSpeed } from "../src/main/composition-export";
 import { buildAudioCleanupFilter, createDefaultEditorState } from "../src/shared/editor-domain";
 import type { EditorProjectStateFile, ProjectFile } from "../src/shared/types";
@@ -87,7 +88,10 @@ describe("timeline composition export", () => {
       videoSegments: [{ path: video, kind: "video", start: 0, end: 1, sourceStart: 0, volume: 1, hasAudio: false }],
       audioSegments: [{
         path: tone, start: 0, end: 1, sourceStart: 0, volume: 1,
-        cleanupFilter: buildAudioCleanupFilter({ preset: "wind", strength: 50 })
+        cleanupFilter: buildAudioCleanupFilter(
+          { preset: "wind", strength: 50 },
+          resolveArnndnModelPath()
+        )
       }],
       outputPath: output, format: "mp4", resolution: "720p", trimStart: 0, trimEnd: null
     });

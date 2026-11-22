@@ -15,7 +15,7 @@
  *      ExportDialog, notifications).
  *
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProjectView
 } from "../shared/types";
@@ -98,6 +98,9 @@ export function EditorView() {
   // first saved to disk. Once a project exists, renames persist immediately.
   const [pendingProjectName, setPendingProjectName] = useState("");
   const [importedMedia, setImportedMedia] = useState<EditorMediaItem[]>([]);
+  const [cleanupPreviews, setCleanupPreviews] = useState<
+    Record<string, { key: string; url: string }>
+  >({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<MediaPanelTab>("all");
   const [activeTool, setActiveTool] = useState<EditorTool>("media");
@@ -280,6 +283,34 @@ export function EditorView() {
   });
 
   useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    for (const [itemId, settings] of Object.entries(audioCleanup)) {
+      if (!settings || settings.strength === 0) continue;
+      const key = `${settings.preset}:${settings.strength}`;
+      if (cleanupPreviews[itemId]?.key === key) continue;
+      const jobId = crypto.randomUUID();
+      void window.openVideoCraft.audio.prepareCleanup({
+        jobId, projectId, itemId, preset: settings.preset, strength: settings.strength
+      }).then((result) => {
+        if (active) setCleanupPreviews((current) => ({
+          ...current,
+          [itemId]: { key, url: result.url }
+        }));
+      }).catch(() => undefined);
+    }
+    return () => { active = false; };
+  }, [projectId, audioCleanup, cleanupPreviews]);
+
+  const previewImportedMedia = useMemo(
+    () => importedMedia.map((item) => {
+      const preview = cleanupPreviews[item.id];
+      return preview ? { ...item, url: preview.url } : item;
+    }),
+    [importedMedia, cleanupPreviews]
+  );
+
+  useEffect(() => {
     const customBackground = customBackgroundImportId
       ? importedMedia.find((item) => item.id === customBackgroundImportId)
       : null;
@@ -380,7 +411,7 @@ export function EditorView() {
     currentTime,
     customBackgroundUrl,
     duration,
-    importedMedia,
+    importedMedia: previewImportedMedia,
     layoutMode,
     project,
     screenAspectRatio,

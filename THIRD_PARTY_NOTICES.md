@@ -55,3 +55,10 @@ committed, SHA-256-pinned source manifests.
 
 The source-offer document, macOS rebuild notes, and these notices are packaged
 in the app’s Resources directory.
+
+### RNNoise model
+
+The bundled `resources/models/cb.rnnn` model is distributed by the
+`richardpl/arnndn-models` repository and was trained by Gregor Richards. The
+model repository states that the model files are not creative works and are not
+subject to copyright: <https://github.com/GregorR/rnnoise-models>.

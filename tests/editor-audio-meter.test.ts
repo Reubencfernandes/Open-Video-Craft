@@ -71,30 +71,11 @@ describe("editor AudioMeter cleanup preview", () => {
 
   afterEach(() => meter.dispose());
 
-  it("routes media through high-pass and low-shelf filters when cleanup is enabled", () => {
+  it("keeps the Web Audio graph clean; denoise happens in the rendered source", () => {
     const element = document.createElement("video");
-    expect(meter.connectElement(element, 1, { preset: "wind", strength: 50 })).toBe(true);
+    expect(meter.connectElement(element, 1)).toBe(true);
     const context = FakeAudioContext.last;
-    expect(context).not.toBeNull();
-    const source = context?.sources[0];
-    const highpass = context?.biquads[0];
-    const shelf = context?.biquads[1];
-    expect(source?.connections[0]).toBe(highpass);
-    expect(highpass?.type).toBe("highpass");
-    expect(highpass?.frequency.value).toBe(80);
-    expect(shelf?.type).toBe("lowshelf");
-    expect(shelf?.frequency.value).toBe(200);
-    expect(shelf?.gain.value).toBe(-4);
-  });
-
-  it("removes the filters when cleanup is disabled", () => {
-    const element = document.createElement("video");
-    meter.connectElement(element, 1, { preset: "wind", strength: 50 });
-    const context = FakeAudioContext.last;
-    expect(meter.setElementCleanup(element, null)).toBe(true);
-    const source = context?.sources[0];
-    const elementGain = context?.gains[1];
-    expect(source?.connections).toHaveLength(1);
-    expect(source?.connections[0]).toBe(elementGain);
+    expect(context?.biquads).toHaveLength(0);
+    expect(context?.sources[0]?.connections[0]).toBe(context?.gains[1]);
   });
 });

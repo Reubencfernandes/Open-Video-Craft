@@ -74,6 +74,10 @@
         "to": "fonts"
       },
       {
+        "from": "resources/models",
+        "to": "models"
+      },
+      {
         "from": "THIRD_PARTY_NOTICES.md",
         "to": "THIRD_PARTY_NOTICES.md"
       },

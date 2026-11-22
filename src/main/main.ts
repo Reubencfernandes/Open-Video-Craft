@@ -16,7 +16,9 @@ import {
   screen as electronScreen,
   shell,
 } from "electron";
+import { execFile } from "node:child_process";
 import { promises as fs, watch as watchFs } from "node:fs";
+import { promisify } from "node:util";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createMacApplicationMenuTemplate } from "./application-menu";
@@ -61,17 +63,21 @@ import {
 } from "./file-dialogs";
 import {
   convertWebmAudioToWav,
+  resolveFfmpegPath,
   killActiveFfmpegProcesses,
   probeMediaDurationMs,
   remuxWebm
 } from "./ffmpeg";
 import { exportEditorVideo } from "./editor-export";
+import { resolveArnndnModelPath } from "./audio-model-path";
+import { buildAudioCleanupFilter } from "../shared/editor-domain";
 import { ExportJobRegistry } from "./export-jobs";
 import { GeminiAgentManager } from "./gemini-agent";
 import { generateLyria } from "./music-lyria";
 import { renderLocalMusic } from "./music-local";
 import { ProviderKeysManager } from "./provider-keys";
 import {
+  assertAudioCleanupPreviewRequest,
   assertClaudeChatRequest,
   assertExportVideoRequest,
   assertGeminiChatSendRequest,
@@ -187,6 +193,12 @@ let geminiAgentManager: GeminiAgentManager | null = null;
 let claudeAgentManager: ClaudeAgentManager | null = null;
 const sttJobs = new Map<string, AbortController>();
 const lyriaJobs = new Map<string, AbortController>();
+const mediaTrackKeys = ["screen", "camera", "micWav", "micWebm", "systemWav", "systemWebm"] as const;
+
+function isMediaTrackKey(value: string): value is (typeof mediaTrackKeys)[number] {
+  return mediaTrackKeys.some((track) => track === value);
+}
+
 let editorStateWatcher: ReturnType<typeof watchFs> | null = null;
 let editorStateWatchTimer: NodeJS.Timeout | null = null;
 let watchedEditorProjectId: string | null = null;
@@ -1065,6 +1077,43 @@ function registerIpc(): void {
       }
     }
   );
+  ipcMain.handle(
+    "audio:prepare-cleanup",
+    async (_event, request: unknown) => {
+      assertAudioCleanupPreviewRequest(request);
+      const jobId = request.jobId;
+      const trackedPath = importedMediaCache.get(request.itemId);
+      const trackSuffix = request.itemId.startsWith(`${request.projectId}:`)
+        ? request.itemId.slice(request.projectId.length + 1)
+        : "";
+      const projectPath = isMediaTrackKey(trackSuffix)
+        ? projectStore.getMediaPath(request.projectId, trackSuffix)
+        : null;
+      const sourcePath = trackedPath ?? projectPath;
+      if (!sourcePath) throw new Error("The selected audio source is no longer available.");
+      const outputPath = path.join(
+        app.getPath("userData"), "audio-cleanup", "output", `${jobId}.wav`
+      );
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      const filter = buildAudioCleanupFilter(
+        { preset: request.preset, strength: request.strength },
+        resolveArnndnModelPath(process.resourcesPath)
+      );
+      await promisify(execFile)(resolveFfmpegPath(), [
+        "-y", "-i", sourcePath, "-af", filter,
+        "-ar", "48000", "-c:a", "pcm_s16le", outputPath
+      ], { maxBuffer: 8 * 1024 * 1024 });
+      const durationMs = await probeMediaDurationMs(outputPath).catch(() => null);
+      importedMediaCache.set(jobId, outputPath);
+      return {
+        id: jobId,
+        url: `ovc-import://file/${encodeURIComponent(jobId)}`,
+        path: outputPath,
+        duration: durationMs === null ? null : durationMs / 1000
+      };
+    }
+  );
+
   ipcMain.handle("music:cancel", (_event, jobId: unknown): boolean => {
     if (typeof jobId !== "string") return false;
     const control = lyriaJobs.get(jobId);
