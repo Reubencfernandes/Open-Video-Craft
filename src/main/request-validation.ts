@@ -243,7 +243,7 @@ export function assertMusicGenerateRequest(
     !request ||
     typeof request !== "object" ||
     !isUuid(request.jobId) ||
-    !["lyria-clip", "lyria-pro"].includes(request.engine ?? "") ||
+    !["claude-local", "lyria-clip", "lyria-pro"].includes(request.engine ?? "") ||
     typeof request.prompt !== "string" ||
     request.prompt.trim().length === 0 ||
     request.prompt.length > 2000 ||

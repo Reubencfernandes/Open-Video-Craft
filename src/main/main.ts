@@ -69,6 +69,7 @@ import { exportEditorVideo } from "./editor-export";
 import { ExportJobRegistry } from "./export-jobs";
 import { GeminiAgentManager } from "./gemini-agent";
 import { generateLyria } from "./music-lyria";
+import { renderLocalMusic } from "./music-local";
 import { ProviderKeysManager } from "./provider-keys";
 import {
   assertClaudeChatRequest,
@@ -995,32 +996,50 @@ function registerIpc(): void {
       const sendProgress = (progress: MusicGenerateProgressEvent) => {
         if (!event.sender.isDestroyed()) event.sender.send("music:generate-progress", progress);
       };
-      const apiKey = await getProviderKeysManager().getGeminiKey();
-      if (!apiKey) {
-        throw new Error("No Gemini API key is saved. Add one in the AI settings.");
-      }
       const control = new AbortController();
       lyriaJobs.set(request.jobId, control);
       try {
-        sendProgress({
-          jobId: request.jobId,
-          phase: "generating",
-          percent: null,
-          message: "Composing with Lyria…"
-        });
-        const output = await generateLyria({
-          model: request.engine === "lyria-clip" ? "lyria-3-clip-preview" : "lyria-3-pro-preview",
-          prompt: request.prompt,
-          lyrics: request.lyrics,
-          apiKey,
-          signal: control.signal
-        });
-        const extension = output.mimeType.includes("wav") ? "wav" : "mp3";
+        const local = request.engine === "claude-local";
+        let audio: Buffer;
+        let extension: string;
+        let lyrics: string | null = null;
+        if (local) {
+          sendProgress({
+            jobId: request.jobId,
+            phase: "generating",
+            percent: null,
+            message: "Composing locally with Claude…"
+          });
+          audio = renderLocalMusic({ prompt: request.prompt, lyrics: request.lyrics });
+          extension = "wav";
+        } else {
+          const apiKey = await getProviderKeysManager().getGeminiKey();
+          if (!apiKey) {
+            throw new Error("No Gemini API key is saved. Add one in the AI settings.");
+          }
+          sendProgress({
+            jobId: request.jobId,
+            phase: "generating",
+            percent: null,
+            message: "Composing with Lyria…"
+          });
+          const output = await generateLyria({
+            model: request.engine === "lyria-clip" ? "lyria-3-clip-preview" : "lyria-3-pro-preview",
+            prompt: request.prompt,
+            lyrics: request.lyrics,
+            apiKey,
+            signal: control.signal
+          });
+          audio = output.audio;
+          extension = output.mimeType.includes("wav") ? "wav" : "mp3";
+          lyrics = output.lyrics;
+        }
+        const outputDirectory = local ? "music-local" : "lyria";
         const outputPath = path.join(
-          app.getPath("userData"), "lyria", "output", `${request.jobId}.${extension}`
+          app.getPath("userData"), outputDirectory, "output", `${request.jobId}.${extension}`
         );
         await fs.mkdir(path.dirname(outputPath), { recursive: true });
-        await fs.writeFile(outputPath, output.audio);
+        await fs.writeFile(outputPath, audio);
         sendProgress({
           jobId: request.jobId,
           phase: "saving",
@@ -1039,7 +1058,7 @@ function registerIpc(): void {
           kind: "audio",
           extension,
           duration: durationMs === null ? null : durationMs / 1000,
-          lyrics: output.lyrics
+          lyrics
         };
       } finally {
         lyriaJobs.delete(request.jobId);

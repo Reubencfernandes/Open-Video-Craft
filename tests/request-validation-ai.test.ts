@@ -62,6 +62,12 @@ describe("assertUpdateProviderKeysRequest", () => {
       assertUpdateProviderKeysRequest({ sttProvider: "cohere", cohereApiKey: "abc", cohereLanguage: "de" })
     ).not.toThrow();
     expect(() => assertUpdateProviderKeysRequest({ geminiApiKey: null })).not.toThrow();
+    expect(() => assertMusicGenerateRequest({
+      jobId: uuid,
+      engine: "claude-local",
+      prompt: "mellow lo-fi groove",
+      lyrics: ""
+    })).not.toThrow();
   });
 
   it("rejects bad providers, oversized keys, bad languages", () => {

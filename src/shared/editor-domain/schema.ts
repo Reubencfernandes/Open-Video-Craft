@@ -166,7 +166,7 @@ function isPendingMediaImport(value: unknown): boolean {
 
 function isPendingMusicGeneration(value: unknown): boolean {
   return isRecord(value) && typeof value.requestId === "string" && value.requestId.length > 0 &&
-    oneOf(value.engine, ["lyria-clip", "lyria-pro"]) &&
+    oneOf(value.engine, ["claude-local", "lyria-clip", "lyria-pro"]) &&
     typeof value.prompt === "string" && value.prompt.trim().length > 0 &&
     typeof value.lyrics === "string";
 }

@@ -111,6 +111,14 @@ describe("Claude Max assistant command construction", () => {
     expect(prompt).toContain("old-turn-14");
   });
 
+  it("instructs Claude to use key-free local music and transcription", () => {
+    const args = buildClaudeAgentArgs({ projectId: "project-1", message: "x" });
+    const prompt = args.join(" ");
+    expect(prompt).toContain("claude-local");
+    expect(prompt).toContain("start_analysis");
+    expect(prompt).toContain("never require a cloud API key");
+  });
+
   it("rejects prompts longer than the public request limit", () => {
     const message = "x".repeat(8_001);
     expect(() => buildClaudeAgentArgs({ projectId: "project-1", message })).toThrow("message is too long");

@@ -41,7 +41,7 @@ export type TextFontFamily = "sans" | "rounded" | "serif" | "mono";
 export type ClipTransitionType = "crossfade" | "fade-black" | "slide-left" | "wipe-left";
 export type PreviewQuality = "high" | "low";
 export type AgentMediaPlacement = "media-bin" | "timeline" | "background-audio" | "custom-background";
-export type AgentMusicEngine = "lyria-clip" | "lyria-pro";
+export type AgentMusicEngine = "claude-local" | "lyria-clip" | "lyria-pro";
 
 export interface TimelineSegment {
   id: string;

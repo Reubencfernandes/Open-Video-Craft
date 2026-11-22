@@ -508,7 +508,7 @@ export interface SttProgressEvent {
 /* AI music generation (Lyria cloud)                                   */
 /* ------------------------------------------------------------------ */
 
-export type MusicEngine = "lyria-clip" | "lyria-pro";
+export type MusicEngine = "claude-local" | "lyria-clip" | "lyria-pro";
 
 export interface MusicGenerateRequest {
   jobId: string;

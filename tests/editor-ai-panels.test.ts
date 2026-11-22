@@ -41,7 +41,7 @@ describe("editor AI and audio panels", () => {
     expect(html).not.toMatch(/live output|equalizer/i);
   });
 
-  it("offers only Lyria engines and defaults to Lyria Clip", () => {
+  it("offers Claude local synthesis first and defaults to it", () => {
     const html = renderToStaticMarkup(createElement(MusicPanel, {
       generationState: "idle",
       progress: null,
@@ -52,12 +52,28 @@ describe("editor AI and audio panels", () => {
       onOpenAiSettings: () => undefined
     }));
 
+    expect(html).toContain("Claude Max (local)");
     expect(html).toContain("Lyria 3 Clip (cloud)");
     expect(html).toContain("Lyria 3 Pro (cloud)");
     expect(html).toContain("data-floating-select");
-    expect(html.match(/role="option"/g)).toHaveLength(2);
+    expect(html.match(/role="option"/g)).toHaveLength(3);
     expect(html).not.toMatch(/ACE-Step|Get Python|Duration \(s\)|Seed \(blank/);
     expect(latestRelease.changes.join(" ")).not.toMatch(/ACE-Step/i);
+  });
+
+  it("does not require a Gemini key for Claude local music", () => {
+    const html = renderToStaticMarkup(createElement(MusicPanel, {
+      generationState: "idle",
+      progress: null,
+      lastLyrics: null,
+      providerKeys: missingGeminiKey,
+      onGenerate: () => undefined,
+      onCancel: () => undefined,
+      onOpenAiSettings: () => undefined
+    }));
+    expect(html).toContain("Claude Max (local)");
+    expect(html).not.toContain("Add your Gemini API key");
+    expect(html).not.toContain("Loading Gemini settings…");
   });
 
   it("keeps Gemini actions disabled while provider settings load", () => {
@@ -66,6 +82,7 @@ describe("editor AI and audio panels", () => {
       progress: null,
       lastLyrics: null,
       providerKeys: null,
+      initialEngine: "lyria-clip",
       onGenerate: () => undefined,
       onCancel: () => undefined,
       onOpenAiSettings: () => undefined
@@ -96,6 +113,7 @@ describe("editor AI and audio panels", () => {
       progress: null,
       lastLyrics: null,
       providerKeys: missingGeminiKey,
+      initialEngine: "lyria-clip",
       onGenerate: () => undefined,
       onCancel: () => undefined,
       onOpenAiSettings: () => undefined

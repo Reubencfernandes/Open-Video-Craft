@@ -90,7 +90,7 @@ export const operationSchema = z.discriminatedUnion("type", [
     placement: z.enum(["media-bin", "timeline", "background-audio", "custom-background"]),
     timelineStart: z.number().nonnegative().optional()
   }),
-  z.object({ type: z.literal("generate_music"), engine: z.enum(["lyria-clip", "lyria-pro"]), prompt: z.string().min(1).max(2000), lyrics: z.string().max(5000).optional() }),
+  z.object({ type: z.literal("generate_music"), engine: z.enum(["claude-local", "lyria-clip", "lyria-pro"]), prompt: z.string().min(1).max(2000), lyrics: z.string().max(5000).optional() }),
   z.object({
     type: z.literal("set_zoom"),
     id: z.string().min(1).max(128),
