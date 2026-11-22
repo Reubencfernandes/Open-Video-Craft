@@ -27,7 +27,7 @@ export function createDefaultEditorState(): EditorStateSnapshot {
     cameraBorderStyle: "light", cameraContentTransform: { x: 0, y: 0, scale: 100, mirrored: false },
     videoCornerStyle: "soft", screenPosition: { x: 0, y: 0, scale: 100 },
     screenAspectRatio: "auto", cameraFrame: { x: 72, y: 72, size: 24 },
-    masterVolume: 100, audioLevels: {}, audioCleanup: {}, backgroundAudioIds: [],
+    masterVolume: 100, audioLevels: {}, audioCleanup: {}, youtubeVolume: { enabled: false, targetLufs: -14, truePeakDb: -1 }, backgroundAudioIds: [],
     customBackgroundImportId: null, trimRange: { start: 0, end: 0 },
     previewQuality: "high", timelineZoom: 1, previewZoom: 1,
     pendingMediaImport: null, pendingMusicGeneration: null
@@ -97,6 +97,13 @@ export function validateEditorStateSnapshot(value: unknown): value is EditorStat
     isCameraContentTransform(value.cameraContentTransform) && oneOf(value.videoCornerStyle, ["flat", "soft", "round"]) &&
     isXYZ(value.screenPosition, ["x", "y", "scale"]) && oneOf(value.screenAspectRatio, ["auto", "16:9", "16:10", "4:3"]) &&
     isXYZ(value.cameraFrame, ["x", "y", "size"]) && finite(value.masterVolume) && isAudioLevels(value.audioLevels) &&
+    (value.youtubeVolume === undefined || (() => {
+      const setting = value.youtubeVolume as { enabled?: unknown; targetLufs?: unknown; truePeakDb?: unknown };
+      return typeof setting === "object" && setting !== null &&
+        typeof setting.enabled === "boolean" &&
+        finite(setting.targetLufs) && setting.targetLufs >= -24 && setting.targetLufs <= -9 &&
+        finite(setting.truePeakDb) && setting.truePeakDb >= -6 && setting.truePeakDb <= 0;
+    })()) &&
     isAudioCleanupState(value.audioCleanup) &&
     isArrayOf(value.backgroundAudioIds, (item): item is string => typeof item === "string") &&
     (value.customBackgroundImportId === null || typeof value.customBackgroundImportId === "string") &&

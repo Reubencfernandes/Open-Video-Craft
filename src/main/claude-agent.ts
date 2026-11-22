@@ -21,6 +21,7 @@ export const CLAUDE_MCP_TOOL_NAMES = [
   "mcp__open-video-craft__query_analysis_silences",
   "mcp__open-video-craft__start_analysis",
   "mcp__open-video-craft__apply_edit_plan",
+  "mcp__open-video-craft__set_youtube_volume",
   "mcp__open-video-craft__undo_agent_edit",
   "mcp__open-video-craft__export_project"
 ] as const;
@@ -34,6 +35,7 @@ const CLAUDE_SYSTEM_PROMPT = [
   "Speed effects apply to video clips only, never to music on an audio lane. Use query_analysis_silences, which reports transcript-derived non-speech gaps; never speed a range that overlaps speech.",
   "For music requests, use generate_music with engine claude-local; it renders locally without a Gemini API key.",
   "For subtitle or transcription requests, call start_analysis, read query_analysis_transcript, and apply replace_subtitles from the local result; never require a cloud API key.",
+  "For YouTube-safe constant loudness across all video clips, call set_youtube_volume; it normalizes the final mix to -14 LUFS and -1 dBTP by default.",
   "For audio fade requests, use set_audio with fadeIn and/or fadeOut in seconds (0–10) on the audio item; this is supported, so never say it cannot be done.",
   "For wind or background noise around speech, use set_audio_cleanup on the relevant audio item with a conservative preset and strength 0–100.",
   "Never add unrelated edits, generic cleanup or extra effects.",

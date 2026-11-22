@@ -137,6 +137,12 @@ export interface AudioLevel {
   fadeOut?: number;
 }
 
+export interface YouTubeVolumeSettings {
+  enabled: boolean;
+  targetLufs: number;
+  truePeakDb: number;
+}
+
 export type AudioLevelState = Record<string, AudioLevel>;
 export interface TrimRange { start: number; end: number }
 
@@ -182,6 +188,8 @@ export interface EditorStateSnapshot {
   cameraFrame: CameraFrame;
   masterVolume: number;
   audioLevels: AudioLevelState;
+  /** Optional YouTube-safe loudness normalization for exported audio. */
+  youtubeVolume?: YouTubeVolumeSettings;
   /** Optional so older schema-v2 projects load without migration. */
   audioCleanup?: AudioCleanupState;
   backgroundAudioIds: string[];
@@ -233,6 +241,7 @@ export type EditorEditOperation =
   | { type: "move_clip"; segmentId: string; timelineStart: number; lane?: number }
   | { type: "sequence_clips"; segmentIds: string[]; start: number; gap: number }
   | { type: "set_audio"; itemId: string; gainDb: number; muted: boolean; fadeIn?: number; fadeOut?: number }
+  | { type: "set_youtube_volume"; enabled: boolean; targetLufs?: number; truePeakDb?: number }
   | { type: "set_audio_cleanup"; itemId: string; preset: AudioCleanupPreset; strength: number }
   | { type: "set_audio_lane"; lane: number; gainDb: number; muted: boolean }
   | { type: "set_master_volume"; volume: number }

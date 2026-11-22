@@ -95,6 +95,12 @@ text must be read with `query_analysis_transcript` and silences with
 `get_analysis` returns the full analysis blob and can exceed the assistant's
 context limit.
 
+### YouTube volume
+
+`set_youtube_volume` enables a YouTube-safe loudness ceiling on the final
+export (-14 LUFS integrated, -1 dBTP true peak by default). It keeps playback
+level constant across all video clips instead of relying on per-clip gains.
+
 ### Audio clip fades
 
 `set_audio` accepts optional `fadeIn` and `fadeOut` durations in seconds

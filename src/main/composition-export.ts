@@ -140,7 +140,13 @@ export async function exportEditorProjectToPath(input: {
       zoomEffects: input.document.state.zoomEffects,
       speedEffects: input.document.state.speedEffects,
       textOverlays: exportTextOverlays,
-      background: background ? { imagePath: background.imagePath } : undefined
+      background: background ? { imagePath: background.imagePath } : undefined,
+      youtubeVolume: input.document.state.youtubeVolume?.enabled
+        ? {
+            targetLufs: input.document.state.youtubeVolume.targetLufs,
+            truePeakDb: input.document.state.youtubeVolume.truePeakDb
+          }
+        : undefined
     }, input.control);
     exportCompleted = true;
   } finally {

@@ -41,7 +41,7 @@ function assertScopedProject(projectId: string | undefined): string | undefined 
 
 const server = new McpServer(
   { name: "open-video-craft", version: serverVersion },
-  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Read transcripts only through query_analysis_transcript and non-speech gaps only through query_analysis_silences; get_analysis returns a large blob for status and fingerprint. Speed effects apply to video clips only, never to music on an audio lane. For music requests, use generate_music with engine claude-local, which renders locally without an API key. For topic callouts, use bounded transcript excerpts to choose timestamps and call set_text_overlay with title and box style. For audio fade requests, use set_audio with optional fadeIn/fadeOut seconds (0–10) on the audio item; fades are supported. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a speech-preserving local filter applied in preview and export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
+  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Read transcripts only through query_analysis_transcript and non-speech gaps only through query_analysis_silences; get_analysis returns a large blob for status and fingerprint. Speed effects apply to video clips only, never to music on an audio lane. For a constant YouTube-safe output level across all video clips, call set_youtube_volume; it normalizes the final mix to -14 LUFS and -1 dBTP by default. For music requests, use generate_music with engine claude-local, which renders locally without an API key. For topic callouts, use bounded transcript excerpts to choose timestamps and call set_text_overlay with title and box style. For audio fade requests, use set_audio with optional fadeIn/fadeOut seconds (0–10) on the audio item; fades are supported. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a speech-preserving local filter applied in preview and export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
 );
 
 const projectIdSchema = z.string().min(1).max(128).optional().describe("Project ID. Omit to use the open or most recent project.");
@@ -178,6 +178,34 @@ async function loadAnalysisResult(projectId: string | undefined, jobId: string |
   const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
   return await readCachedAnalysis(project.rootPath) ?? { status: "not-started" };
 }
+
+server.registerTool("set_youtube_volume", {
+  title: "Normalize volume for YouTube",
+  description: "Set a constant YouTube-safe loudness ceiling for exported audio (-14 LUFS, -1 dBTP by default), applied to the final mix so every video clip stays at the same level and YouTube does not lower it.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    enabled: z.boolean().describe("Enable or disable YouTube loudness normalization."),
+    targetLufs: z.number().min(-24).max(-9).optional().describe("Integrated loudness target; default -14 LUFS."),
+    truePeakDb: z.number().min(-6).max(0).optional().describe("True-peak ceiling; default -1 dBTP.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true }
+}, async ({ projectId, enabled, targetLufs, truePeakDb }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const document = await readEditorDocument(project.rootPath);
+    if (!document) throw new Error("The project has no saved editor state.");
+    const operation = sharedOperationSchema.parse({
+      type: "set_youtube_volume", enabled, targetLufs, truePeakDb
+    });
+    const result = await applyAgentEdit({
+      rootPath: project.rootPath,
+      baseRevision: document.revision,
+      summary: enabled ? "Enable YouTube-safe volume normalization." : "Disable YouTube-safe volume normalization.",
+      operations: [operation]
+    });
+    return success(toRecord(result));
+  } catch (error) { return failure(error); }
+});
 
 const operationSchema = sharedOperationSchema;
 
@@ -371,6 +399,7 @@ function operationAction(operation: EditorEditOperation): EditAction {
     case "sequence_clips":
       return "restructure";
     case "set_audio":
+    case "set_youtube_volume":
     case "set_audio_cleanup":
     case "set_audio_lane":
     case "set_master_volume":

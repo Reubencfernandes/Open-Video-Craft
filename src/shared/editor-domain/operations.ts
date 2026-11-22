@@ -119,6 +119,15 @@ export function applyEditorOperations(
         };
         break;
       }
+      case "set_youtube_volume": {
+        const previous = next.youtubeVolume ?? { enabled: false, targetLufs: -14, truePeakDb: -1 };
+        next.youtubeVolume = {
+          enabled: operation.enabled,
+          targetLufs: operation.targetLufs ?? previous.targetLufs,
+          truePeakDb: operation.truePeakDb ?? previous.truePeakDb
+        };
+        break;
+      }
       case "set_audio_cleanup": {
         next.audioCleanup = {
           ...(next.audioCleanup ?? {}),

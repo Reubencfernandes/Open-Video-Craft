@@ -58,7 +58,7 @@ try {
   }
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name);
-  for (const required of ["list_projects", "inspect_project", "start_analysis", "get_analysis", "query_analysis_transcript", "query_analysis_silences", "apply_edit_plan", "undo_agent_edit", "export_project"]) {
+  for (const required of ["list_projects", "inspect_project", "start_analysis", "get_analysis", "query_analysis_transcript", "query_analysis_silences", "set_youtube_volume", "apply_edit_plan", "undo_agent_edit", "export_project"]) {
     if (!names.includes(required)) throw new Error(`Missing MCP tool: ${required}`);
   }
   const inspect = await client.callTool({ name: "inspect_project", arguments: { projectId: project.id } });

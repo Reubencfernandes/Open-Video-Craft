@@ -130,6 +130,7 @@ export interface TimelineCompositionJob {
   speedEffects?: TimelineCompositionSpeedEffect[];
   textOverlays?: TimelineCompositionTextOverlay[];
   background?: { imagePath: string };
+  youtubeVolume?: { targetLufs: number; truePeakDb: number };
 }
 
 type CompositionPiece = {
@@ -486,8 +487,17 @@ export async function exportTimelineComposition(
     filters.push(`[amix]${trimAudioFilter}[aout]`);
   }
 
+  let audioOutputLabel = "aout";
+  if (job.youtubeVolume && (hasSpeedAudio || hasConstantAudio)) {
+    const normalized = "aout-youtube";
+    filters.push(
+      `[aout]loudnorm=I=${formatFfmpegNumber(job.youtubeVolume.targetLufs)}:` +
+      `TP=${formatFfmpegNumber(job.youtubeVolume.truePeakDb)}:LRA=11[${normalized}]`
+    );
+    audioOutputLabel = normalized;
+  }
   args.push("-filter_complex", filters.join(";"), "-map", "[vout]");
-  if (hasSpeedAudio || hasConstantAudio) args.push("-map", "[aout]"); else args.push("-an");
+  if (hasSpeedAudio || hasConstantAudio) args.push("-map", `[${audioOutputLabel}]`); else args.push("-an");
   const speedAudioDuration = speedRegions.reduce(
     (total, region) => total + (region.end - region.start) / region.rate,
     0

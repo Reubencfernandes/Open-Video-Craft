@@ -36,6 +36,11 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("move_clip"), segmentId: z.string(), timelineStart: z.number().nonnegative(), lane: z.number().int().nonnegative().optional() }),
   z.object({ type: z.literal("sequence_clips"), segmentIds: z.array(z.string()).min(1), start: z.number().nonnegative(), gap: z.number().nonnegative() }),
   z.object({ type: z.literal("set_audio"), itemId: z.string(), gainDb: z.number().min(-60).max(12), muted: z.boolean(), fadeIn: z.number().min(0).max(10).optional(), fadeOut: z.number().min(0).max(10).optional() }),
+  z.object({
+    type: z.literal("set_youtube_volume"), enabled: z.boolean(),
+    targetLufs: z.number().min(-24).max(-9).optional(),
+    truePeakDb: z.number().min(-6).max(0).optional()
+  }),
   z.object({ type: z.literal("set_audio_cleanup"), itemId: z.string().min(1).max(128), preset: z.enum(AUDIO_CLEANUP_PRESETS), strength: z.number().min(0).max(100) }),
   z.object({ type: z.literal("set_audio_lane"), lane: z.number().int().nonnegative(), gainDb: z.number().min(-60).max(12), muted: z.boolean() }),
   z.object({ type: z.literal("set_master_volume"), volume: z.number().min(0).max(100) }),
