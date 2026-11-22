@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   applyEditorOperations,
   createDefaultEditorState,
-  parseEditorDocument
+  parseEditorDocument,
+  validateEditorStateSnapshot
 } from "../src/shared/editor-domain";
 import {
   applyAgentEdit,
@@ -18,6 +19,20 @@ import {
 let rootPath: string;
 beforeEach(async () => { rootPath = await fs.mkdtemp(path.join(os.tmpdir(), "ovc-editor-domain-")); });
 afterEach(async () => { await fs.rm(rootPath, { recursive: true, force: true }); });
+
+describe("near-zero clip trimming", () => {
+  it("accepts a 0.01s trim through the public operation pipeline", () => {
+    const state = createDefaultEditorState();
+    state.timelineSegments = [
+      { id: "music-segment", itemId: "music", track: "audio", lane: 0, start: 0, end: 2, sourceStart: 0 }
+    ];
+    const result = applyEditorOperations(state, [
+      { type: "trim_clip", segmentId: "music-segment", timelineEnd: 0.01 }
+    ]);
+    expect(result.state.timelineSegments[0]?.end).toBeCloseTo(0.01, 2);
+    expect(validateEditorStateSnapshot(result.state)).toBe(true);
+  });
+});
 
 describe("editor document migration", () => {
   it("migrates schema v1 without changing the saved snapshot", () => {

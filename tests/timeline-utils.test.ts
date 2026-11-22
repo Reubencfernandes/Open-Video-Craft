@@ -84,6 +84,16 @@ describe("timeline trim and split geometry", () => {
     expect(result[0]?.end).toBeCloseTo(0.01, 2);
   });
 
+  it("keeps a near-zero trim when media metadata resynchronizes", () => {
+    const audio: TimelineSegment = {
+      id: "music", itemId: "music", track: "audio", lane: 0, start: 0, end: 10, sourceStart: 0
+    };
+    const trimmed = trimTimelineSegment([audio], "music", "end", 0.01, new Map([["music", 10]]));
+    const media: EditorMediaItem = { ...item, id: "music", kind: "audio", name: "Music" };
+    const synced = syncTimelineSegments(trimmed, [media], new Map([["music", 10]]), new Set());
+    expect(synced[0]?.end).toBeCloseTo(0.01, 2);
+  });
+
   it("splits the clip under the playhead instead of a stale selected clip", () => {
     const target = findSplittableTimelineSegment(videoSegments, "first", 7.5);
     expect(target?.id).toBe("second");

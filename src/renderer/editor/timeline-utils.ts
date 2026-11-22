@@ -61,15 +61,15 @@ export function syncTimelineSegments(
       if (!itemDuration || !Number.isFinite(itemDuration) || itemDuration <= 0) {
         return { ...segment, lane };
       }
-      const sourceStart = clampNumber(segment.sourceStart, 0, Math.max(0, itemDuration - 0.1));
+      const sourceStart = clampNumber(segment.sourceStart, 0, Math.max(0, itemDuration - 0.01));
       // A clip's timeline length can never exceed the media left after sourceStart,
       // but its end lives in timeline space and may sit well past itemDuration once
       // the clip has been moved, so clamp against start + remaining source, not
       // against the raw media duration.
-      const maxEnd = segment.start + Math.max(0.1, itemDuration - sourceStart);
+      const maxEnd = segment.start + Math.max(0.01, itemDuration - sourceStart);
       const end = segment.pendingDuration
         ? maxEnd
-        : clampNumber(segment.end, segment.start + 0.1, maxEnd);
+        : clampNumber(segment.end, segment.start + 0.01, maxEnd);
 
       return {
         ...segment,
@@ -137,7 +137,7 @@ export function createTimelineMediaClips(
         track: segment.track,
         lane: segment.track === "audio" ? normalizeTimelineLane(segment.lane) : 0,
         start: segment.start,
-        duration: Math.max(0.1, segment.end - segment.start),
+        duration: Math.max(0.01, segment.end - segment.start),
         sourceStart: segment.sourceStart
       } satisfies TimelineMediaClip;
     })

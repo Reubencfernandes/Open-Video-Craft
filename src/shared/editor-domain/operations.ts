@@ -618,7 +618,7 @@ function isProjectLinkedAudioId(itemId: string): boolean {
 }
 
 function shiftSegment(segment: TimelineSegment, delta: number): TimelineSegment {
-  return { ...segment, start: Math.max(0, segment.start + delta), end: Math.max(0.1, segment.end + delta) };
+  return { ...segment, start: Math.max(0, segment.start + delta), end: Math.max(0.01, segment.end + delta) };
 }
 
 function findSegmentIndex(state: EditorStateSnapshot, id: string): number {
@@ -629,7 +629,7 @@ function findSegmentIndex(state: EditorStateSnapshot, id: string): number {
 
 function validateTimeline(segments: TimelineSegment[]): void {
   for (const segment of segments) {
-    if (!isTimelineSegment(segment) || segment.start < 0 || segment.end - segment.start < 0.1) {
+    if (!isTimelineSegment(segment) || segment.start < 0 || segment.end - segment.start < 0.01) {
       throw new Error(`Invalid timeline clip "${segment.id}".`);
     }
   }
