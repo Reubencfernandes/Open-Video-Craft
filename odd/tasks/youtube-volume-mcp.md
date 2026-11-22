@@ -15,10 +15,12 @@ Objective: add an always-available MCP function that sets a YouTube-safe volume 
 - [x] T1 (S1-S3) Add persisted YouTube normalization state and editor operation. Route: inline.
 - [x] T2 (S1, S4) Apply loudness normalization in FFmpeg export. Route: inline.
 - [x] T3 (S1, S2, S5) Add MCP tool, allowlist and instructions. Route: inline.
-- [x] T4 (S1-S6) Verify, commit and rebuild/relaunch the app. Route: inline. Pending final rebuild evidence.
+- [x] T4 (S1-S6) Verify, commit and rebuild/relaunch the app. Route: inline. Final rebuild and relaunch verified.
 
 ## Log
 
 - L1 (user, verbatim): "aggiungi una funzione richiamabil sempre da MCP, che metta un volume massimo per Youtube (in modo che non lo abbassi poi) e che sia costante in tutte le clip video".
 
 - L2 (evidence): `set_youtube_volume` persists a YouTube-safe setting (-14 LUFS, -1 dBTP defaults) and export appends `loudnorm` to the final mixed audio. The tool is in Claude's allowlist, the MCP smoke tool list and the AI instructions.
+
+- L3 (evidence): 529 Vitest tests passed, typecheck, build, MCP smoke and `git diff --check`. Final ad-hoc build relaunched the app as PID `80702`, frontmost with window `Open Video Craft`.
