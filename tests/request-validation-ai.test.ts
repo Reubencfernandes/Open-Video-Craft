@@ -4,6 +4,7 @@ import {
   assertClaudeChatRequest,
   assertMatrixPopupRequest,
   assertMicTranscriptionRequest,
+  assertImportRecordedClipRequest,
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
   assertProviderKeyId,
@@ -53,6 +54,20 @@ describe("assertClaudeChatRequest", () => {
     expect(() => assertClaudeChatRequest({
       projectId: "p", message: "x",
       history: Array.from({ length: 13 }, () => ({ role: "user" as const, text: "x" }))
+    })).toThrow();
+  });
+});
+
+describe("assertImportRecordedClipRequest", () => {
+  it("accepts a recorded clip and rejects bad payloads", () => {
+    expect(() => assertImportRecordedClipRequest({
+      projectId: "project-1", requestId: uuid, name: "clip.webm", data: new ArrayBuffer(32)
+    })).not.toThrow();
+    expect(() => assertImportRecordedClipRequest({
+      projectId: "project-1", requestId: "bad", name: "clip.webm", data: new ArrayBuffer(32)
+    })).toThrow();
+    expect(() => assertImportRecordedClipRequest({
+      projectId: "project-1", requestId: uuid, name: "clip.webm", data: new ArrayBuffer(0)
     })).toThrow();
   });
 });

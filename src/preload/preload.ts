@@ -11,6 +11,7 @@ import type {
   AppInfo,
   AudioCleanupPreviewRequest,
   MicTranscriptionRequest,
+  ImportRecordedClipRequest,
   MicTranscriptionResult,
   AudioCleanupPreviewResult,
   BenchSnapshot,
@@ -204,6 +205,8 @@ const api = {
     openMain: (): Promise<boolean> => ipcRenderer.invoke("windows:open-main")
   },
   editor: {
+    importRecordedClip: (request: ImportRecordedClipRequest): Promise<ImportedMediaFile[]> =>
+      ipcRenderer.invoke("editor:import-recorded-clip", request),
     importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media"),
     importMediaPaths: (filePaths: string[]): Promise<ImportedMediaFile[]> => {
       const grantedPaths = filePaths.filter((filePath) => {

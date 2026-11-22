@@ -71,6 +71,7 @@ import {
 } from "./ffmpeg";
 import { exportEditorVideo } from "./editor-export";
 import { transcribeAudio } from "./editor-analysis";
+import { resolveContainedProjectPath } from "./project-containment";
 import { resolveArnndnModelPath } from "./audio-model-path";
 import { buildAudioCleanupFilter } from "../shared/editor-domain";
 import { ExportJobRegistry } from "./export-jobs";
@@ -81,6 +82,7 @@ import { ProviderKeysManager } from "./provider-keys";
 import {
   assertAudioCleanupPreviewRequest,
   assertMicTranscriptionRequest,
+  assertImportRecordedClipRequest,
   assertClaudeChatRequest,
   assertExportVideoRequest,
   assertGeminiChatSendRequest,
@@ -1080,6 +1082,22 @@ function registerIpc(): void {
       }
     }
   );
+  ipcMain.handle("editor:import-recorded-clip", async (_event, request: unknown) => {
+    assertImportRecordedClipRequest(request);
+    const project = projectStore.getProject(request.projectId);
+    if (!project) throw new Error("The project is no longer open.");
+    const filePath = resolveContainedProjectPath(
+      project.rootPath, `imports/recorded-${request.requestId}.webm`
+    );
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, Buffer.from(new Uint8Array(request.data)));
+    return importMediaFromPaths(
+      [filePath],
+      (id, resolvedPath) => importedMediaCache.set(id, resolvedPath),
+      getDialogParentWindow()
+    );
+  });
+
   ipcMain.handle("audio:transcribe-mic", async (_event, request: unknown) => {
     assertMicTranscriptionRequest(request);
     const inputPath = path.join(os.tmpdir(), `ovc-mic-${request.requestId}.webm`);

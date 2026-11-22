@@ -8,6 +8,7 @@ import type {
   ClaudeChatTurn,
   AudioCleanupPreviewRequest,
   MicTranscriptionRequest,
+  ImportRecordedClipRequest,
   DeviceSelection,
   ExportVideoRequest,
   GeminiChatSendRequest,
@@ -371,5 +372,22 @@ export function assertMicTranscriptionRequest(
     request.audio.byteLength === 0 || request.audio.byteLength > 16 * 1024 * 1024
   ) {
     throw new Error("Invalid microphone transcription request.");
+  }
+}
+
+
+export function assertImportRecordedClipRequest(
+  value: unknown
+): asserts value is ImportRecordedClipRequest {
+  const request = value as Partial<ImportRecordedClipRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    !isUuid(request.requestId) ||
+    !isNonEmptyBoundedString(request.name, 200) ||
+    !(request.data instanceof ArrayBuffer) ||
+    request.data.byteLength === 0 || request.data.byteLength > 256 * 1024 * 1024
+  ) {
+    throw new Error("Invalid recorded clip import request.");
   }
 }

@@ -36,6 +36,7 @@ import { useEditorDerivedData } from "./editor/useEditorDerivedData";
 import { useEditorExport } from "./editor/useEditorExport";
 import { useEditorMediaActions } from "./editor/useEditorMediaActions";
 import { useClaudeChat } from "./editor/useClaudeChat";
+import { useProjectClipRecorder } from "./editor/useProjectClipRecorder";
 import { useGeminiChat } from "./editor/useGeminiChat";
 import type { AssistantProvider } from "./editor/panels/AssistantPanel";
 import { useMusicGeneration } from "./editor/useMusicGeneration";
@@ -488,6 +489,13 @@ export function EditorView() {
     setTextOverlays((current) => current.filter((overlay) => overlay.id !== id));
     setSelectedTextOverlayId((current) => current === id ? null : current);
   }
+
+  const projectRecorder = useProjectClipRecorder({
+    projectId,
+    onImported: (files) => {
+      ingestImportedFiles(files, { addToTimeline: true, timelineStart: currentTimeRef.current });
+    }
+  });
 
   const {
     audioElsRef,
@@ -979,6 +987,9 @@ export function EditorView() {
                     selectedItemId={selectedItem?.id ?? null}
                     onImport={() => void importMedia()}
                     onImportPaths={(filePaths) => void importMediaFromPaths(filePaths)}
+                    onRecordAudio={() => void (projectRecorder.kind === "audio" ? projectRecorder.stop() : projectRecorder.start("audio"))}
+                    onRecordVideo={() => void (projectRecorder.kind === "video" ? projectRecorder.stop() : projectRecorder.start("video"))}
+                    recordingKind={projectRecorder.kind}
                     onTabChange={setActivePanel}
                     onSelectItem={selectTimelineItem}
                     onItemDuration={updateMediaDuration}

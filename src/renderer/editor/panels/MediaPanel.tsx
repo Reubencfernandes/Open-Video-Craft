@@ -3,7 +3,7 @@
  * asset grid with a tile-size footer.
  */
 import { useMemo, useState, type DragEvent } from "react";
-import { Plus, Search, Upload, X } from "lucide-react";
+import { Mic, Plus, Search, Upload, Video, X } from "lucide-react";
 import { AssetCard } from "../AssetCard";
 import { mediaDragType } from "../types";
 import type { EditorMediaItem, MediaPanel as MediaPanelTab } from "../types";
@@ -32,6 +32,9 @@ export function MediaPanel(props: {
   selectedItemId: string | null;
   onImport: () => void;
   onImportPaths: (filePaths: string[]) => void;
+  onRecordAudio: () => void;
+  onRecordVideo: () => void;
+  recordingKind: "audio" | "video" | null;
   onTabChange: (tab: MediaPanelTab) => void;
   onSelectItem: (itemId: string) => void;
   onItemDuration: (itemId: string, duration: number | null) => void;
@@ -81,6 +84,24 @@ export function MediaPanel(props: {
       }}
     >
       <div className="flex flex-none items-center justify-end gap-1 px-0.5">
+        <button
+          className={`grid size-8 place-items-center rounded-lg transition hover:bg-white/[0.08] ${props.recordingKind === "audio" ? "bg-rose-500/20 text-rose-200" : "text-neutral-300 hover:text-white"}`}
+          type="button"
+          title={props.recordingKind === "audio" ? "Stop audio recording" : "Record microphone clip"}
+          aria-label={props.recordingKind === "audio" ? "Stop audio recording" : "Record microphone clip"}
+          onClick={props.onRecordAudio}
+        >
+          <Mic size={15} />
+        </button>
+        <button
+          className={`grid size-8 place-items-center rounded-lg transition hover:bg-white/[0.08] ${props.recordingKind === "video" ? "bg-rose-500/20 text-rose-200" : "text-neutral-300 hover:text-white"}`}
+          type="button"
+          title={props.recordingKind === "video" ? "Stop video recording" : "Record camera and microphone clip"}
+          aria-label={props.recordingKind === "video" ? "Stop video recording" : "Record camera clip"}
+          onClick={props.onRecordVideo}
+        >
+          <Video size={15} />
+        </button>
         <button
           className="grid size-8 place-items-center rounded-lg text-neutral-300 transition hover:bg-white/[0.08] hover:text-white"
           type="button"
