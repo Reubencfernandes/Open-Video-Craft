@@ -3,7 +3,7 @@
  */
 import type { SpeedEffect, SpeedRate } from "./types";
 
-export const speedRates = [1, 2, 3, 4, 5] as const satisfies SpeedRate[];
+export const speedRates = [1, 1.25, 1.5, 2, 3, 4, 5] as const satisfies SpeedRate[];
 export const defaultSpeedRate: SpeedRate = 2;
 export const speedMinDurationSeconds = 0.2;
 
