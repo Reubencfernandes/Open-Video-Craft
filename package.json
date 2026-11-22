@@ -50,7 +50,9 @@
     "afterPack": "scripts/after-pack.cjs",
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",
-      "node_modules/onnxruntime-node/**/*"
+      "node_modules/onnxruntime-node/**/*",
+      "node_modules/@img/**/*",
+      "node_modules/sharp/**/*"
     ],
     "electronUpdaterCompatibility": ">=2.16",
     "directories": {
@@ -60,9 +62,7 @@
     "files": [
       "dist-electron/**/*",
       "dist-renderer/**/*",
-      "package.json",
-      "!node_modules/sharp/**/*",
-      "!node_modules/@img/**/*"
+      "package.json"
     ],
     "extraResources": [
       {
@@ -156,7 +156,6 @@
     "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.16",
-    "sharp": "0.35.5",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vite": "^8.1.2",
@@ -174,6 +173,7 @@
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "sharp": "0.35.5",
     "wavesurfer.js": "^7.12.8",
     "zod": "^4.6.7"
   },
