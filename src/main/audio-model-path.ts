@@ -6,6 +6,6 @@ export function resolveArnndnModelPath(
   moduleDirectory: string = __dirname
 ): string {
   return resourcesPath
-    ? path.join(resourcesPath, "models", "cb.rnnn")
-    : path.resolve(moduleDirectory, "..", "..", "resources", "models", "cb.rnnn");
+    ? path.join(resourcesPath, "models", "lq.rnnn")
+    : path.resolve(moduleDirectory, "..", "..", "resources", "models", "lq.rnnn");
 }

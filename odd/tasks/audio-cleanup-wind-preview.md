@@ -41,3 +41,5 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 - L11 (evidence): the saved project had cleanup settings on three video item IDs; the first preview implementation rendered 180 MB WAVs for those videos and replaced their `url`, causing blank preview and silence. The fix skips every item whose kind is not `audio`.
 
 - L12 (evidence): the regression fix skips non-audio media when substituting cleanup preview URLs, with `tests/cleanup-preview-media.test.ts` as a guard. Final app relaunch PID `7457`. Stale generated WAVs in userData were left untouched because deletion was blocked by the safety policy.
+
+- L13 (evidence): real clip audio was measured with six arnndn models. `lq.rnnn` reduced the 20–200 Hz wind band most while preserving 300–3400 Hz speech. New wind mapping uses high-pass 90–220 Hz and mix 0.35–1.0; at strength 30 wind fell from -24.72 dB to -28.07 dB versus -25.54 dB with the old model/filter.

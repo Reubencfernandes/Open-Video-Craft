@@ -13,10 +13,10 @@ describe("audio cleanup", () => {
   it("builds a neural wind filter driven by the bundled RNNoise model", () => {
     const filter = buildAudioCleanupFilter(
       { preset: "wind", strength: 50 },
-      "/Models/cb.rnnn"
+      "/Models/lq.rnnn"
     );
-    expect(filter).toContain("highpass=f=100");
-    expect(filter).toContain("arnndn=m='/Models/cb.rnnn':mix=0.75");
+    expect(filter).toContain("highpass=f=155");
+    expect(filter).toContain("arnndn=m='/Models/lq.rnnn':mix=1.00");
     expect(filter).not.toContain("afftdn");
     expect(filter).not.toContain("anlmdn");
     expect(filter).not.toContain("lowpass");

@@ -35,16 +35,16 @@ function escapeFilterValue(value: string): string {
 /** Builds an FFmpeg filter fragment without changing sample rate or layout. */
 export function buildAudioCleanupFilter(
   settings: AudioCleanupSettings,
-  modelPath = "cb.rnnn"
+  modelPath = "lq.rnnn"
 ): string {
   const normalized = normalizeAudioCleanupSettings(settings);
   if (normalized.strength === 0) return "anull";
   const amount = normalized.strength / 100;
   const cutoff = normalized.preset === "wind"
-    ? Math.round(85 + amount * 30)
+    ? Math.round(90 + amount * 130)
     : normalized.preset === "room"
       ? Math.round(50 + amount * 15)
       : 40;
-  const mix = Math.min(1, 0.2 + amount * 1.1).toFixed(2);
+  const mix = Math.min(1, 0.35 + amount * 1.3).toFixed(2);
   return `highpass=f=${cutoff},arnndn=m='${escapeFilterValue(modelPath)}':mix=${mix}`;
 }

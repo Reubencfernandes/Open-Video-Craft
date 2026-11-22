@@ -58,7 +58,7 @@ in the app’s Resources directory.
 
 ### RNNoise model
 
-The bundled `resources/models/cb.rnnn` model is distributed by the
+The bundled `resources/models/cb.rnnn` and `resources/models/lq.rnnn` models are distributed by the
 `richardpl/arnndn-models` repository and was trained by Gregor Richards. The
 model repository states that the model files are not creative works and are not
 subject to copyright: <https://github.com/GregorR/rnnoise-models>.
