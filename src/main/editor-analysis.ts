@@ -214,18 +214,36 @@ async function detectSilence(filePath: string) {
   return starts.map((start, index) => ({ start, end: ends[index] ?? start, duration: Math.max(0, (ends[index] ?? start) - start) })).filter((range) => range.duration > 0);
 }
 
+export function createAnalysisFingerprintInput(
+  project: ProjectFile,
+  editor: EditorProjectStateFile | null,
+  fileSignatures: readonly string[]
+): string {
+  const state = editor?.state;
+  return JSON.stringify({
+    projectId: project.id,
+    files: fileSignatures,
+    timeline: state?.timelineSegments ?? [],
+    speed: state?.speedEffects ?? [],
+    zoom: state?.zoomEffects ?? [],
+    text: state?.textOverlays ?? [],
+    subtitles: state?.subtitles ?? [],
+    trim: state?.trimRange ?? { start: 0, end: 0 }
+  });
+}
+
 async function createFingerprint(rootPath: string, project: ProjectFile, editor: EditorProjectStateFile | null) {
-  const hash = createHash("sha256");
+  const fileSignatures: string[] = [];
   for (const track of Object.values(project.tracks)) {
     if (!track) continue;
     const stats = await fs.stat(resolveContainedProjectPath(rootPath, track.path)).catch(() => null);
-    hash.update(`${track.path}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0};`);
+    fileSignatures.push(`${track.path}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0}`);
   }
   for (const imported of editor?.imports ?? []) {
     const stats = await fs.stat(resolveContainedProjectPath(rootPath, imported.relativePath)).catch(() => null);
-    hash.update(`${imported.relativePath}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0};`);
+    fileSignatures.push(`${imported.relativePath}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0}`);
   }
-  return hash.digest("hex").slice(0, 20);
+  return createHash("sha256").update(createAnalysisFingerprintInput(project, editor, fileSignatures)).digest("hex").slice(0, 20);
 }
 function resolveTrack(rootPath: string, project: ProjectFile, keys: string[]): string | null {
   for (const key of keys) {
