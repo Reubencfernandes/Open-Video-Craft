@@ -8,6 +8,7 @@ Objective: let the owner dictate messages into the AI assistant chat using the m
 - S3 Dictated audio must be transcribed locally through the existing `stt:transcribe` IPC and inserted into the composer text.
 - S4 No cloud API key, audio upload or new dependency may be required.
 - S5 Behavior changes ship with Vitest tests through public interfaces; full verification and an ad-hoc rebuild must pass.
+- S6 User follow-up (verbatim): "Se registro con il mic in chat AI mi da errore: no available backend found...". Renderer-side Whisper worker has no ONNX backend in the packaged app; dictation must use the main-process Whisper path instead.
 
 ## Tasks
 
@@ -22,3 +23,7 @@ Objective: let the owner dictate messages into the AI assistant chat using the m
 - L2 (evidence): the composer now records microphone audio, resamples it to 16 kHz mono and transcribes it with the existing local Whisper worker; text is appended to the draft. 531 Vitest tests passed.
 
 - L3 (evidence): final app rebuilt and relaunched as PID `30279`, frontmost with window `Open Video Craft`.
+
+- L4 (user, verbatim): "Se registro con il mic in chat AI mi da errore: no available backend found...".
+
+- L5 (evidence): the packaged renderer Whisper worker reported "no available backend found". Dictation now posts the recorded Blob to `audio:transcribe-mic`; the main process writes a temporary WebM, calls the already-working local Whisper path and returns text. Renderer resampling code was removed.

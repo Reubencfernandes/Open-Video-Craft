@@ -10,6 +10,8 @@ import type {
   ClaudeChatResult,
   AppInfo,
   AudioCleanupPreviewRequest,
+  MicTranscriptionRequest,
+  MicTranscriptionResult,
   AudioCleanupPreviewResult,
   BenchSnapshot,
   ConfigureAiProviderRequest,
@@ -71,6 +73,8 @@ const api = {
       ipcRenderer.invoke("ai:disconnect", provider)
   },
   audio: {
+    transcribeMic: (request: MicTranscriptionRequest): Promise<MicTranscriptionResult> =>
+      ipcRenderer.invoke("audio:transcribe-mic", request),
     prepareCleanup: (request: AudioCleanupPreviewRequest): Promise<AudioCleanupPreviewResult> =>
       ipcRenderer.invoke("audio:prepare-cleanup", request)
   },

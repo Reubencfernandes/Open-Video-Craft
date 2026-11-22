@@ -7,6 +7,7 @@ import type {
   ClaudeChatRequest,
   ClaudeChatTurn,
   AudioCleanupPreviewRequest,
+  MicTranscriptionRequest,
   DeviceSelection,
   ExportVideoRequest,
   GeminiChatSendRequest,
@@ -355,5 +356,20 @@ export function assertAudioCleanupPreviewRequest(
     request.strength < 0 || request.strength > 100
   ) {
     throw new Error("Invalid audio cleanup preview request.");
+  }
+}
+
+
+export function assertMicTranscriptionRequest(
+  value: unknown
+): asserts value is MicTranscriptionRequest {
+  const request = value as Partial<MicTranscriptionRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    !isUuid(request.requestId) ||
+    !(request.audio instanceof ArrayBuffer) ||
+    request.audio.byteLength === 0 || request.audio.byteLength > 16 * 1024 * 1024
+  ) {
+    throw new Error("Invalid microphone transcription request.");
   }
 }

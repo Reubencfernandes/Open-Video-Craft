@@ -3,6 +3,7 @@ import {
   assertAudioCleanupPreviewRequest,
   assertClaudeChatRequest,
   assertMatrixPopupRequest,
+  assertMicTranscriptionRequest,
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
   assertProviderKeyId,
@@ -53,6 +54,17 @@ describe("assertClaudeChatRequest", () => {
       projectId: "p", message: "x",
       history: Array.from({ length: 13 }, () => ({ role: "user" as const, text: "x" }))
     })).toThrow();
+  });
+});
+
+describe("assertMicTranscriptionRequest", () => {
+  it("accepts microphone audio and rejects bad payloads", () => {
+    expect(() => assertMicTranscriptionRequest({
+      requestId: uuid,
+      audio: new ArrayBuffer(16)
+    })).not.toThrow();
+    expect(() => assertMicTranscriptionRequest({ requestId: "bad", audio: new ArrayBuffer(16) })).toThrow();
+    expect(() => assertMicTranscriptionRequest({ requestId: uuid, audio: new ArrayBuffer(0) })).toThrow();
   });
 });
 

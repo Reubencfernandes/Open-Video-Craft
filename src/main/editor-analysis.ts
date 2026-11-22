@@ -182,7 +182,7 @@ async function runAnalysis(
   job.status = "complete"; job.progress = 100; job.message = "Analysis complete."; job.result = result;
 }
 
-async function transcribeAudio(audioPath: string, userDataPath: string): Promise<{ language: string | null; segments: SubtitleSegment[] }> {
+export async function transcribeAudio(audioPath: string, userDataPath: string): Promise<{ language: string | null; segments: SubtitleSegment[] }> {
   const pcm = await captureStdout(resolveFfmpegPath(), ["-i", audioPath, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "pipe:1"]);
   const floats = new Float32Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
   const transformers = await import("@huggingface/transformers");

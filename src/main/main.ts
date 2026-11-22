@@ -18,6 +18,7 @@ import {
 } from "electron";
 import { execFile } from "node:child_process";
 import { promises as fs, watch as watchFs } from "node:fs";
+import os from "node:os";
 import { promisify } from "node:util";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -69,6 +70,7 @@ import {
   remuxWebm
 } from "./ffmpeg";
 import { exportEditorVideo } from "./editor-export";
+import { transcribeAudio } from "./editor-analysis";
 import { resolveArnndnModelPath } from "./audio-model-path";
 import { buildAudioCleanupFilter } from "../shared/editor-domain";
 import { ExportJobRegistry } from "./export-jobs";
@@ -78,6 +80,7 @@ import { renderLocalMusic } from "./music-local";
 import { ProviderKeysManager } from "./provider-keys";
 import {
   assertAudioCleanupPreviewRequest,
+  assertMicTranscriptionRequest,
   assertClaudeChatRequest,
   assertExportVideoRequest,
   assertGeminiChatSendRequest,
@@ -1077,6 +1080,21 @@ function registerIpc(): void {
       }
     }
   );
+  ipcMain.handle("audio:transcribe-mic", async (_event, request: unknown) => {
+    assertMicTranscriptionRequest(request);
+    const inputPath = path.join(os.tmpdir(), `ovc-mic-${request.requestId}.webm`);
+    await fs.writeFile(inputPath, Buffer.from(new Uint8Array(request.audio)));
+    try {
+      const transcript = await transcribeAudio(inputPath, app.getPath("userData"));
+      return {
+        text: transcript.segments.map((segment) => segment.text).join(" ").replace(/\s+/gu, " ").trim(),
+        language: transcript.language
+      };
+    } finally {
+      await fs.rm(inputPath, { force: true }).catch(() => undefined);
+    }
+  });
+
   ipcMain.handle(
     "audio:prepare-cleanup",
     async (_event, request: unknown) => {

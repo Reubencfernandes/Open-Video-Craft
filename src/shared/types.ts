@@ -382,6 +382,16 @@ export interface ClaudeChatRequest {
   history?: ClaudeChatTurn[];
 }
 
+export interface MicTranscriptionRequest {
+  requestId: string;
+  audio: ArrayBuffer;
+}
+
+export interface MicTranscriptionResult {
+  text: string;
+  language: string | null;
+}
+
 export interface AudioCleanupPreviewRequest {
   jobId: string;
   projectId: string;

@@ -1,7 +1,5 @@
-/** Microphone dictation for the AI composer using the local Whisper worker. */
+/** Microphone dictation for the AI composer using main-process Whisper. */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { resampleMonoTo16k } from "./audio-resample";
-import { transcribeAudioInWorker } from "./subtitle-transcription-client";
 
 export function useAssistantVoiceInput(onTranscript: (text: string) => void) {
   const [recording, setRecording] = useState(false);
@@ -45,24 +43,15 @@ export function useAssistantVoiceInput(onTranscript: (text: string) => void) {
         setRecording(false);
         stopStreams();
         void (async () => {
-          const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
           setTranscribing(true);
           try {
+            const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
             if (blob.size === 0) throw new Error("No audio was recorded.");
-            const context = new window.AudioContext();
-            const decoded = await context.decodeAudioData(await blob.arrayBuffer());
-            const audio = resampleMonoTo16k(decoded);
-            await context.close().catch(() => undefined);
-            const output = await transcribeAudioInWorker({
-              audio,
-              wasmBaseUrl: new URL(".", document.baseURI).href,
-              onProgress: () => undefined,
-              onTranscribing: () => undefined
+            const result = await window.openVideoCraft.audio.transcribeMic({
+              requestId: crypto.randomUUID(),
+              audio: await blob.arrayBuffer()
             });
-            const text = output.text?.trim() ||
-              output.chunks?.map((chunk) => chunk.text).join(" ").trim() ||
-              "";
-            if (text) onTranscript(text);
+            if (result.text) onTranscript(result.text);
             else setError("No speech was detected.");
           } catch (cause) {
             setError(cause instanceof Error ? cause.message : String(cause));
