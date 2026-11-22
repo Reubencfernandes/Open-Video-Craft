@@ -11,11 +11,17 @@ export function useClaudeChat(params: { projectId: string | null }) {
   const activeRequestRef = useRef(0);
   const sendingRef = useRef(false);
   const previousProjectRef = useRef<string | null>(null);
+  const messagesRef = useRef<GeminiChatMessage[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     activeRequestRef.current += 1;
     sendingRef.current = false;
     setMessages([]);
+    messagesRef.current = [];
     setSending(false);
     setStatusMessage(null);
     setChatError(null);
@@ -38,6 +44,7 @@ export function useClaudeChat(params: { projectId: string | null }) {
     if (!projectId || !trimmed || sendingRef.current) return;
     const requestProjectId = projectId;
     const requestId = ++activeRequestRef.current;
+    const history = messagesRef.current.slice(-12).map((item) => ({ role: item.role, text: item.text }));
     sendingRef.current = true;
     setSending(true);
     setChatError(null);
@@ -57,7 +64,8 @@ export function useClaudeChat(params: { projectId: string | null }) {
     try {
       const result = await window.openVideoCraft.claude.send({
         projectId: requestProjectId,
-        message: trimmed
+        message: trimmed,
+        history
       });
       if (activeRequestRef.current === requestId) {
         setMessages((current) => [
@@ -97,6 +105,7 @@ export function useClaudeChat(params: { projectId: string | null }) {
     activeRequestRef.current += 1;
     sendingRef.current = false;
     setMessages([]);
+    messagesRef.current = [];
     setSending(false);
     setStatusMessage(null);
     setChatError(null);

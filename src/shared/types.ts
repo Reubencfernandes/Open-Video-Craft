@@ -371,9 +371,15 @@ export interface MatrixPopupRequest {
   readonly pauseOnHover?: boolean;
 }
 
+export interface ClaudeChatTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
 export interface ClaudeChatRequest {
   projectId: string;
   message: string;
+  history?: ClaudeChatTurn[];
 }
 
 export interface ClaudeChatResult {

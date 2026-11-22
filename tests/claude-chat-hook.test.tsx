@@ -11,7 +11,11 @@ Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", {
 });
 
 type ChatApi = {
-  send: (request: { projectId: string; message: string }) => Promise<{ text: string; provider: "claude-max" }>;
+  send: (request: {
+    projectId: string;
+    message: string;
+    history?: readonly { role: "user" | "assistant"; text: string }[];
+  }) => Promise<{ text: string; provider: "claude-max" }>;
   cancel: (projectId: string) => Promise<boolean>;
 };
 
@@ -85,9 +89,26 @@ describe("useClaudeChat", () => {
     send.mockResolvedValue({ text: "Added three zooms.", provider: "claude-max" });
     const hook = mount("project-1");
     await act(async () => { await hook.send("Add zooms"); });
-    expect(send).toHaveBeenCalledWith({ projectId: "project-1", message: "Add zooms" });
+    expect(send).toHaveBeenCalledWith({ projectId: "project-1", message: "Add zooms", history: [] });
     expect(current().messages.map((message) => message.text)).toEqual(["Add zooms", "Added three zooms."]);
     expect(current().sending).toBe(false);
+  });
+
+  it("sends prior turns with a follow-up message", async () => {
+    send
+      .mockResolvedValueOnce({ text: "Added a blue callout.", provider: "claude-max" })
+      .mockResolvedValueOnce({ text: "Made it rounded.", provider: "claude-max" });
+    const hook = mount("project-1");
+    await act(async () => { await hook.send("Add an informative box"); });
+    await act(async () => { await hook.send("Make it rounded"); });
+    expect(send).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      message: "Make it rounded",
+      history: [
+        { role: "user", text: "Add an informative box" },
+        { role: "assistant", text: "Added a blue callout." }
+      ]
+    });
   });
 
   it("shows an error and removes the optimistic user message on failure", async () => {

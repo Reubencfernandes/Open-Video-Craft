@@ -80,6 +80,34 @@ describe("Claude Max assistant command construction", () => {
     expect(prompt).not.toContain("shell");
   });
 
+  it("includes prior turns so follow-up requests keep the conversation thread", () => {
+    const prompt = buildClaudeAgentPrompt({
+      projectId: "project-1",
+      message: "Now make it rounded.",
+      history: [
+        { role: "user", text: "Add an informative box." },
+        { role: "assistant", text: "Added a blue callout titled TOPIC." }
+      ]
+    });
+    expect(prompt).toContain("Add an informative box.");
+    expect(prompt).toContain("Added a blue callout titled TOPIC.");
+    expect(prompt).toContain("follow-up");
+    expect(prompt.indexOf("Add an informative box.")).toBeLessThan(prompt.indexOf("Now make it rounded."));
+  });
+
+  it("bounds the injected chat history to the last twelve turns", () => {
+    const prompt = buildClaudeAgentPrompt({
+      projectId: "project-1",
+      message: "Current request",
+      history: Array.from({ length: 15 }, (_value, index) => ({
+        role: "user" as const,
+        text: `old-turn-${index}`
+      }))
+    });
+    expect(prompt).not.toContain("old-turn-2\n");
+    expect(prompt).toContain("old-turn-14");
+  });
+
   it("rejects prompts longer than the public request limit", () => {
     const message = "x".repeat(8_001);
     expect(() => buildClaudeAgentArgs({ projectId: "project-1", message })).toThrow("message is too long");

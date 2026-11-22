@@ -80,10 +80,18 @@ export function buildClaudeAgentPrompt(request: ClaudeChatRequest): string {
   if (!message || message.length > 8_000) {
     throw new Error("message is too long");
   }
+  const history = (request.history ?? []).slice(-12);
+  const conversation = history.length > 0
+    ? [
+        "Conversation so far, most recent last; treat the request below as a follow-up:",
+        ...history.map((turn) => `${turn.role}: ${turn.text}`)
+      ].join("\n")
+    : null;
   return [
     `Open Video Craft project ID: ${request.projectId}`,
     "Use the Open Video Craft MCP tools to inspect the project and perform the following user request.",
     "Call inspect_project before any mutation and preserve everything outside the request.",
+    ...(conversation === null ? [] : [conversation]),
     `User request: ${message}`
   ].join("\n");
 }

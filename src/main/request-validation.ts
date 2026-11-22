@@ -5,6 +5,7 @@
  */
 import type {
   ClaudeChatRequest,
+  ClaudeChatTurn,
   DeviceSelection,
   ExportVideoRequest,
   GeminiChatSendRequest,
@@ -303,6 +304,22 @@ export function assertClaudeChatRequest(value: unknown): asserts value is Claude
   ) {
     throw new Error("Invalid Claude chat request.");
   }
+  if (request.history === undefined) return;
+  if (!Array.isArray(request.history) || request.history.length > 12) {
+    throw new Error("Invalid Claude chat request.");
+  }
+  for (const turn of request.history) {
+    if (!isClaudeChatTurn(turn)) throw new Error("Invalid Claude chat request.");
+  }
+}
+
+function isClaudeChatTurn(value: unknown): value is ClaudeChatTurn {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (!("role" in value) || !("text" in value)) return false;
+  const role: unknown = value.role;
+  const text: unknown = value.text;
+  return (role === "user" || role === "assistant") &&
+    typeof text === "string" && text.trim().length > 0 && text.length <= 4_000;
 }
 
 export function assertGeminiChatSendRequest(
