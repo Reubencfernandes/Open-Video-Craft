@@ -41,7 +41,7 @@ function assertScopedProject(projectId: string | undefined): string | undefined 
 
 const server = new McpServer(
   { name: "open-video-craft", version: serverVersion },
-  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Read transcripts only through query_analysis_transcript and silences only through query_analysis_silences; get_analysis returns a large blob for status and fingerprint. Speed effects apply to video clips only, never to music on an audio lane. For music requests, use generate_music with engine claude-local, which renders locally without an API key. For topic callouts, use bounded transcript excerpts to choose timestamps and call set_text_overlay with title and box style. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a speech-preserving local filter applied in preview and export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
+  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Read transcripts only through query_analysis_transcript and non-speech gaps only through query_analysis_silences; get_analysis returns a large blob for status and fingerprint. Speed effects apply to video clips only, never to music on an audio lane. For music requests, use generate_music with engine claude-local, which renders locally without an API key. For topic callouts, use bounded transcript excerpts to choose timestamps and call set_text_overlay with title and box style. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a speech-preserving local filter applied in preview and export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
 );
 
 const projectIdSchema = z.string().min(1).max(128).optional().describe("Project ID. Omit to use the open or most recent project.");
@@ -148,7 +148,7 @@ server.registerTool("query_analysis_transcript", {
 
 server.registerTool("query_analysis_silences", {
   title: "Query silence ranges",
-  description: "Read bounded timestamped silence ranges from the cached analysis. Use the clip's timeline window from inspect_project. Use this instead of get_analysis when choosing speed-up ranges.",
+  description: "Read bounded timestamped non-speech gaps derived from the local transcript. Use the clip's timeline window from inspect_project. Use this instead of get_analysis when choosing speed-up ranges; never speed a range that overlaps speech.",
   inputSchema: {
     projectId: projectIdSchema,
     jobId: z.string().optional(),

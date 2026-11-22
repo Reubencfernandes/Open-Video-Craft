@@ -1,3 +1,4 @@
+import { deriveNonSpeechRanges } from "../shared/analysis/non-speech-ranges";
 /** Local, cacheable media analysis used by the MCP server. */
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -112,11 +113,6 @@ async function runAnalysis(
   ) ?? 0;
   const knownDuration = Math.max(0, (input.project.durationMs ?? 0) / 1000, importedDuration, editorDuration);
 
-  job.progress = 15; job.message = "Detecting silence.";
-  const silenceRanges = audioPath ? await detectSilence(audioPath).catch((error) => {
-    warnings.push(`Silence detection failed: ${messageOf(error)}`); return [];
-  }) : [];
-
   job.progress = 35; job.message = "Creating visual contact sheet.";
   const contactSheets: ProjectAnalysis["contactSheets"] = [];
   if (videoPath) {
@@ -159,6 +155,12 @@ async function runAnalysis(
       segments = transcript.segments; language = transcript.language;
     } catch (error) { warnings.push(`Local transcription failed: ${messageOf(error)}`); }
   }
+
+  job.progress = 65; job.message = "Detecting non-speech gaps.";
+  const energyRanges = audioPath ? await detectSilence(audioPath).catch((error) => {
+    warnings.push(`Silence detection failed: ${messageOf(error)}`); return [];
+  }) : [];
+  const silenceRanges = deriveNonSpeechRanges(segments, knownDuration, energyRanges);
 
   const fillerWords = segments.flatMap((segment) => segment.words ?? [])
     .filter((word) => /^(?:um+|uh+|erm+|hmm+)\b/i.test(word.text.trim()))
