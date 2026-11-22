@@ -199,7 +199,6 @@ export function TimelineClip(props: {
   /** Follows the selected recording picture through edits. */
   linked?: boolean;
   audioLevel?: { volume: number; muted: boolean };
-  onVolumeChange?: (volume: number) => void;
   onSelect: (additive: boolean) => void;
   onTrimPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
@@ -220,73 +219,50 @@ export function TimelineClip(props: {
         : "bg-[#222226]";
 
   return (
-    <div
-      className="absolute inset-y-0"
+    <button
+      className={cx(
+        clipBaseClassName,
+        fillClassName,
+        getClipSelectionClassName(props.selected, props.rangeSelected),
+        !props.selected && props.linked && linkedOutlineClassName
+      )}
+      type="button"
+      data-segment-id={props.clip.id}
+      data-selected={props.selected ? "true" : undefined}
+      data-linked={props.linked ? "true" : undefined}
+      aria-pressed={props.selected}
+      title={props.linked ? `${item.name} · moves with the selected recording` : item.name}
       style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
+      onClick={(event) => {
+        if (isKeyboardActivation(event)) {
+          props.onSelect(event.metaKey || event.ctrlKey || event.shiftKey);
+        }
+      }}
+      onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
     >
-      <button
-        className={cx(
-          clipBaseClassName,
-          fillClassName,
-          getClipSelectionClassName(props.selected, props.rangeSelected),
-          !props.selected && props.linked && linkedOutlineClassName
-        )}
-        type="button"
-        data-segment-id={props.clip.id}
-        data-selected={props.selected ? "true" : undefined}
-        data-linked={props.linked ? "true" : undefined}
-        aria-pressed={props.selected}
-        title={props.linked ? `${item.name} · moves with the selected recording` : item.name}
-        onClick={(event) => {
-          if (isKeyboardActivation(event)) {
-            props.onSelect(event.metaKey || event.ctrlKey || event.shiftKey);
-          }
-        }}
-        onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
-      >
-        {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}
-        {item.kind === "audio" ? (
-          <BezierAudioWaveform
-            id={props.clip.id}
-            name={item.name}
-            volume={props.audioLevel?.volume ?? 100}
-            muted={props.audioLevel?.muted ?? false}
-          />
-        ) : null}
-        {item.kind === "audio" ? (
-          props.linked ? (
-            <Link2 className="relative z-[2] flex-none" size={13} aria-label="Linked" />
-          ) : (
-            <Music2 className="relative z-[2] flex-none" size={13} />
-          )
-        ) : null}
-        <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
-        <ClipTrimEdges
-          onTrimPointerDown={(event, edge) => props.onTrimPointerDown(event, props.clip.id, edge)}
-          onPointerMove={props.onInteractionPointerMove}
-          onPointerUp={props.onInteractionPointerUp}
+      {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}
+      {item.kind === "audio" ? (
+        <BezierAudioWaveform
+          id={props.clip.id}
+          name={item.name}
+          volume={props.audioLevel?.volume ?? 100}
+          muted={props.audioLevel?.muted ?? false}
         />
-      </button>
-      {props.onVolumeChange ? (
-        <div
-          className="absolute right-1 top-1 z-[6] w-12"
-          data-timeline-clip-volume
-          onPointerDown={(event) => event.stopPropagation()}
-          onPointerMove={(event) => event.stopPropagation()}
-          onPointerUp={(event) => event.stopPropagation()}
-        >
-          <input
-            aria-label={`Volume for ${item.name}`}
-            className="h-1 w-full accent-emerald-300"
-            max={100}
-            min={0}
-            type="range"
-            value={props.audioLevel?.volume ?? 100}
-            onChange={(event) => props.onVolumeChange?.(Number(event.target.value))}
-          />
-        </div>
       ) : null}
-    </div>
+      {item.kind === "audio" ? (
+        props.linked ? (
+          <Link2 className="relative z-[2] flex-none" size={13} aria-label="Linked" />
+        ) : (
+          <Music2 className="relative z-[2] flex-none" size={13} />
+        )
+      ) : null}
+      <strong className="relative z-[2] min-w-0 truncate">{item.name}</strong>
+      <ClipTrimEdges
+        onTrimPointerDown={(event, edge) => props.onTrimPointerDown(event, props.clip.id, edge)}
+        onPointerMove={props.onInteractionPointerMove}
+        onPointerUp={props.onInteractionPointerUp}
+      />
+    </button>
   );
 }
 

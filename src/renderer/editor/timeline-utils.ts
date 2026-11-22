@@ -427,6 +427,29 @@ export function moveTimelineSegment(
   );
 }
 
+/** Resolve the real start for a newly inserted clip before it is committed. */
+export function getSnappedInsertStart(
+  segments: readonly TimelineSegment[],
+  track: TimelineTrackKind,
+  rawStart: number,
+  length: number,
+  timelineDuration: number
+): number {
+  const draft: TimelineSegment = {
+    id: "__insert-preview__",
+    itemId: "__insert-preview__",
+    track,
+    lane: 0,
+    start: Math.max(0, rawStart),
+    end: Math.max(0, rawStart) + Math.max(0.01, length),
+    sourceStart: 0
+  };
+  const moved = moveTimelineSegment(
+    [...segments, draft], draft.id, draft.start, timelineDuration
+  ).find((segment) => segment.id === draft.id);
+  return moved?.start ?? draft.start;
+}
+
 /**
  * Move a media-clip selection as one rigid group. The shared delta preserves
  * spacing and source offsets, snaps any selected edge to nearby cuts/playhead,

@@ -182,6 +182,8 @@ export function TimelineContextMenuView(props: {
   y: number;
   canSplit: boolean;
   canDelete: boolean;
+  volume?: number;
+  onVolumeChange?: (volume: number) => void;
   onSplit: () => void;
   onDelete: () => void;
 }) {
@@ -194,6 +196,23 @@ export function TimelineContextMenuView(props: {
       style={{ left: props.x, top: props.y }}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      {props.onVolumeChange ? (
+        <label className="grid gap-1 border-b border-white/10 px-2 py-2 text-[0.68rem] font-bold text-neutral-300">
+          <span className="flex items-center justify-between gap-2">
+            Clip volume
+            <span className="text-emerald-200">{Math.round(props.volume ?? 100)}%</span>
+          </span>
+          <input
+            aria-label="Clip volume"
+            className="w-40 accent-emerald-300"
+            max={100}
+            min={0}
+            type="range"
+            value={props.volume ?? 100}
+            onChange={(event) => props.onVolumeChange?.(Number(event.target.value))}
+          />
+        </label>
+      ) : null}
       <button type="button" className={itemClassName} disabled={!props.canSplit} onClick={props.onSplit}>
         <Scissors size={14} />
         Split

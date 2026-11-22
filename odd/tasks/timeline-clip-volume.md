@@ -17,3 +17,5 @@ Objective: let the owner change the volume of a clip directly on the timeline, f
 ## Log
 
 - L1 (user, verbatim): "devo poter cambiare il volume di una clip audio o video direttamente dalla timeline".
+
+- L2 (follow-up): the inline clip slider covered clip previews and duration. Volume now lives in the timeline right-click menu, and new video/audio drops use `getSnappedInsertStart` with a visible drop guide snapped to existing clip edges.

@@ -40,6 +40,7 @@ type TimelineTracksProps = {
   transitions: ClipTransition[];
   transitionBoundaries: TimelineTransitionBoundary[];
   transitionDropKey: string | null;
+  dropGuideTime?: number | null;
   subtitles: SubtitleSegment[];
   subtitleProcessing?: boolean;
   subtitleProcessingRanges?: SubtitleActivityRange[];
@@ -108,6 +109,9 @@ export function TimelineTracks(props: TimelineTracksProps) {
   const rangeSelectionSettled = Boolean(
     props.rangeSelection && !props.rangeSelection.dragging
   );
+  const dropGuideRatio = props.dropGuideTime === null || props.dropGuideTime === undefined
+    ? 0
+    : Math.max(0, Math.min(1, props.dropGuideTime / Math.max(1, props.renderDuration)));
 
   return (
     <div className="relative grid content-start gap-1" data-timeline-tracks>
@@ -124,8 +128,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
           <TimelineClip
             key={clip.id}
             clip={clip}
-            audioLevel={getEffectiveAudioLevel(props.audioLevels, clip.item.id, null)}
-            onVolumeChange={(volume) => props.onSetAudioLevel(clip.item.id, { volume })}
             timelineDuration={props.renderDuration}
             selected={
               (!props.rangeSelection || rangeSelectionSettled) &&
@@ -141,7 +143,14 @@ export function TimelineTracks(props: TimelineTracksProps) {
             onInteractionPointerUp={props.onInteractionPointerUp}
           />
         ))}
-        {props.transitionDropKey
+        {props.dropGuideTime !== null && props.dropGuideTime !== undefined ? (
+        <div
+          className="pointer-events-none absolute inset-y-0 z-[8] w-px bg-emerald-300/85 shadow-[0_0_12px_rgba(110,231,183,0.7)]"
+          data-timeline-drop-guide
+          style={{ left: `calc(var(--timeline-label-width) + var(--timeline-track-gap) + (100% - var(--timeline-label-width) - var(--timeline-track-gap)) * ${dropGuideRatio})` }}
+        />
+      ) : null}
+      {props.transitionDropKey
           ? props.transitionBoundaries.map((boundary) => (
               <TimelineTransitionDropTarget
                 key={boundary.key}
@@ -208,7 +217,6 @@ export function TimelineTracks(props: TimelineTracksProps) {
                   clip.item.id,
                   track.lane
                 )}
-                onVolumeChange={(volume) => props.onSetAudioLevel(clip.item.id, { volume })}
                 timelineDuration={props.renderDuration}
                 selected={
                   (!props.rangeSelection || rangeSelectionSettled) &&

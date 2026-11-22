@@ -3,6 +3,7 @@ import {
   calculateTimelineDuration,
   findSplittableTimelineSegment,
   createTimelineClipStyle,
+  getSnappedInsertStart,
   syncTimelineSegments,
   resolveAudioLane,
   trimTimelineSegment
@@ -18,6 +19,13 @@ const videoSegments: TimelineSegment[] = [
 
 describe("timeline trim and split geometry", () => {
   const item: EditorMediaItem = { id: "video-a", name: "A", url: "a.mp4", kind: "video", origin: "imported", track: "imported", duration: 60 };
+
+  it("snaps a newly inserted video clip to the end of the last clip", () => {
+    const existing: TimelineSegment[] = [
+      { id: "first", itemId: "video-a", track: "video", lane: 0, start: 0, end: 10, sourceStart: 0 }
+    ];
+    expect(getSnappedInsertStart(existing, "video", 5, 5, 20)).toBe(10);
+  });
 
   it("renders a near-zero clip with a pixel-sized minimum width", () => {
     const style = createTimelineClipStyle(0, 0.01, 1_000);

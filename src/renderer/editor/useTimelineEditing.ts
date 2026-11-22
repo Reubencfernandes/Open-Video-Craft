@@ -22,6 +22,7 @@ import type {
 import {
   areTimelineSegmentsEqual,
   getTimelineMediaDuration,
+  getSnappedInsertStart,
   getTimelineTrackKind,
   moveTimelineSegment,
   resolveAudioLane,
@@ -427,7 +428,9 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     const knownDuration = mediaDurationById.get(item.id) ??
       getTimelineMediaDuration(item, activeDuration, selectedTimelineItemId);
     const itemDuration = knownDuration > 0 ? knownDuration : 1;
-    const start = Math.max(0, dropTime);
+    const start = getSnappedInsertStart(
+      timelineSegments, track, dropTime, itemDuration, timelineRenderDuration
+    );
     const end = start + itemDuration;
     // The "itemId:segment-" id format is load-bearing: selection code maps a
     // segment back to its media item by splitting on ":segment-".
