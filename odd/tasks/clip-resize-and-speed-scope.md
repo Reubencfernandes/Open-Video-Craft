@@ -15,7 +15,7 @@ Objective: allow timeline clips (video and AI-generated audio/music) to be resiz
 
 - [x] T1 (S1, S2, S4, S6) Find the minimum-duration clamp for timeline clip trimming and lower it for all clip kinds. Route: inline.
 - [x] T2 (S3, S5, S6) Exclude audio-track clips from playback and export speed processing. Route: inline.
-- [x] T3 (S1-S7) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Pending final rebuild/relaunch evidence.
+- [x] T3 (S1-S7) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Final rebuild and relaunch verified.
 
 ## Log
 
@@ -25,3 +25,6 @@ Objective: allow timeline clips (video and AI-generated audio/music) to be resiz
 
 - L4 (evidence): UI trimming used a 0.15s floor and the `trim_clip` operation used 0.1s; both are now 0.01s. `tests/timeline-utils.test.ts` verifies a 0.01s end trim on an audio clip.
 - L5 (evidence): export mixes speedable picture audio and real-time audio-lane music on separate branches; `tests/composition-export.test.ts` verifies a 2s music clip is not cut to the 1s sped-up video duration. Playback uses `getPlaybackRateForTrack` so audio clips stay at rate 1.
+
+- L6 (evidence): final ad-hoc arm64 rebuild produced `release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg`; the app relaunched as PID `62170`, frontmost, with window `Open Video Craft`.
+- L7 (evidence): 512 Vitest tests passed, plus typecheck, build, MCP smoke, FFmpeg verification, audit high and `git diff --check`.
