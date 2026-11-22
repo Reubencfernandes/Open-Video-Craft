@@ -22,3 +22,5 @@ Objective: let the owner set fade-in and fade-out on audio clips directly from t
 
 - L2 (evidence): fades are stored as optional `fadeIn`/`fadeOut` on audio levels (0–30s), preserving legacy projects. The right-click clip menu exposes 0–10s sliders. Export applies `afade`; preview schedules the matching Web Audio gain envelope.
 - L3 (evidence): `tests/audio-fades.test.ts`, `tests/composition-export.test.ts`, `tests/editor-audio-meter.test.ts` and `tests/timeline-volume-control.test.tsx` cover persistence, export RMS attenuation and preview scheduling. 522 Vitest tests passed.
+
+- L4 (evidence): 525 Vitest tests passed before the final ad-hoc rebuild; app relaunched as PID `58405`, frontmost with window `Open Video Craft`.

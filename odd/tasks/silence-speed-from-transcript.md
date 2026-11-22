@@ -20,3 +20,5 @@ Objective: make "speed up silences" act only on moments where the owner is not s
 - L1 (user, verbatim): "La velocizzazione dei momenti morti non va bene per nulla, velocizza totalmente a caso, dovrebbe farlo nei punti in cui non parlo".
 
 - L2 (evidence): `deriveNonSpeechRanges` now uses Whisper timestamp gaps as the primary source for `silenceRanges`; energy-based `silencedetect` remains only a fallback when no transcript exists. Assistant instructions explicitly forbid speeding ranges that overlap speech.
+
+- L3 (evidence): final ad-hoc rebuild relaunched the app as PID `58405`. New analyses now expose transcript-derived non-speech gaps; energy detection is only a fallback.
