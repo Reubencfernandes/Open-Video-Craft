@@ -17,7 +17,7 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 - [x] T2 (S2, S4) Replace the wind/room filter chain with a speech-preserving local filter and regression-test it. Route: inline.
 - [x] T3 (S1, S3) Apply audible cleanup in preview through the existing audio graph. Route: inline.
 - [x] T4 (S1-S5) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Final rebuild and relaunch verified.
-- [ ] T5 (S6, S7) Replace static filters with local arnndn and render preview audio with the same engine. Route: inline.
+- [x] T5 (S6, S7) Replace static filters with local arnndn and render preview audio with the same engine. Route: inline.
 
 ## Log
 
@@ -31,3 +31,7 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 
 - L6 (user, verbatim): "Con la cancellazione del rumore non ci siamo proprio, deve farlo dinamicamente con l'AI magari, il rumore del vento non lo toglie proprio e anzi ora in preview se lo applico, sento un altro rumore super fastidioso che si aggiunge al vento".
 - L7 (decision): use FFmpeg `arnndn` with the public `cb.rnnn` RNNoise model (public-domain model data per GregorR/rnnoise-models) and render a local WAV for preview so preview and export share one engine.
+
+- L8 (evidence): `arnndn` with `cb.rnnn` at strength 50 reduced hiss by ~5.3 dB more than the static chain, while keeping voice-band loss around 1.5 dB; GPU/static Web Audio filters were removed so preview cannot add synthesis artifacts.
+- L9 (evidence): cleanup preview now runs `audio:prepare-cleanup` in the main process, renders a WAV with the same `buildAudioCleanupFilter` used by export, and registers it for the renderer's media URL. `tests/audio-cleanup.test.ts`, `audio-model-path.test.ts`, `composition-export.test.ts`, `editor-audio-meter.test.ts` and request validation cover the path.
+- L10 (evidence): 513 Vitest tests passed, typecheck, build, MCP smoke, FFmpeg verification, audit high and `git diff --check`; final ad-hoc build bundled `Resources/models/cb.rnnn` and the app relaunched as PID `13244`, frontmost.
