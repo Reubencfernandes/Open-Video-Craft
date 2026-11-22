@@ -289,7 +289,7 @@ export function EditorView() {
     for (const [itemId, settings] of Object.entries(audioCleanup)) {
       if (!settings || settings.strength === 0) continue;
       const mediaItem = importedMedia.find((item) => item.id === itemId);
-      if (mediaItem?.kind !== "audio") continue;
+      if (!mediaItem) continue;
       const key = `${settings.preset}:${settings.strength}`;
       if (cleanupPreviews[itemId]?.key === key) continue;
       const jobId = crypto.randomUUID();
@@ -309,7 +309,6 @@ export function EditorView() {
     () => applyCleanupPreviewUrls(importedMedia, cleanupPreviews),
     [importedMedia, cleanupPreviews]
   );
-
   useEffect(() => {
     const customBackground = customBackgroundImportId
       ? importedMedia.find((item) => item.id === customBackgroundImportId)
@@ -433,6 +432,18 @@ export function EditorView() {
     zoomPreviewTime
   });
 
+  const cleanupAudioUrls = useMemo(
+    () => Object.fromEntries(Object.entries(cleanupPreviews).map(([id, preview]) => [id, preview.url])),
+    [cleanupPreviews]
+  );
+  const cleanupVideoClips = useMemo(
+    () => videoTimelineClips.flatMap((clip) => {
+      const url = cleanupAudioUrls[clip.item.id];
+      return url ? [{ id: clip.id, url }] : [];
+    }),
+    [videoTimelineClips, cleanupAudioUrls]
+  );
+
   /** Creates a text overlay where the panel's text tile was dropped on the
    * timeline. Animation is opt-in: new text starts with none. */
   function addTextOverlayAt(dropTime: number) {
@@ -497,6 +508,7 @@ export function EditorView() {
     audioLevels,
     audioCleanup,
     audioTimelineClips,
+    cleanupAudioUrls,
     currentTime,
     layoutMode,
     masterVolume,
@@ -1145,6 +1157,7 @@ export function EditorView() {
             mainVideoRef={mainVideoRef}
             cameraRef={cameraRef}
             audioElsRef={audioElsRef}
+            cleanupClips={cleanupVideoClips}
             onScreenEditPointerDown={beginScreenLayoutDrag}
             onCameraEditPointerDown={beginCameraLayoutDrag}
             onMediaReady={() =>

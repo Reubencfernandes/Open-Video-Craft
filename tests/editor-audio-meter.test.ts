@@ -97,6 +97,9 @@ describe("editor AudioMeter cleanup preview", () => {
     expect(events.some((event) => event.type === "set" && event.value === 0 && event.time === 0)).toBe(true);
     expect(events.some((event) => event.type === "ramp" && event.value === 0.8 && event.time === 1)).toBe(true);
     expect(events.some((event) => event.type === "ramp" && event.value === 0 && event.time === 6)).toBe(true);
+    const scheduledEvents = events.length;
+    meter.setElementGain(element, 0.5);
+    expect(context?.gains[1]?.gain.events).toHaveLength(scheduledEvents);
   });
 
   it("keeps the Web Audio graph clean; denoise happens in the rendered source", () => {

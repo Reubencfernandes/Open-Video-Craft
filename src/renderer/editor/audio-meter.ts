@@ -3,6 +3,7 @@ type ElementAudioNodes = {
   source: MediaElementAudioSourceNode;
   gain: GainNode;
   baseVolume: number;
+  envelopeUntil: number;
 };
 
 export class AudioMeter {
@@ -17,7 +18,8 @@ export class AudioMeter {
     const existing = this.elements.get(element);
     if (existing) {
       existing.baseVolume = sanitizeGain(volume);
-      existing.gain.gain.value = existing.baseVolume;
+      const now = this.context?.currentTime ?? 0;
+      if (existing.envelopeUntil <= now) existing.gain.gain.value = existing.baseVolume;
       return true;
     }
 
@@ -31,7 +33,7 @@ export class AudioMeter {
       gain.gain.value = baseVolume;
       source.connect(gain);
       gain.connect(this.masterGain);
-      this.elements.set(element, { source, gain, baseVolume });
+      this.elements.set(element, { source, gain, baseVolume, envelopeUntil: 0 });
       return true;
     } catch {
       return false;
@@ -51,6 +53,7 @@ export class AudioMeter {
     const nodes = this.elements.get(element);
     if (!nodes || !this.context) return false;
     const now = this.context.currentTime;
+    nodes.envelopeUntil = now + Math.max(0.01, duration);
     const gain = nodes.gain.gain;
     gain.cancelScheduledValues(now);
     gain.setValueAtTime(nodes.baseVolume, now);

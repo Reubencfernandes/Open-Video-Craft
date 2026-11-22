@@ -67,6 +67,7 @@ export function EditorPreviewPanel(props: {
   mainVideoRef: RefObject<HTMLVideoElement | null>;
   cameraRef: RefObject<HTMLVideoElement | null>;
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
+  cleanupClips?: ReadonlyArray<{ id: string; url: string }>;
   onScreenEditPointerDown: (
     event: ReactPointerEvent<HTMLElement>,
     mode: ScreenLayoutDragMode
@@ -214,7 +215,7 @@ export function EditorPreviewPanel(props: {
         onToggleFullscreen={() => void togglePreviewFullscreen()}
         onSeekFrame={props.onSeekFrame}
       />
-      <TimelineAudioElements clips={props.audioTimelineClips} elementsRef={props.audioElsRef} onMediaDuration={props.onMediaDuration} />
+      <TimelineAudioElements clips={props.audioTimelineClips} cleanupClips={props.cleanupClips} elementsRef={props.audioElsRef} onMediaDuration={props.onMediaDuration} />
     </section>
   );
 }

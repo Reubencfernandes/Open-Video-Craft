@@ -7,11 +7,24 @@ import type { TimelineMediaClip } from "./types";
 
 export function TimelineAudioElements(props: {
   clips: TimelineMediaClip[];
+  cleanupClips?: ReadonlyArray<{ id: string; url: string }>;
   elementsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
   onMediaDuration: (itemId: string, duration: number | null) => void;
 }) {
   return (
     <div className="hidden" aria-hidden="true">
+      {(props.cleanupClips ?? []).map((clip) => (
+        <audio
+          key={`cleanup:${clip.id}`}
+          src={clip.url}
+          crossOrigin="anonymous"
+          preload="metadata"
+          ref={(element) => {
+            if (element) props.elementsRef.current.set(`cleanup:${clip.id}`, element);
+            else props.elementsRef.current.delete(`cleanup:${clip.id}`);
+          }}
+        />
+      ))}
       {props.clips.map((clip) => (
         <audio
           key={clip.id}

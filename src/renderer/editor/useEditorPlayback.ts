@@ -46,6 +46,7 @@ type UseEditorPlaybackParams = {
   activeVideoClip: TimelineMediaClip | null;
   audioLevels: AudioLevelState;
   audioCleanup: AudioCleanupState;
+  cleanupAudioUrls: Readonly<Record<string, string>>;
   audioTimelineClips: TimelineMediaClip[];
   currentTime: number;
   layoutMode: LayoutMode;
@@ -91,6 +92,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     activeVideoClip,
     audioLevels,
     audioCleanup,
+    cleanupAudioUrls,
     audioTimelineClips,
     currentTime,
     layoutMode,
@@ -131,6 +133,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<AudioLevelState>({});
   const audioCleanupRef = useRef<AudioCleanupState>({});
+  const cleanupAudioUrlsRef = useRef<Readonly<Record<string, string>>>({});
   const timelineDurationRef = useRef(0);
   const audioMeterRef = useRef<AudioMeter | null>(null);
   const playbackInteractionRef = useRef(false);
@@ -199,6 +202,10 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   useEffect(() => {
     audioCleanupRef.current = audioCleanup;
   }, [audioCleanup]);
+
+  useEffect(() => {
+    cleanupAudioUrlsRef.current = cleanupAudioUrls;
+  }, [cleanupAudioUrls]);
 
   useEffect(() => {
     timelineDurationRef.current = timelineDuration;
@@ -452,13 +459,31 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       input.pendingSeekKeyRef.current = null;
     }
 
-    input.element.muted = input.muted;
-    if (input.muted) {
+    const cleanupUrl = cleanupAudioUrlsRef.current[input.videoClip.item.id];
+    input.element.muted = input.muted || Boolean(cleanupUrl);
+    if (input.muted || cleanupUrl) {
       audioMeterRef.current?.setElementGain(input.element, 0);
       input.element.volume = 0;
     } else {
       const connected = getAudioMeter().setElementGain(input.element, 1);
       input.element.volume = connected ? 1 : input.volume;
+    }
+    if (cleanupUrl) {
+      const cleanupElement = audioElsRef.current.get(`cleanup:${input.videoClip.id}`);
+      if (cleanupElement) {
+        syncSecondaryMediaElement({
+          element: cleanupElement,
+          clip: input.videoClip,
+          timelineTime: input.timelineTime,
+          isPlaying: input.isPlaying,
+          reason: input.reason,
+          syncKey: `cleanup:${input.videoClip.id}`,
+          clipChanged,
+          volume: input.volume,
+          label: "cleanup audio",
+          useEngine: true
+        });
+      }
     }
     input.element.playbackRate = getPlaybackRateForTrack("video", speedEffectsRef.current, input.timelineTime);
     if (
