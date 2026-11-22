@@ -4,11 +4,12 @@
  * speed, subtitles, transitions) through the same guarded pipeline external
  * AI CLIs use — every applied edit shows an undo chip.
  */
-import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, Loader2, Mic, Send, Sparkles, Trash2, X } from "lucide-react";
 import type { GeminiChatMessage, ProviderKeysView } from "../../../shared/types";
 import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { ChatMessageBubble } from "./assistant/ChatMessageBubble";
+import { useAssistantVoiceInput } from "../useAssistantVoiceInput";
 
 const quickActions = [
   "Add zooms to the important moments",
@@ -37,6 +38,10 @@ export function AssistantPanel(props: {
 }) {
   const [draft, setDraft] = useState("");
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const onVoiceTranscript = useCallback((text: string) => {
+    setDraft((current) => (current.trim() ? `${current.trim()} ${text}` : text));
+  }, []);
+  const voice = useAssistantVoiceInput(onVoiceTranscript);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
@@ -184,6 +189,13 @@ export function AssistantPanel(props: {
         ) : null}
       </div>
 
+      {voice.recording || voice.transcribing || voice.error ? (
+        <div className="flex flex-none items-center gap-2 px-3 pb-1 text-[0.66rem] font-bold text-neutral-400" aria-live="polite">
+          {voice.error ? <span className="text-rose-300">{voice.error}</span> : null}
+          {voice.recording ? <span className="text-emerald-300">Recording microphone…</span> : null}
+          {voice.transcribing ? <span>Transcribing with local Whisper…</span> : null}
+        </div>
+      ) : null}
       <div
         className="flex min-w-0 flex-none items-end gap-2 border-t border-white/[0.06] bg-[#111113] p-3"
         data-assistant-composer
@@ -211,6 +223,16 @@ export function AssistantPanel(props: {
             }
           }}
         />
+        <button
+          aria-label={voice.recording ? "Stop dictation" : "Dictate message"}
+          className="grid size-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/[0.06] text-neutral-100 transition hover:bg-white/[0.11] disabled:cursor-not-allowed disabled:opacity-45"
+          type="button"
+          disabled={props.sending || voice.transcribing || (!isClaude && !hasGeminiKey)}
+          title={voice.recording ? "Stop dictation" : "Dictate message"}
+          onClick={() => (voice.recording ? voice.stop() : void voice.start())}
+        >
+          {voice.transcribing ? <Loader2 className="animate-spin" size={15} /> : <Mic size={15} />}
+        </button>
         <button
           aria-label="Send message"
           className="grid size-10 shrink-0 place-items-center rounded-full bg-white text-black transition hover:bg-neutral-200 disabled:bg-white/[0.07] disabled:text-neutral-600"

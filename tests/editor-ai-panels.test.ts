@@ -105,6 +105,7 @@ describe("editor AI and audio panels", () => {
     expect(musicHtml).toMatch(/<button[^>]*disabled=""/);
     expect(assistantHtml).toContain("Loading Gemini settings…");
     expect(assistantHtml).toMatch(/<textarea[^>]*disabled=""/);
+    expect(assistantHtml).toContain("Dictate message");
   });
 
   it("uses the shared glowing status pill for missing Gemini keys", () => {
