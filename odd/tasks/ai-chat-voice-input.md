@@ -27,3 +27,5 @@ Objective: let the owner dictate messages into the AI assistant chat using the m
 - L4 (user, verbatim): "Se registro con il mic in chat AI mi da errore: no available backend found...".
 
 - L5 (evidence): the packaged renderer Whisper worker reported "no available backend found". Dictation now posts the recorded Blob to `audio:transcribe-mic`; the main process writes a temporary WebM, calls the already-working local Whisper path and returns text. Renderer resampling code was removed.
+
+- L6 (evidence): final app rebuilt and relaunched as PID `74884`, frontmost with window `Open Video Craft`.
