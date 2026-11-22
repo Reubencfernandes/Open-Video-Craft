@@ -13,7 +13,7 @@ Objective: make timeline exports preserve the editor background image and the ex
 
 - [x] T1 (S1-S3) Reproduce the current export from the saved project and confirm which effects are already present. Route: inline.
 - [x] T2 (S2, S4) Pass background selection from `composition-export.ts` into the FFmpeg timeline renderer and composite it behind clips/gaps. Route: inline.
-- [x] T3 (S1-S5) Add regression tests, verify, commit and rebuild/relaunch the app. Route: inline. Pending final app relaunch evidence.
+- [x] T3 (S1-S5) Add regression tests, verify, commit and rebuild/relaunch the app. Route: inline. Final app relaunch verified.
 
 ## Log
 
@@ -23,3 +23,5 @@ Objective: make timeline exports preserve the editor background image and the ex
 
 - L4 (evidence): after wiring the background, the same 20s export window still lasted 18.23s (speed effects preserved) and a side pixel changed from RGB `(0,0,0)` to `(1,59,112)`, matching the custom background image instead of black padding.
 - L5 (evidence): `tests/composition-export.test.ts` now covers both `exportTimelineComposition` with a blue background and the public `exportEditorProjectToPath` path with a saved custom background import. 499 Vitest tests passed, plus typecheck, build, MCP smoke, FFmpeg verification, audit high and `git diff --check`.
+
+- L6 (evidence): final ad-hoc arm64 rebuild produced `release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg`; the app was relaunched as PID `17871`, frontmost, with window `Open Video Craft`.
