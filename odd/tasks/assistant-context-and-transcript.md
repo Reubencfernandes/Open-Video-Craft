@@ -14,7 +14,7 @@ Objective: let the in-app AI assistant read a bounded transcript excerpt instead
 
 - [x] T1 (S1, S3, S5) Add a bounded MCP transcript excerpt tool and update assistant prompts/allowlist. Route: inline. Commit `fa30354`.
 - [x] T2 (S2, S4, S5) Pass bounded chat history from renderer through IPC into each Claude CLI turn. Route: inline. Commit `88043e8`.
-- [x] T3 (S1-S6) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Pending final rebuild launch evidence.
+- [x] T3 (S1-S6) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Final rebuild and launch verified.
 
 ## Log
 
@@ -26,3 +26,6 @@ Objective: let the in-app AI assistant read a bounded transcript excerpt instead
 - L5 (evidence): live follow-up probe built from `buildClaudeAgentArgs` answered `We just discussed Carmela and evangelical dynamics. I made no edits.`, proving prior turns reached the stateless CLI prompt.
 - L6 (decision): the Gemini prompt was left unchanged because its native declaration set does not expose `query_analysis_transcript`; the bounded tool is wired into the provider-neutral MCP server and Claude Max allowlist.
 - L7 (evidence): 103 Vitest files / 493 tests passed, typecheck, build, MCP smoke, FFmpeg verification, audit high and `git diff --check` passed before the final app rebuild.
+
+- L8 (evidence): final ad-hoc rebuild at 14:46 produced `release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg`; the launched app is PID `74609`, frontmost `Open Video Craft`, with window `Open Video Craft`.
+- L9 (evidence): a Claude probe against the registered packaged MCP server returned `{"totalSegments":413,"returned":1,"excerpts":[{"start":0.72,"end":2.38,"text":"Here we come often with Carmela, I"}]}`, confirming the fix is inside the shipped bundle.
