@@ -33,6 +33,7 @@ export function TimelineToolbar(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomChange: (zoom: number) => void;
 }) {
   return (
     <div className="timeline-toolbar flex min-h-11 flex-none items-center justify-between gap-2 border-t border-white/[0.05]">
@@ -73,6 +74,17 @@ export function TimelineToolbar(props: {
         >
           <Minus size={14} />
         </button>
+        <input
+          aria-label="Timeline zoom"
+          className="h-1.5 w-20 cursor-pointer accent-white"
+          type="range"
+          min={1}
+          max={10}
+          step={0.1}
+          value={props.timelineZoom}
+          onChange={(event) => props.onZoomChange(Number(event.target.value))}
+          title={`Timeline zoom ${Math.round(props.timelineZoom * 100)}% (Ctrl/Cmd + wheel also works)`}
+        />
         <span className="min-w-[2.9rem] text-center text-[0.66rem] font-bold tabular-nums">
           {Math.round(props.timelineZoom * 100)}%
         </span>

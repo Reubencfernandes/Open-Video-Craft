@@ -62,6 +62,7 @@ export function Timeline(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomChange: (zoom: number) => void;
   onZoomWheel: (event: ReactWheelEvent<HTMLElement>) => void;
   onRulerPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onRulerPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -369,6 +370,7 @@ export function Timeline(props: {
         onZoomIn={props.onZoomIn}
         onZoomOut={props.onZoomOut}
         onZoomReset={props.onZoomReset}
+        onZoomChange={props.onZoomChange}
       />
 
       {props.contextMenu ? (

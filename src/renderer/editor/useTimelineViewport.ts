@@ -29,6 +29,19 @@ const timelineZoomStep = 1.5;
 const timelineDurationDragSensitivity = 0.004;
 
 /** Smooth wheel/pinch zoom shared by the handler and unit tests. */
+export type TimelineZoomShortcut = "in" | "out" | "fit";
+
+export function getTimelineZoomAfterShortcut(
+  currentZoom: number,
+  shortcut: TimelineZoomShortcut
+): number {
+  if (shortcut === "fit") return minTimelineZoom;
+  const next = shortcut === "in"
+    ? currentZoom * timelineZoomStep
+    : currentZoom / timelineZoomStep;
+  return clampNumber(next, minTimelineZoom, maxTimelineZoom);
+}
+
 export function getTimelineZoomAfterWheel(currentZoom: number, deltaY: number): number {
   const factor = Math.exp(-deltaY * 0.0018);
   return clampNumber(currentZoom * factor, minTimelineZoom, maxTimelineZoom);

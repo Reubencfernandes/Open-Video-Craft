@@ -33,6 +33,7 @@ export function EditorTimelineSection(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomChange: (zoom: number) => void;
   onZoomWheel: (event: ReactWheelEvent<HTMLElement>) => void;
   onRulerPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onRulerPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -138,6 +139,7 @@ export function EditorTimelineSection(props: {
       onZoomIn={props.onZoomIn}
       onZoomOut={props.onZoomOut}
       onZoomReset={props.onZoomReset}
+      onZoomChange={props.onZoomChange}
       onZoomWheel={props.onZoomWheel}
       onRulerPointerDown={props.onRulerPointerDown}
       onRulerPointerMove={props.onRulerPointerMove}
