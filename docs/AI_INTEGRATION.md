@@ -95,6 +95,13 @@ text must be read with `query_analysis_transcript` and silences with
 `get_analysis` returns the full analysis blob and can exceed the assistant's
 context limit.
 
+### Claude Max local music
+
+Music requests through Claude Max use `generate_music` with engine
+`claude-local`. The main process renders a deterministic WAV with a local
+synth, so no Gemini API key, network call or audio upload is required. Lyria
+engines remain available when a Gemini key is configured.
+
 ### Composition export
 
 `src/main/composition-export.ts` converts an editor document into media sources
