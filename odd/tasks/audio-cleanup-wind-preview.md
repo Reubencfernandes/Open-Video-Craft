@@ -14,7 +14,7 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 - [x] T1 (S1, S2) Reproduce the current filter on a synthetic speech+wind signal and identify why it muffles voice and leaves wind. Route: inline.
 - [x] T2 (S2, S4) Replace the wind/room filter chain with a speech-preserving local filter and regression-test it. Route: inline.
 - [x] T3 (S1, S3) Apply audible cleanup in preview through the existing audio graph. Route: inline.
-- [x] T4 (S1-S5) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Pending final rebuild/relaunch evidence.
+- [x] T4 (S1-S5) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Final rebuild and relaunch verified.
 
 ## Log
 
@@ -23,3 +23,5 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 
 - L3 (evidence): on a synthetic speech+wind signal, the old filter lowered the voice band 0.19 dB and the wind band 5.2 dB; the new `highpass + lowshelf + light anlmdn` chain lowered voice 0.93 dB and wind 8.3 dB, avoiding `afftdn` artifacts that muffled speech.
 - L4 (evidence): `AudioMeter` now rebuilds a Web Audio chain (high-pass, low-shelf) when cleanup changes, and `tests/editor-audio-meter.test.ts` verifies both enabled and disabled states.
+
+- L5 (evidence): final ad-hoc arm64 rebuild produced `release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg`; the app relaunched as PID `12061`, frontmost, with window `Open Video Craft`.
