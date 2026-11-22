@@ -15,10 +15,10 @@ describe("audio cleanup", () => {
       { preset: "wind", strength: 50 },
       "/Models/lq.rnnn"
     );
-    expect(filter).toContain("highpass=f=235");
-    expect(filter).toContain("arnndn=m='/Models/lq.rnnn':mix=1.00");
-    expect(filter).toContain("equalizer=f=2500:t=q:w=1:g=4");
-    expect(filter).toContain("acompressor=threshold=-22dB:ratio=4");
+    expect(filter).toContain("highpass=f=170");
+    expect(filter).toContain("arnndn=m='/Models/lq.rnnn':mix=1");
+    expect(filter).toContain("volume=1.22");
+    expect(filter).not.toContain("acompressor");
     expect(filter).not.toContain("afftdn");
     expect(filter).not.toContain("anlmdn");
     expect(filter).not.toContain("lowpass");

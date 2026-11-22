@@ -49,3 +49,5 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 - L15 (evidence): the owner reported wind still louder than voice. Spectral measurement of the real clip showed low-band wind 3.14 dB above the 1–4 kHz voice band before cleanup and only 0.17 dB below voice after the previous filter. Final wind chain uses high-pass 220–250 Hz, lq arnndn mix 0.8–1.0, +4 dB speech-presence EQ and compression; measured ratio becomes about 1.2 dB in favour of voice with 4.1 dB additional wind reduction.
 
 - L16 (evidence): final ad-hoc arm64 build relaunched the app as PID `91575`, frontmost with window `Open Video Craft`.
+
+- L17 (evidence): the presence EQ/compressor chain coloured and lowered the voice. Final wind preset uses 120–220 Hz high-pass, lq RNNoise at full mix and a gentle 1.12–1.25 volume restore. On the real clip at strength 30, the 1–4 kHz voice band is about 0.9 dB louder than the original while the 20–200 Hz wind band is about 2.7 dB quieter.

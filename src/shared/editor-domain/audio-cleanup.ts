@@ -42,13 +42,14 @@ export function buildAudioCleanupFilter(
   const amount = normalized.strength / 100;
   const wind = normalized.preset === "wind";
   const cutoff = wind
-    ? Math.round(220 + amount * 30)
+    ? Math.round(120 + amount * 100)
     : normalized.preset === "room"
       ? Math.round(50 + amount * 15)
       : 40;
-  const mix = Math.min(1, wind ? 0.8 + amount * 0.4 : 0.35 + amount * 1.3).toFixed(2);
-  const denoise = `highpass=f=${cutoff},arnndn=m='${escapeFilterValue(modelPath)}':mix=${mix}`;
-  return wind
-    ? `${denoise},equalizer=f=2500:t=q:w=1:g=4,acompressor=threshold=-22dB:ratio=4:attack=10:release=200:makeup=3`
-    : denoise;
+  if (wind) {
+    const gain = Math.min(1.25, 1.12 + amount * 0.2).toFixed(2);
+    return `highpass=f=${cutoff},arnndn=m='${escapeFilterValue(modelPath)}':mix=1,volume=${gain}`;
+  }
+  const mix = Math.min(1, 0.35 + amount * 1.3).toFixed(2);
+  return `highpass=f=${cutoff},arnndn=m='${escapeFilterValue(modelPath)}':mix=${mix}`;
 }
