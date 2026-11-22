@@ -12,10 +12,13 @@ Objective: let Claude/MCP add fade-in and fade-out to audio clips instead of rep
 
 - [x] T1 (S1, S2) Extend `set_audio` schema/types/operation with optional fade durations. Route: inline.
 - [x] T2 (S1, S3) Update AI/MCP instructions. Route: inline.
-- [x] T3 (S1-S4) Verify, commit and rebuild/relaunch the app. Route: inline. Pending final rebuild evidence.
+- [x] T3 (S1-S4) Verify, commit and rebuild/relaunch the app. Route: inline. Final rebuild and live AI probe verified.
 
 ## Log
 
 - L1 (user, verbatim): "mi dice tramite AI che non può aggiungere un fade out sulla fine della clip audio! ma cazzo ti avevo detto di farlo!"
 
 - L2 (evidence): `set_audio` now accepts optional `fadeIn`/`fadeOut` (0–10 seconds), preserves unspecified values, and explicit prompts tell Claude/Gemini/MCP that fades are supported.
+
+- L3 (evidence): final ad-hoc build relaunched the app as PID `3013`. A packaged-MCP Claude probe answered: "Sì, `set_audio` con `fadeOut: 2` è supportato (range 0–10 s)" and identified the audio item without applying edits.
+- L4 (evidence): 527 Vitest tests passed, typecheck, build, MCP smoke and `git diff --check`.
