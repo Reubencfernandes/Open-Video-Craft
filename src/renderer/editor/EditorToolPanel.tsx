@@ -112,7 +112,7 @@ export function EditorToolPanel(props: {
   onCameraContentTransformReset: () => void;
   onMasterVolumeChange: (volume: number) => void;
   onAddBackgroundMusic: () => void;
-  onSetAudioLevel: (itemId: string, patch: Partial<{ volume: number; muted: boolean }>) => void;
+  onSetAudioLevel: (itemId: string, patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>) => void;
   onAddZoom: () => void;
   onUpdateZoom: (id: string, updates: Partial<ZoomEffect>) => void;
   onRemoveZoom: (id: string) => void;

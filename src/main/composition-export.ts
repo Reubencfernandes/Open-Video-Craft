@@ -86,6 +86,7 @@ export async function exportEditorProjectToPath(input: {
       audioSegments.push({
         path: source.path, start: segment.start, end: segment.end,
         sourceStart: segment.sourceStart, volume, cleanupFilter,
+        fadeIn: level.fadeIn, fadeOut: level.fadeOut,
         speedAffected: false
       });
     }

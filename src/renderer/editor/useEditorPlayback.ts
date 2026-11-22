@@ -520,6 +520,14 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       !input.element.ended
     ) {
       playMediaElement(input.element, input.label);
+      if (input.clip.track === "audio") {
+        const level = getEffectiveAudioLevel(
+          audioLevelsRef.current, input.clip.item.id, input.clip.lane
+        );
+        getAudioMeter().scheduleFade(
+          input.element, level.fadeIn ?? 0, level.fadeOut ?? 0, input.clip.duration
+        );
+      }
     } else if ((!input.isPlaying || !playable) && !input.element.paused) {
       input.element.pause();
     }

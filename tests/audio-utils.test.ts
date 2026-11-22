@@ -19,11 +19,15 @@ describe("audio dB conversion and metering", () => {
 
     expect(getEffectiveAudioLevel(levels, "voice", 2)).toEqual({
       volume: 80,
-      muted: true
+      muted: true,
+      fadeIn: 0,
+      fadeOut: 0
     });
     expect(getEffectiveAudioLevel(levels, "voice", 1)).toEqual({
       volume: 80,
-      muted: false
+      muted: false,
+      fadeIn: 0,
+      fadeOut: 0
     });
   });
 

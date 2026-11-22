@@ -131,6 +131,41 @@ describe("timeline composition export", () => {
     expect(blueChannel).toBeGreaterThan(30);
   }, 60_000);
 
+  it("applies saved fade-in and fade-out to an audio clip", async () => {
+    const ffmpeg = resolveFfmpegPath();
+    const video = path.join(directory, "fade-video.mp4");
+    const tone = path.join(directory, "fade-tone.wav");
+    const output = path.join(directory, "fade-result.mp4");
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=black:s=320x180:r=30:d=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", video]);
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "sine=frequency=660:duration=4", "-ar", "48000", tone]);
+
+    await exportTimelineComposition({
+      videoSegments: [{ id: "video", path: video, kind: "video", start: 0, end: 4, sourceStart: 0, volume: 1, hasAudio: false }],
+      audioSegments: [{ path: tone, start: 0, end: 4, sourceStart: 0, volume: 1, fadeIn: 1, fadeOut: 1 }],
+      outputPath: output, format: "mp4", resolution: "720p", trimStart: 0, trimEnd: null
+    });
+
+    const decoded = await exec(ffmpeg, [
+      "-v", "error", "-i", output, "-vn", "-ac", "1", "-ar", "48000",
+      "-f", "s16le", "pipe:1"
+    ], { encoding: "buffer" as any, maxBuffer: 32 * 1024 * 1024 } as any);
+    const samples = decoded.stdout as Buffer;
+    const rms = (from: number, to: number): number => {
+      let sum = 0;
+      let count = 0;
+      for (let index = Math.floor(from * 48_000) * 2; index < Math.floor(to * 48_000) * 2 && index < samples.length; index += 2) {
+        const value = samples.readInt16LE(index) / 32_768;
+        sum += value * value;
+        count += 1;
+      }
+      return Math.sqrt(sum / Math.max(1, count));
+    };
+    const middle = rms(1.5, 2.5);
+    expect(middle).toBeGreaterThan(0.05);
+    expect(rms(0.1, 0.5)).toBeLessThan(middle / 3);
+    expect(rms(3.6, 3.95)).toBeLessThan(middle / 3);
+  }, 60_000);
+
   it("keeps audio-track music in real time when a video clip is sped up", async () => {
     const ffmpeg = resolveFfmpegPath();
     const video = path.join(directory, "speed-video.mp4");

@@ -184,6 +184,9 @@ export function TimelineContextMenuView(props: {
   canDelete: boolean;
   volume?: number;
   onVolumeChange?: (volume: number) => void;
+  fadeIn?: number;
+  fadeOut?: number;
+  onFadeChange?: (patch: { fadeIn?: number; fadeOut?: number }) => void;
   onSplit: () => void;
   onDelete: () => void;
 }) {
@@ -212,6 +215,36 @@ export function TimelineContextMenuView(props: {
             onChange={(event) => props.onVolumeChange?.(Number(event.target.value))}
           />
         </label>
+      ) : null}
+      {props.onFadeChange ? (
+        <div className="grid gap-2 border-b border-white/10 px-2 py-2 text-[0.68rem] font-bold text-neutral-300">
+          <label className="grid gap-1">
+            <span>Fade in · {Math.round((props.fadeIn ?? 0) * 100) / 100}s</span>
+            <input
+              aria-label="Clip fade in"
+              className="w-40 accent-emerald-300"
+              max={10}
+              min={0}
+              step={0.1}
+              type="range"
+              value={props.fadeIn ?? 0}
+              onChange={(event) => props.onFadeChange?.({ fadeIn: Number(event.target.value) })}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span>Fade out · {Math.round((props.fadeOut ?? 0) * 100) / 100}s</span>
+            <input
+              aria-label="Clip fade out"
+              className="w-40 accent-emerald-300"
+              max={10}
+              min={0}
+              step={0.1}
+              type="range"
+              value={props.fadeOut ?? 0}
+              onChange={(event) => props.onFadeChange?.({ fadeOut: Number(event.target.value) })}
+            />
+          </label>
+        </div>
       ) : null}
       <button type="button" className={itemClassName} disabled={!props.canSplit} onClick={props.onSplit}>
         <Scissors size={14} />

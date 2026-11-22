@@ -2,6 +2,7 @@
 type ElementAudioNodes = {
   source: MediaElementAudioSourceNode;
   gain: GainNode;
+  baseVolume: number;
 };
 
 export class AudioMeter {
@@ -15,7 +16,8 @@ export class AudioMeter {
   connectElement(element: HTMLMediaElement, volume: number): boolean {
     const existing = this.elements.get(element);
     if (existing) {
-      existing.gain.gain.value = sanitizeGain(volume);
+      existing.baseVolume = sanitizeGain(volume);
+      existing.gain.gain.value = existing.baseVolume;
       return true;
     }
 
@@ -25,10 +27,11 @@ export class AudioMeter {
     try {
       const source = context.createMediaElementSource(element);
       const gain = context.createGain();
-      gain.gain.value = sanitizeGain(volume);
+      const baseVolume = sanitizeGain(volume);
+      gain.gain.value = baseVolume;
       source.connect(gain);
       gain.connect(this.masterGain);
-      this.elements.set(element, { source, gain });
+      this.elements.set(element, { source, gain, baseVolume });
       return true;
     } catch {
       return false;
@@ -37,6 +40,30 @@ export class AudioMeter {
 
   setElementGain(element: HTMLMediaElement, volume: number): boolean {
     return this.connectElement(element, volume);
+  }
+
+  scheduleFade(
+    element: HTMLMediaElement,
+    fadeIn: number,
+    fadeOut: number,
+    duration: number
+  ): boolean {
+    const nodes = this.elements.get(element);
+    if (!nodes || !this.context) return false;
+    const now = this.context.currentTime;
+    const gain = nodes.gain.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(nodes.baseVolume, now);
+    if (fadeIn > 0) {
+      gain.setValueAtTime(0, now);
+      gain.linearRampToValueAtTime(nodes.baseVolume, now + Math.min(fadeIn, duration / 2));
+    }
+    if (fadeOut > 0) {
+      const start = now + Math.max(fadeIn, duration - fadeOut);
+      gain.setValueAtTime(nodes.baseVolume, start);
+      gain.linearRampToValueAtTime(0, now + duration);
+    }
+    return true;
   }
 
   setMasterGain(volume: number): void {

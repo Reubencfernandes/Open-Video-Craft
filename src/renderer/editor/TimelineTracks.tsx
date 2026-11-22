@@ -56,7 +56,7 @@ type TimelineTracksProps = {
   selectedTextOverlayId: string | null;
   onSetAudioLevel: (
     itemId: string,
-    patch: Partial<{ volume: number; muted: boolean }>
+    patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>
   ) => void;
   onSelectClip: (clip: TimelineMediaClip, additive: boolean) => void;
   onSelectZoom: (effect: ZoomEffect) => void;

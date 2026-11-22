@@ -23,6 +23,7 @@ describe("timeline clip volume menu", () => {
 
   it("edits volume from the clip context menu", () => {
     const onVolumeChange = vi.fn();
+    const onFadeChange = vi.fn();
     act(() => {
       root.render(
         <TimelineContextMenuView
@@ -32,6 +33,9 @@ describe("timeline clip volume menu", () => {
           canDelete
           volume={70}
           onVolumeChange={onVolumeChange}
+          fadeIn={1}
+          fadeOut={2}
+          onFadeChange={onFadeChange}
           onSplit={() => undefined}
           onDelete={() => undefined}
         />
@@ -47,5 +51,9 @@ describe("timeline clip volume menu", () => {
       range?.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(onVolumeChange).toHaveBeenCalledWith(35);
+    const fadeIn = container.querySelector<HTMLInputElement>("input[aria-label='Clip fade in']");
+    const fadeOut = container.querySelector<HTMLInputElement>("input[aria-label='Clip fade out']");
+    expect(fadeIn?.value).toBe("1");
+    expect(fadeOut?.value).toBe("2");
   });
 });

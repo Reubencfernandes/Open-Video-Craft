@@ -56,7 +56,7 @@ export function EditorTimelineSection(props: {
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   onSetAudioLevel: (
     itemId: string,
-    patch: Partial<{ volume: number; muted: boolean }>
+    patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>
   ) => void;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];

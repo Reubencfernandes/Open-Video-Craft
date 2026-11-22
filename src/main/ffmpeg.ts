@@ -110,6 +110,8 @@ export interface TimelineCompositionAudioSegment {
   sourceStart: number;
   volume: number;
   cleanupFilter?: string;
+  fadeIn?: number;
+  fadeOut?: number;
   /** Audio-track music stays real-time even when the picture is sped up. */
   speedAffected?: boolean;
 }
@@ -399,7 +401,8 @@ export async function exportTimelineComposition(
     args.push("-t", formatFfmpegNumber(duration), "-i", segment.path);
     audioInputs.push({
       inputIndex: inputIndex++, start: segment.start, duration, volume: segment.volume,
-      cleanupFilter: segment.cleanupFilter, fadeIn: 0, fadeOut: 0,
+      cleanupFilter: segment.cleanupFilter,
+      fadeIn: segment.fadeIn ?? 0, fadeOut: segment.fadeOut ?? 0,
       speedAffected: segment.speedAffected ?? true
     });
   }

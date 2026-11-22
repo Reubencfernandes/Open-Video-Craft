@@ -106,9 +106,12 @@ export function applyEditorOperations(
         if (!Number.isFinite(operation.gainDb) || operation.gainDb < -60 || operation.gainDb > 12) {
           throw new Error("Audio gain must be between -60 dB and +12 dB.");
         }
+        const previous = next.audioLevels[operation.itemId] ?? {};
         next.audioLevels[operation.itemId] = {
           volume: Math.round(Math.pow(10, operation.gainDb / 20) * 10000) / 100,
-          muted: operation.muted
+          muted: operation.muted,
+          ...(previous.fadeIn === undefined ? {} : { fadeIn: previous.fadeIn }),
+          ...(previous.fadeOut === undefined ? {} : { fadeOut: previous.fadeOut })
         };
         break;
       }

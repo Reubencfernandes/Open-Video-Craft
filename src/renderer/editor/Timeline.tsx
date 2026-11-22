@@ -88,7 +88,7 @@ export function Timeline(props: {
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   onSetAudioLevel: (
     itemId: string,
-    patch: Partial<{ volume: number; muted: boolean }>
+    patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>
   ) => void;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
@@ -420,6 +420,29 @@ export function Timeline(props: {
               .find((item) => item.id === props.contextMenu?.segmentId);
             if (!clip) return undefined;
             return (volume: number) => props.onSetAudioLevel(clip.item.id, { volume });
+          })()}
+          fadeIn={(() => {
+            const clip = [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip || clip.track !== "audio") return undefined;
+            return getEffectiveAudioLevel(
+              props.audioLevels, clip.item.id, clip.lane
+            ).fadeIn;
+          })()}
+          fadeOut={(() => {
+            const clip = [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip || clip.track !== "audio") return undefined;
+            return getEffectiveAudioLevel(
+              props.audioLevels, clip.item.id, clip.lane
+            ).fadeOut;
+          })()}
+          onFadeChange={(() => {
+            const clip = [...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip) return undefined;
+            return (patch: { fadeIn?: number; fadeOut?: number }) =>
+              props.onSetAudioLevel(clip.item.id, patch);
           })()}
           onSplit={props.onContextMenuSplit}
           onDelete={props.onContextMenuDelete}

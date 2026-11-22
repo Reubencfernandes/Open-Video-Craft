@@ -129,7 +129,15 @@ export interface TextOverlay {
 export interface ScreenPositionState { x: number; y: number; scale: number }
 export interface CameraFrame { x: number; y: number; size: number }
 export interface CameraContentTransform { x: number; y: number; scale: number; mirrored: boolean }
-export type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
+export interface AudioLevel {
+  volume: number;
+  muted: boolean;
+  /** Optional so older editor documents stay valid. */
+  fadeIn?: number;
+  fadeOut?: number;
+}
+
+export type AudioLevelState = Record<string, AudioLevel>;
 export interface TrimRange { start: number; end: number }
 
 /** One-shot renderer command persisted by an AI edit and consumed by the open app. */

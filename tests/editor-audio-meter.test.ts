@@ -12,8 +12,24 @@ class FakeNode {
   }
 }
 
+class FakeParam {
+  value = 1;
+  readonly events: Array<{ type: string; value: number; time: number }> = [];
+  cancelScheduledValues(time: number): void {
+    this.events.push({ type: "cancel", value: this.value, time });
+  }
+  setValueAtTime(value: number, time: number): void {
+    this.value = value;
+    this.events.push({ type: "set", value, time });
+  }
+  linearRampToValueAtTime(value: number, time: number): void {
+    this.value = value;
+    this.events.push({ type: "ramp", value, time });
+  }
+}
+
 class FakeGain extends FakeNode {
-  gain = { value: 1 };
+  gain = new FakeParam();
 }
 
 class FakeBiquad extends FakeNode {
@@ -33,6 +49,7 @@ class FakeAudioContext {
   readonly gains: FakeGain[] = [];
   readonly sources: FakeNode[] = [];
   state: "running" | "suspended" = "running";
+  currentTime = 0;
   destination = new FakeNode();
 
   constructor() {
@@ -70,6 +87,17 @@ describe("editor AudioMeter cleanup preview", () => {
   });
 
   afterEach(() => meter.dispose());
+
+  it("schedules a fade envelope on an audio element", () => {
+    const element = document.createElement("audio");
+    meter.connectElement(element, 0.8);
+    const context = FakeAudioContext.last;
+    expect(meter.scheduleFade(element, 1, 2, 6)).toBe(true);
+    const events = context?.gains[1]?.gain.events ?? [];
+    expect(events.some((event) => event.type === "set" && event.value === 0 && event.time === 0)).toBe(true);
+    expect(events.some((event) => event.type === "ramp" && event.value === 0.8 && event.time === 1)).toBe(true);
+    expect(events.some((event) => event.type === "ramp" && event.value === 0 && event.time === 6)).toBe(true);
+  });
 
   it("keeps the Web Audio graph clean; denoise happens in the rendered source", () => {
     const element = document.createElement("video");
