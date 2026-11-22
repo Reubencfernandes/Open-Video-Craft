@@ -39,3 +39,5 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 - L10 (evidence): 513 Vitest tests passed, typecheck, build, MCP smoke, FFmpeg verification, audit high and `git diff --check`; final ad-hoc build bundled `Resources/models/cb.rnnn` and the app relaunched as PID `13244`, frontmost.
 
 - L11 (evidence): the saved project had cleanup settings on three video item IDs; the first preview implementation rendered 180 MB WAVs for those videos and replaced their `url`, causing blank preview and silence. The fix skips every item whose kind is not `audio`.
+
+- L12 (evidence): the regression fix skips non-audio media when substituting cleanup preview URLs, with `tests/cleanup-preview-media.test.ts` as a guard. Final app relaunch PID `7457`. Stale generated WAVs in userData were left untouched because deletion was blocked by the safety policy.

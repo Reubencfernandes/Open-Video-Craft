@@ -19,3 +19,6 @@ Objective: let the owner change the volume of a clip directly on the timeline, f
 - L1 (user, verbatim): "devo poter cambiare il volume di una clip audio o video direttamente dalla timeline".
 
 - L2 (follow-up): the inline clip slider covered clip previews and duration. Volume now lives in the timeline right-click menu, and new video/audio drops use `getSnappedInsertStart` with a visible drop guide snapped to existing clip edges.
+
+- L3 (evidence): new video/audio drops now use `getSnappedInsertStart`; a drop guide appears while dragging from the media library. The inline slider was removed and volume is edited from the right-click menu, restoring clip thumbnails/duration.
+- L4 (evidence): 517 Vitest tests passed, typecheck, build, MCP smoke and `git diff --check`. Final ad-hoc rebuild relaunched the app as PID `7457`, frontmost with window `Open Video Craft`.
