@@ -66,7 +66,7 @@ export function applyEditorOperations(
         const target = next.timelineSegments[index];
         const start = operation.timelineStart ?? target.start;
         const end = operation.timelineEnd ?? target.end;
-        if (start < 0 || end - start < 0.1 || start >= target.end || end <= target.start) {
+        if (start < 0 || end - start < 0.01 || start >= target.end || end <= target.start) {
           throw new Error(`Invalid trim for clip "${target.id}".`);
         }
         next.timelineSegments[index] = {

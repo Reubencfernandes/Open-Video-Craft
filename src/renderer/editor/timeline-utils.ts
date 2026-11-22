@@ -307,7 +307,7 @@ export function trimTimelineSegment(
     const mediaDuration = knownDuration && knownDuration > 0
       ? knownDuration
       : segment.sourceStart + segment.end - segment.start;
-    const minDuration = 0.15;
+    const minDuration = 0.01;
     // The video track is a single lane: a trim stops against its neighbors
     // instead of sliding underneath them.
     const neighbors = segment.track === "video"

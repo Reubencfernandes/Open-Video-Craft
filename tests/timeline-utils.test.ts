@@ -76,6 +76,14 @@ describe("timeline trim and split geometry", () => {
     expect(result.find((segment) => segment.id === "second")?.end).toBe(15);
   });
 
+  it("trims a clip down to near zero duration", () => {
+    const audio: TimelineSegment = {
+      id: "music", itemId: "music", track: "audio", lane: 0, start: 0, end: 10, sourceStart: 0
+    };
+    const result = trimTimelineSegment([audio], "music", "end", 0.01, new Map([["music", 10]]));
+    expect(result[0]?.end).toBeCloseTo(0.01, 2);
+  });
+
   it("splits the clip under the playhead instead of a stale selected clip", () => {
     const target = findSplittableTimelineSegment(videoSegments, "first", 7.5);
     expect(target?.id).toBe("second");

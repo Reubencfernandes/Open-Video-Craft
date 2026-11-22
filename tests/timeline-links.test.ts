@@ -187,9 +187,9 @@ describe("video trim bounds", () => {
 
   it("never shrinks a clip that is already shorter than the minimum", () => {
     const tiny: TimelineSegment[] = [
-      { id: "tiny", itemId: "v", track: "video", lane: 0, start: 4, end: 4.1, sourceStart: 4 }
+      { id: "tiny", itemId: "v", track: "video", lane: 0, start: 4, end: 4.005, sourceStart: 4 }
     ];
-    expect(byId(trimTimelineSegment(tiny, "tiny", "start", 4.09, durations), "tiny").start).toBe(4);
-    expect(byId(trimTimelineSegment(tiny, "tiny", "end", 4.01, durations), "tiny").end).toBe(4.1);
+    expect(byId(trimTimelineSegment(tiny, "tiny", "start", 4.009, durations), "tiny").start).toBe(4);
+    expect(byId(trimTimelineSegment(tiny, "tiny", "end", 4.001, durations), "tiny").end).toBeCloseTo(4.005, 3);
   });
 });
