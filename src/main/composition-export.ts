@@ -80,7 +80,11 @@ export async function exportEditorProjectToPath(input: {
         cleanupFilter
       });
     } else {
-      audioSegments.push({ path: source.path, start: segment.start, end: segment.end, sourceStart: segment.sourceStart, volume, cleanupFilter });
+      audioSegments.push({
+        path: source.path, start: segment.start, end: segment.end,
+        sourceStart: segment.sourceStart, volume, cleanupFilter,
+        speedAffected: false
+      });
     }
   }
 

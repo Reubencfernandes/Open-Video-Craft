@@ -22,7 +22,7 @@ import {
   createClipPlaybackKey,
   createTimelineMediaClips
 } from "./timeline-utils";
-import { getActiveSpeedRate } from "./speed-utils";
+import { getActiveSpeedRate, getPlaybackRateForTrack } from "./speed-utils";
 import { frameRate } from "./types";
 import type {
   EditorMediaItem,
@@ -462,7 +462,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       const connected = getAudioMeter().setElementGain(input.element, 1, clipCleanup);
       input.element.volume = connected ? 1 : input.volume;
     }
-    input.element.playbackRate = getPlaybackRate(input.timelineTime);
+    input.element.playbackRate = getPlaybackRateForTrack("video", speedEffectsRef.current, input.timelineTime);
     if (
       input.isPlaying &&
       input.element.paused &&
@@ -509,11 +509,11 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     }
 
     if (input.useEngine) {
-      applyAudioGain(input.element, input.volume);
+      applyAudioGain(input.element, input.volume, input.clip.item.id);
     } else {
       input.element.volume = input.volume;
     }
-    input.element.playbackRate = getPlaybackRate(input.timelineTime);
+    input.element.playbackRate = getPlaybackRateForTrack(input.clip.track, speedEffectsRef.current, input.timelineTime);
     if (
       input.isPlaying &&
       playable &&

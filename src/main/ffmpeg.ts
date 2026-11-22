@@ -110,6 +110,8 @@ export interface TimelineCompositionAudioSegment {
   sourceStart: number;
   volume: number;
   cleanupFilter?: string;
+  /** Audio-track music stays real-time even when the picture is sped up. */
+  speedAffected?: boolean;
 }
 
 export interface TimelineCompositionJob {
@@ -374,6 +376,7 @@ export async function exportTimelineComposition(
     fadeIn: number;
     fadeOut: number;
     cleanupFilter?: string;
+    speedAffected: boolean;
   }> = [];
   for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex += 1) {
     const piece = pieces[pieceIndex];
@@ -385,7 +388,8 @@ export async function exportTimelineComposition(
         volume: piece.segment.volume,
         cleanupFilter: piece.segment.cleanupFilter,
         fadeIn: (getTransitionBetween(pieces[pieceIndex - 1], piece, transitions)?.duration ?? 0) / 2,
-        fadeOut: (getTransitionBetween(piece, pieces[pieceIndex + 1], transitions)?.duration ?? 0) / 2
+        fadeOut: (getTransitionBetween(piece, pieces[pieceIndex + 1], transitions)?.duration ?? 0) / 2,
+        speedAffected: true
       });
     }
   }
@@ -393,7 +397,11 @@ export async function exportTimelineComposition(
     const duration = segment.end - segment.start;
     if (segment.sourceStart > 0) args.push("-ss", formatFfmpegNumber(segment.sourceStart));
     args.push("-t", formatFfmpegNumber(duration), "-i", segment.path);
-    audioInputs.push({ inputIndex: inputIndex++, start: segment.start, duration, volume: segment.volume, cleanupFilter: segment.cleanupFilter, fadeIn: 0, fadeOut: 0 });
+    audioInputs.push({
+      inputIndex: inputIndex++, start: segment.start, duration, volume: segment.volume,
+      cleanupFilter: segment.cleanupFilter, fadeIn: 0, fadeOut: 0,
+      speedAffected: segment.speedAffected ?? true
+    });
   }
 
   const filters: string[] = [];
@@ -435,7 +443,8 @@ export async function exportTimelineComposition(
   }
   filters.push(`[${videoLabel}]null${subtitleFilter}[vout]`);
 
-  const audioLabels: string[] = [];
+  const speedAudioLabels: string[] = [];
+  const constantAudioLabels: string[] = [];
   audioInputs.forEach((input, index) => {
     const delay = Math.max(0, Math.round(input.start * 1000));
     const label = `a${index}`;
@@ -445,24 +454,45 @@ export async function exportTimelineComposition(
       : "";
     const cleanup = input.cleanupFilter ? `,${input.cleanupFilter}` : "";
     filters.push(`[${input.inputIndex}:a:0]atrim=duration=${formatFfmpegNumber(input.duration)},asetpts=PTS-STARTPTS${cleanup},volume=${formatFfmpegNumber(clampVolume(input.volume))}${fadeIn}${fadeOut},adelay=${delay}:all=1[${label}]`);
-    audioLabels.push(`[${label}]`);
+    (input.speedAffected ? speedAudioLabels : constantAudioLabels).push(`[${label}]`);
   });
-  if (audioLabels.length > 0) {
-    filters.push(`${audioLabels.join("")}amix=inputs=${audioLabels.length}:duration=longest:dropout_transition=0:normalize=0[amix]`);
-    filters.push(`[amix]atrim=start=${formatFfmpegNumber(job.trimStart)}:end=${formatFfmpegNumber(trimEnd)},asetpts=PTS-STARTPTS[atrim]`);
+  const trimAudioFilter = `atrim=start=${formatFfmpegNumber(job.trimStart)}:end=${formatFfmpegNumber(trimEnd)},asetpts=PTS-STARTPTS`;
+  const hasSpeedAudio = speedAudioLabels.length > 0;
+  const hasConstantAudio = constantAudioLabels.length > 0;
+  if (hasSpeedAudio && hasConstantAudio) {
+    filters.push(`${speedAudioLabels.join("")}amix=inputs=${speedAudioLabels.length}:duration=longest:dropout_transition=0:normalize=0[amix-speed]`);
+    filters.push(`[amix-speed]${trimAudioFilter}[atrim]`);
+    if (speedRegions.some((region) => region.rate !== 1)) {
+      appendSpeedAudioFilters(filters, "atrim", "aout-speed", speedRegions);
+    } else {
+      filters.push("[atrim]anull[aout-speed]");
+    }
+    filters.push(`${constantAudioLabels.join("")}amix=inputs=${constantAudioLabels.length}:duration=longest:dropout_transition=0:normalize=0[amix-real]`);
+    filters.push(`[amix-real]${trimAudioFilter}[aout-real]`);
+    filters.push("[aout-speed][aout-real]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]");
+  } else if (hasSpeedAudio) {
+    filters.push(`${speedAudioLabels.join("")}amix=inputs=${speedAudioLabels.length}:duration=longest:dropout_transition=0:normalize=0[amix]`);
+    filters.push(`[amix]${trimAudioFilter}[atrim]`);
     if (speedRegions.some((region) => region.rate !== 1)) {
       appendSpeedAudioFilters(filters, "atrim", "aout", speedRegions);
     } else {
       filters.push("[atrim]anull[aout]");
     }
+  } else if (hasConstantAudio) {
+    filters.push(`${constantAudioLabels.join("")}amix=inputs=${constantAudioLabels.length}:duration=longest:dropout_transition=0:normalize=0[amix]`);
+    filters.push(`[amix]${trimAudioFilter}[aout]`);
   }
 
   args.push("-filter_complex", filters.join(";"), "-map", "[vout]");
-  if (audioLabels.length > 0) args.push("-map", "[aout]"); else args.push("-an");
-  const outputDuration = speedRegions.reduce(
+  if (hasSpeedAudio || hasConstantAudio) args.push("-map", "[aout]"); else args.push("-an");
+  const speedAudioDuration = speedRegions.reduce(
     (total, region) => total + (region.end - region.start) / region.rate,
     0
-  ) || sourceDuration;
+  );
+  const constantAudioDuration = audioInputs
+    .filter((input) => !input.speedAffected)
+    .reduce((maximum, input) => Math.max(maximum, input.start + input.duration - job.trimStart), 0);
+  const outputDuration = Math.max(speedAudioDuration || sourceDuration, constantAudioDuration);
   args.push(...await createCodecArgs(job.format), "-t", formatFfmpegNumber(Math.max(0.1, outputDuration)), job.outputPath);
   await runProcess(resolveFfmpegPath(), args, {
     ...control,

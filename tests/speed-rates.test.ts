@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getPlaybackRateForTrack } from "../src/renderer/editor/speed-utils";
 
 import { createDefaultEditorState, validateEditorStateSnapshot } from "../src/shared/editor-domain/schema";
 import { applyEditorOperations } from "../src/shared/editor-domain/operations";
@@ -34,5 +35,14 @@ describe("fractional speed rates", () => {
     expect(result.state.speedEffects[0]?.rate).toBe(1.25);
     expect(validateEditorStateSnapshot(result.state)).toBe(true);
     expect(getActiveSpeedRate(result.state.speedEffects, 3)).toBe(1.25);
+  });
+});
+
+
+describe("playback speed scope", () => {
+  it("never speeds up audio-track clips", () => {
+    const effects = [{ id: "s", start: 0, end: 5, rate: 3 as const }];
+    expect(getPlaybackRateForTrack("audio", effects, 1)).toBe(1);
+    expect(getPlaybackRateForTrack("video", effects, 1)).toBe(3);
   });
 });

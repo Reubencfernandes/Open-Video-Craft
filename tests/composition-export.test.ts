@@ -127,6 +127,33 @@ describe("timeline composition export", () => {
     expect(blueChannel).toBeGreaterThan(30);
   }, 60_000);
 
+  it("keeps audio-track music in real time when a video clip is sped up", async () => {
+    const ffmpeg = resolveFfmpegPath();
+    const video = path.join(directory, "speed-video.mp4");
+    const music = path.join(directory, "speed-music.wav");
+    const output = path.join(directory, "speed-audio-result.mp4");
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=red:s=320x180:r=30:d=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", video]);
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "sine=frequency=660:duration=2", "-ar", "48000", music]);
+
+    await exportTimelineComposition({
+      videoSegments: [
+        { id: "picture", path: video, kind: "video", start: 0, end: 2, sourceStart: 0, volume: 1, hasAudio: false }
+      ],
+      audioSegments: [
+        { path: music, start: 0, end: 2, sourceStart: 0, volume: 1, speedAffected: false }
+      ],
+      speedEffects: [{ start: 0, end: 2, rate: 2 }],
+      outputPath: output, format: "mp4", resolution: "720p", trimStart: 0, trimEnd: null
+    });
+
+    const decoded = await exec(ffmpeg, [
+      "-v", "error", "-i", output, "-vn", "-ac", "2", "-ar", "48000",
+      "-f", "s16le", "pipe:1"
+    ], { encoding: "buffer" as any, maxBuffer: 32 * 1024 * 1024 } as any);
+    const audioSeconds = (decoded.stdout as Buffer).length / (48_000 * 2 * 2);
+    expect(audioSeconds).toBeGreaterThan(1.8);
+  }, 60_000);
+
   it("composites the configured background behind letterboxed clips", async () => {
     const ffmpeg = resolveFfmpegPath();
     const portrait = path.join(directory, "portrait.mp4");

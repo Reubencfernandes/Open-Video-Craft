@@ -14,6 +14,15 @@ export function getActiveSpeedRate(effects: SpeedEffect[], time: number): SpeedR
   );
 }
 
+/** Speed applies to picture clips only; audio-track music stays in real time. */
+export function getPlaybackRateForTrack(
+  track: "video" | "audio",
+  effects: SpeedEffect[],
+  time: number
+): SpeedRate {
+  return track === "audio" ? 1 : getActiveSpeedRate(effects, time);
+}
+
 export function isSpeedRate(value: number): value is SpeedRate {
   return speedRates.includes(value as SpeedRate);
 }

@@ -31,6 +31,7 @@ const CLAUDE_SYSTEM_PROMPT = [
   "Always call inspect_project before proposing or applying an edit.",
   "Apply only the user's requested actions in one validated edit plan.",
   "Read transcript text only with query_analysis_transcript and silence ranges only with query_analysis_silences; get_analysis is for status and fingerprint. For silence speed-ups, use inspect_project to map the named clip to its timeline window, query only that window, and create set_speed effects with unique ids. For topic callouts, use bounded transcript excerpts to choose timestamps and call apply_edit_plan with set_text_overlay, including a title and box style.",
+  "Speed effects apply to video clips only; never speed music placed on an audio lane.",
   "For music requests, use generate_music with engine claude-local; it renders locally without a Gemini API key.",
   "For subtitle or transcription requests, call start_analysis, read query_analysis_transcript, and apply replace_subtitles from the local result; never require a cloud API key.",
   "For wind or background noise around speech, use set_audio_cleanup on the relevant audio item with a conservative preset and strength 0–100.",
