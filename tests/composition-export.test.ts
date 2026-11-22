@@ -126,6 +126,37 @@ describe("timeline composition export", () => {
     expect(blueChannel).toBeGreaterThan(30);
   }, 60_000);
 
+  it("renders an animated callout box without FFmpeg filter errors", async () => {
+    const ffmpeg = resolveFfmpegPath();
+    const video = path.join(directory, "callout-video.mp4");
+    const output = path.join(directory, "callout-result.mp4");
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=black:s=320x180:r=30:d=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", video]);
+
+    const bytes = await exportTimelineComposition({
+      videoSegments: [
+        { id: "callout-video", path: video, kind: "video", start: 0, end: 2, sourceStart: 0, volume: 1, hasAudio: false }
+      ],
+      audioSegments: [],
+      textOverlays: [{
+        id: "callout-1", start: 0.2, end: 1.6, text: "Key point", title: "TOPIC",
+        x: 50, y: 25, size: 24, color: "#ffffff", fontFamily: "mono", weight: 700,
+        animation: "slide-in-out",
+        box: {
+          backgroundColor: "#123c8f", backgroundOpacity: 72,
+          borderColor: "#66b3ff", borderWidth: 3, borderRadius: 18,
+          padding: 22, titleColor: "#9fd1ff", titleSize: 26
+        }
+      }],
+      outputPath: output, format: "mp4", resolution: "720p", trimStart: 0, trimEnd: null
+    });
+    expect(bytes).toBeGreaterThan(1_000);
+    const frame = await exec(ffmpeg, [
+      "-ss", "0.8", "-i", output, "-frames:v", "1", "-vf", "scale=1:1",
+      "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"
+    ], { encoding: "buffer" as any, maxBuffer: 1024 * 1024 } as any);
+    expect(frame.stdout.length).toBeGreaterThan(0);
+  }, 60_000);
+
   it("renders focus zoom and keeps video, mixed audio, and duration synced through speed", async () => {
     const ffmpeg = resolveFfmpegPath();
     const source = path.join(directory, "effects-source.mp4");

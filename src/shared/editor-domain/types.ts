@@ -34,7 +34,9 @@ export type ZoomSpeed = "slow" | "medium" | "fast";
 export type ZoomEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "custom";
 export type SpeedRate = 1 | 1.25 | 1.5 | 2 | 3 | 4 | 5;
 export type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";
-export type TextAnimation = "none" | "fade" | "pop" | "slide-up";
+export type TextAnimation =
+  | "none" | "fade" | "pop" | "slide-up"
+  | "fade-in-out" | "pop-in-out" | "slide-in-out";
 export type TextFontFamily = "sans" | "rounded" | "serif" | "mono";
 export type ClipTransitionType = "crossfade" | "fade-black" | "slide-left" | "wipe-left";
 export type PreviewQuality = "high" | "low";
@@ -90,12 +92,28 @@ export interface SubtitleSegment {
   words?: SubtitleWord[];
 }
 
+/** Visual style for a titled callout panel around overlay text. */
+export interface CalloutBoxStyle {
+  readonly backgroundColor: string;
+  readonly backgroundOpacity: number;
+  readonly borderColor: string;
+  readonly borderWidth: number;
+  readonly borderRadius: number;
+  readonly padding: number;
+  readonly titleColor: string;
+  readonly titleSize: number;
+}
+
 /** Timed freeform text rendered independently from captions/subtitles. */
 export interface TextOverlay {
   id: string;
   start: number;
   end: number;
   text: string;
+  /** Optional heading; when absent the overlay remains plain text. */
+  title?: string;
+  /** Optional panel style; when absent the overlay has no visible box. */
+  box?: CalloutBoxStyle;
   x: number;
   y: number;
   size: number;

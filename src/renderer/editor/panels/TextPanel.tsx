@@ -3,15 +3,29 @@ import { Plus, Trash2 } from "lucide-react";
 import { BubbleActionButton } from "../../BubbleActionButton";
 import { FloatingSelect } from "../FloatingSelect";
 import { RangeControl } from "../controls";
-import type { TextAnimation, TextFontFamily, TextOverlay } from "../types";
+import type { CalloutBoxStyle, TextAnimation, TextFontFamily, TextOverlay } from "../types";
 import { TextColorPicker } from "./TextColorPicker";
 
 const animationOptions: Array<{ value: TextAnimation; label: string }> = [
   { value: "none", label: "None" },
   { value: "fade", label: "Fade in" },
   { value: "pop", label: "Pop" },
-  { value: "slide-up", label: "Slide up" }
+  { value: "slide-up", label: "Slide up" },
+  { value: "fade-in-out", label: "Fade in/out" },
+  { value: "pop-in-out", label: "Pop in/out" },
+  { value: "slide-in-out", label: "Slide in/out" }
 ];
+
+const defaultCalloutBox: CalloutBoxStyle = {
+  backgroundColor: "#123c8f",
+  backgroundOpacity: 72,
+  borderColor: "#66b3ff",
+  borderWidth: 3,
+  borderRadius: 18,
+  padding: 22,
+  titleColor: "#9fd1ff",
+  titleSize: 26
+};
 
 const fontOptions: Array<{ value: TextFontFamily; label: string }> = [
   { value: "sans", label: "Modern sans" },
@@ -37,6 +51,7 @@ export function TextPanel(props: {
   onRemove: (id: string) => void;
 }) {
   const selected = props.selectedOverlay;
+  const box = selected?.box;
 
   return (
     <div className="grid min-h-0 min-w-0 content-start gap-3 overflow-auto">
@@ -92,7 +107,44 @@ export function TextPanel(props: {
           </label>
 
           <button
-            className="editor-choice-button inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-white px-3 text-xs font-bold text-[#111114] transition hover:bg-neutral-200"
+            className="editor-choice-button inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-400/[0.08] px-3 text-xs font-bold text-emerald-100"
+            type="button"
+            onClick={() => props.onUpdate(selected.id, selected.box
+              ? { title: undefined, box: undefined }
+              : { title: selected.title ?? "TOPIC", box: defaultCalloutBox, animation: "slide-in-out" })}
+          >
+            {selected.box ? "Remove callout box" : "Add callout box"}
+          </button>
+
+          {box ? (
+            <div className="grid gap-2 rounded-lg border border-emerald-300/20 bg-emerald-400/[0.05] p-2.5">
+              <span className="text-[0.68rem] font-bold text-emerald-100">Callout style</span>
+              <label className="grid gap-1 text-[0.65rem] font-bold text-slate-400">
+                Callout title
+                <input
+                  aria-label="Callout title"
+                  className="editor-field h-10 w-full min-w-0 rounded-lg px-3 text-xs font-bold text-white"
+                  value={selected.title ?? ""}
+                  onChange={(event) => props.onUpdate(selected.id, { title: event.target.value })}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <ColorField label="Background color" color={box.backgroundColor} onChange={(backgroundColor) => props.onUpdate(selected.id, { box: { ...box, backgroundColor } })} />
+                <ColorField label="Border color" color={box.borderColor} onChange={(borderColor) => props.onUpdate(selected.id, { box: { ...box, borderColor } })} />
+              </div>
+              <RangeField label="Background opacity" value={box.backgroundOpacity} min={0} max={100} suffix="%" onChange={(backgroundOpacity) => props.onUpdate(selected.id, { box: { ...box, backgroundOpacity } })} />
+              <RangeField label="Border width" value={box.borderWidth} min={0} max={16} suffix="px" onChange={(borderWidth) => props.onUpdate(selected.id, { box: { ...box, borderWidth } })} />
+              <RangeField label="Border radius" value={box.borderRadius} min={0} max={64} suffix="px" onChange={(borderRadius) => props.onUpdate(selected.id, { box: { ...box, borderRadius } })} />
+              <RangeField label="Padding" value={box.padding} min={0} max={80} suffix="px" onChange={(padding) => props.onUpdate(selected.id, { box: { ...box, padding } })} />
+              <div className="grid grid-cols-2 gap-2">
+                <ColorField label="Title color" color={box.titleColor} onChange={(titleColor) => props.onUpdate(selected.id, { box: { ...box, titleColor } })} />
+                <RangeField label="Title size" value={box.titleSize} min={10} max={160} suffix="px" onChange={(titleSize) => props.onUpdate(selected.id, { box: { ...box, titleSize } })} />
+              </div>
+            </div>
+          ) : null}
+
+          <button
+            className="editor-choice-button inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-white/[0.06] px-3 text-xs font-bold text-slate-200"
             type="button"
             onClick={() => props.onRemove(selected.id)}
           >
@@ -180,5 +232,20 @@ function RangeField(props: {
       formatValue={(value) => `${Math.round(value)}${props.suffix}`}
       onChange={props.onChange}
     />
+  );
+}
+
+function ColorField(props: { label: string; color: string; onChange: (color: string) => void }) {
+  return (
+    <label className="grid gap-1 text-[0.65rem] font-bold text-slate-400">
+      {props.label}
+      <input
+        aria-label={props.label}
+        className="editor-field h-10 w-full min-w-0 rounded-lg px-2 text-xs font-bold text-white"
+        type="color"
+        value={props.color}
+        onChange={(event) => props.onChange(event.target.value)}
+      />
+    </label>
   );
 }

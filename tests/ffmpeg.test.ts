@@ -80,6 +80,28 @@ describe("FFmpeg binaries", () => {
     expect(canStreamCopy({ ...job, textOverlays: [overlay()] })).toBe(false);
   });
 
+  it("draws titled callout panels with rounded corners and exit animation", () => {
+    const filter = createVideoFilter("1080p", null, [overlay({
+      title: "TOPIC",
+      box: {
+        backgroundColor: "#123c8f",
+        backgroundOpacity: 72,
+        borderColor: "#66b3ff",
+        borderWidth: 3,
+        borderRadius: 18,
+        padding: 22,
+        titleColor: "#9fd1ff",
+        titleSize: 26
+      },
+      animation: "slide-in-out"
+    })]);
+    expect(filter).toContain("drawbox");
+    expect(filter).toContain("drawtext=text='TOPIC'");
+    expect(filter).toContain("0x123c8f");
+    expect(filter).not.toContain(",,");
+    expect(filter).toMatch(/alpha=.*t/);
+  });
+
   it("draws text overlays under burned-in subtitles", () => {
     const filter = createVideoFilter("source", "/tmp/captions.srt", [overlay()], 720);
     const drawtextIndex = filter.indexOf("drawtext=");

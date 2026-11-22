@@ -8,6 +8,10 @@ import { existsSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
+import {
+  appendCalloutBoxFilter,
+  createCalloutBoxDrawboxFilter
+} from "./callout-filter";
 import type { ExportResolution, ExportVideoFormat } from "../shared/types";
 import { loadFontMetrics, wrapTextToWidth } from "./font-metrics";
 import { resolveOverlayFont } from "./overlay-fonts";
@@ -74,9 +78,21 @@ export interface TimelineCompositionSpeedEffect {
 }
 
 export interface TimelineCompositionTextOverlay {
+  id?: string;
   start: number;
   end: number;
   text: string;
+  title?: string;
+  box?: {
+    backgroundColor: string;
+    backgroundOpacity: number;
+    borderColor: string;
+    borderWidth: number;
+    borderRadius: number;
+    padding: number;
+    titleColor: string;
+    titleSize: number;
+  };
   x: number;
   y: number;
   size: number;
@@ -84,7 +100,7 @@ export interface TimelineCompositionTextOverlay {
   fontFamily?: "sans" | "rounded" | "serif" | "mono";
   opacity?: number;
   weight: 400 | 600 | 700 | 800;
-  animation: "none" | "fade" | "pop" | "slide-up";
+  animation: "none" | "fade" | "pop" | "slide-up" | "fade-in-out" | "pop-in-out" | "slide-in-out";
 }
 
 export interface TimelineCompositionAudioSegment {
@@ -571,15 +587,19 @@ export function createTextOverlayDrawtext(
   const start = formatFfmpegNumber(overlay.start);
   const end = formatFfmpegNumber(overlay.end);
   const ramp = formatFfmpegNumber(Math.min(0.4, Math.max(0.08, (overlay.end - overlay.start) / 2)));
-  const progress = `clip((t-${start})/${ramp},0,1)`;
+  const entrance = `clip((t-${start})/${ramp},0,1)`;
+  const hasExit = overlay.animation === "fade-in-out" || overlay.animation === "pop-in-out" || overlay.animation === "slide-in-out";
+  const progress = hasExit ? `min(${entrance},clip((${end}-t)/${ramp},0,1))` : entrance;
   const baseFontSize = Math.max(12, Math.round(overlay.size * height / 1080));
-  const fontSize = overlay.animation === "pop"
+  const pops = overlay.animation === "pop" || overlay.animation === "pop-in-out";
+  const fontSize = pops
     ? `'${baseFontSize}*(0.72+0.28*${progress})'`
     : String(baseFontSize);
   const x = `${formatFfmpegNumber(overlay.x / 100)}*w-text_w/2`;
   const baseY = `${formatFfmpegNumber(overlay.y / 100)}*h-text_h/2`;
-  const y = overlay.animation === "slide-up"
-    ? `${baseY}+(1-${progress})*${formatFfmpegNumber(height * 0.04)}`
+  const slides = overlay.animation === "slide-up" || overlay.animation === "slide-in-out";
+  const y = slides
+    ? `${baseY}+(1-${entrance})*${formatFfmpegNumber(height * 0.04)}`
     : baseY;
   const opacity = formatFfmpegNumber(Math.max(0, Math.min(100, overlay.opacity ?? 100)) / 100);
   const alpha = overlay.animation === "none" ? opacity : `'${opacity}*${progress}'`;
@@ -590,7 +610,16 @@ export function createTextOverlayDrawtext(
   const shadowOffset = Math.max(1, Math.round(height * 2 / 1080));
   const font = resolveOverlayFont(overlay);
   const layout = layOutOverlayText(overlay, font.filePath, baseFontSize, width);
-  return (
+  const titleFilter = overlay.title
+    ? `drawtext=text='${escapeDrawtextText(overlay.title)}':` +
+      `${font.argument}:` +
+      `fontcolor=0x${(overlay.box?.titleColor ?? overlay.color).slice(1)}:` +
+      `fontsize=${Math.max(10, Math.round((overlay.box?.titleSize ?? overlay.size * 0.6) * height / 1080))}:` +
+      `x='${x}':y='${baseY}-${Math.round(baseFontSize * 1.35)}':` +
+      `alpha=${alpha}:shadowx=0:shadowy=${shadowOffset}:shadowcolor=black@0.8:` +
+      `text_align=C:enable='between(t,${start},${end})',`
+    : "";
+  return titleFilter + (
     `drawtext=text='${escapeDrawtextText(layout.text)}':` +
     `${font.argument}:` +
     `fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
@@ -657,9 +686,9 @@ function appendTextOverlayFilters(
   let currentLabel = inputLabel;
   overlays.forEach((overlay, index) => {
     const nextLabel = index === overlays.length - 1 ? outputLabel : `vtext${index}`;
-    filters.push(
-      `[${currentLabel}]${createTextOverlayDrawtext(overlay, height, width)}[${nextLabel}]`
-    );
+    currentLabel = appendCalloutBoxFilter(filters, currentLabel, overlay, height, width);
+    const textFilter = createTextOverlayDrawtext(overlay, height, width);
+    filters.push(`[${currentLabel}]${textFilter}[${nextLabel}]`);
     currentLabel = nextLabel;
   });
 }
@@ -845,6 +874,8 @@ export function createVideoFilter(
   const overlayWidth = dimensions?.[0] ?? sourceSize?.width ?? 1920;
   const overlayHeight = dimensions?.[1] ?? sourceSize?.height ?? 1080;
   for (const overlay of textOverlays ?? []) {
+    const boxFilter = createCalloutBoxDrawboxFilter(overlay, overlayHeight, overlayWidth);
+    if (boxFilter) filters.push(boxFilter);
     filters.push(createTextOverlayDrawtext(overlay, overlayHeight, overlayWidth));
   }
   // Subtitles last so burned-in captions stay above overlay text, matching the

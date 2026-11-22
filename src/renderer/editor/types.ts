@@ -18,6 +18,7 @@ export type {
   CameraPosition,
   CameraShape,
   ClipTransition,
+  CalloutBoxStyle,
   ClipTransitionType,
   LayoutMode,
   ScreenAspectRatio,

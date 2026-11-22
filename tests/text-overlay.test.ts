@@ -17,6 +17,36 @@ const overlay: TextOverlay = {
   animation: "pop"
 };
 
+describe("callout box preview", () => {
+  const callout: TextOverlay = {
+    ...overlay,
+    title: "TOPIC",
+    animation: "slide-in-out",
+    box: {
+      backgroundColor: "#123c8f",
+      backgroundOpacity: 72,
+      borderColor: "#66b3ff",
+      borderWidth: 3,
+      borderRadius: 18,
+      padding: 22,
+      titleColor: "#9fd1ff",
+      titleSize: 26
+    }
+  };
+
+  it("uses the custom panel style and fades out before the end", () => {
+    const entering = getTextOverlayStyle(callout, 2.15);
+    const settled = getTextOverlayStyle(callout, 3);
+    const exiting = getTextOverlayStyle(callout, 4.9);
+
+    expect(entering.backgroundColor).toContain("18, 60, 143");
+    expect(entering.borderRadius).toBe("18px");
+    expect(entering.border).toContain("#66b3ff");
+    expect(Number(settled.opacity)).toBeGreaterThan(0.6);
+    expect(Number(exiting.opacity)).toBeLessThan(Number(settled.opacity));
+  });
+});
+
 describe("text overlay preview animation", () => {
   it("derives placement and entrance animation from timeline time", () => {
     const entering = getTextOverlayStyle(overlay, 2.2);

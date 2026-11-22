@@ -64,10 +64,23 @@ export const operationSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("set_text_overlay"), overlay: z.object({
     id: z.string().min(1).max(128), start: z.number().nonnegative(), end: z.number().positive(),
-    text: z.string().max(500), x: z.number().min(0).max(100), y: z.number().min(0).max(100),
+    text: z.string().max(500), title: z.string().max(200).optional(),
+    box: z.object({
+      backgroundColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+      backgroundOpacity: z.number().min(0).max(100),
+      borderColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+      borderWidth: z.number().min(0).max(16),
+      borderRadius: z.number().min(0).max(64),
+      padding: z.number().min(0).max(80),
+      titleColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+      titleSize: z.number().min(10).max(160)
+    }).optional(),
+    x: z.number().min(0).max(100), y: z.number().min(0).max(100),
     size: z.number().min(12).max(240), color: z.string().regex(/^#[0-9a-f]{6}$/i),
+    fontFamily: z.enum(["sans", "rounded", "serif", "mono"]).optional(),
+    opacity: z.number().min(0).max(100).optional(),
     weight: z.union([z.literal(400), z.literal(600), z.literal(700), z.literal(800)]),
-    animation: z.enum(["none", "fade", "pop", "slide-up"])
+    animation: z.enum(["none", "fade", "pop", "slide-up", "fade-in-out", "pop-in-out", "slide-in-out"])
   }) }),
   z.object({ type: z.literal("remove_text_overlay"), id: z.string().min(1).max(128) }),
   z.object({ type: z.literal("set_subtitle_preferences"), language: z.string().nullable().optional(), style: z.enum(["clean", "karaoke", "boxed", "pop"]).optional() }),

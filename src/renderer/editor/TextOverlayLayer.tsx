@@ -70,7 +70,17 @@ export function TextOverlayLayer(props: {
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
         >
-          {overlay.text}
+          <span className="grid gap-1">
+            {overlay.title ? (
+              <strong
+                className="block text-[0.62em] uppercase tracking-[0.18em]"
+                style={{ color: overlay.box?.titleColor ?? overlay.color, fontSize: overlay.box ? `${overlay.box.titleSize / 10.8}cqh` : undefined }}
+              >
+                {overlay.title}
+              </strong>
+            ) : null}
+            {overlay.text ? <span className="block">{overlay.text}</span> : null}
+          </span>
         </button>
       ))}
     </div>
@@ -79,21 +89,26 @@ export function TextOverlayLayer(props: {
 
 /** Deterministic animation styling keeps playback and timeline scrubbing aligned. */
 export function getTextOverlayStyle(overlay: TextOverlay, currentTime: number): CSSProperties {
-  const progress = clampNumber((currentTime - overlay.start) / 0.4, 0, 1);
+  const ramp = Math.min(0.4, Math.max(0.08, (overlay.end - overlay.start) / 2));
+  const entrance = clampNumber((currentTime - overlay.start) / ramp, 0, 1);
+  const hasExit = overlay.animation === "fade-in-out" || overlay.animation === "pop-in-out" || overlay.animation === "slide-in-out";
+  const exit = hasExit ? clampNumber((overlay.end - currentTime) / ramp, 0, 1) : 1;
+  const animationProgress = Math.min(entrance, exit);
   let opacity = 1;
   let scale = 1;
   let translateY = 0;
-  if (overlay.animation === "fade") opacity = progress;
-  if (overlay.animation === "pop") {
-    opacity = progress;
-    scale = 0.72 + progress * 0.28;
+  if (overlay.animation === "fade" || overlay.animation === "fade-in-out") opacity = animationProgress;
+  if (overlay.animation === "pop" || overlay.animation === "pop-in-out") {
+    opacity = animationProgress;
+    scale = 0.72 + animationProgress * 0.28;
   }
-  if (overlay.animation === "slide-up") {
-    opacity = progress;
-    translateY = (1 - progress) * 28;
+  if (overlay.animation === "slide-up" || overlay.animation === "slide-in-out") {
+    opacity = animationProgress;
+    translateY = (1 - entrance) * 28 - (1 - exit) * 18;
   }
 
-  return {
+  const box = overlay.box;
+  const style: CSSProperties = {
     left: `${overlay.x}%`,
     top: `${overlay.y}%`,
     color: overlay.color,
@@ -103,4 +118,20 @@ export function getTextOverlayStyle(overlay: TextOverlay, currentTime: number): 
     opacity: opacity * ((overlay.opacity ?? 100) / 100),
     transform: `translate(-50%, -50%) translateY(${translateY}px) scale(${scale})`
   };
+  if (box) {
+    style.backgroundColor = hexToRgba(box.backgroundColor, box.backgroundOpacity / 100);
+    style.border = `${box.borderWidth}px solid ${box.borderColor}`;
+    style.borderRadius = `${box.borderRadius}px`;
+    style.padding = `${box.padding}px`;
+    style.boxShadow = `0 10px 30px rgba(0, 0, 0, 0.35)`;
+  }
+  return style;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  const red = Number.parseInt(clean.slice(0, 2), 16);
+  const green = Number.parseInt(clean.slice(2, 4), 16);
+  const blue = Number.parseInt(clean.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }

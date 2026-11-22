@@ -114,8 +114,22 @@ export function isSubtitleSegment(value: unknown): value is SubtitleSegment {
       isRecord(word) && typeof word.text === "string" && finite(word.start) && finite(word.end) && word.end >= word.start));
 }
 
+function isCalloutBoxStyle(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.backgroundColor === "string" && /^#[0-9a-f]{6}$/i.test(value.backgroundColor) &&
+    finite(value.backgroundOpacity) && value.backgroundOpacity >= 0 && value.backgroundOpacity <= 100 &&
+    typeof value.borderColor === "string" && /^#[0-9a-f]{6}$/i.test(value.borderColor) &&
+    finite(value.borderWidth) && value.borderWidth >= 0 && value.borderWidth <= 16 &&
+    finite(value.borderRadius) && value.borderRadius >= 0 && value.borderRadius <= 64 &&
+    finite(value.padding) && value.padding >= 0 && value.padding <= 80 &&
+    typeof value.titleColor === "string" && /^#[0-9a-f]{6}$/i.test(value.titleColor) &&
+    finite(value.titleSize) && value.titleSize >= 10 && value.titleSize <= 160;
+}
+
 export function isTextOverlay(value: unknown): value is TextOverlay {
   return hasTimedId(value) && typeof value.text === "string" &&
+    (value.title === undefined || (typeof value.title === "string" && value.title.length <= 200)) &&
+    (value.box === undefined || isCalloutBoxStyle(value.box)) &&
     finite(value.x) && value.x >= 0 && value.x <= 100 &&
     finite(value.y) && value.y >= 0 && value.y <= 100 &&
     finite(value.size) && value.size >= 12 && value.size <= 240 &&
@@ -123,7 +137,7 @@ export function isTextOverlay(value: unknown): value is TextOverlay {
     (value.fontFamily === undefined || oneOf(value.fontFamily, ["sans", "rounded", "serif", "mono"])) &&
     (value.opacity === undefined || (finite(value.opacity) && value.opacity >= 0 && value.opacity <= 100)) &&
     [400, 600, 700, 800].includes(value.weight as number) &&
-    oneOf(value.animation, ["none", "fade", "pop", "slide-up"]);
+    oneOf(value.animation, ["none", "fade", "pop", "slide-up", "fade-in-out", "pop-in-out", "slide-in-out"]);
 }
 
 function isClipTransition(value: unknown): value is ClipTransition {
