@@ -124,6 +124,8 @@ export function TimelineTracks(props: TimelineTracksProps) {
           <TimelineClip
             key={clip.id}
             clip={clip}
+            audioLevel={getEffectiveAudioLevel(props.audioLevels, clip.item.id, null)}
+            onVolumeChange={(volume) => props.onSetAudioLevel(clip.item.id, { volume })}
             timelineDuration={props.renderDuration}
             selected={
               (!props.rangeSelection || rangeSelectionSettled) &&
@@ -206,6 +208,7 @@ export function TimelineTracks(props: TimelineTracksProps) {
                   clip.item.id,
                   track.lane
                 )}
+                onVolumeChange={(volume) => props.onSetAudioLevel(clip.item.id, { volume })}
                 timelineDuration={props.renderDuration}
                 selected={
                   (!props.rangeSelection || rangeSelectionSettled) &&
