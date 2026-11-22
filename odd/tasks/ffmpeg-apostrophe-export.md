@@ -12,10 +12,12 @@ Objective: fix export error `No such filter: '0'` caused by apostrophes in callo
 
 - [x] T1 (S1, S2) Add a failing export test with apostrophe text. Route: inline.
 - [x] T2 (S1-S3) Fix drawtext escaping. Route: inline.
-- [x] T3 (S1-S4) Verify, commit and rebuild/relaunch the app. Route: inline. Pending final rebuild evidence.
+- [x] T3 (S1-S4) Verify, commit and rebuild/relaunch the app. Route: inline. Final rebuild and relaunch verified.
 
 ## Log
 
 - L1 (user, verbatim): "durante l'export da errore No such filter '0'".
 
 - L2 (evidence): `escapeDrawtextText` replaced ASCII apostrophes with `\'` inside single-quoted filter options, so FFmpeg parsed the rest of the text as a new filter named `0`. It now uses the typographic apostrophe `’`. A regression export with `l'economia: 100%` passes, and the real full 1080p project export produced 1,462,342,020 bytes.
+
+- L3 (evidence): final ad-hoc build relaunched the app as PID `30279`, frontmost with window `Open Video Craft`.

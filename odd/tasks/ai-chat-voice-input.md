@@ -13,10 +13,12 @@ Objective: let the owner dictate messages into the AI assistant chat using the m
 
 - [x] T1 (S1-S4) Add a voice recorder/transcriber hook around the existing local STT bridge. Route: inline.
 - [x] T2 (S1, S2) Add microphone UI to the AI composer with recording/error states. Route: inline.
-- [x] T3 (S1-S5) Verify, commit and rebuild/relaunch the app. Route: inline. Pending final rebuild evidence.
+- [x] T3 (S1-S5) Verify, commit and rebuild/relaunch the app. Route: inline. Final rebuild and relaunch verified.
 
 ## Log
 
 - L1 (user, verbatim): "nella chat AI dammi la possibilità di scrivere tramite voce del microfono".
 
 - L2 (evidence): the composer now records microphone audio, resamples it to 16 kHz mono and transcribes it with the existing local Whisper worker; text is appended to the draft. 531 Vitest tests passed.
+
+- L3 (evidence): final app rebuilt and relaunched as PID `30279`, frontmost with window `Open Video Craft`.
