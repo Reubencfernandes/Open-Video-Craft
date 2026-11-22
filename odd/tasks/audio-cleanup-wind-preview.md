@@ -45,3 +45,5 @@ Objective: reduce wind/room noise without muffling speech, and let the owner hea
 - L13 (evidence): real clip audio was measured with six arnndn models. `lq.rnnn` reduced the 20–200 Hz wind band most while preserving 300–3400 Hz speech. New wind mapping uses high-pass 90–220 Hz and mix 0.35–1.0; at strength 30 wind fell from -24.72 dB to -28.07 dB versus -25.54 dB with the old model/filter.
 
 - L14 (evidence): final ad-hoc rebuild bundling `lq.rnnn` relaunched the app as PID `58405`, frontmost.
+
+- L15 (evidence): the owner reported wind still louder than voice. Spectral measurement of the real clip showed low-band wind 3.14 dB above the 1–4 kHz voice band before cleanup and only 0.17 dB below voice after the previous filter. Final wind chain uses high-pass 220–250 Hz, lq arnndn mix 0.8–1.0, +4 dB speech-presence EQ and compression; measured ratio becomes about 1.2 dB in favour of voice with 4.1 dB additional wind reduction.
