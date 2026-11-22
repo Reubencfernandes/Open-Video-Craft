@@ -95,6 +95,11 @@ text must be read with `query_analysis_transcript` and silences with
 `get_analysis` returns the full analysis blob and can exceed the assistant's
 context limit.
 
+### Audio clip fades
+
+`set_audio` accepts optional `fadeIn` and `fadeOut` durations in seconds
+(0–10). The same values are used by FFmpeg export and the preview envelope.
+
 ### Claude Max local music
 
 Music requests through Claude Max use `generate_music` with engine

@@ -21,6 +21,16 @@ describe("audio clip fades", () => {
       .toMatchObject({ fadeIn: 0, fadeOut: 0 });
   });
 
+  it("applies AI-driven fade values through set_audio", () => {
+    const state = createDefaultEditorState();
+    state.audioLevels = { music: { volume: 100, muted: false } };
+    const result = applyEditorOperations(state, [
+      { type: "set_audio", itemId: "music", gainDb: 0, muted: false, fadeIn: 0.8, fadeOut: 2.5 }
+    ]);
+    expect(result.state.audioLevels.music).toMatchObject({ fadeIn: 0.8, fadeOut: 2.5 });
+    expect(validateEditorStateSnapshot(result.state)).toBe(true);
+  });
+
   it("keeps fade values when an audio gain operation updates the same item", () => {
     const state = createDefaultEditorState();
     state.audioLevels = { music: { volume: 100, muted: false, fadeIn: 1, fadeOut: 2 } };

@@ -232,7 +232,7 @@ export type EditorEditOperation =
   | { type: "delete_clip"; segmentId: string; ripple: boolean }
   | { type: "move_clip"; segmentId: string; timelineStart: number; lane?: number }
   | { type: "sequence_clips"; segmentIds: string[]; start: number; gap: number }
-  | { type: "set_audio"; itemId: string; gainDb: number; muted: boolean }
+  | { type: "set_audio"; itemId: string; gainDb: number; muted: boolean; fadeIn?: number; fadeOut?: number }
   | { type: "set_audio_cleanup"; itemId: string; preset: AudioCleanupPreset; strength: number }
   | { type: "set_audio_lane"; lane: number; gainDb: number; muted: boolean }
   | { type: "set_master_volume"; volume: number }

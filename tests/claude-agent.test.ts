@@ -119,6 +119,13 @@ describe("Claude Max assistant command construction", () => {
     expect(prompt).toContain("never require a cloud API key");
   });
 
+  it("instructs Claude that audio fades are supported", () => {
+    const args = buildClaudeAgentArgs({ projectId: "project-1", message: "x" });
+    const prompt = args.join(" ");
+    expect(prompt).toContain("set_audio with fadeIn and/or fadeOut");
+    expect(prompt).toContain("never say it cannot be done");
+  });
+
   it("rejects prompts longer than the public request limit", () => {
     const message = "x".repeat(8_001);
     expect(() => buildClaudeAgentArgs({ projectId: "project-1", message })).toThrow("message is too long");

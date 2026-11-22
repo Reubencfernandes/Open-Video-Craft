@@ -110,8 +110,12 @@ export function applyEditorOperations(
         next.audioLevels[operation.itemId] = {
           volume: Math.round(Math.pow(10, operation.gainDb / 20) * 10000) / 100,
           muted: operation.muted,
-          ...(previous.fadeIn === undefined ? {} : { fadeIn: previous.fadeIn }),
-          ...(previous.fadeOut === undefined ? {} : { fadeOut: previous.fadeOut })
+          ...(operation.fadeIn !== undefined
+            ? { fadeIn: Math.max(0, Math.min(10, operation.fadeIn)) }
+            : previous.fadeIn === undefined ? {} : { fadeIn: previous.fadeIn }),
+          ...(operation.fadeOut !== undefined
+            ? { fadeOut: Math.max(0, Math.min(10, operation.fadeOut)) }
+            : previous.fadeOut === undefined ? {} : { fadeOut: previous.fadeOut })
         };
         break;
       }
