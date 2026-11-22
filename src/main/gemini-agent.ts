@@ -493,7 +493,8 @@ export class GeminiAgentManager {
     const job = await startProjectAnalysis({
       rootPath: record.rootPath,
       project: record.project,
-      editor
+      editor,
+      userDataPath: this.input.userDataPath
     });
     // Poll the in-process job until it settles (analysis is local and bounded).
     const deadline = Date.now() + 10 * 60_000;

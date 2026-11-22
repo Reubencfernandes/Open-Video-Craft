@@ -5,6 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { resolveFfmpegPath } from "./ffmpeg";
 import { resolveContainedProjectPath } from "./project-containment";
+import { resolveLocalModelPaths } from "../shared/local-model-paths";
 import type { EditorProjectStateFile, ProjectFile } from "../shared/types";
 import type { SubtitleSegment, SubtitleWord } from "../shared/editor-domain";
 
@@ -49,6 +50,7 @@ export async function startProjectAnalysis(input: {
   rootPath: string;
   project: ProjectFile;
   editor: EditorProjectStateFile | null;
+  userDataPath: string;
   thumbnailIntervalSeconds?: number;
 }): Promise<AnalysisJobStatus> {
   const fingerprint = await createFingerprint(input.rootPath, input.project, input.editor);
@@ -88,7 +90,7 @@ export async function readContactSheet(rootPath: string, page: number): Promise<
 
 async function runAnalysis(
   job: AnalysisJobStatus,
-  input: { rootPath: string; project: ProjectFile; editor: EditorProjectStateFile | null; thumbnailIntervalSeconds?: number },
+  input: { rootPath: string; project: ProjectFile; editor: EditorProjectStateFile | null; userDataPath: string; thumbnailIntervalSeconds?: number },
   fingerprint: string
 ) {
   job.status = "analyzing"; job.progress = 5; job.message = "Preparing local media analysis.";
@@ -153,7 +155,7 @@ async function runAnalysis(
   let language = input.editor?.state.subtitleLanguage ?? null;
   if (segments.length === 0 && audioPath) {
     try {
-      const transcript = await transcribeAudio(audioPath);
+      const transcript = await transcribeAudio(audioPath, input.userDataPath);
       segments = transcript.segments; language = transcript.language;
     } catch (error) { warnings.push(`Local transcription failed: ${messageOf(error)}`); }
   }
@@ -178,11 +180,16 @@ async function runAnalysis(
   job.status = "complete"; job.progress = 100; job.message = "Analysis complete."; job.result = result;
 }
 
-async function transcribeAudio(audioPath: string): Promise<{ language: string | null; segments: SubtitleSegment[] }> {
+async function transcribeAudio(audioPath: string, userDataPath: string): Promise<{ language: string | null; segments: SubtitleSegment[] }> {
   const pcm = await captureStdout(resolveFfmpegPath(), ["-i", audioPath, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "pipe:1"]);
   const floats = new Float32Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
   const transformers = await import("@huggingface/transformers");
+  const paths = resolveLocalModelPaths(userDataPath);
+  await fs.mkdir(paths.localModelPath, { recursive: true });
+  await fs.mkdir(paths.cacheDir, { recursive: true });
   transformers.env.allowLocalModels = false;
+  transformers.env.localModelPath = paths.localModelPath;
+  transformers.env.cacheDir = paths.cacheDir;
   cachedTranscriber ??= transformers.pipeline("automatic-speech-recognition", "onnx-community/whisper-base_timestamped");
   const transcriber = await cachedTranscriber;
   const output = await transcriber(floats, { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5 });

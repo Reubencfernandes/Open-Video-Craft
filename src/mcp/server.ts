@@ -98,7 +98,7 @@ server.registerTool("start_analysis", {
   try {
     const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const editor = await readEditorDocument(project.rootPath);
-    const job = await startProjectAnalysis({ rootPath: project.rootPath, project: project.project, editor, thumbnailIntervalSeconds });
+    const job = await startProjectAnalysis({ rootPath: project.rootPath, project: project.project, editor, userDataPath, thumbnailIntervalSeconds });
     return success(toRecord(job));
   } catch (error) { return failure(error); }
 });
