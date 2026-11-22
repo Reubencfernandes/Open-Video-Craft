@@ -5,8 +5,9 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { exportTimelineComposition, resolveFfmpegPath } from "../src/main/ffmpeg";
-import { retimeSubtitlesForSpeed, retimeTextOverlaysForSpeed } from "../src/main/composition-export";
-import { buildAudioCleanupFilter } from "../src/shared/editor-domain";
+import { exportEditorProjectToPath, retimeSubtitlesForSpeed, retimeTextOverlaysForSpeed } from "../src/main/composition-export";
+import { buildAudioCleanupFilter, createDefaultEditorState } from "../src/shared/editor-domain";
+import type { EditorProjectStateFile, ProjectFile } from "../src/shared/types";
 
 const exec = promisify(execFile);
 let directory: string;
@@ -124,6 +125,76 @@ describe("timeline composition export", () => {
     const [redChannel, , blueChannel] = middle.stdout as unknown as Buffer;
     expect(redChannel).toBeGreaterThan(30);
     expect(blueChannel).toBeGreaterThan(30);
+  }, 60_000);
+
+  it("composites the configured background behind letterboxed clips", async () => {
+    const ffmpeg = resolveFfmpegPath();
+    const portrait = path.join(directory, "portrait.mp4");
+    const background = path.join(directory, "background.png");
+    const output = path.join(directory, "background-result.mp4");
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=red:s=160x180:r=30:d=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", portrait]);
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=blue:s=320x180:d=1", "-frames:v", "1", background]);
+
+    await exportTimelineComposition({
+      videoSegments: [
+        { id: "portrait", path: portrait, kind: "video", start: 0, end: 2, sourceStart: 0, volume: 1, hasAudio: false }
+      ],
+      audioSegments: [],
+      background: { imagePath: background },
+      outputPath: output, format: "mp4", resolution: "720p", trimStart: 0, trimEnd: null
+    });
+
+    const side = await exec(ffmpeg, [
+      "-ss", "0.5", "-i", output, "-vf", "crop=8:8:40:360",
+      "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"
+    ], { encoding: "buffer" as any, maxBuffer: 1024 * 1024 } as any);
+    const [red, green, blue] = side.stdout as unknown as Buffer;
+    expect(blue).toBeGreaterThan(120);
+    expect(blue).toBeGreaterThan(red * 2);
+    expect(blue).toBeGreaterThan(green * 2);
+  }, 60_000);
+
+  it("uses the saved custom background through the project export API", async () => {
+    const ffmpeg = resolveFfmpegPath();
+    const portrait = path.join(directory, "portrait.mp4");
+    const background = path.join(directory, "background.png");
+    const output = path.join(directory, "project-background-result.mp4");
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=red:s=160x180:r=30:d=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", portrait]);
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=blue:s=320x180:d=1", "-frames:v", "1", background]);
+    const now = new Date().toISOString();
+    const project: ProjectFile = {
+      schemaVersion: 1, appVersion: "test", id: "background-project", name: "Background",
+      createdAt: now, updatedAt: now, status: "complete", source: null,
+      devices: { microphone: { enabled: false, deviceId: null, label: null }, camera: { enabled: false, deviceId: null, label: null } },
+      tracks: {}, durationMs: 2_000, startedAt: null, stoppedAt: null, error: null
+    };
+    const document: EditorProjectStateFile = {
+      schemaVersion: 2, revision: 1, savedAt: now,
+      state: {
+        ...createDefaultEditorState(),
+        timelineSegments: [{ id: "portrait-segment", itemId: "portrait", track: "video", lane: 0, start: 0, end: 2, sourceStart: 0 }],
+        backgroundStyle: "custom",
+        customBackgroundImportId: "background",
+        trimRange: { start: 0, end: 2 }
+      },
+      imports: [
+        { id: "portrait", name: "portrait.mp4", kind: "video", extension: "mp4", duration: 2, relativePath: "portrait.mp4" },
+        { id: "background", name: "background.png", kind: "image", extension: "png", duration: null, relativePath: "background.png" }
+      ],
+      lastMutation: { source: "editor", at: now, editId: null, summary: null }
+    };
+
+    await exportEditorProjectToPath({
+      rootPath: directory, project, document, outputPath: output,
+      format: "mp4", resolution: "720p", subtitleMode: "none", trimStart: 0, trimEnd: 2
+    });
+
+    const side = await exec(ffmpeg, [
+      "-ss", "0.5", "-i", output, "-vf", "crop=8:8:40:360",
+      "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"
+    ], { encoding: "buffer" as any, maxBuffer: 1024 * 1024 } as any);
+    const [, , blue] = side.stdout as unknown as Buffer;
+    expect(blue).toBeGreaterThan(120);
   }, 60_000);
 
   it("renders an animated callout box without FFmpeg filter errors", async () => {

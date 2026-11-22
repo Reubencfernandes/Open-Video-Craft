@@ -1,6 +1,7 @@
 /** Pure Node timeline export entry point shared by Electron and the MCP server. */
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { exportTimelineComposition, mediaHasAudio } from "./ffmpeg";
 import type {
@@ -104,6 +105,7 @@ export async function exportEditorProjectToPath(input: {
     trimStart,
     effectiveTrimEnd
   );
+  const background = await resolveExportBackground(input.document, sourceById);
   const subtitleRequest: ExportVideoRequest = {
     jobId: randomUUID(),
     source: { kind: "project", projectId }, format: input.format, resolution: input.resolution,
@@ -129,16 +131,66 @@ export async function exportEditorProjectToPath(input: {
       transitions: input.document.state.transitions ?? [],
       zoomEffects: input.document.state.zoomEffects,
       speedEffects: input.document.state.speedEffects,
-      textOverlays: exportTextOverlays
+      textOverlays: exportTextOverlays,
+      background: background ? { imagePath: background.imagePath } : undefined
     }, input.control);
     exportCompleted = true;
   } finally {
     await temporarySubtitles?.cleanup().catch(() => undefined);
+    await background?.cleanup().catch(() => undefined);
     if (subtitlePath && subtitleMode === "sidecar" && !exportCompleted) {
       await fs.rm(subtitlePath, { force: true }).catch(() => undefined);
     }
   }
   return { path: input.outputPath, bytesWritten, subtitlePath: subtitleMode === "sidecar" ? subtitlePath : null };
+}
+
+const bundledBackgroundPrefixes: Record<string, string> = {
+  "real-world-1": "scene-skyline",
+  "real-world-2": "scene-cityscape",
+  "real-world-3": "scene-coast",
+  "real-world-4": "style-florals",
+  "real-world-5": "style-chrome",
+  "real-world-6": "style-marble",
+  "gradient-1": "gradient-dawn",
+  "gradient-2": "gradient-silver",
+  "gradient-3": "gradient-ultraviolet",
+  "animated-1": "gradient-dawn",
+  "animated-2": "gradient-ultraviolet",
+  "animated-3": "gradient-dawn"
+};
+
+async function resolveExportBackground(
+  document: EditorProjectStateFile,
+  sourceById: ReadonlyMap<string, { path: string; kind: "video" | "audio" | "image" }>
+): Promise<{ imagePath: string; cleanup: () => Promise<void> } | null> {
+  const style = document.state.backgroundStyle;
+  const customId = document.state.customBackgroundImportId;
+  if (style === "custom" && customId) {
+    const source = sourceById.get(customId);
+    if (source?.kind === "image" && await fileExists(source.path)) {
+      return { imagePath: source.path, cleanup: async () => undefined };
+    }
+    return null;
+  }
+  const prefix = bundledBackgroundPrefixes[style];
+  if (!prefix) return null;
+  const assetsDirectory = path.resolve(__dirname, "..", "..", "dist-renderer", "assets");
+  const entries = await fs.readdir(assetsDirectory).catch(() => [] as string[]);
+  const asset = entries.find((name) => name.startsWith(prefix) && /\.(?:jpg|jpeg|png)$/iu.test(name));
+  if (!asset) return null;
+  const temporaryPath = path.join(os.tmpdir(), `ovc-background-${randomUUID()}${path.extname(asset)}`);
+  await fs.copyFile(path.join(assetsDirectory, asset), temporaryPath);
+  return { imagePath: temporaryPath, cleanup: () => fs.rm(temporaryPath, { force: true }) };
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function retimeTextOverlaysForSpeed(

@@ -125,6 +125,7 @@ export interface TimelineCompositionJob {
   zoomEffects?: TimelineCompositionZoomEffect[];
   speedEffects?: TimelineCompositionSpeedEffect[];
   textOverlays?: TimelineCompositionTextOverlay[];
+  background?: { imagePath: string };
 }
 
 type CompositionPiece = {
@@ -336,6 +337,11 @@ export async function exportTimelineComposition(
   const args: string[] = ["-y"];
   const pieces: CompositionPiece[] = [];
   let inputIndex = 0;
+  const backgroundPath = job.background?.imagePath;
+  if (backgroundPath) {
+    args.push("-loop", "1", "-t", formatFfmpegNumber(Math.max(0.1, timelineEnd)), "-i", backgroundPath);
+    inputIndex = 1;
+  }
   let cursor = 0;
   for (const segment of videoSegments) {
     if (segment.start > cursor + 0.01) {
@@ -391,7 +397,23 @@ export async function exportTimelineComposition(
   }
 
   const filters: string[] = [];
-  appendTransitionVideoFilters(filters, pieces, transitions, width, height);
+  let backgroundSources: string[] | null = null;
+  if (backgroundPath) {
+    filters.push(
+      `[0:v]scale=${width}:${height}:force_original_aspect_ratio=increase,` +
+      `crop=${width}:${height},setsar=1,fps=30,format=yuv420p[bgprepared]`
+    );
+    backgroundSources = pieces.map((_piece, index) => `bg${index}`);
+    if (backgroundSources.length === 1) {
+      filters.push(`[bgprepared]null[${backgroundSources[0]}]`);
+    } else {
+      filters.push(
+        `[bgprepared]split=${backgroundSources.length}` +
+        `${backgroundSources.map((label) => `[${label}]`).join("")}`
+      );
+    }
+  }
+  appendTransitionVideoFilters(filters, pieces, transitions, width, height, backgroundSources);
   const trimEnd = job.trimEnd && job.trimEnd > job.trimStart ? job.trimEnd : timelineEnd;
   const sourceDuration = Math.max(0.1, trimEnd - job.trimStart);
   const speedRegions = createSpeedRegions(job.speedEffects ?? [], job.trimStart, trimEnd);
@@ -704,7 +726,8 @@ function appendTransitionVideoFilters(
   pieces: CompositionPiece[],
   transitions: TimelineCompositionTransition[],
   width: number,
-  height: number
+  height: number,
+  backgroundSources: string[] | null = null
 ): void {
   const transitionAfter = new Map<number, TimelineCompositionTransition>();
   for (let index = 0; index < pieces.length - 1; index += 1) {
@@ -717,12 +740,24 @@ function appendTransitionVideoFilters(
     const outgoing = transitionAfter.get(index);
     const lead = (incoming?.duration ?? 0) / 2;
     const trail = (outgoing?.duration ?? 0) / 2;
-    const base = `v${index}base`;
+    let base = `v${index}base`;
     const branchNames = ["body", ...(incoming ? ["head"] : []), ...(outgoing ? ["tail"] : [])];
-    filters.push(
-      `[${piece.inputIndex}:v:0]setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
-      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30,format=yuv420p[${base}]`
-    );
+    if (piece.gap && backgroundSources) {
+      filters.push(`[${backgroundSources[index]}]null[v${index}gap]`);
+      base = `v${index}gap`;
+    } else {
+      const padColor = backgroundSources ? "black@0" : "black";
+      const pixelFormat = backgroundSources ? "yuva420p" : "yuv420p";
+      filters.push(
+        `[${piece.inputIndex}:v:0]setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
+        `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:${padColor},setsar=1,fps=30,format=${pixelFormat}[${base}]`
+      );
+      if (backgroundSources) {
+        const composited = `v${index}composited`;
+        filters.push(`[${backgroundSources[index]}][${base}]overlay=0:0:format=auto,format=yuv420p[${composited}]`);
+        base = composited;
+      }
+    }
     const sources = branchNames.map((name) => `v${index}${name}src`);
     if (sources.length === 1) filters.push(`[${base}]null[${sources[0]}]`);
     else filters.push(`[${base}]split=${sources.length}${sources.map((label) => `[${label}]`).join("")}`);
@@ -752,7 +787,7 @@ function appendTransitionVideoFilters(
         `trim=duration=${formatFfmpegNumber(outgoing.duration)},setpts=PTS-STARTPTS[${tail}]`
       );
     }
-    return { body, head, tail };
+    return { body, head, tail, base };
   });
 
   const outputUnits: string[] = [];
