@@ -58,7 +58,7 @@ try {
   }
   const tools = await client.listTools();
   const names = tools.tools.map((tool) => tool.name);
-  for (const required of ["list_projects", "inspect_project", "start_analysis", "get_analysis", "apply_edit_plan", "undo_agent_edit", "export_project"]) {
+  for (const required of ["list_projects", "inspect_project", "start_analysis", "get_analysis", "query_analysis_transcript", "apply_edit_plan", "undo_agent_edit", "export_project"]) {
     if (!names.includes(required)) throw new Error(`Missing MCP tool: ${required}`);
   }
   const inspect = await client.callTool({ name: "inspect_project", arguments: { projectId: project.id } });
@@ -165,6 +165,35 @@ try {
     }
   });
   if (!staleAnalysisPlan.isError) throw new Error("apply_edit_plan accepted a stale analysis fingerprint");
+  await mkdir(path.join(projectRoot, ".ovc", "analysis"), { recursive: true });
+  await writeFile(path.join(projectRoot, ".ovc", "analysis", "latest.json"), `${JSON.stringify({
+    schemaVersion: 2,
+    projectId: project.id,
+    fingerprint: "smoke-fingerprint",
+    generatedAt: now,
+    status: "complete",
+    timelineDurationSeconds: 10,
+    transcript: { language: "en", segments: [
+      { start: 1, end: 2, text: "Welcome to the channel.", words: [] },
+      { start: 3, end: 4, text: "Today we discuss Python packaging.", words: [] },
+      { start: 5, end: 6, text: "The Python API is useful.", words: [] }
+    ] },
+    silenceRanges: [],
+    contactSheets: [],
+    editCandidates: { fillerWords: [], note: "smoke" },
+    warnings: []
+  })}\n`);
+  const excerpts = await client.callTool({
+    name: "query_analysis_transcript",
+    arguments: { projectId: project.id, query: "Python API", limit: 5 }
+  });
+  if (excerpts.isError) throw new Error(`query_analysis_transcript failed: ${JSON.stringify(excerpts.content)}`);
+  if (excerpts.structuredContent?.excerpts?.length !== 1 || excerpts.structuredContent?.excerpts?.[0]?.start !== 5) {
+    throw new Error("query_analysis_transcript did not return the matching bounded excerpt");
+  }
+  if (JSON.stringify(excerpts.structuredContent).includes("words")) {
+    throw new Error("query_analysis_transcript returned full transcript segments");
+  }
   process.stdout.write("MCP smoke test passed.\n");
 } finally {
   await client.close().catch(() => undefined);

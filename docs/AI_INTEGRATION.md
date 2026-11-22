@@ -59,7 +59,7 @@ Craft's recent-project library and verifies each project manifest.
 
 MCP tools fall into three groups:
 
-- Inspection: `list_projects`, `inspect_project`, and `get_analysis`.
+- Inspection: `list_projects`, `inspect_project`, `get_analysis`, and `query_analysis_transcript`.
 - Background work: `start_analysis`.
 - Mutations: `apply_edit_plan`, `undo_agent_edit`, and `export_project`.
 
@@ -89,7 +89,10 @@ review candidates only: the server instructions explicitly forbid treating a
 detection as permission to remove content.
 
 The tool returns a job ID immediately. Agents poll with `get_analysis`, avoiding
-long MCP calls while transcription or image generation is in progress.
+long MCP calls while transcription or image generation is in progress. Transcript
+text must be read with `query_analysis_transcript`, which returns at most 40 short
+timestamped excerpts; `get_analysis` returns the full analysis blob and can exceed
+the assistant's context limit.
 
 ### Composition export
 

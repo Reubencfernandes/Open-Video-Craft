@@ -17,6 +17,7 @@ export const CLAUDE_MCP_TOOL_NAMES = [
   "mcp__open-video-craft__list_projects",
   "mcp__open-video-craft__inspect_project",
   "mcp__open-video-craft__get_analysis",
+  "mcp__open-video-craft__query_analysis_transcript",
   "mcp__open-video-craft__start_analysis",
   "mcp__open-video-craft__apply_edit_plan",
   "mcp__open-video-craft__undo_agent_edit",
@@ -28,7 +29,7 @@ const CLAUDE_SYSTEM_PROMPT = [
   "You control the application only through its MCP tools.",
   "Always call inspect_project before proposing or applying an edit.",
   "Apply only the user's requested actions in one validated edit plan.",
-  "For topic callouts, use the transcript from get_analysis to choose timestamps and call apply_edit_plan with set_text_overlay, including a title and box style.",
+  "Read transcript text only with query_analysis_transcript; get_analysis is for status and fingerprint. For topic callouts, use bounded transcript excerpts to choose timestamps and call apply_edit_plan with set_text_overlay, including a title and box style.",
   "For wind or background noise around speech, use set_audio_cleanup on the relevant audio item with a conservative preset and strength 0–100.",
   "Never add unrelated edits, generic cleanup or extra effects.",
   "Reply briefly with what changed; do not describe tool mechanics."
