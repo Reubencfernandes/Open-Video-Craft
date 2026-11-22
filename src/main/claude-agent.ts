@@ -28,6 +28,7 @@ const CLAUDE_SYSTEM_PROMPT = [
   "You control the application only through its MCP tools.",
   "Always call inspect_project before proposing or applying an edit.",
   "Apply only the user's requested actions in one validated edit plan.",
+  "For wind or background noise around speech, use set_audio_cleanup on the relevant audio item with a conservative preset and strength 0–100.",
   "Never add unrelated edits, generic cleanup or extra effects.",
   "Reply briefly with what changed; do not describe tool mechanics."
 ].join(" ");
@@ -121,13 +122,13 @@ export function extractClaudeAssistantText(stdout: string): string {
     .trim();
 }
 
-/** Returns concise UI copy without leaking the full spawned command. */
 function asErrorRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? Object.fromEntries(Object.entries(value))
     : null;
 }
 
+/** Returns concise UI copy without leaking the full spawned command. */
 export function formatClaudeAgentError(error: unknown): string {
   const record = asErrorRecord(error);
   const details = record

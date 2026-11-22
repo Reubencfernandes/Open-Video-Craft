@@ -46,6 +46,7 @@ export interface TimelineCompositionVideoSegment {
   sourceStart: number;
   volume: number;
   hasAudio: boolean;
+  cleanupFilter?: string;
 }
 
 export interface TimelineCompositionTransition {
@@ -69,7 +70,7 @@ export interface TimelineCompositionZoomEffect {
 export interface TimelineCompositionSpeedEffect {
   start: number;
   end: number;
-  rate: 1 | 2 | 3 | 4 | 5;
+  rate: 1 | 1.25 | 1.5 | 2 | 3 | 4 | 5;
 }
 
 export interface TimelineCompositionTextOverlay {
@@ -92,6 +93,7 @@ export interface TimelineCompositionAudioSegment {
   end: number;
   sourceStart: number;
   volume: number;
+  cleanupFilter?: string;
 }
 
 export interface TimelineCompositionJob {
@@ -349,6 +351,7 @@ export async function exportTimelineComposition(
     volume: number;
     fadeIn: number;
     fadeOut: number;
+    cleanupFilter?: string;
   }> = [];
   for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex += 1) {
     const piece = pieces[pieceIndex];
@@ -358,6 +361,7 @@ export async function exportTimelineComposition(
         start: piece.segment.start,
         duration: piece.duration,
         volume: piece.segment.volume,
+        cleanupFilter: piece.segment.cleanupFilter,
         fadeIn: (getTransitionBetween(pieces[pieceIndex - 1], piece, transitions)?.duration ?? 0) / 2,
         fadeOut: (getTransitionBetween(piece, pieces[pieceIndex + 1], transitions)?.duration ?? 0) / 2
       });
@@ -367,7 +371,7 @@ export async function exportTimelineComposition(
     const duration = segment.end - segment.start;
     if (segment.sourceStart > 0) args.push("-ss", formatFfmpegNumber(segment.sourceStart));
     args.push("-t", formatFfmpegNumber(duration), "-i", segment.path);
-    audioInputs.push({ inputIndex: inputIndex++, start: segment.start, duration, volume: segment.volume, fadeIn: 0, fadeOut: 0 });
+    audioInputs.push({ inputIndex: inputIndex++, start: segment.start, duration, volume: segment.volume, cleanupFilter: segment.cleanupFilter, fadeIn: 0, fadeOut: 0 });
   }
 
   const filters: string[] = [];
@@ -401,7 +405,8 @@ export async function exportTimelineComposition(
     const fadeOut = input.fadeOut > 0
       ? `,afade=t=out:st=${formatFfmpegNumber(Math.max(0, input.duration - input.fadeOut))}:d=${formatFfmpegNumber(input.fadeOut)}`
       : "";
-    filters.push(`[${input.inputIndex}:a:0]atrim=duration=${formatFfmpegNumber(input.duration)},asetpts=PTS-STARTPTS,volume=${formatFfmpegNumber(clampVolume(input.volume))}${fadeIn}${fadeOut},adelay=${delay}:all=1[${label}]`);
+    const cleanup = input.cleanupFilter ? `,${input.cleanupFilter}` : "";
+    filters.push(`[${input.inputIndex}:a:0]atrim=duration=${formatFfmpegNumber(input.duration)},asetpts=PTS-STARTPTS${cleanup},volume=${formatFfmpegNumber(clampVolume(input.volume))}${fadeIn}${fadeOut},adelay=${delay}:all=1[${label}]`);
     audioLabels.push(`[${label}]`);
   });
   if (audioLabels.length > 0) {
@@ -428,7 +433,7 @@ export async function exportTimelineComposition(
   return (await fs.stat(job.outputPath)).size;
 }
 
-type RelativeSpeedRegion = { start: number; end: number; rate: 1 | 2 | 3 | 4 | 5 };
+type RelativeSpeedRegion = { start: number; end: number; rate: TimelineCompositionSpeedEffect["rate"] };
 type RelativeZoomEffect = TimelineCompositionZoomEffect & { start: number; end: number };
 
 /** Split a trimmed timeline into contiguous normal/speed regions. */

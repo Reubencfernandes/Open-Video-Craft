@@ -6,6 +6,7 @@ import type {
   ProviderKeysView,
   SttProviderId
 } from "../../shared/types";
+import type { AudioCleanupState } from "../../shared/editor-domain";
 import type { GeminiChatMessage } from "../../shared/types";
 import type { MusicGenerationForm, MusicGenerationState } from "./useMusicGeneration";
 import { AssistantPanel, type AssistantProvider } from "./panels/AssistantPanel";
@@ -64,6 +65,8 @@ export function EditorToolPanel(props: {
   sttModelLabel: string;
   sttProvider: SttProviderId;
   providerKeys: ProviderKeysView | null;
+  audioCleanup: AudioCleanupState;
+  onSetAudioCleanup: (itemId: string, settings: AudioCleanupState[string] | null) => void;
   assistantProvider: AssistantProvider;
   onAssistantProviderChange: (provider: AssistantProvider) => void;
   onCancelTranscription: () => void;
@@ -168,6 +171,8 @@ export function EditorToolPanel(props: {
           masterVolume={props.masterVolume}
           audioSources={props.audioSources}
           audioLevels={props.audioLevels}
+          audioCleanup={props.audioCleanup}
+          onSetAudioCleanup={props.onSetAudioCleanup}
           onMasterVolumeChange={props.onMasterVolumeChange}
           onAddBackgroundMusic={props.onAddBackgroundMusic}
           onSelectItem={props.onSelectItem}

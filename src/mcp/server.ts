@@ -39,7 +39,7 @@ function assertScopedProject(projectId: string | undefined): string | undefined 
 
 const server = new McpServer(
   { name: "open-video-craft", version: serverVersion },
-  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
+  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a conservative local FFmpeg filter applied at export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
 );
 
 const projectIdSchema = z.string().min(1).max(128).optional().describe("Project ID. Omit to use the open or most recent project.");
@@ -317,6 +317,7 @@ function operationAction(operation: EditorEditOperation): EditAction {
     case "sequence_clips":
       return "restructure";
     case "set_audio":
+    case "set_audio_cleanup":
     case "set_audio_lane":
     case "set_master_volume":
     case "set_background_audio":

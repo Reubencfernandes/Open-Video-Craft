@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { exportTimelineComposition, resolveFfmpegPath } from "../src/main/ffmpeg";
 import { retimeSubtitlesForSpeed, retimeTextOverlaysForSpeed } from "../src/main/composition-export";
+import { buildAudioCleanupFilter } from "../src/shared/editor-domain";
 
 const exec = promisify(execFile);
 let directory: string;
@@ -71,6 +72,28 @@ describe("timeline composition export", () => {
     expect(Number(duration)).toBeCloseTo(2.25, 1);
     expect(diagnostics).toMatch(/Video:/);
     expect(diagnostics).toMatch(/Audio:/);
+  }, 60_000);
+
+  it("applies local speech cleanup filters to exported audio", async () => {
+    const ffmpeg = resolveFfmpegPath();
+    const video = path.join(directory, "cleanup-video.mp4");
+    const tone = path.join(directory, "cleanup-tone.wav");
+    const output = path.join(directory, "cleanup-result.mp4");
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=black:s=320x180:r=30:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", video]);
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "sine=frequency=220:duration=1", "-ar", "48000", tone]);
+
+    const bytes = await exportTimelineComposition({
+      videoSegments: [{ path: video, kind: "video", start: 0, end: 1, sourceStart: 0, volume: 1, hasAudio: false }],
+      audioSegments: [{
+        path: tone, start: 0, end: 1, sourceStart: 0, volume: 1,
+        cleanupFilter: buildAudioCleanupFilter({ preset: "wind", strength: 50 })
+      }],
+      outputPath: output, format: "mp4", resolution: "720p", trimStart: 0, trimEnd: null
+    });
+
+    expect(bytes).toBeGreaterThan(1_000);
+    const probe = await exec(ffmpeg, ["-i", output]).catch((error: any) => error);
+    expect(`${probe.stderr ?? ""}`).toMatch(/Audio:/);
   }, 60_000);
 
   it("renders a fixed-duration crossfade between adjacent clips", async () => {

@@ -43,7 +43,10 @@ import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewQuality } from "./editor/usePreviewQuality";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
 import { useTimelineController } from "./editor/useTimelineController";
-import { useTimelineViewport } from "./editor/useTimelineViewport";
+import {
+  getTimelineZoomAfterShortcut,
+  useTimelineViewport
+} from "./editor/useTimelineViewport";
 import { useWorkspacePanelResize } from "./editor/useWorkspacePanelResize";
 import { useAppUpdateStatus } from "./useAppUpdateStatus";
 import {
@@ -57,6 +60,7 @@ import { clampNumber, createId } from "./editor/utils";
 import { getZoomPreviewTime } from "./editor/zoom-utils";
 import { sanitizeClipTransitions, validateClipTransitions } from "../shared/editor-domain";
 import type {
+  AudioCleanupState,
   PendingMediaImport,
   PendingMusicGeneration
 } from "../shared/editor-domain";
@@ -131,6 +135,7 @@ export function EditorView() {
   const [audioLevels, setAudioLevels] = useState<
     Record<string, { volume: number; muted: boolean }>
   >({});
+  const [audioCleanup, setAudioCleanup] = useState<AudioCleanupState>({});
   const [backgroundAudioIds, setBackgroundAudioIds] = useState<string[]>([]);
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
@@ -170,6 +175,20 @@ export function EditorView() {
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const { updateStatus, installUpdate } = useAppUpdateStatus();
 
+  useEffect(() => {
+    function onZoomShortcut(event: KeyboardEvent) {
+      if (!event.ctrlKey && !event.metaKey) return;
+      const shortcut = event.key === "=" || event.key === "+" ? "in"
+        : event.key === "-" ? "out"
+          : event.key === "0" ? "fit" : null;
+      if (shortcut === null) return;
+      event.preventDefault();
+      setTimelineZoom((zoom) => getTimelineZoomAfterShortcut(zoom, shortcut));
+    }
+    window.addEventListener("keydown", onZoomShortcut);
+    return () => window.removeEventListener("keydown", onZoomShortcut);
+  }, []);
+
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
 
   const {
@@ -182,6 +201,7 @@ export function EditorView() {
     undoLastAgentEdit
   } = useEditorPersistence({
     activeBackgroundCategory,
+    audioCleanup,
     audioLevels,
     backgroundAudioIds,
     backgroundStyle,
@@ -212,6 +232,7 @@ export function EditorView() {
     screenAspectRatio,
     screenPosition,
     setActiveBackgroundCategory,
+    setAudioCleanup,
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
@@ -945,6 +966,13 @@ export function EditorView() {
             sttModelLabel={whisperTranscriptionModelLabel}
             sttProvider={sttProvider}
             providerKeys={providerKeys}
+            audioCleanup={audioCleanup}
+            onSetAudioCleanup={(itemId, settings) => setAudioCleanup((current) => {
+              const next = { ...current };
+              if (settings === null) delete next[itemId];
+              else next[itemId] = settings;
+              return next;
+            })}
             assistantProvider={assistantProvider}
             onAssistantProviderChange={setAssistantProvider}
             onCancelTranscription={cancelTranscription}
@@ -1122,6 +1150,7 @@ export function EditorView() {
           onZoomIn={zoomTimelineIn}
           onZoomOut={zoomTimelineOut}
           onZoomReset={resetTimelineZoom}
+          onZoomChange={setTimelineZoom}
           onZoomWheel={zoomTimelineWithWheel}
           onRulerPointerDown={beginTimelineRulerPointer}
           onRulerPointerMove={moveTimelineRulerPointer}

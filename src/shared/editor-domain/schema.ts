@@ -1,3 +1,4 @@
+import { isAudioCleanupPreset } from "./audio-cleanup";
 import type {
   AudioLevelState,
   CameraContentTransform,
@@ -26,7 +27,7 @@ export function createDefaultEditorState(): EditorStateSnapshot {
     cameraBorderStyle: "light", cameraContentTransform: { x: 0, y: 0, scale: 100, mirrored: false },
     videoCornerStyle: "soft", screenPosition: { x: 0, y: 0, scale: 100 },
     screenAspectRatio: "auto", cameraFrame: { x: 72, y: 72, size: 24 },
-    masterVolume: 100, audioLevels: {}, backgroundAudioIds: [],
+    masterVolume: 100, audioLevels: {}, audioCleanup: {}, backgroundAudioIds: [],
     customBackgroundImportId: null, trimRange: { start: 0, end: 0 },
     previewQuality: "high", timelineZoom: 1, previewZoom: 1,
     pendingMediaImport: null, pendingMusicGeneration: null
@@ -96,6 +97,7 @@ export function validateEditorStateSnapshot(value: unknown): value is EditorStat
     isCameraContentTransform(value.cameraContentTransform) && oneOf(value.videoCornerStyle, ["flat", "soft", "round"]) &&
     isXYZ(value.screenPosition, ["x", "y", "scale"]) && oneOf(value.screenAspectRatio, ["auto", "16:9", "16:10", "4:3"]) &&
     isXYZ(value.cameraFrame, ["x", "y", "size"]) && finite(value.masterVolume) && isAudioLevels(value.audioLevels) &&
+    isAudioCleanupState(value.audioCleanup) &&
     isArrayOf(value.backgroundAudioIds, (item): item is string => typeof item === "string") &&
     (value.customBackgroundImportId === null || typeof value.customBackgroundImportId === "string") &&
     isRange(value.trimRange) &&
@@ -174,7 +176,7 @@ function isZoomEffect(value: unknown): value is ZoomEffect {
 }
 
 function isSpeedEffect(value: unknown): value is SpeedEffect {
-  return hasTimedId(value) && [1, 2, 3, 4, 5].includes(value.rate as number);
+  return hasTimedId(value) && [1, 1.25, 1.5, 2, 3, 4, 5].includes(value.rate as number);
 }
 
 function hasTimedId(value: unknown): value is Record<string, unknown> {
@@ -188,6 +190,16 @@ function isCameraContentTransform(value: unknown): value is CameraContentTransfo
 function isAudioLevels(value: unknown): value is AudioLevelState {
   return isRecord(value) && Object.values(value).every((level) =>
     isRecord(level) && finite(level.volume) && typeof level.muted === "boolean");
+}
+
+function isAudioCleanupState(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((entry) =>
+    isRecord(entry) &&
+    isAudioCleanupPreset(entry.preset) &&
+    finite(entry.strength) && entry.strength >= 0 && entry.strength <= 100
+  );
 }
 
 function isRange(value: unknown): value is TrimRange {

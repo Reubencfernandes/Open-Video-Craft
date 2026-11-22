@@ -11,3 +11,4 @@ export * from "./editor-domain/types";
 export * from "./editor-domain/schema";
 export * from "./editor-domain/operations";
 export * from "./editor-domain/audio-levels";
+export * from "./editor-domain/audio-cleanup";

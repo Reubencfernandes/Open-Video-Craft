@@ -3,6 +3,10 @@
  * process, MCP server, export worker, and tests. Keep this module free of
  * runtime dependencies so every process agrees on the persisted file shape.
  */
+import type { AudioCleanupPreset, AudioCleanupSettings, AudioCleanupState } from "./audio-cleanup";
+
+export type { AudioCleanupPreset, AudioCleanupSettings, AudioCleanupState };
+
 export type LayoutMode =
   | "screen-only"
   | "camera-only"
@@ -28,7 +32,7 @@ export type ScreenAspectRatio = "auto" | "16:9" | "16:10" | "4:3";
 export type TimelineTrackKind = "video" | "audio";
 export type ZoomSpeed = "slow" | "medium" | "fast";
 export type ZoomEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "custom";
-export type SpeedRate = 1 | 2 | 3 | 4 | 5;
+export type SpeedRate = 1 | 1.25 | 1.5 | 2 | 3 | 4 | 5;
 export type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";
 export type TextAnimation = "none" | "fade" | "pop" | "slide-up";
 export type TextFontFamily = "sans" | "rounded" | "serif" | "mono";
@@ -152,6 +156,8 @@ export interface EditorStateSnapshot {
   cameraFrame: CameraFrame;
   masterVolume: number;
   audioLevels: AudioLevelState;
+  /** Optional so older schema-v2 projects load without migration. */
+  audioCleanup?: AudioCleanupState;
   backgroundAudioIds: string[];
   customBackgroundImportId: string | null;
   trimRange: TrimRange;
@@ -201,6 +207,7 @@ export type EditorEditOperation =
   | { type: "move_clip"; segmentId: string; timelineStart: number; lane?: number }
   | { type: "sequence_clips"; segmentIds: string[]; start: number; gap: number }
   | { type: "set_audio"; itemId: string; gainDb: number; muted: boolean }
+  | { type: "set_audio_cleanup"; itemId: string; preset: AudioCleanupPreset; strength: number }
   | { type: "set_audio_lane"; lane: number; gainDb: number; muted: boolean }
   | { type: "set_master_volume"; volume: number }
   | { type: "set_background_audio"; itemIds: string[] }

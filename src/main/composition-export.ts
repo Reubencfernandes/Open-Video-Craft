@@ -22,8 +22,12 @@ import type {
   ExportVideoResult,
   ProjectFile
 } from "../shared/types";
-import { getEffectiveAudioLevel, validateClipTransitions } from "../shared/editor-domain";
-import type { TextOverlay } from "../shared/editor-domain";
+import {
+  buildAudioCleanupFilter,
+  getEffectiveAudioLevel,
+  validateClipTransitions
+} from "../shared/editor-domain";
+import type { SpeedRate, TextOverlay } from "../shared/editor-domain";
 
 export async function exportEditorProjectToPath(input: {
   rootPath: string;
@@ -64,15 +68,18 @@ export async function exportEditorProjectToPath(input: {
     const volume = level.muted
       ? 0
       : Math.max(0, level.volume / 100) * input.document.state.masterVolume / 100;
+    const cleanup = input.document.state.audioCleanup?.[segment.itemId];
+    const cleanupFilter = cleanup ? buildAudioCleanupFilter(cleanup) : undefined;
     if (segment.track === "video") {
       if (source.kind === "audio") throw new Error(`Audio item "${segment.itemId}" cannot appear on the video track.`);
       videoSegments.push({
         id: segment.id, path: source.path, kind: source.kind, start: segment.start, end: segment.end,
         sourceStart: segment.sourceStart, volume,
-        hasAudio: source.kind === "video" && await mediaHasAudio(source.path)
+        hasAudio: source.kind === "video" && await mediaHasAudio(source.path),
+        cleanupFilter
       });
     } else {
-      audioSegments.push({ path: source.path, start: segment.start, end: segment.end, sourceStart: segment.sourceStart, volume });
+      audioSegments.push({ path: source.path, start: segment.start, end: segment.end, sourceStart: segment.sourceStart, volume, cleanupFilter });
     }
   }
 
@@ -136,7 +143,7 @@ export async function exportEditorProjectToPath(input: {
 
 export function retimeTextOverlaysForSpeed(
   overlays: TextOverlay[],
-  effects: Array<{ start: number; end: number; rate: 1 | 2 | 3 | 4 | 5 }>,
+  effects: Array<{ start: number; end: number; rate: SpeedRate }>,
   trimStart: number,
   trimEnd: number
 ): TextOverlay[] {
@@ -152,7 +159,7 @@ export function retimeTextOverlaysForSpeed(
 
 export function retimeSubtitlesForSpeed(
   subtitles: Array<{ start: number; end: number; text: string }>,
-  effects: Array<{ start: number; end: number; rate: 1 | 2 | 3 | 4 | 5 }>,
+  effects: Array<{ start: number; end: number; rate: SpeedRate }>,
   trimStart: number,
   trimEnd: number
 ): Array<{ start: number; end: number; text: string }> {
@@ -169,7 +176,7 @@ export function retimeSubtitlesForSpeed(
 /** Convert a source-timeline timestamp to exported wall time. */
 function mapTimelineTimeThroughSpeed(
   value: number,
-  effects: Array<{ start: number; end: number; rate: 1 | 2 | 3 | 4 | 5 }>,
+  effects: Array<{ start: number; end: number; rate: SpeedRate }>,
   trimStart: number,
   trimEnd: number
 ): number {

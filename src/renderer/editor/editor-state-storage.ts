@@ -25,6 +25,7 @@ import {
   validateEditorStateSnapshot
 } from "../../shared/editor-domain";
 import type {
+  AudioCleanupState,
   AudioLevelState,
   EditorStateSnapshot,
   PendingMediaImport,
@@ -35,6 +36,7 @@ import type {
 } from "../../shared/editor-domain";
 
 export type {
+  AudioCleanupState,
   AudioLevelState,
   EditorStateSnapshot,
   PendingMediaImport,
@@ -49,6 +51,7 @@ type CreateEditorStateSnapshotInput = Omit<EditorStateSnapshot, "v">;
 type RestoreEditorStateActions = {
   addKnownTimelineItemId: (itemId: string) => void;
   setActiveBackgroundCategory: (value: BackgroundCategory) => void;
+  setAudioCleanup: (value: AudioCleanupState) => void;
   setAudioLevels: (value: AudioLevelState) => void;
   setBackgroundAudioIds: (value: string[]) => void;
   setBackgroundStyle: (value: BackgroundStyle) => void;
@@ -135,6 +138,7 @@ export function restoreEditorStateSnapshot(
       actions.setPreviewZoom(snapshot.previewZoom);
     }
     actions.setAudioLevels(snapshot.audioLevels);
+    actions.setAudioCleanup(snapshot.audioCleanup ?? {});
     actions.setBackgroundAudioIds(snapshot.backgroundAudioIds);
     actions.setCustomBackgroundImportId(snapshot.customBackgroundImportId);
     actions.setTrimRange(snapshot.trimRange);

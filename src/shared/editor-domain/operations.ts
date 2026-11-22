@@ -112,6 +112,17 @@ export function applyEditorOperations(
         };
         break;
       }
+      case "set_audio_cleanup": {
+        next.audioCleanup = {
+          ...(next.audioCleanup ?? {}),
+          [operation.itemId]: {
+            preset: operation.preset,
+            strength: Math.max(0, Math.min(100, Math.round(operation.strength)))
+          }
+        };
+        affected.add(operation.itemId);
+        break;
+      }
       case "set_audio_lane": {
         next.audioLevels[getAudioLaneLevelKey(operation.lane)] = {
           volume: gainDbToVolume(operation.gainDb),
@@ -231,7 +242,7 @@ export function applyEditorOperations(
           rate: operation.rate
         };
         validateEffectRange(effect, getEditorDuration(next), "Speed");
-        if (![1, 2, 3, 4, 5].includes(effect.rate)) throw new Error("Speed rate must be from 1x to 5x.");
+        if (![1, 1.25, 1.5, 2, 3, 4, 5].includes(effect.rate)) throw new Error("Speed rate must be 1x, 1.25x, 1.5x, 2x, 3x, 4x or 5x.");
         next.speedEffects = upsertTimedEffect(next.speedEffects, effect);
         validateNonOverlappingEffects(next.speedEffects, "Speed");
         addClipsInRange(next.timelineSegments, effect.start, effect.end, affected);

@@ -15,6 +15,7 @@ import {
   restoreEditorStateSnapshot
 } from "./editor-state-storage";
 import type {
+  AudioCleanupState,
   AudioLevelState,
   PendingMediaImport,
   PendingMusicGeneration,
@@ -45,6 +46,7 @@ import type {
 
 type UseEditorPersistenceParams = {
   activeBackgroundCategory: BackgroundCategory;
+  audioCleanup: AudioCleanupState;
   audioLevels: AudioLevelState;
   backgroundAudioIds: string[];
   backgroundStyle: BackgroundStyle;
@@ -70,6 +72,7 @@ type UseEditorPersistenceParams = {
   screenAspectRatio: ScreenAspectRatio;
   screenPosition: ScreenPositionState;
   setActiveBackgroundCategory: Dispatch<SetStateAction<BackgroundCategory>>;
+  setAudioCleanup: Dispatch<SetStateAction<AudioCleanupState>>;
   setAudioLevels: Dispatch<SetStateAction<AudioLevelState>>;
   setBackgroundAudioIds: Dispatch<SetStateAction<string[]>>;
   setBackgroundStyle: Dispatch<SetStateAction<BackgroundStyle>>;
@@ -119,6 +122,7 @@ type UseEditorPersistenceParams = {
 type RestoreActionParams = {
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
   setActiveBackgroundCategory: Dispatch<SetStateAction<BackgroundCategory>>;
+  setAudioCleanup: Dispatch<SetStateAction<AudioCleanupState>>;
   setAudioLevels: Dispatch<SetStateAction<AudioLevelState>>;
   setBackgroundAudioIds: Dispatch<SetStateAction<string[]>>;
   setBackgroundStyle: Dispatch<SetStateAction<BackgroundStyle>>;
@@ -196,6 +200,7 @@ export function trackSaveInFlight(
 export function useEditorPersistence(params: UseEditorPersistenceParams) {
   const {
     activeBackgroundCategory,
+    audioCleanup,
     audioLevels,
     backgroundAudioIds,
     backgroundStyle,
@@ -221,6 +226,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     screenAspectRatio,
     screenPosition,
     setActiveBackgroundCategory,
+    setAudioCleanup,
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
@@ -323,6 +329,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
           const restored = applySavedState(savedState, {
             knownTimelineItemIdsRef,
             setActiveBackgroundCategory,
+            setAudioCleanup,
             setAudioLevels,
             setBackgroundAudioIds,
             setBackgroundStyle,
@@ -365,6 +372,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             restoreEditorStateSnapshot(legacyState, createRestoreActions({
               knownTimelineItemIdsRef,
               setActiveBackgroundCategory,
+              setAudioCleanup,
               setAudioLevels,
               setBackgroundAudioIds,
               setBackgroundStyle,
@@ -415,6 +423,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     knownTimelineItemIdsRef,
     projectId,
     setActiveBackgroundCategory,
+    setAudioCleanup,
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
@@ -457,6 +466,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     () =>
       createEditorStateSnapshot({
         activeBackgroundCategory,
+        audioCleanup,
         audioLevels,
         backgroundAudioIds,
         backgroundStyle,
@@ -489,6 +499,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       }),
     [
       activeBackgroundCategory,
+      audioCleanup,
       audioLevels,
       backgroundAudioIds,
       backgroundStyle,
@@ -658,7 +669,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       }
       const restored = applySavedState(external, {
         knownTimelineItemIdsRef,
-        setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
+        setActiveBackgroundCategory, setAudioCleanup, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
         setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
         setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
         setMasterVolume, setPendingMediaImport, setPendingMusicGeneration, setPreviewQuality,
@@ -699,7 +710,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     });
     if (!applySavedState(restored, {
       knownTimelineItemIdsRef,
-      setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
+      setActiveBackgroundCategory, setAudioCleanup, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
       setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
       setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
       setMasterVolume, setPendingMediaImport, setPendingMusicGeneration, setPreviewQuality,
@@ -786,6 +797,7 @@ function createRestoreActions(actions: RestoreActionParams) {
   return {
     addKnownTimelineItemId: (itemId: string) => actions.knownTimelineItemIdsRef.current.add(itemId),
     setActiveBackgroundCategory: actions.setActiveBackgroundCategory,
+    setAudioCleanup: actions.setAudioCleanup,
     setAudioLevels: actions.setAudioLevels,
     setBackgroundAudioIds: actions.setBackgroundAudioIds,
     setBackgroundStyle: actions.setBackgroundStyle,

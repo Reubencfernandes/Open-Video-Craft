@@ -1,4 +1,10 @@
-import { AudioLines, Music2, Volume2, VolumeX } from "lucide-react";
+import { AudioLines, Music2, Sparkles, Volume2, VolumeX } from "lucide-react";
+import {
+  AUDIO_CLEANUP_PRESETS,
+  type AudioCleanupSettings,
+  type AudioCleanupState,
+  normalizeAudioCleanupSettings
+} from "../../../shared/editor-domain";
 import { BubbleActionButton } from "../../BubbleActionButton";
 import { cx } from "../../classNames";
 import { dbToLinearPercent, formatDb, maxVolumeDb, minVolumeDb, percentToSliderDb } from "../audio-utils";
@@ -17,6 +23,8 @@ export function AudioPanel(props: {
   masterVolume: number;
   audioSources: EditorMediaItem[];
   audioLevels: Record<string, AudioLevel>;
+  audioCleanup: AudioCleanupState;
+  onSetAudioCleanup: (itemId: string, settings: AudioCleanupSettings | null) => void;
   onMasterVolumeChange: (volume: number) => void;
   onAddBackgroundMusic: () => void;
   onSelectItem: (itemId: string) => void;
@@ -43,7 +51,9 @@ export function AudioPanel(props: {
             key={item.id}
             item={item}
             level={props.audioLevels[item.id] ?? { volume: 100, muted: false }}
+            cleanup={props.audioCleanup[item.id]}
             onSelect={() => props.onSelectItem(item.id)}
+            onSetCleanup={(settings) => props.onSetAudioCleanup(item.id, settings)}
             onSetLevel={(patch) => props.onSetAudioLevel(item.id, patch)}
           />
         ))}
@@ -61,8 +71,10 @@ export function AudioPanel(props: {
 function AudioSourceRow(props: {
   item: EditorMediaItem;
   level: AudioLevel;
+  cleanup: AudioCleanupSettings | undefined;
   onSelect: () => void;
   onSetLevel: (patch: Partial<AudioLevel>) => void;
+  onSetCleanup: (settings: AudioCleanupSettings | null) => void;
 }) {
   return (
     <div
@@ -98,6 +110,54 @@ function AudioSourceRow(props: {
         formatValue={() => formatDb(props.level.volume)}
         onChange={(value) => props.onSetLevel({ volume: dbToLinearPercent(value) })}
       />
+
+      <div className="grid gap-2 rounded-lg bg-emerald-400/[0.05] p-2.5 ring-1 ring-inset ring-emerald-300/10">
+        <div className="flex items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-emerald-100">
+            <Sparkles size={13} /> Voice cleanup
+          </span>
+          <button
+            className="rounded-md border border-white/10 px-2 py-1 text-[0.65rem] font-bold text-slate-200 hover:bg-white/10"
+            type="button"
+            onClick={() => props.onSetCleanup(props.cleanup ? null : normalizeAudioCleanupSettings({ preset: "wind", strength: 35 }))}
+          >
+            {props.cleanup ? "Disable" : "Enable"}
+          </button>
+        </div>
+        {props.cleanup ? (
+          <>
+            <label className="grid gap-1 text-[0.65rem] font-bold text-slate-400">
+              Preset
+              <select
+                className="editor-field rounded-lg bg-white/[0.06] p-2 text-xs font-bold text-white"
+                value={props.cleanup.preset}
+                onChange={(event) => props.onSetCleanup(normalizeAudioCleanupSettings({
+                  preset: event.target.value,
+                  strength: props.cleanup?.strength
+                }))}
+              >
+                {AUDIO_CLEANUP_PRESETS.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset === "wind" ? "Wind" : preset === "room" ? "Room" : "Steady noise"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <RangeControl
+              label="Cleanup strength"
+              min={0}
+              max={100}
+              step={5}
+              value={props.cleanup.strength}
+              formatValue={() => `${props.cleanup?.strength ?? 0}%`}
+              onChange={(value) => props.onSetCleanup(normalizeAudioCleanupSettings({
+                preset: props.cleanup?.preset,
+                strength: value
+              }))}
+            />
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }

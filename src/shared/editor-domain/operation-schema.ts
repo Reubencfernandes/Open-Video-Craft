@@ -5,6 +5,7 @@
  * ./types.ts.
  */
 import { z } from "zod";
+import { AUDIO_CLEANUP_PRESETS } from "./audio-cleanup";
 
 export const editRangeSchema = z.object({
   start: z.number().nonnegative(),
@@ -35,6 +36,7 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("move_clip"), segmentId: z.string(), timelineStart: z.number().nonnegative(), lane: z.number().int().nonnegative().optional() }),
   z.object({ type: z.literal("sequence_clips"), segmentIds: z.array(z.string()).min(1), start: z.number().nonnegative(), gap: z.number().nonnegative() }),
   z.object({ type: z.literal("set_audio"), itemId: z.string(), gainDb: z.number().min(-60).max(12), muted: z.boolean() }),
+  z.object({ type: z.literal("set_audio_cleanup"), itemId: z.string().min(1).max(128), preset: z.enum(AUDIO_CLEANUP_PRESETS), strength: z.number().min(0).max(100) }),
   z.object({ type: z.literal("set_audio_lane"), lane: z.number().int().nonnegative(), gainDb: z.number().min(-60).max(12), muted: z.boolean() }),
   z.object({ type: z.literal("set_master_volume"), volume: z.number().min(0).max(100) }),
   z.object({ type: z.literal("set_background_audio"), itemIds: z.array(z.string()).max(200) }),
@@ -91,7 +93,7 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remove_zoom"), id: z.string().min(1).max(128) }),
   z.object({
     type: z.literal("set_speed"), id: z.string().min(1).max(128),
-    start: z.number().nonnegative(), end: z.number().positive(), rate: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
+    start: z.number().nonnegative(), end: z.number().positive(), rate: z.union([z.literal(1), z.literal(1.25), z.literal(1.5), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
   }),
   z.object({ type: z.literal("remove_speed"), id: z.string().min(1).max(128) }),
   z.object({
