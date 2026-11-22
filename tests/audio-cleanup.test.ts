@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AUDIO_CLEANUP_PRESETS,
   buildAudioCleanupFilter,
+  getAudioCleanupPreviewSettings,
   normalizeAudioCleanupSettings
 } from "../src/shared/editor-domain/audio-cleanup";
 import { operationSchema } from "../src/shared/editor-domain/operation-schema";
@@ -10,12 +11,23 @@ import { createDefaultEditorState, validateEditorStateSnapshot } from "../src/sh
 import { applyEditorOperations } from "../src/shared/editor-domain/operations";
 
 describe("audio cleanup", () => {
-  it("builds a conservative wind filter that keeps speech bandwidth", () => {
+  it("builds a speech-preserving wind filter without aggressive FFT denoise", () => {
     const filter = buildAudioCleanupFilter({ preset: "wind", strength: 50 });
     expect(filter).toContain("highpass=f=80");
-    expect(filter).toContain("afftdn");
+    expect(filter).toContain("lowshelf=f=200:g=-4");
+    expect(filter).toContain("anlmdn=s=1.1:r=0.01");
+    expect(filter).not.toContain("afftdn");
     expect(filter).not.toContain("lowpass");
-    expect(filter).not.toContain("acompressor");
+  });
+
+  it("maps cleanup settings to preview filter parameters", () => {
+    expect(getAudioCleanupPreviewSettings({ preset: "wind", strength: 50 })).toEqual({
+      highpassHz: 80,
+      lowShelfHz: 200,
+      lowShelfGainDb: -4,
+      noiseStrength: 1.1
+    });
+    expect(getAudioCleanupPreviewSettings({ preset: "wind", strength: 0 })).toBeNull();
   });
 
   it("offers distinct presets and clamps strength", () => {

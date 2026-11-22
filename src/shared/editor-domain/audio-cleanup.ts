@@ -31,27 +31,56 @@ export function normalizeAudioCleanupSettings(input: {
   return { preset, strength: Math.max(0, Math.min(100, Math.round(rawStrength))) };
 }
 
-/** Builds an FFmpeg filter fragment without changing sample rate or channel layout. */
-export function buildAudioCleanupFilter(settings: AudioCleanupSettings): string {
-  const normalized = normalizeAudioCleanupSettings(settings);
-  if (normalized.strength === 0) return "anull";
+export interface AudioCleanupPreviewSettings {
+  readonly highpassHz: number;
+  readonly lowShelfHz: number;
+  readonly lowShelfGainDb: number;
+  readonly noiseStrength: number;
+}
 
+function roundTenth(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/** Web Audio approximation used by preview; mirrors the export filter intent. */
+export function getAudioCleanupPreviewSettings(
+  settings: AudioCleanupSettings
+): AudioCleanupPreviewSettings | null {
+  const normalized = normalizeAudioCleanupSettings(settings);
+  if (normalized.strength === 0) return null;
   const amount = normalized.strength / 100;
   switch (normalized.preset) {
-    case "wind": {
-      // Wind rumble lives below the voice fundamentals. 80 Hz removes the rumble
-      // while keeping the normal male/female speech range intact.
-      const cutoff = Math.round(70 + amount * 20);
-      const noiseFloor = Math.round(-34 + amount * 10);
-      return `highpass=f=${cutoff},afftdn=nf=${noiseFloor}:rf=-45`;
-    }
-    case "room": {
-      const noiseFloor = Math.round(-38 + amount * 10);
-      return `afftdn=nf=${noiseFloor}:rf=-48`;
-    }
-    case "steady": {
-      const strength = (1.5 + amount * 2.5).toFixed(2);
-      return `anlmdn=s=${strength}:r=0.025`;
-    }
+    case "wind":
+      return {
+        highpassHz: Math.round(75 + amount * 10),
+        lowShelfHz: 200,
+        lowShelfGainDb: -roundTenth(2 + amount * 4),
+        noiseStrength: roundTenth(0.6 + amount)
+      };
+    case "room":
+      return {
+        highpassHz: Math.round(55 + amount * 10),
+        lowShelfHz: 250,
+        lowShelfGainDb: -roundTenth(1.5 + amount * 3.5),
+        noiseStrength: roundTenth(0.5 + amount * 1.3)
+      };
+    case "steady":
+      return {
+        highpassHz: 40,
+        lowShelfHz: 200,
+        lowShelfGainDb: 0,
+        noiseStrength: roundTenth(1 + amount * 2.5)
+      };
   }
+}
+
+/** Builds an FFmpeg filter fragment without changing sample rate or channel layout. */
+export function buildAudioCleanupFilter(settings: AudioCleanupSettings): string {
+  const preview = getAudioCleanupPreviewSettings(settings);
+  if (!preview) return "anull";
+  const shelf = preview.lowShelfGainDb === 0
+    ? ""
+    : `,lowshelf=f=${preview.lowShelfHz}:g=${preview.lowShelfGainDb}:w=0.7`;
+  const rate = settings.preset === "steady" ? "0.025" : "0.01";
+  return `highpass=f=${preview.highpassHz}${shelf},anlmdn=s=${preview.noiseStrength}:r=${rate}`;
 }

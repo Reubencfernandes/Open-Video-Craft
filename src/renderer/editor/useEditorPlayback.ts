@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { getEffectiveAudioLevel } from "../../shared/editor-domain";
+import { getEffectiveAudioLevel, type AudioCleanupState } from "../../shared/editor-domain";
 import { AudioMeter } from "./audio-meter";
 import { canDriftSeek } from "./media-utils";
 import { resolveNextTimelineTime } from "./playback-clock";
@@ -45,6 +45,7 @@ type UseEditorPlaybackParams = {
   activeDuration: number;
   activeVideoClip: TimelineMediaClip | null;
   audioLevels: AudioLevelState;
+  audioCleanup: AudioCleanupState;
   audioTimelineClips: TimelineMediaClip[];
   currentTime: number;
   layoutMode: LayoutMode;
@@ -89,6 +90,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     activeDuration,
     activeVideoClip,
     audioLevels,
+    audioCleanup,
     audioTimelineClips,
     currentTime,
     layoutMode,
@@ -128,6 +130,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const pendingPlayElementsRef = useRef(new WeakSet<HTMLMediaElement>());
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<AudioLevelState>({});
+  const audioCleanupRef = useRef<AudioCleanupState>({});
   const timelineDurationRef = useRef(0);
   const audioMeterRef = useRef<AudioMeter | null>(null);
   const playbackInteractionRef = useRef(false);
@@ -138,8 +141,9 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     return audioMeterRef.current;
   }
 
-  function applyAudioGain(element: HTMLMediaElement, sourceGain: number) {
-    const connected = getAudioMeter().setElementGain(element, sourceGain);
+  function applyAudioGain(element: HTMLMediaElement, sourceGain: number, itemId?: string) {
+    const cleanup = itemId === undefined ? null : audioCleanupRef.current[itemId] ?? null;
+    const connected = getAudioMeter().setElementGain(element, sourceGain, cleanup);
     element.volume = connected
       ? 1
       : Math.min(1, Math.max(0, (masterVolumeRef.current / 100) * sourceGain));
@@ -191,6 +195,10 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   useEffect(() => {
     audioLevelsRef.current = audioLevels;
   }, [audioLevels]);
+
+  useEffect(() => {
+    audioCleanupRef.current = audioCleanup;
+  }, [audioCleanup]);
 
   useEffect(() => {
     timelineDurationRef.current = timelineDuration;
@@ -285,7 +293,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     const meter = getAudioMeter();
     meter.setMasterGain(master);
     if (mainVideoRef.current) {
-      const connected = !mainVideoRef.current.muted && meter.setElementGain(mainVideoRef.current, 1);
+      const mainCleanup = activeVideoClip ? audioCleanup[activeVideoClip.item.id] ?? null : null;
+      const connected = !mainVideoRef.current.muted && meter.setElementGain(mainVideoRef.current, 1, mainCleanup);
       mainVideoRef.current.volume = connected ? 1 : Math.min(1, master);
     }
     for (const clip of audioTimelineClips) {
@@ -294,10 +303,10 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
         continue;
       }
       const level = getEffectiveAudioLevel(audioLevels, clip.item.id, clip.lane);
-      applyAudioGain(element, level.muted ? 0 : level.volume / 100);
+      applyAudioGain(element, level.muted ? 0 : level.volume / 100, clip.item.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [masterVolume, audioLevels, audioTimelineClips]);
+  }, [masterVolume, audioLevels, audioCleanup, activeVideoClip, audioTimelineClips]);
 
   function getClipVolume(clip: TimelineMediaClip): number {
     const level = getEffectiveAudioLevel(
@@ -446,10 +455,11 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
     input.element.muted = input.muted;
     if (input.muted) {
-      audioMeterRef.current?.setElementGain(input.element, 0);
+      audioMeterRef.current?.setElementGain(input.element, 0, null);
       input.element.volume = 0;
     } else {
-      const connected = getAudioMeter().setElementGain(input.element, 1);
+      const clipCleanup = audioCleanupRef.current[input.videoClip.item.id] ?? null;
+      const connected = getAudioMeter().setElementGain(input.element, 1, clipCleanup);
       input.element.volume = connected ? 1 : input.volume;
     }
     input.element.playbackRate = getPlaybackRate(input.timelineTime);

@@ -464,6 +464,7 @@ export function EditorView() {
     activeDuration,
     activeVideoClip,
     audioLevels,
+    audioCleanup,
     audioTimelineClips,
     currentTime,
     layoutMode,

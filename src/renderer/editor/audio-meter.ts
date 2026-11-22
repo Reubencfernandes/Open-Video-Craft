@@ -1,7 +1,10 @@
 /** Live preview audio graph and peak meter. */
+import { getAudioCleanupPreviewSettings, type AudioCleanupSettings } from "../../shared/editor-domain";
+
 type ElementAudioNodes = {
   source: MediaElementAudioSourceNode;
   gain: GainNode;
+  filters: AudioNode[];
 };
 
 export class AudioMeter {
@@ -12,10 +15,15 @@ export class AudioMeter {
   private readonly elements = new Map<HTMLMediaElement, ElementAudioNodes>();
   private masterVolume = 1;
 
-  connectElement(element: HTMLMediaElement, volume: number): boolean {
+  connectElement(
+    element: HTMLMediaElement,
+    volume: number,
+    cleanup?: AudioCleanupSettings | null
+  ): boolean {
     const existing = this.elements.get(element);
     if (existing) {
       existing.gain.gain.value = sanitizeGain(volume);
+      if (cleanup !== undefined) this.applyCleanup(existing, cleanup);
       return true;
     }
 
@@ -28,17 +36,30 @@ export class AudioMeter {
       const source = context.createMediaElementSource(element);
       const gain = context.createGain();
       gain.gain.value = sanitizeGain(volume);
-      source.connect(gain);
       gain.connect(this.masterGain);
-      this.elements.set(element, { source, gain });
+      const nodes: ElementAudioNodes = { source, gain, filters: [] };
+      this.elements.set(element, nodes);
+      if (cleanup !== undefined) this.applyCleanup(nodes, cleanup);
+      else source.connect(gain);
       return true;
     } catch {
       return false;
     }
   }
 
-  setElementGain(element: HTMLMediaElement, volume: number): boolean {
-    return this.connectElement(element, volume);
+  setElementGain(
+    element: HTMLMediaElement,
+    volume: number,
+    cleanup?: AudioCleanupSettings | null
+  ): boolean {
+    return this.connectElement(element, volume, cleanup);
+  }
+
+  setElementCleanup(element: HTMLMediaElement, cleanup: AudioCleanupSettings | null): boolean {
+    const nodes = this.elements.get(element);
+    if (!nodes) return false;
+    this.applyCleanup(nodes, cleanup);
+    return true;
   }
 
   setMasterGain(volume: number): void {
@@ -70,8 +91,9 @@ export class AudioMeter {
   }
 
   dispose(): void {
-    for (const { source, gain } of this.elements.values()) {
+    for (const { source, gain, filters } of this.elements.values()) {
       source.disconnect();
+      for (const filter of filters) filter.disconnect();
       gain.disconnect();
     }
     this.elements.clear();
@@ -84,6 +106,35 @@ export class AudioMeter {
     this.masterGain = null;
     this.analyser = null;
     this.samples = null;
+  }
+
+  private applyCleanup(nodes: ElementAudioNodes, cleanup: AudioCleanupSettings | null): void {
+    const context = this.context;
+    if (!context) return;
+    nodes.source.disconnect();
+    for (const filter of nodes.filters) filter.disconnect();
+    nodes.filters = [];
+    const settings = cleanup ? getAudioCleanupPreviewSettings(cleanup) : null;
+    if (!settings) {
+      nodes.source.connect(nodes.gain);
+      return;
+    }
+    const highpass = context.createBiquadFilter();
+    highpass.type = "highpass";
+    highpass.frequency.value = settings.highpassHz;
+    nodes.source.connect(highpass);
+    nodes.filters.push(highpass);
+    let tail: AudioNode = highpass;
+    if (settings.lowShelfGainDb !== 0) {
+      const shelf = context.createBiquadFilter();
+      shelf.type = "lowshelf";
+      shelf.frequency.value = settings.lowShelfHz;
+      shelf.gain.value = settings.lowShelfGainDb;
+      tail.connect(shelf);
+      tail = shelf;
+      nodes.filters.push(shelf);
+    }
+    tail.connect(nodes.gain);
   }
 
   private ensureContext(): AudioContext | null {

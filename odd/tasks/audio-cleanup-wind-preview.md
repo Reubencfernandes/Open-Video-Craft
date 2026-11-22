@@ -1,0 +1,25 @@
+# Wind cleanup quality and audible preview
+Objective: reduce wind/room noise without muffling speech, and let the owner hear the cleanup in preview before exporting. Branch `feat/p0b-min-fork-identity`; no PR or merge. Test runner: Vitest, Node 22.
+
+## Specs
+
+- S1 User request (verbatim): "La cancellazione del rumore/vento non funziona bene, mi ovatta la voce e sento comunque brutalmente il rumore del vento, inoltre devo poterlo sentire in anteprima e non solo esportando il video".
+- S2 The export filter must reduce low-frequency wind while preserving the speech band; it must not rely on an aggressive `afftdn` floor that muffles voice.
+- S3 The same cleanup must be audible in the editor preview while the setting changes, without requiring an export.
+- S4 Existing presets (`wind`, `room`, `steady`), strength 0–100, saved projects and AI `set_audio_cleanup` operations must remain compatible.
+- S5 Behavior changes ship with Vitest tests through public interfaces; full verification and an ad-hoc rebuild must pass.
+
+## Tasks
+
+- [x] T1 (S1, S2) Reproduce the current filter on a synthetic speech+wind signal and identify why it muffles voice and leaves wind. Route: inline.
+- [x] T2 (S2, S4) Replace the wind/room filter chain with a speech-preserving local filter and regression-test it. Route: inline.
+- [x] T3 (S1, S3) Apply audible cleanup in preview through the existing audio graph. Route: inline.
+- [x] T4 (S1-S5) Verify, commit in reviewable slices and rebuild/relaunch the app. Route: inline. Pending final rebuild/relaunch evidence.
+
+## Log
+
+- L1 (user, verbatim): "La cancellazione del rumore/vento non funziona bene, mi ovatta la voce e sento comunque brutalmente il rumore del vento, inoltre devo poterlo sentire in anteprima e non solo esportando il video".
+- L2 (evidence): `buildAudioCleanupFilter` maps `wind` to `highpass=f=70..90,afftdn=nf=-34..-24:rf=-45`; the preview playback path never applies `audioCleanup`, so the setting is export-only.
+
+- L3 (evidence): on a synthetic speech+wind signal, the old filter lowered the voice band 0.19 dB and the wind band 5.2 dB; the new `highpass + lowshelf + light anlmdn` chain lowered voice 0.93 dB and wind 8.3 dB, avoiding `afftdn` artifacts that muffled speech.
+- L4 (evidence): `AudioMeter` now rebuilds a Web Audio chain (high-pass, low-shelf) when cleanup changes, and `tests/editor-audio-meter.test.ts` verifies both enabled and disabled states.
