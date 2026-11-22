@@ -28,3 +28,5 @@ Objective: allow timeline clips (video and AI-generated audio/music) to be resiz
 
 - L6 (evidence): final ad-hoc arm64 rebuild produced `release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg`; the app relaunched as PID `62170`, frontmost, with window `Open Video Craft`.
 - L7 (evidence): 512 Vitest tests passed, plus typecheck, build, MCP smoke, FFmpeg verification, audit high and `git diff --check`.
+
+- L8 (follow-up): the drag limit was 0.01s but the visual clip width still had a 1.5% floor (about 20s on the 23-minute project), so clips appeared impossible to shrink. `createTimelineClipStyle` now uses `minWidth: 2px`; linked audio minimum is also 0.01s.

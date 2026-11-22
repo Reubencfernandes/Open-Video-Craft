@@ -696,12 +696,14 @@ export function createTimelineClipStyle(
 ): CSSProperties {
   const safeDuration = Math.max(timelineDuration, start + duration, 1);
   const left = Math.min(100, Math.max(0, (start / safeDuration) * 100));
-  const width = Math.min(100 - left, Math.max(1.5, (duration / safeDuration) * 100));
+  const width = Math.min(100 - left, Math.max(0, (duration / safeDuration) * 100));
+  const widthPercent = Number(width.toFixed(4));
 
   return {
     left: `${left}%`,
     right: "auto",
-    width: `${width}%`
+    width: `${widthPercent}%`,
+    minWidth: "2px"
   };
 }
 

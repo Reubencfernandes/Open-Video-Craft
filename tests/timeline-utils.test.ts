@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateTimelineDuration,
   findSplittableTimelineSegment,
+  createTimelineClipStyle,
   syncTimelineSegments,
   resolveAudioLane,
   trimTimelineSegment
@@ -17,6 +18,12 @@ const videoSegments: TimelineSegment[] = [
 
 describe("timeline trim and split geometry", () => {
   const item: EditorMediaItem = { id: "video-a", name: "A", url: "a.mp4", kind: "video", origin: "imported", track: "imported", duration: 60 };
+
+  it("renders a near-zero clip with a pixel-sized minimum width", () => {
+    const style = createTimelineClipStyle(0, 0.01, 1_000);
+    expect(style.width).toBe("0.001%");
+    expect(style.minWidth).toBe("2px");
+  });
 
   it("preserves deliberate short trims when media metadata resynchronizes", () => {
     const trimmed = trimTimelineSegment([videoSegments[0]], "first", "end", 0.5, new Map([[item.id, 60]]));

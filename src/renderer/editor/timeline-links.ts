@@ -20,7 +20,7 @@ const recordingVideoSuffix = ":screen";
 const recordingAudioSuffixes = [":audio", ":system-audio"];
 const syncToleranceSeconds = 0.001;
 /** Linked pieces thinner than this are treated as already aligned. */
-export const minimumLinkedPieceSeconds = 0.05;
+export const minimumLinkedPieceSeconds = 0.01;
 
 type SegmentIdFactory = (sourceId: string) => string;
 
