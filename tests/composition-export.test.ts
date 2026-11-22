@@ -131,6 +131,24 @@ describe("timeline composition export", () => {
     expect(blueChannel).toBeGreaterThan(30);
   }, 60_000);
 
+  it("exports overlay text containing an apostrophe", async () => {
+    const ffmpeg = resolveFfmpegPath();
+    const video = path.join(directory, "apostrophe-video.mp4");
+    const output = path.join(directory, "apostrophe-result.mp4");
+    await exec(ffmpeg, ["-y", "-f", "lavfi", "-i", "color=c=black:s=320x180:r=30:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", video]);
+
+    const bytes = await exportTimelineComposition({
+      videoSegments: [{ id: "video", path: video, kind: "video", start: 0, end: 1, sourceStart: 0, volume: 1, hasAudio: false }],
+      audioSegments: [],
+      textOverlays: [{
+        id: "apostrophe", start: 0, end: 1, text: "l'economia: 100%",
+        x: 50, y: 50, size: 32, color: "#ffffff", fontFamily: "sans", weight: 700, animation: "none"
+      }],
+      outputPath: output, format: "mp4", resolution: "720p", trimStart: 0, trimEnd: null
+    });
+    expect(bytes).toBeGreaterThan(1_000);
+  }, 60_000);
+
   it("applies saved fade-in and fade-out to an audio clip", async () => {
     const ffmpeg = resolveFfmpegPath();
     const video = path.join(directory, "fade-video.mp4");

@@ -1083,7 +1083,7 @@ function escapeFilterPath(filePath: string): string {
 function escapeDrawtextText(text: string): string {
   return text
     .replace(/\\/g, "\\\\")
-    .replace(/'/g, "\\'")
+    .replace(/'/g, "’")
     .replace(/:/g, "\\:")
     .replace(/%/g, "\\%")
     // A real newline is what drawtext breaks a line on. The filter-argument
