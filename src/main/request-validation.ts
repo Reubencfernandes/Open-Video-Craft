@@ -6,6 +6,7 @@
 import type {
   ClaudeChatRequest,
   ClaudeChatTurn,
+  AudioCleanupPreviewRequest,
   DeviceSelection,
   ExportVideoRequest,
   GeminiChatSendRequest,
@@ -336,5 +337,23 @@ export function assertGeminiChatSendRequest(
     typeof request.includeVideo !== "boolean"
   ) {
     throw new Error("Invalid AI chat request.");
+  }
+}
+
+
+export function assertAudioCleanupPreviewRequest(
+  value: unknown
+): asserts value is AudioCleanupPreviewRequest {
+  const request = value as Partial<AudioCleanupPreviewRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    !isUuid(request.jobId) ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    !isNonEmptyBoundedString(request.itemId, 128) ||
+    !["wind", "room", "steady"].includes(request.preset ?? "") ||
+    typeof request.strength !== "number" || !Number.isFinite(request.strength) ||
+    request.strength < 0 || request.strength > 100
+  ) {
+    throw new Error("Invalid audio cleanup preview request.");
   }
 }
