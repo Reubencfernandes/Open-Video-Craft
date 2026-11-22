@@ -31,6 +31,7 @@ import { ToolRail } from "./editor/ToolRail";
 import { WorkspaceResizeHandle } from "./editor/WorkspaceResizeHandle";
 import { getCameraFrameFromPreset } from "./editor/layout-geometry";
 import { MediaPanel } from "./editor/panels/MediaPanel";
+import { applyCleanupPreviewUrls } from "./editor/cleanup-preview";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
 import { useEditorExport } from "./editor/useEditorExport";
 import { useEditorMediaActions } from "./editor/useEditorMediaActions";
@@ -287,6 +288,8 @@ export function EditorView() {
     let active = true;
     for (const [itemId, settings] of Object.entries(audioCleanup)) {
       if (!settings || settings.strength === 0) continue;
+      const mediaItem = importedMedia.find((item) => item.id === itemId);
+      if (mediaItem?.kind !== "audio") continue;
       const key = `${settings.preset}:${settings.strength}`;
       if (cleanupPreviews[itemId]?.key === key) continue;
       const jobId = crypto.randomUUID();
@@ -300,13 +303,10 @@ export function EditorView() {
       }).catch(() => undefined);
     }
     return () => { active = false; };
-  }, [projectId, audioCleanup, cleanupPreviews]);
+  }, [projectId, audioCleanup, cleanupPreviews, importedMedia]);
 
   const previewImportedMedia = useMemo(
-    () => importedMedia.map((item) => {
-      const preview = cleanupPreviews[item.id];
-      return preview ? { ...item, url: preview.url } : item;
-    }),
+    () => applyCleanupPreviewUrls(importedMedia, cleanupPreviews),
     [importedMedia, cleanupPreviews]
   );
 
