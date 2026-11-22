@@ -13,10 +13,12 @@ Objective: make the editor preview play exactly the audio heard in the export: c
 
 - [x] T1 (S1, S2) Fix preview gain automation so scheduled fades are not overwritten. Route: inline.
 - [x] T2 (S1, S3, S4) Render and play cleaned audio alongside video clips with cleanup, and verify audio-clip cleanup. Route: inline.
-- [x] T3 (S1-S5) Verify, commit and rebuild/relaunch the app. Route: inline. Pending final rebuild evidence.
+- [x] T3 (S1-S5) Verify, commit and rebuild/relaunch the app. Route: inline. Final rebuild and relaunch verified.
 
 ## Log
 
 - L1 (user, verbatim): "dal video esportato sento il fade out sull'audio, però devo sentirlo anche da preview, stessa cosa per la cancellazione rumore del vento".
 
 - L2 (evidence): `AudioMeter` tracks an active envelope and no longer writes a raw gain value during a scheduled fade. Cleanup previews are generated for video items too and played through a separate hidden audio element while the video element is muted, so thumbnails and video URL stay intact.
+
+- L3 (evidence): 527 Vitest tests passed, typecheck, build, MCP smoke and `git diff --check`. Final ad-hoc build relaunched the app as PID `48432`, frontmost with window `Open Video Craft`.
