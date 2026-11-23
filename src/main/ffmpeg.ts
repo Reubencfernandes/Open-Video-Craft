@@ -10,6 +10,7 @@ import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import {
   appendCalloutBoxFilter,
+  createCalloutLayout,
   createCalloutBoxDrawboxFilter
 } from "./callout-filter";
 import type { ExportResolution, ExportVideoFormat } from "../shared/types";
@@ -674,22 +675,23 @@ export function createTextOverlayDrawtext(
   // export while looking fine in the editor.
   const shadowOffset = Math.max(1, Math.round(height * 2 / 1080));
   const font = resolveOverlayFont(overlay);
-  const layout = layOutOverlayText(overlay, font.filePath, baseFontSize, width);
+  const callout = overlay.box ? createCalloutLayout(overlay, height, width) : null;
+  const plainLayout = callout ? null : layOutOverlayText(overlay, font.filePath, baseFontSize, width);
   const titleFilter = overlay.title
-    ? `drawtext=text='${escapeDrawtextText(overlay.title)}':` +
+    ? `drawtext=text='${escapeDrawtextText(callout?.titleText ?? overlay.title)}':` +
       `${font.argument}:` +
       `fontcolor=0x${(overlay.box?.titleColor ?? overlay.color).slice(1)}:` +
-      `fontsize=${Math.max(10, Math.round((overlay.box?.titleSize ?? overlay.size * 0.6) * height / 1080))}:` +
-      `x='${x}':y='${baseY}-${Math.round(baseFontSize * 1.35)}':` +
+      `fontsize=${callout?.titleFontSize ?? Math.max(10, Math.round((overlay.box?.titleSize ?? overlay.size * 0.6) * height / 1080))}:` +
+      `x='${x}':y='${callout ? callout.titleY : `${baseY}-${Math.round(baseFontSize * 1.35)}`}':` +
       `alpha=${alpha}:shadowx=0:shadowy=${shadowOffset}:shadowcolor=black@0.8:` +
-      `text_align=C:enable='between(t,${start},${end})',`
+      `text_align=C:line_spacing=${callout?.titleLineSpacing ?? 0}:enable='between(t,${start},${end})',`
     : "";
   return titleFilter + (
-    `drawtext=text='${escapeDrawtextText(layout.text)}':` +
+    `drawtext=text='${escapeDrawtextText(callout?.bodyText ?? plainLayout?.text ?? overlay.text)}':` +
     `${font.argument}:` +
-    `fontcolor=0x${overlay.color.slice(1)}:fontsize=${fontSize}:x='${x}':y='${y}':` +
+    `fontcolor=0x${overlay.color.slice(1)}:fontsize=${callout?.bodyFontSize ?? fontSize}:x='${x}':y='${callout?.bodyY ?? y}':` +
     `alpha=${alpha}:shadowx=0:shadowy=${shadowOffset}:shadowcolor=black@0.9:` +
-    `text_align=C:line_spacing=${layout.lineSpacing}:` +
+    `text_align=C:line_spacing=${callout?.bodyLineSpacing ?? plainLayout?.lineSpacing ?? 0}:` +
     `enable='between(t,${start},${end})'`
   );
 }
