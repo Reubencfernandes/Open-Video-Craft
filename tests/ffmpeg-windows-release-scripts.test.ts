@@ -1,8 +1,13 @@
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import packageJson from "../package.json";
 
 // @ts-expect-error The JavaScript release script intentionally has no declaration file.
-import { getPeArchitecture, WINDOWS_FFMPEG } from "../scripts/prepare-windows-ffmpeg.mjs";
+import {
+  getPeArchitecture,
+  obtainPinnedWindowsFfmpeg,
+  WINDOWS_FFMPEG
+} from "../scripts/prepare-windows-ffmpeg.mjs";
 // @ts-expect-error The JavaScript release script intentionally has no declaration file.
 import { validateWindowsUpdateMetadataShape } from "../scripts/verify-windows-release.mjs";
 
@@ -33,5 +38,46 @@ describe("Windows release inputs", () => {
       [setup, portable],
       `version: ${packageJson.version}\npath: ${setup}\nfiles:\n  - url: ${setup}`
     )).toEqual({ setupName: setup, portableName: portable });
+  });
+});
+
+describe("Windows FFmpeg download fallback", () => {
+  function createIo(input: { upstreamFails: boolean }) {
+    const downloads: string[] = [];
+    return {
+      downloads,
+      io: {
+        downloadFile: async (url: string) => {
+          downloads.push(url);
+          if (input.upstreamFails && url === WINDOWS_FFMPEG.archiveUrl) {
+            throw new Error(`Download failed with HTTP 404 Not Found: ${url}`);
+          }
+        },
+        sha256File: async () => WINDOWS_FFMPEG.archiveSha256,
+        extractArchive: async () => undefined,
+        findWindowsFfmpeg: async (directory: string) => `${directory}/bin/ffmpeg.exe`,
+        log: () => undefined
+      }
+    };
+  }
+
+  it("mirrors the exact pinned executable on this repository's releases", () => {
+    expect(WINDOWS_FFMPEG.mirrorBinaryUrl).toMatch(
+      /^https:\/\/github\.com\/Reubencfernandes\/Open-Video-Craft\/releases\/download\/v1\.0\.5\/ffmpeg-n8\.1\.2-29-g703dcc25b9-win64-gpl\.exe$/
+    );
+  });
+
+  it("uses the upstream archive while it exists", async () => {
+    const { io, downloads } = createIo({ upstreamFails: false });
+    const binary = await obtainPinnedWindowsFfmpeg(tmpdir(), io);
+    expect(downloads).toEqual([WINDOWS_FFMPEG.archiveUrl]);
+    expect(binary).toMatch(/extracted\/bin\/ffmpeg\.exe$/);
+  });
+
+  it("falls back to the mirror when upstream pruned the archive", async () => {
+    const { io, downloads } = createIo({ upstreamFails: true });
+    const binary = await obtainPinnedWindowsFfmpeg(tmpdir(), io);
+    expect(downloads).toEqual([WINDOWS_FFMPEG.archiveUrl, WINDOWS_FFMPEG.mirrorBinaryUrl]);
+    expect(binary).toMatch(/ffmpeg-mirror\.exe$/);
   });
 });

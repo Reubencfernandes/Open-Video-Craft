@@ -18,6 +18,11 @@ const projectDirectory = path.resolve(scriptDirectory, "..");
 export const WINDOWS_FFMPEG = Object.freeze({
   archiveUrl: "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-07-21-13-38/ffmpeg-n8.1.2-29-g703dcc25b9-win64-gpl-8.1.zip",
   archiveSha256: "ebf57e8b1a10b176b88c3cbc66e68a4aed472cf47520b0fbf003e892fb3be642",
+  // BtbN prunes autobuild releases after a few months, which broke the 1.0.7
+  // release build. The identical ffmpeg.exe is mirrored on the Open Video
+  // Craft 1.0.5 release, beside its GPL source bundles, and is used when the
+  // upstream archive is gone. Both paths must match binarySha256.
+  mirrorBinaryUrl: "https://github.com/Reubencfernandes/Open-Video-Craft/releases/download/v1.0.5/ffmpeg-n8.1.2-29-g703dcc25b9-win64-gpl.exe",
   binarySha256: "070be6f5202e71a5e0bec88312230eebf2708f9b9ee3694596babf20902dddd2",
   buildCommit: "8c736b2d6fe5da2a10a8896d01e53bfb0ca4f665",
   ffmpegCommit: "703dcc25b91eacd2ab8b8b2fe888dc8d7ab4ad6d",
@@ -66,29 +71,52 @@ export function getPeArchitecture(buffer) {
   return machine === 0x8664 ? "x64" : machine === 0xaa64 ? "arm64" : machine === 0x14c ? "ia32" : null;
 }
 
+/**
+ * Fetch the pinned ffmpeg.exe into workDirectory: from the upstream BtbN
+ * archive while it still exists, otherwise from the mirror. The caller
+ * verifies the executable against WINDOWS_FFMPEG.binarySha256 either way.
+ */
+export async function obtainPinnedWindowsFfmpeg(workDirectory, io = defaultIo) {
+  const archivePath = path.join(workDirectory, "ffmpeg.zip");
+  try {
+    await io.downloadFile(WINDOWS_FFMPEG.archiveUrl, archivePath);
+    const archiveHash = await io.sha256File(archivePath);
+    if (archiveHash !== WINDOWS_FFMPEG.archiveSha256) {
+      throw new Error(`Windows FFmpeg archive checksum mismatch: expected ${WINDOWS_FFMPEG.archiveSha256}, received ${archiveHash}`);
+    }
+    const extractDirectory = path.join(workDirectory, "extracted");
+    await mkdir(extractDirectory, { recursive: true });
+    await io.extractArchive(archivePath, extractDirectory);
+    return await io.findWindowsFfmpeg(extractDirectory);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    io.log(`Upstream Windows FFmpeg archive unavailable (${reason}); using the mirrored executable.\n`);
+    const mirroredPath = path.join(workDirectory, "ffmpeg-mirror.exe");
+    await io.downloadFile(WINDOWS_FFMPEG.mirrorBinaryUrl, mirroredPath);
+    return mirroredPath;
+  }
+}
+
+const defaultIo = {
+  downloadFile,
+  sha256File,
+  findWindowsFfmpeg,
+  extractArchive: (archivePath, directory) =>
+    execFileAsync("tar.exe", ["-xf", archivePath, "-C", directory], { maxBuffer: 16 * 1024 * 1024 }),
+  log: (message) => process.stdout.write(message)
+};
+
 export async function prepareWindowsFfmpeg() {
   if (process.platform !== "win32" || process.arch !== "x64") {
     throw new Error(`Windows FFmpeg preparation requires Windows x64; received ${process.platform} ${process.arch}`);
   }
 
   const temporaryDirectory = await mkdtemp(path.join(os.tmpdir(), "ovc-windows-ffmpeg-"));
-  const archivePath = path.join(temporaryDirectory, "ffmpeg.zip");
-  const extractDirectory = path.join(temporaryDirectory, "extracted");
   const destination = path.join(projectDirectory, "node_modules", "ffmpeg-static", "ffmpeg.exe");
   const temporaryDestination = `${destination}.${randomUUID()}.tmp`;
 
   try {
-    await downloadFile(WINDOWS_FFMPEG.archiveUrl, archivePath);
-    const archiveHash = await sha256File(archivePath);
-    if (archiveHash !== WINDOWS_FFMPEG.archiveSha256) {
-      throw new Error(`Windows FFmpeg archive checksum mismatch: expected ${WINDOWS_FFMPEG.archiveSha256}, received ${archiveHash}`);
-    }
-
-    await mkdir(extractDirectory, { recursive: true });
-    await execFileAsync("tar.exe", ["-xf", archivePath, "-C", extractDirectory], {
-      maxBuffer: 16 * 1024 * 1024
-    });
-    const extractedBinary = await findWindowsFfmpeg(extractDirectory);
+    const extractedBinary = await obtainPinnedWindowsFfmpeg(temporaryDirectory);
     const binaryHash = await sha256File(extractedBinary);
     if (binaryHash !== WINDOWS_FFMPEG.binarySha256) {
       throw new Error(`Windows FFmpeg binary checksum mismatch: expected ${WINDOWS_FFMPEG.binarySha256}, received ${binaryHash}`);
