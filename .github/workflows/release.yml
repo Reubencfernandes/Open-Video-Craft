@@ -216,7 +216,11 @@ jobs:
         include:
           - name: macOS
             npm_script: dist:mac
-            os: macos-latest
+            # The 1.0.7 release job waited 15 minutes for a macos-latest
+            # (arm64) runner three times and was cancelled each time
+            # ("capacity constraints"). The Intel image still builds both
+            # slices; FFmpeg checks fall back to static inspection for arm64.
+            os: macos-15-intel
             builder_args: "--x64 --arm64 --publish never"
             artifact_name: open-video-craft-mac
           - name: Windows
