@@ -4,26 +4,16 @@
  * once here keeps them in sync and avoids decoding the same file repeatedly
  * (a recording split into several timeline clips reuses one capture).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { ImportedMediaKind } from "../../shared/types";
+import type { FilmstripFrame } from "./filmstrip";
 import {
-  captureVideoFilmstrip,
+  captureTimedVideoFrames,
   captureVideoPoster,
-  type VideoFilmstrip,
   type VideoPoster
 } from "./media-utils";
 
-const filmstripCache = new Map<string, Promise<VideoFilmstrip>>();
 const posterCache = new Map<string, Promise<VideoPoster>>();
-
-export function loadVideoFilmstrip(url: string): Promise<VideoFilmstrip> {
-  const cached = filmstripCache.get(url);
-  if (cached) return cached;
-  const pending = captureVideoFilmstrip(url, 10);
-  filmstripCache.set(url, pending);
-  void pending.catch(() => filmstripCache.delete(url));
-  return pending;
-}
 
 export function loadVideoPoster(url: string): Promise<VideoPoster> {
   const cached = posterCache.get(url);
@@ -35,33 +25,68 @@ export function loadVideoPoster(url: string): Promise<VideoPoster> {
 }
 
 export interface MediaFilmstrip {
-  frames: string[];
+  /** Captured frames, sorted by source time. Grows while capture runs. */
+  frames: FilmstripFrame[];
   duration: number | null;
 }
 
-/** Resolves multiple distinct decoded frames for timeline video clips. */
+type FilmstripEntry = {
+  snapshot: MediaFilmstrip;
+  listeners: Set<() => void>;
+};
+
+const emptyFilmstrip: MediaFilmstrip = { frames: [], duration: null };
+const filmstripCache = new Map<string, FilmstripEntry>();
+
+/**
+ * One capture per video URL, shared by every clip cut from it. Subscribers
+ * are told as each frame lands, so the strip fills in progressively.
+ */
+function getFilmstripEntry(url: string): FilmstripEntry {
+  const cached = filmstripCache.get(url);
+  if (cached) return cached;
+
+  const entry: FilmstripEntry = { snapshot: emptyFilmstrip, listeners: new Set() };
+  filmstripCache.set(url, entry);
+  const publish = (snapshot: MediaFilmstrip) => {
+    entry.snapshot = snapshot;
+    entry.listeners.forEach((listener) => listener());
+  };
+  captureTimedVideoFrames(url, (frame, duration) => {
+    const frames = [...entry.snapshot.frames, frame].sort((a, b) => a.time - b.time);
+    publish({ frames, duration });
+  }).catch(() => {
+    // Let a later mount retry when nothing at all could be captured.
+    if (entry.snapshot.frames.length === 0) filmstripCache.delete(url);
+  });
+  return entry;
+}
+
+function subscribeToFilmstrip(url: string, listener: () => void): () => void {
+  const entry = getFilmstripEntry(url);
+  entry.listeners.add(listener);
+  return () => entry.listeners.delete(listener);
+}
+
+/** Time-stamped frames for timeline video clips; images use themselves. */
 export function useMediaFilmstrip(item: { url: string; kind: ImportedMediaKind }): MediaFilmstrip {
-  const [filmstrip, setFilmstrip] = useState<MediaFilmstrip>({ frames: [], duration: null });
+  const isVideo = item.kind === "video";
+  const subscribe = useMemo(
+    () => (listener: () => void) =>
+      isVideo ? subscribeToFilmstrip(item.url, listener) : () => undefined,
+    [isVideo, item.url]
+  );
+  const videoFilmstrip = useSyncExternalStore(
+    subscribe,
+    () => (isVideo ? getFilmstripEntry(item.url).snapshot : emptyFilmstrip)
+  );
+  const imageFilmstrip = useMemo<MediaFilmstrip>(
+    () => ({ frames: [{ time: 0, src: item.url }], duration: null }),
+    [item.url]
+  );
 
-  useEffect(() => {
-    if (item.kind === "image") {
-      setFilmstrip({ frames: [item.url], duration: null });
-      return;
-    }
-    if (item.kind !== "video") {
-      setFilmstrip({ frames: [], duration: null });
-      return;
-    }
-
-    let cancelled = false;
-    setFilmstrip({ frames: [], duration: null });
-    loadVideoFilmstrip(item.url).then((result) => {
-      if (!cancelled) setFilmstrip(result);
-    }).catch(() => undefined);
-    return () => { cancelled = true; };
-  }, [item.kind, item.url]);
-
-  return filmstrip;
+  if (item.kind === "image") return imageFilmstrip;
+  return isVideo ? videoFilmstrip : emptyFilmstrip;
 }
 
 export interface MediaThumbnail {

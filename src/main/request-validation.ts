@@ -6,6 +6,7 @@
 import type {
   DeviceSelection,
   ExportVideoRequest,
+  ClaudeChatSendRequest,
   GeminiChatSendRequest,
   MusicGenerateRequest,
   ProviderKeyId,
@@ -260,6 +261,22 @@ export function assertMusicGenerateRequest(
     !(request.seed === null || (Number.isInteger(request.seed) && (request.seed ?? -1) >= 0))
   ) {
     throw new Error("Invalid music generation request.");
+  }
+}
+
+export function assertClaudeChatSendRequest(
+  value: unknown
+): asserts value is ClaudeChatSendRequest {
+  const request = value as Partial<ClaudeChatSendRequest> | null;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    typeof request.message !== "string" ||
+    request.message.trim().length === 0 ||
+    request.message.length > 8000
+  ) {
+    throw new Error("Invalid AI chat request.");
   }
 }
 

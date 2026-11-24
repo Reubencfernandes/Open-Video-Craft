@@ -1,5 +1,6 @@
 import { finite, isSubtitleSegment, isTextOverlay, validateEditorStateSnapshot } from "./schema";
 import { getAudioLaneLevelKey } from "./audio-levels";
+import { getLayoutPresetCameraFrame } from "./layout-presets";
 import type {
   EditorEditOperation,
   EditorEditResult,
@@ -127,6 +128,13 @@ export function applyEditorOperations(
         break;
       case "set_layout":
         next.layoutMode = operation.layoutMode;
+        // A preset is a complete look: overlap and presenter move the camera
+        // to their own spot, and bubbles return it to the chosen grid position.
+        next.cameraFrame = getLayoutPresetCameraFrame(
+          operation.layoutMode,
+          next.cameraPosition,
+          next.cameraSize
+        );
         break;
       case "set_background":
         next.backgroundStyle = operation.style;

@@ -240,7 +240,13 @@ export function TimelineClip(props: {
       }}
       onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
     >
-      {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}
+      {item.kind !== "audio" ? (
+        <VideoFilmstrip
+          frames={frames}
+          sourceStart={props.clip.sourceStart}
+          sourceDuration={props.clip.duration}
+        />
+      ) : null}
       {item.kind === "audio" ? (
         <BezierAudioWaveform
           id={props.clip.id}

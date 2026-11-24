@@ -18,6 +18,7 @@ import type {
   EditorSessionStateRequest,
   FailRecordingRequest,
   GeminiChatMessage,
+  ClaudeChatSendRequest,
   GeminiChatSendRequest,
   GeminiChatUpdateEvent,
   ImportedMediaFile,
@@ -91,6 +92,17 @@ const api = {
     cancel: (jobId: string): Promise<boolean> => ipcRenderer.invoke("music:cancel", jobId),
     onSetupProgress: subscribe<MusicSetupProgressEvent>("music:setup-progress"),
     onGenerateProgress: subscribe<MusicGenerateProgressEvent>("music:generate-progress")
+  },
+  claude: {
+    send: (request: ClaudeChatSendRequest): Promise<GeminiChatMessage[]> =>
+      ipcRenderer.invoke("claude:chat-send", request),
+    cancel: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("claude:chat-cancel", projectId),
+    reset: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("claude:chat-reset", projectId),
+    getHistory: (projectId: string): Promise<GeminiChatMessage[]> =>
+      ipcRenderer.invoke("claude:chat-history", projectId),
+    onUpdate: subscribe<GeminiChatUpdateEvent>("claude:chat-update")
   },
   gemini: {
     send: (request: GeminiChatSendRequest): Promise<GeminiChatMessage[]> =>

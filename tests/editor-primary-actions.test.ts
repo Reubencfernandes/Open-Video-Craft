@@ -255,11 +255,9 @@ describe("editor primary actions", () => {
     const html = renderToStaticMarkup(createElement(StylePanel, {
       activeCategory: "animated",
       backgroundStyle: "animated-1",
-      videoCornerStyle: "soft",
       onCategoryChange: () => undefined,
       onBackgroundStyleChange: () => undefined,
-      onUploadCustomBackground: () => undefined,
-      onCornerStyleChange: () => undefined
+      onUploadCustomBackground: () => undefined
     }));
 
     expect(html).not.toContain("Animated");
@@ -269,8 +267,8 @@ describe("editor primary actions", () => {
     expect(html).toContain("editor-choice-button");
     expect(html).toContain("editor-choice-content");
     expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain("Rounded");
-    expect(html).toContain("Slight");
+    // Video corners moved to the Layout tool (see layout-presets.test.ts).
+    expect(html).not.toContain("Video corners");
     expect(html).not.toContain("Full");
   });
 });

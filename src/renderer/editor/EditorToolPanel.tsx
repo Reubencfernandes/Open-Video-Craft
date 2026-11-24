@@ -6,9 +6,9 @@ import type {
   ProviderKeysView,
   SttProviderId
 } from "../../shared/types";
-import type { GeminiChatMessage } from "../../shared/types";
+import type { AssistantEngine, GeminiChatMessage } from "../../shared/types";
 import type { MusicGenerationForm, MusicGenerationState } from "./useMusicGeneration";
-import { AssistantPanel } from "./panels/AssistantPanel";
+import { AssistantPanel, type ClaudeAvailability } from "./panels/AssistantPanel";
 import { AudioPanel } from "./panels/AudioPanel";
 import { LayoutPanel } from "./panels/LayoutPanel";
 import { MusicPanel } from "./panels/MusicPanel";
@@ -74,6 +74,9 @@ export function EditorToolPanel(props: {
   onMusicGenerate: (form: MusicGenerationForm) => void;
   onMusicCancel: () => void;
   assistantProjectId: string | null;
+  assistantEngine: AssistantEngine;
+  claudeAvailability: ClaudeAvailability;
+  onAssistantEngineChange: (engine: AssistantEngine) => void;
   assistantMessages: GeminiChatMessage[];
   assistantSending: boolean;
   assistantStatusMessage: string | null;
@@ -149,6 +152,7 @@ export function EditorToolPanel(props: {
           cameraContentTransform={props.cameraContentTransform}
           cameraPosition={props.cameraPosition}
           cameraSize={props.cameraSize}
+          videoCornerStyle={props.videoCornerStyle}
           onLayoutModeChange={props.onLayoutModeChange}
           onScreenScaleChange={props.onScreenScaleChange}
           onScreenAspectRatioChange={props.onScreenAspectRatioChange}
@@ -158,6 +162,7 @@ export function EditorToolPanel(props: {
           onCameraContentTransformReset={props.onCameraContentTransformReset}
           onCameraPositionChange={props.onCameraPositionChange}
           onCameraSizeChange={props.onCameraSizeChange}
+          onCornerStyleChange={props.onCornerStyleChange}
         />
       ) : null}
 
@@ -206,6 +211,9 @@ export function EditorToolPanel(props: {
       {props.activeTool === "assistant" ? (
         <AssistantPanel
           projectId={props.assistantProjectId}
+          engine={props.assistantEngine}
+          claudeAvailability={props.claudeAvailability}
+          onEngineChange={props.onAssistantEngineChange}
           providerKeys={props.providerKeys}
           messages={props.assistantMessages}
           sending={props.assistantSending}
@@ -273,11 +281,9 @@ export function EditorToolPanel(props: {
         <StylePanel
           activeCategory={props.activeBackgroundCategory}
           backgroundStyle={props.backgroundStyle}
-          videoCornerStyle={props.videoCornerStyle}
           onCategoryChange={props.onBackgroundCategoryChange}
           onBackgroundStyleChange={props.onBackgroundStyleChange}
           onUploadCustomBackground={props.onUploadCustomBackground}
-          onCornerStyleChange={props.onCornerStyleChange}
         />
       ) : null}
     </div>

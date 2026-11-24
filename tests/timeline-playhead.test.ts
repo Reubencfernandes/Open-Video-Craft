@@ -40,15 +40,34 @@ describe("timeline playhead", () => {
       onPointerUp
     })));
 
-    const playhead = host.querySelector<HTMLElement>("[data-timeline-playhead]");
-    expect(playhead).not.toBeNull();
-    playhead?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-    playhead?.dispatchEvent(new Event("pointermove", { bubbles: true }));
-    playhead?.dispatchEvent(new Event("pointerup", { bubbles: true }));
+    const handle = host.querySelector<HTMLElement>("[data-timeline-playhead-handle]");
+    expect(handle).not.toBeNull();
+    handle?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    handle?.dispatchEvent(new Event("pointermove", { bubbles: true }));
+    handle?.dispatchEvent(new Event("pointerup", { bubbles: true }));
 
     expect(onPointerDown).toHaveBeenCalledOnce();
     expect(onPointerMove).toHaveBeenCalledOnce();
     expect(onPointerUp).toHaveBeenCalledOnce();
+  });
+
+  it("lets presses on the line reach the clip edges underneath it", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    flushSync(() => root?.render(createElement(TimelinePlayhead, {
+      playheadPercent: 0,
+      currentTime: 0,
+      color: "#fff",
+      onPointerDown: vi.fn(),
+      onPointerMove: vi.fn(),
+      onPointerUp: vi.fn()
+    })));
+
+    const line = host.querySelector<HTMLElement>("[data-timeline-playhead]");
+    const handle = host.querySelector<HTMLElement>("[data-timeline-playhead-handle]");
+    expect(line?.className).toContain("pointer-events-none");
+    expect(handle?.className).toContain("pointer-events-auto");
   });
 });
 
@@ -64,6 +83,18 @@ describe("timeline ruler", () => {
     expect(ticks[0]?.style.left).toBe("0%");
     expect(ticks[5]?.style.left).toBe("100%");
     expect(ticks[5]?.textContent).toBe("01:07");
+  });
+
+  it("adds labels when the timeline is zoomed so time stays readable", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    flushSync(() => root?.render(createElement(TimelineRuler, { duration: 90, zoom: 5 })));
+
+    const ticks = host.querySelectorAll<HTMLElement>("[data-timeline-ruler-tick]");
+    expect(ticks).toHaveLength(26);
+    expect(ticks[25]?.style.left).toBe("100%");
+    expect(ticks[25]?.textContent).toBe("01:30");
   });
 });
 
@@ -410,6 +441,9 @@ describe("persistent effect lanes", () => {
     expect(selection?.dataset.timelineRangeLanes).toBe("speed,subtitles");
     expect(selection?.dataset.timelineRangeDragging).toBe("true");
     expect(selection?.className).toContain("bg-pink-400/[0.16]");
+    // The box must track the pointer exactly, not animate toward it.
+    expect(selection?.className).not.toContain("transition");
+    expect(selectionFrame?.className).not.toContain("transition");
     expect(selection?.style.left).toBe("20%");
     expect(selection?.style.width).toBe("20%");
     expect(selectionFrame?.style.top).toBe("5.5rem");

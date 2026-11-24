@@ -1,15 +1,19 @@
 /**
- * Layout tool: layout mode, screen scale/aspect, and camera shape/size/
+ * Layout tool: layout mode, screen scale/aspect/corners, and camera shape/size/
  * position/crop controls.
  */
+import type { CSSProperties } from "react";
+import { User } from "lucide-react";
 import { RangeControl } from "../controls";
+import { getLayoutPresetDiagram, type PercentFrame } from "../layout-geometry";
 import type {
   CameraBorderStyle,
   CameraContentTransform,
   CameraPosition,
   CameraShape,
   LayoutMode,
-  ScreenAspectRatio
+  ScreenAspectRatio,
+  VideoCornerStyle
 } from "../types";
 import { CameraCropControls } from "./CameraCropControls";
 
@@ -51,6 +55,12 @@ const layoutPresetGroups: Array<{
   }
 ];
 
+const videoCornerOptions: Array<{ id: VideoCornerStyle; label: string }> = [
+  { id: "flat", label: "Flat" },
+  { id: "soft", label: "Slight" },
+  { id: "round", label: "Rounded" }
+];
+
 const cameraSizeOptions = [
   { label: "S", value: 18 },
   { label: "M", value: 24 },
@@ -85,6 +95,7 @@ export function LayoutPanel(props: {
   cameraContentTransform: CameraContentTransform;
   cameraPosition: CameraPosition;
   cameraSize: number;
+  videoCornerStyle: VideoCornerStyle;
   onLayoutModeChange: (mode: LayoutMode) => void;
   onScreenScaleChange: (scale: number) => void;
   onScreenAspectRatioChange: (aspectRatio: ScreenAspectRatio) => void;
@@ -94,6 +105,7 @@ export function LayoutPanel(props: {
   onCameraContentTransformReset: () => void;
   onCameraPositionChange: (position: CameraPosition) => void;
   onCameraSizeChange: (size: number) => void;
+  onCornerStyleChange: (style: VideoCornerStyle) => void;
 }) {
   return (
     <div className="grid min-h-0 content-start gap-4 overflow-auto">
@@ -119,20 +131,7 @@ export function LayoutPanel(props: {
                   aria-pressed={props.layoutMode === preset.id}
                   onClick={() => props.onLayoutModeChange(preset.id)}
                 >
-                  <span className="relative block aspect-video overflow-hidden rounded-md bg-slate-950">
-                    <i className="absolute inset-[18%_14%] rounded-sm bg-slate-300/80" />
-                    {preset.id !== "screen-only" ? (
-                      <b
-                        className={`absolute rounded-full bg-white ${
-                          preset.id === "camera-only"
-                            ? "inset-[22%] rounded-md"
-                            : preset.id === "presenter"
-                              ? "bottom-[16%] right-[12%] size-[36%]"
-                              : "bottom-[12%] right-[10%] size-[28%]"
-                        }`}
-                      />
-                    ) : null}
-                  </span>
+                  <LayoutPresetThumbnail layoutMode={preset.id} />
                   <strong>{preset.label}</strong>
                 </button>
               ))}
@@ -174,6 +173,26 @@ export function LayoutPanel(props: {
                 </div>
               </div>
             ) : null}
+            <div className="grid gap-2">
+              <span className="text-xs font-extrabold text-slate-400">Video corners</span>
+              <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
+                {videoCornerOptions.map((option) => (
+                  <button
+                    className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
+                      props.videoCornerStyle === option.id
+                        ? "bg-white text-[#111827]"
+                        : "text-slate-300 hover:bg-white/10 hover:text-white"
+                    }`}
+                    type="button"
+                    key={option.id}
+                    aria-pressed={props.videoCornerStyle === option.id}
+                    onClick={() => props.onCornerStyleChange(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </>
         ) : null}
 
@@ -275,4 +294,47 @@ export function LayoutPanel(props: {
       </div>
     </div>
   );
+}
+
+/**
+ * Miniature of a preset drawn from the real layout geometry: the background
+ * shows wherever the screen does not reach, the light block is the screen
+ * recording, and the white shape is the camera.
+ */
+function LayoutPresetThumbnail(props: { layoutMode: LayoutMode }) {
+  const diagram = getLayoutPresetDiagram(props.layoutMode);
+  return (
+    <span
+      className="relative block aspect-video overflow-hidden rounded-md bg-gradient-to-br from-slate-600 via-slate-800 to-slate-900"
+      data-layout-preset-diagram={props.layoutMode}
+    >
+      {diagram.screen ? (
+        <i
+          className="absolute rounded-[2px] bg-slate-300/85"
+          style={toPercentStyle(diagram.screen)}
+          data-layout-preset-screen
+        />
+      ) : null}
+      {diagram.camera ? (
+        <b
+          className={`absolute grid place-items-center overflow-hidden bg-white text-slate-500 shadow-[0_1px_4px_rgb(0_0_0_/_0.45)] ${
+            diagram.camera.shape === "circle" ? "rounded-full" : ""
+          }`}
+          style={toPercentStyle(diagram.camera)}
+          data-layout-preset-camera={diagram.camera.shape}
+        >
+          <User className="size-3/5 max-h-5 max-w-5" strokeWidth={2.5} aria-hidden="true" />
+        </b>
+      ) : null}
+    </span>
+  );
+}
+
+function toPercentStyle(frame: PercentFrame): CSSProperties {
+  return {
+    left: `${frame.x}%`,
+    top: `${frame.y}%`,
+    width: `${frame.width}%`,
+    height: `${frame.height}%`
+  };
 }

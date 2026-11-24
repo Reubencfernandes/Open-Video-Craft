@@ -59,7 +59,7 @@ export function EditorPreviewPanel(props: {
   playing: boolean;
   currentFrame: number;
   totalFrames: number;
-  renderDuration: number;
+  duration: number;
   masterVolume: number;
   onMasterVolumeChange: (volume: number) => void;
   onTogglePlayback: () => void;
@@ -206,7 +206,7 @@ export function EditorPreviewPanel(props: {
         currentFrame={props.currentFrame}
         totalFrames={props.totalFrames}
         currentTime={props.currentTime}
-        renderDuration={props.renderDuration}
+        duration={props.duration}
         masterVolume={props.masterVolume}
         fullscreen={previewFullscreen}
         onMasterVolumeChange={props.onMasterVolumeChange}

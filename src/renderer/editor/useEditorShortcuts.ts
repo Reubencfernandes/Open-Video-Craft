@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
+import { isModalDialogOpen } from "../useModalDialog";
 import { isKeyboardInteractiveTarget, isKeyboardTextTarget } from "./keyboard-utils";
 
 export type EditorShortcutsParams = {
@@ -37,6 +38,9 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
     }
 
     function handleKeyDown(event: KeyboardEvent) {
+      // A modal owns the keyboard. Without this, Backspace on a focused dialog
+      // button deleted the timeline clip selected behind the backdrop.
+      if (isModalDialogOpen()) return;
       const p = paramsRef.current;
       const isTyping = isKeyboardTextTarget(event.target);
       // Timeline clips are buttons for accessibility, and pressing one focuses

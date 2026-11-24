@@ -1,8 +1,10 @@
 /** Centered release-notes dialog opened from the homepage footer. */
 import { Check, X } from "lucide-react";
+import { useModalDialog } from "../useModalDialog";
 import { latestRelease } from "./latest-release";
 
 export function ChangelogDialog(props: { open: boolean; onClose: () => void }) {
+  const dialogRef = useModalDialog<HTMLElement>({ open: props.open, onClose: props.onClose });
   if (!props.open) return null;
 
   return (
@@ -14,7 +16,8 @@ export function ChangelogDialog(props: { open: boolean; onClose: () => void }) {
       }}
     >
       <section
-        className="relative flex max-h-[calc(100dvh-2rem)] w-[min(35rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-[1.65rem] bg-[#101012] text-white shadow-[0_32px_100px_rgb(0_0_0_/_0.72)]"
+        className="relative flex max-h-[calc(100dvh-2rem)] w-[min(35rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-[1.65rem] bg-[#101012] text-white shadow-[0_32px_100px_rgb(0_0_0_/_0.72)] outline-none"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="changelog-title"

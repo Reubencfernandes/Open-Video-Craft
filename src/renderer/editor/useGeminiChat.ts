@@ -1,13 +1,33 @@
 /**
- * Chat state for the built-in Gemini editing assistant. All model calls and
- * edits happen in the main process; this hook mirrors the message history and
- * streams status updates ("analyzing", "applying edit…") for the panel.
+ * Chat state for the built-in editing assistant, driven either by the user's
+ * local Claude Code or by Gemini. All model calls and edits happen in the main
+ * process; this hook mirrors the message history and streams status updates
+ * ("analyzing", "applying edit…") for the panel.
  */
 import { useEffect, useRef, useState } from "react";
-import type { GeminiChatMessage, GeminiChatUpdateEvent } from "../../shared/types";
+import type {
+  AssistantEngine,
+  GeminiChatMessage,
+  GeminiChatUpdateEvent
+} from "../../shared/types";
 
 export function useGeminiChat(params: { projectId: string | null }) {
-  const { projectId } = params;
+  return useAssistantChat({ ...params, engine: "gemini" });
+}
+
+function getAssistantApi(engine: AssistantEngine) {
+  const api = window.openVideoCraft[engine];
+  return {
+    ...api,
+    send: (projectId: string, message: string) =>
+      engine === "claude"
+        ? window.openVideoCraft.claude.send({ projectId, message })
+        : window.openVideoCraft.gemini.send({ projectId, message, includeVideo: true })
+  };
+}
+
+export function useAssistantChat(params: { projectId: string | null; engine: AssistantEngine }) {
+  const { projectId, engine } = params;
   const [messages, setMessages] = useState<GeminiChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -26,7 +46,8 @@ export function useGeminiChat(params: { projectId: string | null }) {
     setChatError(null);
     if (!projectId) return;
     let cancelled = false;
-    void window.openVideoCraft.gemini
+    const api = getAssistantApi(engine);
+    void api
       .getHistory(projectId)
       .then((history) => {
         if (!cancelled && activeRequestRef.current === projectGeneration) {
@@ -35,7 +56,7 @@ export function useGeminiChat(params: { projectId: string | null }) {
       })
       .catch(() => undefined);
 
-    const unsubscribe = window.openVideoCraft.gemini.onUpdate(
+    const unsubscribe = api.onUpdate(
       (event: GeminiChatUpdateEvent) => {
         if (event.projectId !== projectId) return;
         setStatusMessage(describeStatus(event));
@@ -48,10 +69,10 @@ export function useGeminiChat(params: { projectId: string | null }) {
         // Project navigation and editor unmounts remove the request controls.
         // Stop only genuinely active work; completed sessions keep their
         // history and are not cancelled merely because the panel disappears.
-        void window.openVideoCraft.gemini.cancel(projectId).catch(() => undefined);
+        void api.cancel(projectId).catch(() => undefined);
       }
     };
-  }, [projectId]);
+  }, [engine, projectId]);
 
   async function send(message: string) {
     const trimmed = message.trim();
@@ -74,11 +95,7 @@ export function useGeminiChat(params: { projectId: string | null }) {
     ]);
 
     try {
-      const history = await window.openVideoCraft.gemini.send({
-        projectId: requestProjectId,
-        message: trimmed,
-        includeVideo: true
-      });
+      const history = await getAssistantApi(engine).send(requestProjectId, trimmed);
       if (
         activeRequestRef.current === requestId &&
         projectIdRef.current === requestProjectId
@@ -92,9 +109,11 @@ export function useGeminiChat(params: { projectId: string | null }) {
       ) {
         return;
       }
-      setChatError(formatGeminiChatError(error));
+      setChatError(
+        engine === "claude" ? formatClaudeChatError(error) : formatGeminiChatError(error)
+      );
       // Re-sync with the authoritative main-process history.
-      void window.openVideoCraft.gemini
+      void getAssistantApi(engine)
         .getHistory(requestProjectId)
         .then((history) => {
           if (
@@ -118,7 +137,7 @@ export function useGeminiChat(params: { projectId: string | null }) {
   }
 
   function cancel() {
-    if (projectId) void window.openVideoCraft.gemini.cancel(projectId);
+    if (projectId) void getAssistantApi(engine).cancel(projectId);
   }
 
   async function reset() {
@@ -130,7 +149,7 @@ export function useGeminiChat(params: { projectId: string | null }) {
     setSending(false);
     setStatusMessage(null);
     setChatError(null);
-    await window.openVideoCraft.gemini.reset(resetProjectId).catch(() => undefined);
+    await getAssistantApi(engine).reset(resetProjectId).catch(() => undefined);
     if (activeRequestRef.current !== resetId || projectIdRef.current !== resetProjectId) return;
   }
 
@@ -143,6 +162,16 @@ export function useGeminiChat(params: { projectId: string | null }) {
     sending,
     statusMessage
   };
+}
+
+/** Claude Code errors are already user-facing; drop the IPC wrapper text. */
+export function formatClaudeChatError(error: unknown): string {
+  const message = (error instanceof Error ? error.message : String(error))
+    .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, "")
+    .replace(/^Error:\s*/i, "")
+    .trim();
+  if (/request was stopped/i.test(message)) return "The Claude request was stopped.";
+  return message || "Claude Code couldn't complete the request. Please try again.";
 }
 
 /** Convert Electron IPC and Gemini API failures into concise, actionable UI copy. */

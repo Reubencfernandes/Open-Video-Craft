@@ -24,6 +24,7 @@ import {
   getTimelineMediaDuration,
   getTimelineTrackKind,
   moveTimelineSegment,
+  pushTimelineUndoSnapshot,
   resolveAudioLane,
   syncTimelineSegments
 } from "./timeline-utils";
@@ -63,12 +64,9 @@ type UseTimelineEditingParams = {
   setTimelineViewDuration: Dispatch<SetStateAction<number>>;
   setTrimRange: Dispatch<SetStateAction<{ start: number; end: number }>>;
   timelineDuration: number;
-  /** True while a clip or effect drag owns the pointer. */
-  timelineDragActive?: boolean;
   timelineEditableItems: EditorMediaItem[];
   timelineRenderDuration: number;
   timelineSegments: TimelineSegment[];
-  timelineViewDuration?: number;
   updateMediaDuration: (itemId: string, duration: number | null) => void;
 };
 
@@ -103,20 +101,15 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     setTimelineViewDuration,
     setTrimRange,
     timelineDuration,
-    timelineDragActive = false,
     timelineEditableItems,
     timelineRenderDuration,
     timelineSegments,
-    timelineViewDuration = 0,
     updateMediaDuration
   } = params;
 
   const [timelineUndoStack, setTimelineUndoStack] = useState<TimelineSegment[][]>([]);
   const [timelineRedoStack, setTimelineRedoStack] = useState<TimelineSegment[][]>([]);
   const previousTimelineDurationRef = useRef(0);
-  // Whether the visible ruler hugs the content end, as opposed to a deliberate
-  // user extension. Only sampled between drags, so a drag cannot change it.
-  const viewFittedToContentRef = useRef(true);
 
   // ---------------------------------------------------------------------------
   // Library housekeeping effects.
@@ -202,33 +195,17 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timelineEditableItems]);
 
+  // The ruler fits the content once, then only grows with it. Edits never
+  // shrink it: shrinking during a drag made a trimmed edge run away from the
+  // cursor, and refitting after the drag rescaled the whole timeline, so a
+  // trimmed clip jumped back to full width and looked untouched. Double-click
+  // the ruler to fit it to the content again.
   useEffect(() => {
-    if (!timelineDragActive) {
-      viewFittedToContentRef.current =
-        timelineViewDuration <= 0 || Math.abs(timelineViewDuration - timelineDuration) < 0.05;
-    }
-    // Sampled when the view changes, never because the content did.
+    setTimelineViewDuration((current) =>
+      current <= 0 ? timelineDuration : Math.max(current, timelineDuration)
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineViewDuration]);
-
-  // Follow the content end in both directions while the ruler is fitted to
-  // the composition. Preserve a deliberate user extension, but never let the
-  // ruler become shorter than the current content.
-  //
-  // While a drag is active the ruler may grow but never shrink: shrinking
-  // rescales time under the pointer, so trimming the last clip's end made the
-  // edge run away from the cursor. It refits once the drag ends.
-  useEffect(() => {
-    setTimelineViewDuration((current) => {
-      if (timelineDragActive) {
-        return Math.max(current, timelineDuration);
-      }
-      return current <= 0 || viewFittedToContentRef.current
-        ? timelineDuration
-        : Math.max(current, timelineDuration);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timelineDuration, timelineDragActive]);
+  }, [timelineDuration]);
 
   // Keep the export trim range sensible as the timeline duration changes.
   useEffect(() => {
@@ -269,7 +246,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
       }
 
       scheduleTimelinePlaybackSync(next);
-      setTimelineUndoStack((stack) => [...stack.slice(-49), current]);
+      setTimelineUndoStack((stack) => pushTimelineUndoSnapshot(stack, current));
       setTimelineRedoStack([]);
       return next;
     });

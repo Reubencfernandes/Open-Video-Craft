@@ -178,3 +178,48 @@ describe("editor AI and audio panels", () => {
     expect(html).not.toContain('type="checkbox"');
   });
 });
+
+describe("Claude Code assistant engine", () => {
+  function renderClaudePanel(input: {
+    availability: "checking" | "available" | "missing";
+    chatError?: string | null;
+  }) {
+    return renderToStaticMarkup(createElement(AssistantPanel, {
+      projectId: "project-1",
+      engine: "claude",
+      claudeAvailability: input.availability,
+      onEngineChange: () => undefined,
+      providerKeys: null,
+      messages: [],
+      sending: false,
+      statusMessage: null,
+      chatError: input.chatError ?? null,
+      onSend: () => undefined,
+      onCancel: () => undefined,
+      onReset: () => undefined,
+      onUndoEdit: () => undefined,
+      onOpenAiSettings: () => undefined
+    }));
+  }
+
+  it("lets the user chat with Claude without a Gemini key", () => {
+    const html = renderClaudePanel({ availability: "available" });
+    expect(html).toContain('data-assistant-engine="claude"');
+    expect(html).toContain("Tell Claude what to change");
+    expect(html).toContain("Claude edits your timeline directly");
+    expect(html).not.toMatch(/<textarea[^>]*disabled=""/);
+    expect(html).not.toContain("Gemini API key");
+  });
+
+  it("explains how to install Claude Code when it is missing", () => {
+    const html = renderClaudePanel({ availability: "missing" });
+    expect(html).toContain("data-claude-missing");
+    expect(html).toContain("claude.com/claude-code");
+    expect(html).toMatch(/<textarea[^>]*disabled=""/);
+  });
+
+  it("names Claude Code in errors", () => {
+    expect(renderClaudePanel({ availability: "available", chatError: "Not signed in" }))
+      .toContain("Claude Code couldn’t complete this request");
+  });
+});

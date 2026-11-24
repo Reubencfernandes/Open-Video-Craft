@@ -67,7 +67,6 @@ type UseTimelineDragInteractionsParams = {
   setSelectedZoomId: Dispatch<SetStateAction<string | null>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTimelineContextMenu: Dispatch<SetStateAction<TimelineContextMenu>>;
-  setTimelineDragActive?: Dispatch<SetStateAction<boolean>>;
   setTimelineRangeSelection: Dispatch<SetStateAction<TimelineRangeSelection | null>>;
   setTimelineRedoStack: Dispatch<SetStateAction<TimelineSegment[][]>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
@@ -111,7 +110,6 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     setSelectedZoomId,
     setSubtitles,
     setTimelineContextMenu,
-    setTimelineDragActive,
     setTimelineRangeSelection,
     setTimelineRedoStack,
     setTimelineSegments,
@@ -135,7 +133,6 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   // One ref per drag kind; at most one is non-null at a time. Plain playhead
   // scrubbing uses the boolean ref.
   const timelineDragRef = useRef(false);
-  const clipDragFlagRef = useRef(false);
   const rangeSelectionDragRef = useRef<{
     anchorClientX: number;
     anchorClientY: number;
@@ -313,7 +310,9 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       (ids[0] ? timelineSegments.find((segment) => segment.id === ids[0]) : null);
 
     setTimelineRangeSelection(selection);
-    setSelectedTimelineSegmentIds(ids);
+    // Keep the previous array while the covered clips are unchanged, so moving
+    // the marquee only re-renders the rectangle, not every clip and panel.
+    setSelectedTimelineSegmentIds((current) => (haveSameIds(current, ids) ? current : ids));
     setSelectedTimelineSegmentId(primary?.id ?? null);
     if (primary) {
       setSelectedItemId(primary.itemId);
@@ -385,10 +384,6 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     // so it follows the pointer exactly (the transition animates drops instead).
     if (anyClipDragActive()) {
       timelineBodyRef.current?.setAttribute("data-interacting", "true");
-      if (!clipDragFlagRef.current) {
-        clipDragFlagRef.current = true;
-        setTimelineDragActive?.(true);
-      }
     }
 
     if (updateEffectClipDrag(event.clientX)) {
@@ -435,10 +430,6 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     finishEffectClipDrags();
     // Re-enable clip reflow animation so the drop settles smoothly.
     timelineBodyRef.current?.removeAttribute("data-interacting");
-    if (clipDragFlagRef.current) {
-      clipDragFlagRef.current = false;
-      setTimelineDragActive?.(false);
-    }
     timelineDragRef.current = false;
     setScrubbingTimeline(false);
     endPlaybackInteraction();
@@ -456,6 +447,10 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     moveTimelineScrub,
     openTimelineContextMenu
   };
+}
+
+function haveSameIds(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((id, index) => id === b[index]);
 }
 
 function parseTimelineLaneId(value: string | undefined): TimelineLaneId | null {

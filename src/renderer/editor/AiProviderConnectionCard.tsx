@@ -53,7 +53,9 @@ export function AiProviderConnectionCard(props: {
             ) : null}
           </div>
           <p className="mt-1.5 text-[0.68rem] leading-4 text-neutral-400">
-            {provider.message ?? (provider.installed ? `CLI ${provider.version ?? "detected"}` : "Claude Code CLI is not installed yet.")}
+            {provider.message ?? (provider.installed
+              ? `CLI ${provider.version ?? "detected"}. Ready in the AI panel: tell Claude what to edit. Connect to also edit from your own terminal.`
+              : "Claude Code CLI is not installed yet. Install it to let Claude edit your video from the AI panel.")}
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <span className="rounded-full bg-emerald-400/[0.09] px-2 py-1 text-[0.58rem] font-bold text-emerald-300">Video editing</span>

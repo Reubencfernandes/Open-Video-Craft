@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   calculateTimelineDuration,
   findSplittableTimelineSegment,
+  pushTimelineUndoSnapshot,
+  timelineUndoLimit,
   syncTimelineSegments,
   resolveAudioLane,
   trimTimelineSegment
@@ -176,5 +178,25 @@ describe("timeline composition duration", () => {
       [],
       68
     )).toBe(68);
+  });
+});
+
+describe("timeline undo history", () => {
+  it("records one undo step when React runs the same state update twice", () => {
+    const before: TimelineSegment[] = [videoSegments[0]];
+    const once = pushTimelineUndoSnapshot([], before);
+    // StrictMode and restarted renders invoke updaters again with the same input.
+    const twice = pushTimelineUndoSnapshot(once, before);
+    expect(twice).toBe(once);
+    expect(twice).toHaveLength(1);
+  });
+
+  it("keeps separate edits as separate steps and caps the history", () => {
+    let stack: TimelineSegment[][] = [];
+    for (let index = 0; index < timelineUndoLimit + 5; index += 1) {
+      stack = pushTimelineUndoSnapshot(stack, [{ ...videoSegments[0], end: index + 1 }]);
+    }
+    expect(stack).toHaveLength(timelineUndoLimit);
+    expect(stack[stack.length - 1][0].end).toBe(timelineUndoLimit + 5);
   });
 });

@@ -5,6 +5,11 @@
  */
 import type WaveSurfer from "wavesurfer.js";
 import type { ImportedMediaFile, ProjectView } from "../../shared/types";
+import {
+  getFilmstripSampleTimes,
+  getProgressiveCaptureOrder,
+  type FilmstripFrame
+} from "./filmstrip";
 import type { EditorMediaItem } from "./types";
 import { clampNumber } from "./utils";
 
@@ -156,6 +161,51 @@ export async function captureVideoFilmstrip(
       frames,
       duration: resolvedDuration
     };
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
+/**
+ * Captures frames at known source times for the timeline filmstrip, reporting
+ * each one as it lands. Frames arrive coarse-to-fine so a partly captured
+ * strip already covers the whole video.
+ */
+export async function captureTimedVideoFrames(
+  url: string,
+  onFrame: (frame: FilmstripFrame, duration: number) => void,
+  maxFrameWidth = 192
+): Promise<number> {
+  const video = document.createElement("video");
+  video.muted = true;
+  video.defaultMuted = true;
+  video.preload = "auto";
+  video.playsInline = true;
+  video.crossOrigin = "anonymous";
+  video.src = url;
+  video.load();
+
+  try {
+    const duration = await resolveVideoDuration(video);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      // Without a duration no frame can be placed in time; fail so a later
+      // mount retries once the media reports its length.
+      throw new Error("Video duration is unknown.");
+    }
+    const times = getFilmstripSampleTimes(duration);
+    let captured = 0;
+    for (const index of getProgressiveCaptureOrder(times.length)) {
+      await seekVideoTo(video, times[index]);
+      await waitForDecodedFrame(video);
+      const src = captureCurrentVideoFrame(video, maxFrameWidth);
+      if (src) {
+        captured += 1;
+        onFrame({ time: times[index], src }, duration);
+      }
+    }
+    if (captured === 0) throw new Error("Video has no decodable frames.");
+    return duration;
   } finally {
     video.removeAttribute("src");
     video.load();

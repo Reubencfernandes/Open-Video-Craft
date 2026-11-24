@@ -204,3 +204,43 @@ describe("editor global shortcuts", () => {
     expect(callbacks.deleteSelected).toHaveBeenCalledOnce();
   });
 });
+
+describe("editor shortcuts with a modal open", () => {
+  it("leave the timeline alone while a dialog owns the keyboard", () => {
+    const deleteSelected = vi.fn();
+    const togglePlayback = vi.fn();
+    const undo = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+    flushSync(() => root?.render(createElement(ShortcutHarness, {
+      selectedTimelineSegmentId: "clip-1",
+      togglePlayback,
+      deleteSelected,
+      onMute: vi.fn(),
+      undo,
+      redo: vi.fn()
+    })));
+
+    const modal = document.createElement("div");
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+    const closeButton = document.createElement("button");
+    modal.append(closeButton);
+    document.body.append(modal);
+    closeButton.focus();
+
+    for (const key of ["Backspace", "Delete", " ", "z"]) {
+      closeButton.dispatchEvent(new KeyboardEvent("keydown", {
+        key,
+        code: key === " " ? "Space" : undefined,
+        ctrlKey: key === "z",
+        bubbles: true
+      }));
+    }
+
+    expect(deleteSelected).not.toHaveBeenCalled();
+    expect(togglePlayback).not.toHaveBeenCalled();
+    expect(undo).not.toHaveBeenCalled();
+  });
+});

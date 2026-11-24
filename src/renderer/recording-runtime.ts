@@ -8,16 +8,23 @@ export const recordingRuntime = {
   elapsedUpdateMs: 1_000,
   projectUiSyncMs: 15_000,
   screenFrameRate: 30,
-  videoBitsPerSecond: 8_000_000
+  videoBitsPerSecond: 8_000_000,
+  // Every editor seek decodes forward from the previous keyframe. Chromium's
+  // default spacing (~3–4 s) makes playhead scrubbing stall on 1080p VP9; one
+  // keyframe per second costs only a few percent more file size.
+  videoKeyFrameIntervalMs: 1_000
 };
 
 export type RecorderKind = "audio" | "video";
+
+/** Chromium also accepts keyframe spacing, which older DOM typings omit. */
+type RecorderOptions = MediaRecorderOptions & { videoKeyFrameIntervalDuration?: number };
 
 export function createMediaRecorderOptions(
   kind: RecorderKind,
   mimeType: string,
   videoBitsPerSecond: number = recordingRuntime.videoBitsPerSecond
-): MediaRecorderOptions {
+): RecorderOptions {
   return kind === "audio"
     ? {
         audioBitsPerSecond: recordingRuntime.audioBitsPerSecond,
@@ -25,7 +32,8 @@ export function createMediaRecorderOptions(
       }
     : {
         mimeType,
-        videoBitsPerSecond
+        videoBitsPerSecond,
+        videoKeyFrameIntervalDuration: recordingRuntime.videoKeyFrameIntervalMs
       };
 }
 

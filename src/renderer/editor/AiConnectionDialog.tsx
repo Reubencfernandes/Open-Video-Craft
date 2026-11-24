@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useModalDialog } from "../useModalDialog";
 import { ShieldCheck, X } from "lucide-react";
 import type {
   AiConnectionStatus,
@@ -24,6 +25,7 @@ export function AiConnectionDialog(props: {
   const [busy, setBusy] = useState<AiProvider | "undo" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<"all" | "editing" | "transcription" | "music">("all");
+  const dialogRef = useModalDialog<HTMLDivElement>({ open: props.open, onClose: props.onClose });
 
   useEffect(() => {
     if (!props.open) return;
@@ -70,7 +72,7 @@ export function AiConnectionDialog(props: {
   };
 
   return (
-    <div className="fixed inset-0 z-[80] grid min-h-0 place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="AI connection">
+    <div className="fixed inset-0 z-[80] grid min-h-0 place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm outline-none" role="dialog" aria-modal="true" aria-label="AI connection" ref={dialogRef}>
       <section className="flex max-h-[calc(100dvh-2rem)] w-full max-w-5xl min-h-0 flex-col overflow-hidden rounded-2xl bg-[#101012] shadow-2xl">
         <header className="flex shrink-0 items-start justify-between gap-4 px-6 pb-3 pt-5">
           <div className="min-w-0">

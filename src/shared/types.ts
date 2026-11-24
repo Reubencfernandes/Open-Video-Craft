@@ -510,6 +510,15 @@ export interface GeminiChatSendRequest {
   includeVideo: boolean;
 }
 
+/** In-app Claude Code request: the local CLI edits through the editor MCP tools. */
+export interface ClaudeChatSendRequest {
+  projectId: string;
+  message: string;
+}
+
+/** Which model drives the in-app editing assistant. */
+export type AssistantEngine = "claude" | "gemini";
+
 export type GeminiChatRole = "user" | "assistant";
 
 export interface GeminiChatMessage {

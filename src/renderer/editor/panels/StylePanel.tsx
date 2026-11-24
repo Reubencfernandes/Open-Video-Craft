@@ -1,10 +1,11 @@
 /**
- * Style tool: background category/style selection, custom background upload,
- * and video corner styling.
+ * Style tool: background category/style selection and custom background
+ * upload. Video corners live in the Layout tool with the other screen-frame
+ * controls.
  */
 import { Upload } from "lucide-react";
 import { previewBackgrounds } from "../backgrounds";
-import type { BackgroundCategory, BackgroundStyle, VideoCornerStyle } from "../types";
+import type { BackgroundCategory, BackgroundStyle } from "../types";
 
 const backgroundCategories: Array<{
   id: BackgroundCategory;
@@ -36,16 +37,14 @@ const backgroundCategories: Array<{
 
 /**
  * "Style" tool: pick the composition background (built-in swatches or a custom
- * uploaded image) and the corner rounding applied to the video frame.
+ * uploaded image).
  */
 export function StylePanel(props: {
   activeCategory: BackgroundCategory;
   backgroundStyle: BackgroundStyle;
-  videoCornerStyle: VideoCornerStyle;
   onCategoryChange: (category: BackgroundCategory) => void;
   onBackgroundStyleChange: (style: BackgroundStyle) => void;
   onUploadCustomBackground: () => void;
-  onCornerStyleChange: (style: VideoCornerStyle) => void;
 }) {
   // Older projects can still contain an animated background. Keep rendering
   // those projects, but present the supported Image category in the picker.
@@ -113,28 +112,6 @@ export function StylePanel(props: {
         <Upload size={16} />
         Upload custom background
       </button>
-      <div className="grid gap-2">
-        <span className="text-xs font-extrabold text-slate-400">Video corners</span>
-        <div className="grid grid-cols-3 gap-1 rounded-lg bg-white/[0.05] p-1">
-          {(["flat", "soft", "round"] as VideoCornerStyle[]).map((shape) => {
-            return (
-              <button
-                className={`editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold ${
-                  props.videoCornerStyle === shape
-                    ? "bg-white text-[#111827]"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white"
-                }`}
-                type="button"
-                key={shape}
-                aria-pressed={props.videoCornerStyle === shape}
-                onClick={() => props.onCornerStyleChange(shape)}
-              >
-                {shape === "flat" ? "Flat" : shape === "soft" ? "Slight" : "Rounded"}
-              </button>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

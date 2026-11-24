@@ -87,7 +87,6 @@ type UseTimelineControllerParams = {
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
   setTextOverlays: Dispatch<SetStateAction<TextOverlay[]>>;
   setTimelineContextMenu: Dispatch<SetStateAction<TimelineContextMenu>>;
-  setTimelineDragActive: Dispatch<SetStateAction<boolean>>;
   setTimelineRangeSelection: Dispatch<SetStateAction<TimelineRangeSelection | null>>;
   setTimelineSegments: Dispatch<SetStateAction<TimelineSegment[]>>;
   setTimelineViewDuration: Dispatch<SetStateAction<number>>;
@@ -98,13 +97,11 @@ type UseTimelineControllerParams = {
   syncMediaToTime: (time: number, isPlaying: boolean, reason?: PlaybackSyncReason) => void;
   textOverlays: TextOverlay[];
   timelineBodyRef: RefObject<HTMLDivElement | null>;
-  timelineDragActive: boolean;
   timelineDuration: number;
   timelineRangeSelection: TimelineRangeSelection | null;
   timelineEditableItems: EditorMediaItem[];
   timelineRenderDuration: number;
   timelineSegments: TimelineSegment[];
-  timelineViewDuration: number;
   togglePlayback: () => void;
   updateMediaDuration: (itemId: string, duration: number | null) => void;
   updateTextOverlay: (id: string, updates: Partial<TextOverlay>) => void;
@@ -136,12 +133,10 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setTimelineSegments: params.setTimelineSegments,
     setTimelineViewDuration: params.setTimelineViewDuration,
     setTrimRange: params.setTrimRange,
-    timelineDragActive: params.timelineDragActive,
     timelineDuration: params.timelineDuration,
     timelineEditableItems: params.timelineEditableItems,
     timelineRenderDuration: params.timelineRenderDuration,
     timelineSegments: params.timelineSegments,
-    timelineViewDuration: params.timelineViewDuration,
     updateMediaDuration: params.updateMediaDuration
   });
 
@@ -201,7 +196,6 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     setSelectedZoomId: params.setSelectedZoomId,
     setSubtitles: params.setSubtitles,
     setTimelineContextMenu: params.setTimelineContextMenu,
-    setTimelineDragActive: params.setTimelineDragActive,
     setTimelineRangeSelection: params.setTimelineRangeSelection,
     setTimelineRedoStack: editing.setTimelineRedoStack,
     setTimelineSegments: params.setTimelineSegments,

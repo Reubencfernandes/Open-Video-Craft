@@ -19,9 +19,8 @@ export function clampNumber(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-export function createTimelineTicks(duration: number): string[] {
+export function createTimelineTicks(duration: number, tickCount = 6): string[] {
   const safeDuration = Math.max(duration, 1);
-  const tickCount = 6;
 
   return Array.from({ length: tickCount }, (_value, index) =>
     formatTimelineTick((safeDuration / (tickCount - 1)) * index, safeDuration)

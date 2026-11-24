@@ -1,14 +1,19 @@
 /**
  * Geometry for preview layout: camera frame presets and drag/resize math.
  */
+import {
+  getCameraFrameFromPreset,
+  getLayoutPresetCameraFrame
+} from "../../shared/editor-domain/layout-presets";
 import type {
   CameraFrame,
-  CameraPosition,
   LayoutMode,
   ScreenAspectRatio,
   ScreenLayoutDragMode
 } from "./types";
 import { clampNumber } from "./utils";
+
+export { getCameraFrameFromPreset, getLayoutPresetCameraFrame };
 
 export type PercentFrame = {
   x: number;
@@ -17,7 +22,52 @@ export type PercentFrame = {
   height: number;
 };
 
+/**
+ * Thumbnail for a layout preset, in percent of a 16:9 frame. Derived from the
+ * same geometry the preview renders, so the picker always shows what the
+ * preset really does.
+ */
+export type LayoutPresetDiagram = {
+  screen: PercentFrame | null;
+  camera: (PercentFrame & { shape: "circle" | "rect" }) | null;
+};
+
 const compositionFrameAspect = 16 / 9;
+
+/** Camera placement the diagrams use for bubble presets (bottom-right, M). */
+const diagramBubblePosition = "bottom-right";
+const diagramBubbleSize = 24;
+
+export function getLayoutPresetDiagram(layoutMode: LayoutMode): LayoutPresetDiagram {
+  switch (layoutMode) {
+    case "camera-only":
+      return { screen: null, camera: { x: 0, y: 0, width: 100, height: 100, shape: "rect" } };
+    case "side-by-side":
+      return {
+        screen: { x: 40, y: 0, width: 60, height: 100 },
+        camera: { x: 0, y: 0, width: 40, height: 100, shape: "rect" }
+      };
+    case "screen-only":
+      return { screen: getScreenFrameForAspectRatio(layoutMode, "16:9"), camera: null };
+    default: {
+      const frame = getLayoutPresetCameraFrame(
+        layoutMode,
+        diagramBubblePosition,
+        diagramBubbleSize
+      );
+      return {
+        screen: getScreenFrameForAspectRatio(layoutMode, "16:9"),
+        camera: {
+          x: frame.x,
+          y: frame.y,
+          width: frame.size,
+          height: frame.size * compositionFrameAspect,
+          shape: "circle"
+        }
+      };
+    }
+  }
+}
 
 export function getScreenResizeDirection(mode: ScreenLayoutDragMode): { x: number; y: number } {
   switch (mode) {
@@ -51,30 +101,6 @@ export function getScreenFrameForAspectRatio(
     bounds,
     getScreenAspectRatioValue(aspectRatio, intrinsicAspect)
   );
-}
-
-export function getCameraFrameFromPreset(
-  position: CameraPosition,
-  size: number
-): CameraFrame {
-  const safeSize = clampNumber(size, 12, 64);
-  const safeHeight = safeSize * compositionFrameAspect;
-  const x = position.endsWith("left")
-    ? 6
-    : position.endsWith("center")
-      ? 50 - safeSize / 2
-      : 94 - safeSize;
-  const y = position.startsWith("top")
-    ? 7
-    : position.startsWith("middle")
-      ? 50 - safeHeight / 2
-      : 93 - safeHeight;
-
-  return {
-    x: clampNumber(x, 0, Math.max(0, 100 - safeSize)),
-    y: clampNumber(y, 0, Math.max(0, 100 - safeHeight)),
-    size: safeSize
-  };
 }
 
 export function resizeCameraFrameAroundCenter(

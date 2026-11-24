@@ -277,7 +277,7 @@ export function Timeline(props: {
             onPointerUp={props.onRulerPointerUp}
             onPointerCancel={props.onRulerPointerCancel}
           >
-            <TimelineRuler duration={props.renderDuration} />
+            <TimelineRuler duration={props.renderDuration} zoom={props.timelineZoom} />
           </div>
 
           {/* The body owns scrubbing, clip move/trim drags and asset drag & drop.

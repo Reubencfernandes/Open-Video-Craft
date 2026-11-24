@@ -1,12 +1,17 @@
 /**
- * AI assistant tool: chat with Gemini about the open project. The assistant
- * inspects the timeline, runs local analysis, and applies edits (zooms, cuts,
- * speed, subtitles, transitions) through the same guarded pipeline external
- * AI CLIs use — every applied edit shows an undo chip.
+ * AI assistant tool: tell Claude Code (the user's local CLI) or Gemini what to
+ * change. The assistant inspects the timeline, runs local analysis, and
+ * applies edits (cuts, zooms, speed, subtitles, transitions, layout) through
+ * the same guarded pipeline external AI CLIs use. Edits appear on the
+ * timeline as they land, and every applied edit shows an undo chip.
  */
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, Loader2, Send, Sparkles, Trash2, X } from "lucide-react";
-import type { GeminiChatMessage, ProviderKeysView } from "../../../shared/types";
+import { AlertCircle, Loader2, Send, Sparkles, Terminal, Trash2, X } from "lucide-react";
+import type {
+  AssistantEngine,
+  GeminiChatMessage,
+  ProviderKeysView
+} from "../../../shared/types";
 import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { ChatMessageBubble } from "./assistant/ChatMessageBubble";
 
@@ -18,8 +23,19 @@ const quickActions = [
   "Add transitions between clips"
 ];
 
+export type ClaudeAvailability = "checking" | "available" | "missing";
+
+const engineLabels: Record<AssistantEngine, string> = {
+  claude: "Claude Code",
+  gemini: "Gemini"
+};
+
 export function AssistantPanel(props: {
   projectId: string | null;
+  /** Defaults to Gemini for callers that predate engine selection. */
+  engine?: AssistantEngine;
+  claudeAvailability?: ClaudeAvailability;
+  onEngineChange?: (engine: AssistantEngine) => void;
   providerKeys: ProviderKeysView | null;
   messages: GeminiChatMessage[];
   sending: boolean;
@@ -38,11 +54,29 @@ export function AssistantPanel(props: {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [props.messages.length, props.statusMessage]);
 
+  const engine = props.engine ?? "gemini";
+  const engineLabel = engineLabels[engine];
   const providerKeysLoading = props.providerKeys === null;
   const hasGeminiKey = props.providerKeys?.hasGeminiKey === true;
   const missingKey = !providerKeysLoading && !hasGeminiKey;
+  const claudeChecking = (props.claudeAvailability ?? "checking") === "checking";
+  const claudeMissing = props.claudeAvailability === "missing";
+  const engineReady = engine === "claude"
+    ? props.claudeAvailability === "available"
+    : hasGeminiKey;
   const canSend =
-    props.projectId !== null && !props.sending && hasGeminiKey && draft.trim().length > 0;
+    props.projectId !== null && !props.sending && engineReady && draft.trim().length > 0;
+  const placeholder = engine === "claude"
+    ? claudeChecking
+      ? "Looking for Claude Code…"
+      : claudeMissing
+        ? "Install Claude Code first…"
+        : "Tell Claude what to change"
+    : providerKeysLoading
+      ? "Loading Gemini settings…"
+      : missingKey
+        ? "Add a Gemini API key first…"
+        : "Write a message";
 
   const submit = () => {
     if (!canSend) return;
@@ -60,7 +94,50 @@ export function AssistantPanel(props: {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-[#0e0e10] shadow-inner ring-1 ring-white/[0.05]">
-      {providerKeysLoading ? (
+      {props.onEngineChange ? (
+        <div
+          className="m-2.5 mb-0 grid flex-none grid-cols-2 gap-1 rounded-lg bg-white/[0.05] p-1"
+          role="group"
+          aria-label="Assistant engine"
+          data-assistant-engine={engine}
+        >
+          {(["claude", "gemini"] as const).map((option) => (
+            <button
+              className={`editor-choice-button rounded-md px-2 py-1.5 text-[0.68rem] font-extrabold disabled:opacity-50 ${
+                engine === option
+                  ? "bg-white text-[#111827]"
+                  : "text-slate-300 hover:bg-white/10 hover:text-white"
+              }`}
+              type="button"
+              key={option}
+              aria-pressed={engine === option}
+              disabled={props.sending}
+              onClick={() => props.onEngineChange?.(option)}
+            >
+              {engineLabels[option]}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {engine === "claude" ? (
+        claudeChecking ? (
+          <p className="m-2.5 flex flex-none items-center gap-2 rounded-lg bg-white/[0.045] px-3 py-2 text-[0.68rem] text-neutral-400">
+            <Loader2 className="animate-spin" size={12} /> Looking for Claude Code…
+          </p>
+        ) : claudeMissing ? (
+          <div
+            className="m-2.5 flex flex-none items-start gap-2 rounded-lg border border-amber-300/25 bg-amber-400/[0.07] px-3 py-2 text-[0.68rem] leading-4 text-amber-100"
+            data-claude-missing
+          >
+            <Terminal className="mt-0.5 shrink-0" size={13} />
+            <span>
+              Install Claude Code from claude.com/claude-code and sign in once by running
+              <code className="mx-1 rounded bg-black/30 px-1">claude</code>in a terminal. Then reopen this panel.
+            </span>
+          </div>
+        ) : null
+      ) : providerKeysLoading ? (
         <p className="m-2.5 flex flex-none items-center gap-2 rounded-lg bg-white/[0.045] px-3 py-2 text-[0.68rem] text-neutral-400">
           <Loader2 className="animate-spin" size={12} /> Loading Gemini settings…
         </p>
@@ -76,7 +153,7 @@ export function AssistantPanel(props: {
 
       {props.messages.length > 0 ? (
         <div className="flex h-10 flex-none items-center justify-between border-b border-white/[0.06] px-3">
-          <span className="text-[0.66rem] font-bold text-neutral-500">AI assistant</span>
+          <span className="text-[0.66rem] font-bold text-neutral-500">{engineLabel}</span>
           <button
             aria-label="Clear conversation"
             className="grid size-7 place-items-center rounded-full text-neutral-600 transition hover:bg-white/[0.06] hover:text-neutral-300"
@@ -98,7 +175,11 @@ export function AssistantPanel(props: {
           <div className="flex min-h-full min-w-0 flex-col justify-end gap-3 pb-1">
             <div className="max-w-[88%] rounded-2xl rounded-bl-[0.3rem] bg-[#252527] px-3 py-2.5 text-xs leading-[1.5] text-neutral-100">
               <p className="flex items-center gap-1.5 font-bold"><Sparkles size={13} /> What would you like to edit?</p>
-              <p className="mt-1 text-neutral-400">Choose a suggestion or write your own instruction.</p>
+              <p className="mt-1 text-neutral-400">
+                {engine === "claude"
+                  ? "Claude edits your timeline directly while you watch. Every edit can be undone."
+                  : "Choose a suggestion or write your own instruction."}
+              </p>
             </div>
             <div className="flex min-w-0 flex-wrap gap-1.5">
               {quickActions.map((action) => (
@@ -106,7 +187,7 @@ export function AssistantPanel(props: {
                   className="min-w-0 rounded-full bg-white/[0.06] px-2.5 py-1.5 text-left text-[0.65rem] font-semibold text-neutral-300 transition hover:bg-white/[0.11] hover:text-white disabled:opacity-50"
                   type="button"
                   key={action}
-                  disabled={props.sending || !hasGeminiKey}
+                  disabled={props.sending || !engineReady}
                   onClick={() => props.onSend(action)}
                 >
                   {action}
@@ -151,7 +232,7 @@ export function AssistantPanel(props: {
             <AlertCircle className="mt-0.5 shrink-0 text-rose-300" size={15} />
             <div className="min-w-0">
               <strong className="block text-xs text-rose-100">
-                Gemini couldn’t complete this request
+                {engineLabel} couldn’t complete this request
               </strong>
               <p className="mt-1 break-words text-[0.68rem] leading-4 text-rose-300 [overflow-wrap:anywhere]">
                 {props.chatError}
@@ -168,16 +249,10 @@ export function AssistantPanel(props: {
         <textarea
           aria-label="Message the AI assistant"
           className="max-h-28 min-h-10 w-full min-w-0 resize-none rounded-xl bg-white/[0.07] px-3 py-2.5 text-xs font-semibold leading-5 text-white outline-none ring-1 ring-transparent transition placeholder:text-neutral-500 focus:bg-white/[0.09] focus:ring-white/[0.12] disabled:cursor-not-allowed disabled:opacity-60"
-          placeholder={
-            providerKeysLoading
-              ? "Loading Gemini settings…"
-              : missingKey
-                ? "Add a Gemini API key first…"
-                : "Write a message"
-          }
+          placeholder={placeholder}
           rows={1}
           value={draft}
-          disabled={props.sending || !hasGeminiKey}
+          disabled={props.sending || !engineReady}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {

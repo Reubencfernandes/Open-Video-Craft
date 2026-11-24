@@ -125,7 +125,7 @@ function run(command: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}):
 }
 function shellQuote(value: string) { return /^[a-zA-Z0-9_./:=+-]+$/.test(value) ? value : `"${value.replace(/["\\$`]/g, "\\$&")}"`; }
 
-async function resolveProviderExecutable(provider: AiProvider): Promise<string | null> {
+export async function resolveProviderExecutable(provider: AiProvider): Promise<string | null> {
   const direct = await run(provider, ["--version"]);
   if (direct.code === 0) return provider;
   if (process.platform === "win32") {

@@ -22,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import { createMacApplicationMenuTemplate } from "./application-menu";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
 import { AiConnectionManager } from "./ai-connection";
+import { ClaudeCodeAgentManager } from "./claude-code-agent";
 import { registerAppStatusIpc } from "./app-status-ipc";
 import { getProductVersion } from "./app-version";
 import { startAutoUpdates } from "./auto-updates";
@@ -61,6 +62,7 @@ import { generateLyria } from "./music-lyria";
 import { ProviderKeysManager } from "./provider-keys";
 import {
   assertExportVideoRequest,
+  assertClaudeChatSendRequest,
   assertGeminiChatSendRequest,
   assertMusicGenerateRequest,
   assertProviderKeyId,
@@ -170,6 +172,7 @@ let aiConnectionManager: AiConnectionManager | null = null;
 let providerKeysManager: ProviderKeysManager | null = null;
 let musicGenerationManager: MusicGenerationManager | null = null;
 let geminiAgentManager: GeminiAgentManager | null = null;
+let claudeCodeAgentManager: ClaudeCodeAgentManager | null = null;
 const sttJobs = new Map<string, AbortController>();
 const lyriaJobs = new Map<string, AbortController>();
 let editorStateWatcher: ReturnType<typeof watchFs> | null = null;
@@ -257,6 +260,33 @@ function getGeminiAgentManager(): GeminiAgentManager {
     }
   });
   return geminiAgentManager;
+}
+
+function getClaudeCodeAgentManager(): ClaudeCodeAgentManager {
+  claudeCodeAgentManager ??= new ClaudeCodeAgentManager({
+    userDataPath: app.getPath("userData"),
+    electronExecutable: process.execPath,
+    serverEntrypoint: path.join(__dirname, "../mcp/server.js"),
+    resolveProject: (projectId) => {
+      try {
+        const project = projectStore.getProject(projectId);
+        return { rootPath: project.rootPath, name: project.name };
+      } catch {
+        return null;
+      }
+    },
+    onUpdate: (event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send("claude:chat-update", event);
+      }
+    },
+    requestEditorFlush: () => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        if (!window.isDestroyed()) window.webContents.send("editor:flush-request");
+      }
+    }
+  });
+  return claudeCodeAgentManager;
 }
 
 function getMusicGenerationManager(): MusicGenerationManager {
@@ -1032,6 +1062,22 @@ function registerIpc(): void {
     return getMusicGenerationManager().cancel(jobId);
   });
 
+  ipcMain.handle("claude:chat-send", (_event, request: unknown): Promise<GeminiChatMessage[]> => {
+    assertClaudeChatSendRequest(request);
+    return getClaudeCodeAgentManager().send(request);
+  });
+  ipcMain.handle("claude:chat-history", (_event, projectId: unknown): GeminiChatMessage[] => {
+    return typeof projectId === "string" ? getClaudeCodeAgentManager().getHistory(projectId) : [];
+  });
+  ipcMain.handle("claude:chat-cancel", (_event, projectId: unknown): boolean => {
+    return typeof projectId === "string" ? getClaudeCodeAgentManager().cancel(projectId) : false;
+  });
+  ipcMain.handle("claude:chat-reset", (_event, projectId: unknown): boolean => {
+    if (typeof projectId !== "string") return false;
+    getClaudeCodeAgentManager().reset(projectId);
+    return true;
+  });
+
   ipcMain.handle(
     "gemini:chat-send",
     (_event, request: GeminiChatSendRequest): Promise<GeminiChatMessage[]> => {
@@ -1765,6 +1811,7 @@ app.on("will-quit", () => {
   killActiveFfmpegProcesses();
   killActiveSttProcesses();
   musicGenerationManager?.killActiveProcesses();
+  claudeCodeAgentManager?.cancelAll();
   globalShortcut.unregisterAll();
   securityScopedResources?.stopAll();
 });

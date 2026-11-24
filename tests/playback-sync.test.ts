@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createScrubSeekQueue,
   getSafeMediaSeekTarget,
   getMediaTimeForTimelineTime,
   getTimelineTimeForMediaTime,
@@ -154,5 +155,70 @@ describe("playback sync", () => {
         lastSeekAtMs: 900
       })
     ).toBe(true);
+  });
+});
+
+describe("scrub seek queue", () => {
+  function createFakeVideo() {
+    const listeners: Array<() => void> = [];
+    const video = {
+      seeking: false,
+      currentTime: 0,
+      assigned: [] as number[],
+      addEventListener: (_type: "seeked", listener: () => void) => listeners.push(listener),
+      /** The decoder finishes the in-flight seek. */
+      land() {
+        video.seeking = false;
+        listeners.forEach((listener) => listener());
+      }
+    };
+    return video;
+  }
+
+  function createQueue() {
+    return createScrubSeekQueue((element, time) => {
+      const video = element as ReturnType<typeof createFakeVideo>;
+      video.currentTime = time;
+      video.seeking = true;
+      video.assigned.push(time);
+      return true;
+    });
+  }
+
+  it("lets each seek finish and then jumps straight to the newest pointer position", () => {
+    const video = createFakeVideo();
+    const queue = createQueue();
+
+    queue.seek(video, 10);
+    // Pointer keeps moving while the 10s frame decodes: none of these abort it.
+    queue.seek(video, 11);
+    queue.seek(video, 12);
+    queue.seek(video, 13);
+    expect(video.assigned).toEqual([10]);
+
+    video.land();
+    expect(video.assigned).toEqual([10, 13]);
+    video.land();
+    expect(video.assigned).toEqual([10, 13]);
+  });
+
+  it("drops a waiting scrub target when an explicit seek takes over", () => {
+    const video = createFakeVideo();
+    const queue = createQueue();
+
+    queue.seek(video, 10);
+    queue.seek(video, 20);
+    queue.cancel(video);
+    video.land();
+    expect(video.assigned).toEqual([10]);
+  });
+
+  it("seeks immediately when the decoder is idle", () => {
+    const video = createFakeVideo();
+    const queue = createQueue();
+    queue.seek(video, 4);
+    video.land();
+    queue.seek(video, 5);
+    expect(video.assigned).toEqual([4, 5]);
   });
 });

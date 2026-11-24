@@ -94,8 +94,10 @@ export function TimelineToolbar(props: {
 }
 
 /** The time ruler above the tracks, with major ticks spanning 0% through 100%. */
-export function TimelineRuler(props: { duration: number }) {
-  const ticks = createTimelineTicks(props.duration);
+export function TimelineRuler(props: { duration: number; zoom?: number }) {
+  // Keep labels a similar distance apart at every zoom level: a fixed six
+  // labels left a zoomed-in timeline with one timestamp on screen.
+  const ticks = createTimelineTicks(props.duration, getRulerTickCount(props.zoom ?? 1));
 
   return (
     <div className="h-6 pl-[calc(var(--timeline-label-width)+var(--timeline-track-gap))] text-[0.62rem] font-medium tabular-nums text-neutral-500">
@@ -130,6 +132,11 @@ export function TimelineRuler(props: { duration: number }) {
   );
 }
 
+/** Labels across the full ruler width: six at 100%, proportionally more when zoomed. */
+export function getRulerTickCount(zoom: number): number {
+  return Math.max(6, Math.round(5 * Math.max(1, zoom)) + 1);
+}
+
 /**
  * The playhead: a thin white line topped with a dark rounded timecode pill,
  * CapCut style. The outer div is a widened invisible hit/positioning area
@@ -143,21 +150,28 @@ export function TimelinePlayhead(props: {
   onPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
   onPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
+  // Only the time badge grabs the playhead. The line itself lets presses
+  // through: when the playhead rests on a clip edge (always true at 0:00), a
+  // full-height grab strip covered that clip's trim handle, so dragging the
+  // edge moved the playhead instead of trimming. The ruler still scrubs.
   return (
     <div
-      className="absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 cursor-ew-resize bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-[var(--playhead-color)] before:content-['']"
+      className="pointer-events-none absolute bottom-1 top-0 z-[5] w-5 -translate-x-1/2 bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-[var(--playhead-color)] before:content-['']"
       aria-hidden="true"
       data-timeline-playhead
       style={{
         "--playhead-color": props.color,
         left: `calc(var(--timeline-body-pad) + var(--timeline-label-width) + var(--timeline-track-gap) + (${props.playheadPercent} * (100% - (2 * var(--timeline-body-pad)) - var(--timeline-label-width) - var(--timeline-track-gap)) / 100))`
       } as React.CSSProperties}
-      onPointerDown={(event) => { event.stopPropagation(); props.onPointerDown(event); }}
-      onPointerMove={(event) => { event.stopPropagation(); props.onPointerMove(event); }}
-      onPointerUp={(event) => { event.stopPropagation(); props.onPointerUp(event); }}
-      onPointerCancel={(event) => { event.stopPropagation(); props.onPointerUp(event); }}
     >
-      <span className="absolute -top-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/50 bg-[#222226] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums text-white shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]">
+      <span
+        className="pointer-events-auto absolute -top-0.5 left-1/2 -translate-x-1/2 cursor-ew-resize touch-none whitespace-nowrap rounded-md border border-white/50 bg-[#222226] px-2 py-0.5 text-[0.64rem] font-bold tabular-nums text-white shadow-[0_4px_14px_rgb(0_0_0_/_0.5)]"
+        data-timeline-playhead-handle
+        onPointerDown={(event) => { event.stopPropagation(); props.onPointerDown(event); }}
+        onPointerMove={(event) => { event.stopPropagation(); props.onPointerMove(event); }}
+        onPointerUp={(event) => { event.stopPropagation(); props.onPointerUp(event); }}
+        onPointerCancel={(event) => { event.stopPropagation(); props.onPointerUp(event); }}
+      >
         {formatSeconds(props.currentTime)}
       </span>
     </div>

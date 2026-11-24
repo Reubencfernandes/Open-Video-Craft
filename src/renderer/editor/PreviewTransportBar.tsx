@@ -25,7 +25,8 @@ export function PreviewTransportBar(props: {
   currentFrame: number;
   totalFrames: number;
   currentTime: number;
-  renderDuration: number;
+  /** Length of the edit (content end), not the visible ruler span. */
+  duration: number;
   masterVolume: number;
   fullscreen: boolean;
   onMasterVolumeChange: (volume: number) => void;
@@ -48,7 +49,7 @@ export function PreviewTransportBar(props: {
           {formatTimecode(props.currentTime, props.currentFrame)}
         </span>
         <span className="text-neutral-500">
-          / {formatTimecode(props.renderDuration, props.totalFrames)}
+          / {formatTimecode(props.duration, props.totalFrames)}
         </span>
       </div>
 

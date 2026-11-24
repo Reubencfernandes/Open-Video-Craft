@@ -689,6 +689,25 @@ export function areTimelineSegmentsEqual(
   return JSON.stringify(first) === JSON.stringify(second);
 }
 
+/** Undo history depth. */
+export const timelineUndoLimit = 50;
+
+/**
+ * Append a pre-edit snapshot to the undo stack. Pushes happen inside state
+ * updaters, which React may run twice for one update (StrictMode, and renders
+ * it restarts); pushing the same snapshot again is ignored, so one edit is
+ * always one undo step.
+ */
+export function pushTimelineUndoSnapshot(
+  stack: TimelineSegment[][],
+  snapshot: TimelineSegment[]
+): TimelineSegment[][] {
+  if (stack[stack.length - 1] === snapshot) {
+    return stack;
+  }
+  return [...stack.slice(-(timelineUndoLimit - 1)), snapshot];
+}
+
 export function createTimelineClipStyle(
   start: number,
   duration: number,

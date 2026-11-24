@@ -359,6 +359,10 @@ export function TimelineTracks(props: TimelineTracksProps) {
   );
 }
 
+/**
+ * The marquee rectangle. It deliberately has no CSS transition: animating
+ * left/width toward each pointer position made the box trail the cursor.
+ */
 function TimelineRangeOverlay(props: {
   orderedLaneIds: readonly TimelineLaneId[];
   selection: TimelineRangeSelection | null;
@@ -387,7 +391,7 @@ function TimelineRangeOverlay(props: {
 
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 z-[4] grid grid-cols-[var(--timeline-label-width)_minmax(0,1fr)] gap-[var(--timeline-track-gap)] transition-[top,height] duration-75 ease-out will-change-[top,height]"
+      className="pointer-events-none absolute inset-x-0 z-[4] grid grid-cols-[var(--timeline-label-width)_minmax(0,1fr)] gap-[var(--timeline-track-gap)]"
       aria-hidden="true"
       style={{
         top: `${firstLaneIndex * (laneHeightRem + laneGapRem)}rem`,
@@ -396,7 +400,7 @@ function TimelineRangeOverlay(props: {
     >
       <div className="relative col-start-2 h-full">
         <div
-          className="absolute inset-y-0 overflow-visible rounded-lg border border-pink-200/90 bg-pink-400/[0.16] shadow-none transition-[left,width,background-color,border-color] duration-75 ease-out will-change-[left,width]"
+          className="absolute inset-y-0 overflow-visible rounded-lg border border-pink-200/90 bg-pink-400/[0.16] shadow-none"
           data-timeline-range-selection
           data-timeline-range-lanes={props.selection.laneIds.join(",")}
           data-timeline-range-dragging={props.selection.dragging ? "true" : "false"}

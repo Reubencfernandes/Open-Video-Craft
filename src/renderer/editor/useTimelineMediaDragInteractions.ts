@@ -18,6 +18,7 @@ import {
   areTimelineSegmentsEqual,
   getTimelineRangeSelectionForSegments,
   moveTimelineSegmentGroup,
+  pushTimelineUndoSnapshot,
   snapTimelineTime
 } from "./timeline-utils";
 import {
@@ -117,7 +118,7 @@ export function useTimelineMediaDragInteractions(
   function pushUndoEntry(originalSegments: TimelineSegment[]) {
     params.setTimelineSegments((current) => {
       if (!areTimelineSegmentsEqual(originalSegments, current)) {
-        params.setTimelineUndoStack((stack) => [...stack.slice(-49), originalSegments]);
+        params.setTimelineUndoStack((stack) => pushTimelineUndoSnapshot(stack, originalSegments));
         params.setTimelineRedoStack([]);
       }
       return current;

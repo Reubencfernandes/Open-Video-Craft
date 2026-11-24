@@ -160,3 +160,52 @@ function hasMediaDrift(input: {
       (input.driftTolerance ?? primaryVideoDriftToleranceSeconds)
   );
 }
+
+/** The parts of a media element a scrub seek needs. */
+export type ScrubSeekTarget = {
+  readonly seeking: boolean;
+  currentTime: number;
+  addEventListener(type: "seeked", listener: () => void): void;
+};
+
+/**
+ * Coalesces seeks while the playhead is scrubbed. Every pointer move asks for
+ * a new time, and assigning currentTime while the decoder is still seeking
+ * aborts that seek, so on recordings with sparse keyframes almost no frame
+ * finished decoding and the preview froze until the pointer stopped. While a
+ * seek is in flight only the newest target is kept; it is applied as soon as
+ * the current frame lands.
+ */
+export function createScrubSeekQueue(assign: (element: ScrubSeekTarget, time: number) => boolean) {
+  const queued = new WeakMap<ScrubSeekTarget, number>();
+  const listening = new WeakSet<ScrubSeekTarget>();
+
+  function flush(element: ScrubSeekTarget) {
+    const time = queued.get(element);
+    if (time === undefined) return;
+    queued.delete(element);
+    if (Math.abs(element.currentTime - time) > 0.001) {
+      assign(element, time);
+    }
+  }
+
+  return {
+    /** Seek now, or after the in-flight seek if one is still decoding. */
+    seek(element: ScrubSeekTarget, time: number): boolean {
+      if (!element.seeking) {
+        queued.delete(element);
+        return assign(element, time);
+      }
+      queued.set(element, time);
+      if (!listening.has(element)) {
+        listening.add(element);
+        element.addEventListener("seeked", () => flush(element));
+      }
+      return true;
+    },
+    /** Drop a waiting target because an explicit seek replaces it. */
+    cancel(element: ScrubSeekTarget) {
+      queued.delete(element);
+    }
+  };
+}

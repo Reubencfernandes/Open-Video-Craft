@@ -3,13 +3,14 @@
  * element seek/play/pause/volume sync, stall watchdog, and the output level
  * for the audio meter.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { getEffectiveAudioLevel } from "../../shared/editor-domain";
 import { AudioMeter } from "./audio-meter";
 import { canDriftSeek } from "./media-utils";
 import { resolveNextTimelineTime } from "./playback-clock";
 import {
+  createScrubSeekQueue,
   getSafeMediaSeekTarget,
   getMediaTimeForTimelineTime,
   isMediaTimePlayable,
@@ -40,6 +41,15 @@ type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
 
 /** How far ahead an upcoming audio clip is parked on its first sample. */
 const audioPreRollSeconds = 1.5;
+
+function assignMediaTime(element: { currentTime: number }, time: number): boolean {
+  try {
+    element.currentTime = time;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type UseEditorPlaybackParams = {
   activeDuration: number;
@@ -132,6 +142,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const audioMeterRef = useRef<AudioMeter | null>(null);
   const playbackInteractionRef = useRef(false);
   const resumeAfterInteractionRef = useRef(false);
+  const [scrubSeekQueue] = useState(() => createScrubSeekQueue(assignMediaTime));
 
   function getAudioMeter(): AudioMeter {
     audioMeterRef.current ??= new AudioMeter();
@@ -361,12 +372,14 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   }
 
   function trySetMediaTime(element: HTMLMediaElement, time: number): boolean {
-    try {
-      element.currentTime = time;
-      return true;
-    } catch {
-      return false;
-    }
+    // An explicit seek supersedes any scrub target still waiting its turn.
+    scrubSeekQueue.cancel(element);
+    return assignMediaTime(element, time);
+  }
+
+  /** Paused seeks (scrubbing, trim previews) wait for the in-flight frame. */
+  function scrubMediaTime(element: HTMLMediaElement, time: number): boolean {
+    return scrubSeekQueue.seek(element, time);
   }
 
   function playMediaElement(element: HTMLMediaElement, label: string) {
@@ -428,7 +441,9 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
     let didSeek = false;
     if (shouldSeek) {
-      didSeek = trySetMediaTime(input.element, desired);
+      didSeek = input.reason === "seek" && !input.isPlaying
+        ? scrubMediaTime(input.element, desired)
+        : trySetMediaTime(input.element, desired);
     }
 
     if (didSeek) {
@@ -494,7 +509,12 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       lastSeekAtMs: lastSeekAt
     });
 
-    if (shouldSeek && trySetMediaTime(input.element, seekTarget)) {
+    const seeked = shouldSeek && (
+      input.reason === "seek" && !input.isPlaying
+        ? scrubMediaTime(input.element, seekTarget)
+        : trySetMediaTime(input.element, seekTarget)
+    );
+    if (seeked) {
       secondaryDriftSeekTimesRef.current.set(input.syncKey, now);
     }
 

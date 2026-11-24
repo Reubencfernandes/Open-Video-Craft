@@ -220,7 +220,9 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     [activeDuration, audioTimelineClips, speedEffects, subtitles, textOverlays, videoTimelineClips, zoomEffects]
   );
   const timelineRenderDuration = Math.max(timelineViewDuration, timelineDuration);
-  const totalFrames = Math.max(1, Math.floor(timelineRenderDuration * frameRate));
+  // Frame counts follow the edit itself, not the (possibly longer) visible ruler,
+  // so the transport total and "jump to end" land on the last frame of content.
+  const totalFrames = Math.max(1, Math.floor(timelineDuration * frameRate));
   const currentFrame = Math.min(totalFrames, Math.max(0, Math.round(currentTime * frameRate)));
   const playheadPercent =
     timelineRenderDuration > 0

@@ -29,12 +29,16 @@ import { EditorToolPanel } from "./editor/EditorToolPanel";
 import { EditorTopbar } from "./editor/EditorTopbar";
 import { ToolRail } from "./editor/ToolRail";
 import { WorkspaceResizeHandle } from "./editor/WorkspaceResizeHandle";
-import { getCameraFrameFromPreset } from "./editor/layout-geometry";
+import {
+  getCameraFrameFromPreset,
+  getLayoutPresetCameraFrame
+} from "./editor/layout-geometry";
 import { MediaPanel } from "./editor/panels/MediaPanel";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
 import { useEditorExport } from "./editor/useEditorExport";
 import { useEditorMediaActions } from "./editor/useEditorMediaActions";
-import { useGeminiChat } from "./editor/useGeminiChat";
+import { useAssistantEngine } from "./editor/useAssistantEngine";
+import { useAssistantChat } from "./editor/useGeminiChat";
 import { useMusicGeneration } from "./editor/useMusicGeneration";
 import { useEditorPlayback } from "./editor/useEditorPlayback";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
@@ -154,7 +158,6 @@ export function EditorView() {
   const [error, setError] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
   const [scrubbingTimeline, setScrubbingTimeline] = useState(false);
-  const [timelineDragActive, setTimelineDragActive] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [timelineViewDuration, setTimelineViewDuration] = useState(0);
@@ -576,7 +579,11 @@ export function EditorView() {
     });
   }, [isEditorStateReady, pendingMusicGeneration, musicGeneration]);
 
-  const geminiChat = useGeminiChat({ projectId: project?.id ?? null });
+  const assistantEngine = useAssistantEngine(activeTool === "assistant");
+  const geminiChat = useAssistantChat({
+    projectId: project?.id ?? null,
+    engine: assistantEngine.engine
+  });
 
   const {
     canExport,
@@ -719,7 +726,6 @@ export function EditorView() {
     setSubtitles,
     setTextOverlays,
     setTimelineContextMenu,
-    setTimelineDragActive,
     setTimelineRangeSelection,
     setTimelineSegments,
     setTimelineViewDuration,
@@ -730,13 +736,11 @@ export function EditorView() {
     syncMediaToTime,
     textOverlays,
     timelineBodyRef,
-    timelineDragActive,
     timelineDuration,
     timelineRangeSelection,
     timelineEditableItems,
     timelineRenderDuration,
     timelineSegments,
-    timelineViewDuration,
     togglePlayback: () => void togglePlayback(),
     updateMediaDuration,
     updateTextOverlay,
@@ -958,6 +962,9 @@ export function EditorView() {
             onMusicGenerate={(form) => void musicGeneration.generate(form)}
             onMusicCancel={musicGeneration.cancel}
             assistantProjectId={project?.id ?? null}
+            assistantEngine={assistantEngine.engine}
+            claudeAvailability={assistantEngine.claudeAvailability}
+            onAssistantEngineChange={assistantEngine.setEngine}
             assistantMessages={geminiChat.messages}
             assistantSending={geminiChat.sending}
             assistantStatusMessage={geminiChat.statusMessage}
@@ -984,7 +991,9 @@ export function EditorView() {
               setLayoutMode(mode);
               // A preset describes a complete look; leftover manual drags or
               // scaling would keep "fill" from filling and "fit" from fitting.
+              // The camera moves to the spot the preset's thumbnail shows.
               setScreenPosition({ x: 0, y: 0, scale: 100 });
+              setCameraFrame(getLayoutPresetCameraFrame(mode, cameraPosition, cameraSize));
             }}
             onScreenScaleChange={(scale) =>
               setScreenPosition((current) => ({ ...current, scale }))
@@ -1074,7 +1083,7 @@ export function EditorView() {
             playing={playing}
             currentFrame={currentFrame}
             totalFrames={totalFrames}
-            renderDuration={timelineRenderDuration}
+            duration={timelineDuration}
             masterVolume={masterVolume}
             onMasterVolumeChange={setMasterVolume}
             onTogglePlayback={() => void togglePlayback()}

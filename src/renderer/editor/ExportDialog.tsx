@@ -2,6 +2,7 @@
  * Export modal: format and resolution selection.
  */
 import { Download, X } from "lucide-react";
+import { useModalDialog } from "../useModalDialog";
 import type {
   ExportProgress,
   ExportResolution,
@@ -27,13 +28,19 @@ export function ExportDialog(props: {
   onResolutionChange: (resolution: ExportResolution) => void;
   onSubtitleModeChange: (mode: ExportSubtitleMode) => void;
 }) {
+  const dialogRef = useModalDialog<HTMLElement>({
+    open: true,
+    onClose: props.onClose,
+    closeDisabled: props.exporting
+  });
   return (
     <div
       className="fixed inset-0 z-[80] grid place-items-center bg-black/50 backdrop-blur-[10px]"
       role="presentation"
     >
       <section
-        className="grid w-[min(94vw,620px)] gap-4 rounded-2xl border border-white/10 bg-[#161618] p-5 text-white shadow-[0_28px_90px_rgb(0_0_0_/_0.62)]"
+        className="grid w-[min(94vw,620px)] gap-4 rounded-2xl border border-white/10 bg-[#161618] p-5 text-white shadow-[0_28px_90px_rgb(0_0_0_/_0.62)] outline-none"
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Export video"
