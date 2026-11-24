@@ -4,6 +4,44 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-11-24
+
+Claude Code can edit the open video from the AI panel, and trimming,
+scrubbing, and layout presets behave as expected. Version 1.0.6 was never
+published, so this release also delivers all of its changes.
+
+### Added
+
+- Claude Code can edit the open project from the AI panel. Pick **Claude Code**,
+  describe the change, and Claude cuts, zooms, speeds up, captions, or
+  restyles the timeline while you watch; every edit has an undo chip. It runs
+  your own signed-in `claude` CLI restricted to the editor's tools, with no
+  shell or file access.
+
+### Changed
+
+- Layout presets show what each one really does (fit vs. filled screen,
+  split, overlap, presenter), and choosing one moves the camera to match.
+- Video corners moved from Style to Layout, next to the other screen controls.
+- The time ruler only grows with the edit; trimming or deleting no longer
+  rescales the whole timeline. Double-click the ruler to fit it again.
+- The ruler adds timestamps as you zoom in, and timeline thumbnails stay sharp
+  and show each clip's own footage after trims and splits.
+- New recordings store a keyframe every second, so seeking and scrubbing are
+  several times faster.
+
+### Fixed
+
+- The playhead no longer covers a clip's trim handle when it sits on the
+  clip's edge, so the start of a clip can be trimmed at 0:00.
+- Scrubbing the playhead keeps updating the preview instead of freezing until
+  the pointer stops.
+- The selection box follows the pointer exactly instead of trailing behind.
+- The transport total and **Jump to end** use the edit's length, not the
+  visible ruler.
+- Dialogs take focus when they open, close with Escape, and block timeline
+  shortcuts, so Backspace in a dialog can no longer delete a clip behind it.
+
 ## [1.0.6] - 2026-09-25
 
 Timeline editing now keeps a recording's voice in sync with its picture, and

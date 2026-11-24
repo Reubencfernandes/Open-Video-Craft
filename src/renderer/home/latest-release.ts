@@ -2,17 +2,17 @@
 import heroImageUrl from "../assets/release-1.0.0-hero.jpg";
 
 export const latestRelease = {
-  version: "1.0.6",
-  title: "Timeline edits that stay in sync",
-  releasedAt: "September 25, 2026",
+  version: "1.0.7",
+  title: "Claude edits your video",
+  releasedAt: "November 24, 2026",
   summary:
-    "Cutting, deleting, and moving parts of a recording now keeps its voice in sync with the picture, and clicking a clip selects it without moving the playhead.",
+    "Tell Claude Code what to change in the AI panel and watch it edit your timeline. Trimming, scrubbing, and layout presets now behave the way you expect.",
   heroImageUrl,
   changes: [
-    "A recording's microphone and system audio now follow its video through split, delete, move, trim, and cut and paste. Hold Alt to edit the video on its own.",
-    "Clicking a clip selects it without jumping the playhead, and Ctrl/Cmd+B splits straight after a click.",
-    "Dragging the time ruler scrubs the playhead, and trimming the last clip no longer rescales the timeline under the cursor.",
-    "Audio tracks sit directly under the video, selected clips show a clear outline, and cuts play back without gaps.",
-    "All permission, export, and reliability fixes from version 1.0.5 remain included."
+    "Pick Claude Code in the AI panel and describe an edit: Claude cuts, zooms, speeds up, or captions the video while you watch, and every edit can be undone.",
+    "A recording's audio stays in sync with its picture through split, delete, move, and trim.",
+    "Trimming keeps the timeline scale steady, works right at 0:00, and the playhead preview keeps up while you scrub.",
+    "Layout presets show what each one really does, and video corners now live in Layout.",
+    "Timeline thumbnails stay sharp when zoomed and show each clip's own footage."
   ]
 } as const;
