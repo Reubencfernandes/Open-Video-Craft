@@ -18,3 +18,8 @@ Thumbs.db
 .DS_Store
 demo-assets/
 __pycache__/
+resources/bin/
+
+# Local agent state (never shared)
+.engram/
+.pi/
