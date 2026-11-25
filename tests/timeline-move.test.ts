@@ -151,3 +151,22 @@ describe("timeline range selection", () => {
     expect(segmentById(moved, "b").end).toBeCloseTo(7);
   });
 });
+
+describe("snapping never undoes the drag", () => {
+  it("moves a fully selected channel instead of snapping it back to the start", () => {
+    const segments = [videoSegment("a", 0, 2), videoSegment("b", 2, 5)];
+    // 0.15s is inside the 20s-timeline snap window; snapping the group's own
+    // start back to zero would cancel the whole gesture.
+    const moved = moveTimelineSegmentGroup(segments, ["a", "b"], 0.15, 20);
+
+    expect(segmentById(moved, "a").start).toBeCloseTo(0.15);
+    expect(segmentById(moved, "b").start).toBeCloseTo(2.15);
+  });
+
+  it("still snaps a clip onto the timeline start", () => {
+    const segments = [videoSegment("a", 5, 8)];
+    const moved = moveTimelineSegmentGroup(segments, ["a"], -4.9, 20);
+
+    expect(segmentById(moved, "a").start).toBeCloseTo(0);
+  });
+});

@@ -462,6 +462,11 @@ export function moveTimelineSegmentGroup(
     for (const edge of [segment.start, segment.end]) {
       for (const target of targets) {
         const adjustment = target - (edge + delta);
+        // Snapping may refine a drag, never undo it: a candidate that puts the
+        // group back where it started reads as "nothing moves".
+        if (Math.abs(delta) > 0 && Math.abs(delta + adjustment) < 1e-9) {
+          continue;
+        }
         if (
           Math.abs(adjustment) <= snapThreshold &&
           Math.abs(adjustment) < Math.abs(closestAdjustment)
