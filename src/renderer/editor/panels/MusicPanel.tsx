@@ -15,6 +15,11 @@ import { FloatingSelect } from "../FloatingSelect";
 
 const engineOptions: Array<{ id: MusicEngine; label: string; hint: string }> = [
   {
+    id: "claude-local",
+    label: "Claude Max (local)",
+    hint: "No API key: Claude chooses the style and a local synth renders a key-free WAV track."
+  },
+  {
     id: "lyria-clip",
     label: "Lyria 3 Clip (cloud)",
     hint: "30-second clips via your Gemini API key. Output carries an inaudible SynthID watermark."
@@ -28,8 +33,6 @@ const engineOptions: Array<{ id: MusicEngine; label: string; hint: string }> = [
 
 const phaseLabels: Record<MusicGenerateProgressEvent["phase"], string> = {
   starting: "Starting…",
-  "downloading-checkpoints": "Preparing music…",
-  "loading-model": "Preparing music…",
   generating: "Generating music…",
   saving: "Adding to timeline…"
 };
@@ -42,19 +45,21 @@ export function MusicPanel(props: {
   onGenerate: (form: MusicGenerationForm) => void;
   onCancel: () => void;
   onOpenAiSettings: () => void;
+  initialEngine?: MusicEngine;
 }) {
-  const [engine, setEngine] = useState<MusicEngine>("lyria-clip");
+  const [engine, setEngine] = useState<MusicEngine>(props.initialEngine ?? "claude-local");
   const [prompt, setPrompt] = useState("");
   const [lyrics, setLyrics] = useState("");
 
   const generating = props.generationState === "generating";
   const providerKeysLoading = props.providerKeys === null;
   const hasGeminiKey = props.providerKeys?.hasGeminiKey === true;
-  const needsGeminiKey = !providerKeysLoading && !hasGeminiKey;
+  const usesLocalSynth = engine === "claude-local";
+  const needsGeminiKey = !usesLocalSynth && !providerKeysLoading && !hasGeminiKey;
   const canGenerate =
     prompt.trim().length > 0 &&
     !generating &&
-    hasGeminiKey;
+    (usesLocalSynth || hasGeminiKey);
 
   const selectedEngine = engineOptions.find((option) => option.id === engine);
 
@@ -75,7 +80,7 @@ export function MusicPanel(props: {
       </label>
       <p className="text-[0.68rem] leading-4 text-slate-500">{selectedEngine?.hint}</p>
 
-      {providerKeysLoading ? (
+      {providerKeysLoading && !usesLocalSynth ? (
         <p className="text-[0.68rem] leading-4 text-slate-500">Loading Gemini settings…</p>
       ) : null}
 
@@ -114,13 +119,7 @@ export function MusicPanel(props: {
           props.onGenerate({
             engine,
             prompt: prompt.trim(),
-            lyrics,
-            // These fields remain in the shared request contract for the
-            // legacy local engine; Lyria ignores them.
-            durationSeconds: 30,
-            inferSteps: 27,
-            guidanceScale: 15,
-            seed: null
+            lyrics
           })
         }
       >

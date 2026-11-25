@@ -6,11 +6,11 @@
 
 **Record your screen, camera, and audio — then cut, mix, subtitle, and export locally. No required account or upload.**
 
-[**Download Open Video Craft for macOS or Windows →**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
+[**Download Open Video Craft for macOS →**](https://github.com/micio86dev/openvideocraft/releases/latest)
 
-[![Latest release](https://img.shields.io/github/v/release/Reubencfernandes/Open-Video-Craft?label=download&color=34d399)](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest)
-[![Community](https://img.shields.io/badge/community-questions%20%26%20feedback-f472b6)](https://github.com/Reubencfernandes/Open-Video-Craft/discussions/7)
-[![Source platforms](https://img.shields.io/badge/source-macOS%20%7C%20Windows-6366f1)](#development)
+[![Latest release](https://img.shields.io/github/v/release/micio86dev/openvideocraft?label=download&color=34d399)](https://github.com/micio86dev/openvideocraft/releases/latest)
+[![Community](https://img.shields.io/badge/community-questions%20%26%20feedback-f472b6)](https://github.com/micio86dev/openvideocraft/discussions)
+[![Source platforms](https://img.shields.io/badge/source-macOS-6366f1)](#development)
 [![Built with Electron](https://img.shields.io/badge/Electron%2043-React%20%2B%20TypeScript-38bdf8)](#development)
 
 </div>
@@ -80,7 +80,7 @@ invoke their AI features.
 - Floating always-on-top recorder with pause/resume, countdown, and a compact pill mode.
 - Screen, camera, microphone, and **system/desktop audio** as separate tracks.
 - The selected display is identified inside the recorder without placing a
-  display-sized overlay over macOS or Windows.
+  display-sized overlay over macOS.
 - Media is written to disk in chunks while you record, limiting data loss after
   an interrupted recorder session.
 - Recorder-renderer crashes and failed device acquisition are handled without
@@ -118,9 +118,11 @@ invoke their AI features.
 For module boundaries, revision/locking behavior, data flow, privacy guarantees,
 and extension guidance, see [AI integration architecture](docs/AI_INTEGRATION.md).
 
-Open a saved project and select **AI** in the editor top bar. Gemini uses an API
-key encrypted on this computer, while Claude Code connects through the bundled
-user-scoped `open-video-craft` stdio MCP server.
+Open a saved project and select **AI** in the editor top bar. The assistant has
+a **Claude Max** provider that uses the authenticated Claude Code CLI with only
+the bundled `open-video-craft` MCP tools; no Anthropic API key is needed.
+**Gemini** remains available as a separate provider with a locally encrypted API
+key.
 
 The agent can analyze speech, silence, and periodic contact-sheet frames
 locally, then commit a complete edit request as one validated operation plan
@@ -128,39 +130,69 @@ with one-click rollback. Gemini uploads the current video only when you send an
 assistant request. Timeline metadata, transcripts, and contact-sheet images
 requested by a connected provider are handled under that provider's data policy.
 
+### Audio cleanup and precise speed
+
+Select an audio source in the Audio tool to enable conservative voice cleanup.
+Wind, Room and Steady presets apply local FFmpeg filters on export; no audio is
+uploaded. Claude can apply the same setting with the `set_audio_cleanup` edit
+operation. Timeline speed supports 1x, 1.25x, 1.5x, 2x, 3x, 4x and 5x. The
+timeline toolbar has a zoom slider; Ctrl/Cmd + `+`, `-` and `0` zoom in, out and
+fit.
+
+### Matrix popups
+
+The renderer exposes a reusable popup system for short status messages. Call
+`showMatrixPopup()` from renderer code, or `window.openVideoCraft.popups.show()`
+from the preload bridge; main-process code can broadcast a validated popup with
+the `popups:show` IPC channel. Popups accept an optional title and fully
+customizable text, colors, font, size, radius, padding, width, position, tone,
+duration and scanline effect. Enter and exit animations respect the system's
+reduced-motion setting.
+
+```ts
+import { showMatrixPopup } from "./popups/matrix-popup-api";
+
+showMatrixPopup({
+  title: "Recording",
+  text: "Sources are ready",
+  tone: "success",
+  position: "top-right"
+});
+```
+
 ### Keyboard shortcuts
 
-| Action | macOS | Windows |
-| --- | --- | --- |
-| Play / pause | `Space` | `Space` |
-| Seek 1 s / 10 s / 60 s | `←→` / `⇧←→` / `⌘←→` | `←→` / `Shift ←→` / `Ctrl ←→` |
-| Copy / cut / paste clip | `⌘C` / `⌘X` / `⌘V` | `Ctrl C` / `Ctrl X` / `Ctrl V` |
-| Split clip at playhead | `⌘B` | `Ctrl B` |
-| Delete selected | `⌫` | `Delete` |
-| Undo / redo | `⌘Z` / `⇧⌘Z` | `Ctrl Z` / `Ctrl Y` |
-| Export | `⌘E` | `Ctrl E` |
-| Toggle Chromium DevTools | `OVC_ENABLE_DEVTOOLS=1` + `Ctrl Shift I` | `F12` or `Ctrl Shift I` |
+| Action | macOS |
+| --- | --- |
+| Play / pause | `Space` |
+| Seek 1 s / 10 s / 60 s | `←→` / `⇧←→` / `⌘←→` |
+| Copy / cut / paste clip | `⌘C` / `⌘X` / `⌘V` |
+| Split clip at playhead | `⌘B` |
+| Delete selected | `⌫` |
+| Undo / redo | `⌘Z` / `⇧⌘Z` |
+| Export | `⌘E` |
+| Toggle Chromium DevTools | `OVC_ENABLE_DEVTOOLS=1` + `Ctrl Shift I` |
 
 ## Download and install
 
 Grab the latest installer from the
-[**Releases page**](https://github.com/Reubencfernandes/Open-Video-Craft/releases/latest):
+[**Releases page**](https://github.com/micio86dev/openvideocraft/releases/latest):
 
-- **macOS** — `.dmg` (Apple Silicon and Intel; signed and notarized)
-- **Windows** — x64 Setup and Portable `.exe` builds. Version 1.0.2 is unsigned,
-  so Windows may display a SmartScreen warning during installation.
+- **macOS** — `.dmg` for Apple Silicon (arm64) and Intel (x64); a universal
+  build remains available through `npm run dist:mac:universal`. Signing and
+  notarization are applied when Developer ID credentials are configured;
+  otherwise use the local ad-hoc build.
 
-The downloadable installers are attached directly to that release.
-`SHA256SUMS.txt` is an optional integrity check for those files; it is not a
-substitute for the installer downloads.
+The downloadable installer is attached directly to that release.
+`SHA256SUMS.txt` is an optional integrity check; it is not a substitute for the
+installer download.
 
-The bundled GPL FFmpeg executables have a matching
-[source-code offer](FFMPEG_SOURCE_OFFER.md). Starting with v1.0.2, each release
-publishes its verified FFmpeg source and build-provenance bundle beside the app
-installers.
+The bundled GPL FFmpeg executable has a matching
+[source-code offer](FFMPEG_SOURCE_OFFER.md). Each release publishes its verified
+FFmpeg source and build-provenance bundle beside the app installer.
 
-Packaged builds check for updates on startup and every four hours; updates
-download in the background and install on quit.
+Packaged builds check the fork's update feed, but automatic downloads are
+disabled until that feed exists; upstream update feeds are never contacted.
 
 > **macOS permissions:** the first recording asks for Screen Recording (and
 > optionally Camera/Microphone) in System Settings → Privacy & Security. The
@@ -207,8 +239,26 @@ npm run typecheck  # main + renderer TypeScript
 npm test           # vitest unit tests
 npm run build      # production build
 npm run test:mcp   # bundled MCP server smoke test
+npm run bench:startup -- --out bench/startup/latest # isolated startup/idle metrics
 npm audit          # dependency security advisories
 ```
+
+The isolated capture and render PoCs have their own dry-run harnesses:
+
+```sh
+node scripts/bench/g1/run.mjs --dry-run --duration 5 --out /tmp/ovc-g1
+node scripts/bench/g2/run.mjs --self-test
+node scripts/bench/g2/run.mjs --quick --out /tmp/ovc-g2 --report /tmp/ovc-g2/report.json
+```
+
+They never request screen/camera/microphone permission or claim a hardware GO.
+See `docs/baseline/g1-g2-pocs/REPORT.md` for the exact verified status.
+
+`bench:startup` requires a prior `npm run build`. It launches an unpackaged app
+with the development-only `--bench` IPC channel, uses a temporary user-data
+profile, and writes CSV/JSON metrics without opening real projects. Packaged
+builds ignore the flag and do not register the channel. The in-repo startup
+harness supports macOS, Linux and Windows Electron binary layouts.
 
 Built with Electron 43, React, TypeScript, Vite, and Tailwind CSS. A verified
 FFmpeg executable is bundled for remuxing, audio conversion, and export; its
@@ -222,21 +272,18 @@ subtitle timeline rather than design mockups.
 ## Releases
 
 Releases are tag-triggered: pushing a `v*` tag that matches `package.json`
-builds and publishes the release-approved platform matrix through GitHub
-Actions. Version 1.0.4 publishes macOS Intel/Apple Silicon and Windows x64
-builds.
+builds and publishes the macOS Apple Silicon (arm64) target through GitHub
+Actions.
 
-The public stable line remains 1.x: v1.0.4 follows the published v1.0.3 build.
-Earlier 2.x tags were beta-test builds and are not used for this stable release.
-Installed direct-download builds from v1.0.0 onward use the same stable GitHub
-update feed and can move directly to v1.0.4; no intermediate installation is
-required. Mac App Store builds update through the App Store instead.
+The public stable line remains 1.x. Earlier 2.x tags were beta-test builds and
+are not used for this stable release. Mac App Store builds update through the
+App Store instead.
 
 ```sh
-npm run dist:win           # local Windows build
-npm run dist:mac           # local macOS build (signed + notarized)
+npm run dist:mac           # local macOS x64 + arm64 build (signed + notarized)
+npm run dist:mac:universal # local macOS universal build
+npm run dist:mac:adhoc     # local ad-hoc build without notarization
 npm run verify:mac-release # required shipping gate for macOS artifacts
-npm run verify:windows-release # required shipping gate for Windows artifacts
 ```
 
 macOS release builds need a Developer ID Application certificate and one of
@@ -245,11 +292,6 @@ these notarization credential groups:
 - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
 - `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
 - `APPLE_KEYCHAIN_PROFILE` (optionally `APPLE_KEYCHAIN`)
-
-Windows release signing can use `WINDOWS_CSC_LINK` (a base64 certificate or
-secure certificate URL) and `WINDOWS_CSC_KEY_PASSWORD`. Those secrets are not
-currently configured, so v1.0.4 Windows artifacts are published unsigned and
-are labeled accordingly in the release notes.
 
 The GitHub macOS artifacts are direct-download Developer ID builds. The
 sandboxed `mas` target is built separately with App Store signing identities

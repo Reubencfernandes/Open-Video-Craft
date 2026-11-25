@@ -1,0 +1,17 @@
+# npm audit report
+
+@hono/node-server  1.19.10 - 2.1.5
+Severity: moderate
+@hono/node-server: `serveStatic` decodes the request path a second time, leading to bypass of middleware on static paths - https://github.com/advisories/GHSA-rmxm-3fg6-px4f
+@hono/node-server: Unhandled `ECONNRESET` on the socket during an asynchronous WebSocket upgrade crashes the process - https://github.com/advisories/GHSA-qv5m-9pm6-hqp3
+@hono/node-server: Backslash in the request path is parsed as a path separator, bypassing path-based access control at a reverse proxy - https://github.com/advisories/GHSA-jpvv-r467-5p4w
+fix available via `npm audit fix`
+node_modules/@hono/node-server
+  @modelcontextprotocol/sdk  
+  Depends on vulnerable versions of @hono/node-server
+  node_modules/@modelcontextprotocol/sdk
+
+2 moderate severity vulnerabilities
+
+To address all issues, run:
+  npm audit fix

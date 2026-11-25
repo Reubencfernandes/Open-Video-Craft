@@ -1,27 +1,32 @@
 import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { PreviewContent } from "./PreviewContent";
+import { shouldSeekSecondaryMedia } from "./playback-sync";
 import type { PreviewQuality } from "./preview-quality";
 import type {
   ClipTransitionType,
   EditorMediaItem,
-  LayoutMode,
   TimelineMediaClip
 } from "./types";
 
 type TransitionRole = "outgoing" | "incoming";
 
-/** The non-primary clip shown during the short preview window around a cut. */
+/**
+ * Both sides of a transition stay mounted with fixed roles for the whole
+ * window. The old implementation swapped the two video elements at the cut,
+ * which reloaded both decoders exactly at the midpoint and looked like a jerk.
+ */
 export function PreviewTransitionLayer(props: {
-  clip: TimelineMediaClip;
-  role: TransitionRole;
+  from: TimelineMediaClip;
+  to: TimelineMediaClip;
   type: ClipTransitionType;
   progress: number;
   currentTime: number;
   playing: boolean;
-  projectCamera: EditorMediaItem | null;
-  layoutMode: LayoutMode;
+  cameraItem: EditorMediaItem | null;
   screenStyle: CSSProperties;
+  screenContentStyle?: CSSProperties;
+  cameraMaskUrl?: string | null;
   cameraStyle: CSSProperties | null;
   cameraVideoStyle: CSSProperties;
   previewQuality: PreviewQuality;
@@ -29,62 +34,85 @@ export function PreviewTransitionLayer(props: {
    * composite over the frame's Style background instead. */
   opaqueBackdrop: boolean;
 }) {
-  const mainVideoRef = useRef<HTMLVideoElement | null>(null);
-  const cameraRef = useRef<HTMLVideoElement | null>(null);
+  const fromVideoRef = useRef<HTMLVideoElement | null>(null);
+  const fromCameraRef = useRef<HTMLVideoElement | null>(null);
+  const toVideoRef = useRef<HTMLVideoElement | null>(null);
+  const toCameraRef = useRef<HTMLVideoElement | null>(null);
+  const clipKeysRef = useRef<Record<string, string>>({});
+  const lastSeekAtRef = useRef<Record<string, number>>({});
 
-  function syncMediaElements() {
-    const offset = Math.max(0, Math.min(props.clip.duration, props.currentTime - props.clip.start));
-    const mediaTime = props.clip.sourceStart + offset;
-    const elements = [mainVideoRef.current, cameraRef.current].filter(
-      (element): element is HTMLVideoElement => Boolean(element)
-    );
-
-    for (const element of elements) {
-      element.muted = true;
-      if (element.readyState >= HTMLMediaElement.HAVE_METADATA) {
+  function syncSide(
+    element: HTMLMediaElement,
+    clip: TimelineMediaClip,
+    key: string
+  ) {
+    const clipChanged = clipKeysRef.current[key] !== clip.id;
+    clipKeysRef.current[key] = clip.id;
+    const offset = Math.max(0, Math.min(clip.duration, props.currentTime - clip.start));
+    const mediaTime = clip.sourceStart + offset;
+    const shouldSeek = shouldSeekSecondaryMedia({
+      reason: clipChanged ? "clip-change" : "tick",
+      isPlaying: props.playing,
+      clipChanged,
+      canSeek:
+        element.readyState >= HTMLMediaElement.HAVE_METADATA && !element.seeking,
+      currentMediaTime: element.currentTime,
+      desiredMediaTime: mediaTime,
+      nowMs: performance.now(),
+      lastSeekAtMs: lastSeekAtRef.current[key] ?? null
+    });
+    if (shouldSeek) {
+      try {
         const safeTime = Number.isFinite(element.duration)
           ? Math.min(mediaTime, Math.max(0, element.duration - 1 / 30))
           : mediaTime;
-        if (Math.abs(element.currentTime - safeTime) > 0.08) {
-          try {
-            element.currentTime = safeTime;
-          } catch {
-            // Metadata can change while a dragged transition swaps its source.
-          }
+        if (Math.abs(element.currentTime - safeTime) > 0.02) {
+          element.currentTime = safeTime;
+          lastSeekAtRef.current[key] = performance.now();
         }
+      } catch {
+        // Metadata can change while a dragged transition swaps its source.
       }
-      if (props.playing && element.paused && !element.ended) {
-        void element.play().catch(() => undefined);
-      } else if (!props.playing && !element.paused) {
-        element.pause();
-      }
+    }
+    if (props.playing && element.paused && !element.ended) {
+      void element.play().catch(() => undefined);
+    } else if (!props.playing && !element.paused) {
+      element.pause();
     }
   }
 
   useEffect(() => {
-    syncMediaElements();
-    // The clip identity and playhead time fully describe the desired frame.
+    for (const [key, clip, video, camera] of [
+      ["from", props.from, fromVideoRef.current, fromCameraRef.current],
+      ["to", props.to, toVideoRef.current, toCameraRef.current]
+    ] as const) {
+      if (video) syncSide(video, clip, key);
+      if (camera) syncSide(camera, clip, `${key}-camera`);
+    }
+    // The clip identities and playhead time fully describe the desired frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.clip, props.currentTime, props.playing]);
+  }, [props.from.id, props.to.id, props.currentTime, props.playing]);
 
   useEffect(() => () => {
-    mainVideoRef.current?.pause();
-    cameraRef.current?.pause();
+    for (const element of [fromVideoRef.current, fromCameraRef.current, toVideoRef.current, toCameraRef.current]) {
+      element?.pause();
+    }
   }, []);
 
-  const item = props.clip.item;
-  return (
+  const renderSide = (clip: TimelineMediaClip, role: TransitionRole, videoRef: typeof fromVideoRef, cameraRef: typeof fromCameraRef) => (
     <div
       className={`pointer-events-none absolute inset-0 overflow-hidden ${props.opaqueBackdrop ? "bg-black" : ""}`}
-      style={getPreviewTransitionLayerStyle(props.type, props.progress, props.role)}
+      style={{ ...getPreviewTransitionLayerStyle(props.type, props.progress, role), willChange: "opacity, transform", contain: "paint" }}
+      data-transition-side={role}
       aria-hidden="true"
     >
       <PreviewContent
-        item={item}
-        isProjectCompositionSelected={item.origin === "project" && item.track === "screen"}
-        projectCamera={props.projectCamera}
-        layoutMode={props.layoutMode}
+        item={clip.item}
+        cameraItem={props.cameraItem}
+        showNoCameraRecording={false}
         screenStyle={props.screenStyle}
+        screenContentStyle={props.screenContentStyle}
+        cameraMaskUrl={props.cameraMaskUrl}
         cameraStyle={props.cameraStyle}
         cameraVideoStyle={props.cameraVideoStyle}
         screenEditEnabled={false}
@@ -93,15 +121,22 @@ export function PreviewTransitionLayer(props: {
         subtitleStyle="clean"
         currentTime={props.currentTime}
         previewQuality={props.previewQuality}
-        mainVideoRef={mainVideoRef}
+        mainVideoRef={videoRef}
         cameraRef={cameraRef}
         onScreenEditPointerDown={() => undefined}
         onCameraEditPointerDown={() => undefined}
-        onMediaReady={syncMediaElements}
+        onMediaReady={() => undefined}
         onDuration={() => undefined}
         onSubtitleClick={() => undefined}
       />
     </div>
+  );
+
+  return (
+    <>
+      {renderSide(props.from, "outgoing", fromVideoRef, fromCameraRef)}
+      {renderSide(props.to, "incoming", toVideoRef, toCameraRef)}
+    </>
   );
 }
 

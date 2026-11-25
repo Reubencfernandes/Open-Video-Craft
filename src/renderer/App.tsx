@@ -45,10 +45,19 @@ export function App() {
     const status = await loadPermissionsStatus();
 
     if (requiresScreenPermission(status)) {
-      setErrorMessage(
-        "Screen Recording permission is required before Open Video Craft can list screen sources."
-      );
-      return;
+      // macOS keeps reporting the previous verdict after the app binary changes,
+      // so a granted permission can still look denied. The only trustworthy test
+      // is asking the system for sources — and that call is also what makes the
+      // permission prompt appear when it was never decided.
+      const sources = await window.openVideoCraft.sources.list().catch(() => []);
+      if (sources.length === 0) {
+        setErrorMessage(
+          "Screen Recording permission is required before Open Video Craft can list screen sources. Allow it in System Settings, then restart the app."
+        );
+        void window.openVideoCraft.permissions.showGuide("screen").catch(() => undefined);
+        return;
+      }
+      void loadPermissionsStatus();
     }
 
     await runLaunchAction("record", () =>

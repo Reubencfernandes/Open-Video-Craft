@@ -9,8 +9,10 @@ import type {
   CameraPosition,
   CameraShape,
   LayoutMode,
-  ScreenAspectRatio
+  ScreenAspectRatio,
+  ScreenCrop
 } from "../types";
+import type { BackgroundRemovalStatus } from "../../../shared/types";
 import { CameraCropControls } from "./CameraCropControls";
 
 const layoutPresetGroups: Array<{
@@ -78,6 +80,11 @@ const cameraPositionOptions: CameraPosition[] = [
 export function LayoutPanel(props: {
   layoutMode: LayoutMode;
   screenScale: number;
+  screenCrop: ScreenCrop;
+  cameraBackgroundStatus: BackgroundRemovalStatus;
+  cameraMatteReady: boolean;
+  onPrepareCameraBackground: () => void;
+  onCancelCameraBackground: () => void;
   screenAspectRatio: ScreenAspectRatio;
   screenAspectEnabled: boolean;
   cameraShape: CameraShape;
@@ -87,6 +94,13 @@ export function LayoutPanel(props: {
   cameraSize: number;
   onLayoutModeChange: (mode: LayoutMode) => void;
   onScreenScaleChange: (scale: number) => void;
+  onScreenCropChange: (crop: ScreenCrop) => void;
+  /** Gives the selected clips this layout, or removes their own. */
+  onApplyLayoutToClips: () => void;
+  onClearClipLayout: () => void;
+  /** Gives the selected clips the current webcam style, or removes their own. */
+  onApplyCameraStyleToClips: () => void;
+  onClearClipCameraStyle: () => void;
   onScreenAspectRatioChange: (aspectRatio: ScreenAspectRatio) => void;
   onCameraShapeChange: (shape: CameraShape) => void;
   onCameraBorderStyleChange: (border: CameraBorderStyle) => void;
@@ -144,6 +158,55 @@ export function LayoutPanel(props: {
       <div className="grid gap-4">
         {props.layoutMode !== "camera-only" ? (
           <>
+
+      <div className="grid gap-1 rounded-lg bg-white/[0.04] p-2" data-clip-layout>
+        <span className="text-xs font-extrabold text-slate-400">Layout per clip</span>
+        <p className="text-[0.68rem] font-semibold leading-snug text-slate-500">
+          Applies this layout while the selected clips are on screen, so one video can switch
+          layout from clip to clip.
+        </p>
+        <div className="flex gap-1">
+          <button
+            className="editor-choice-button flex-1 rounded-md px-2 py-1.5 text-[0.66rem] font-extrabold text-slate-200 hover:bg-white/10 hover:text-white"
+            type="button"
+            data-apply-layout-to-clips
+            onClick={props.onApplyLayoutToClips}
+          >
+            Apply to selected
+          </button>
+          <button
+            className="editor-choice-button flex-1 rounded-md px-2 py-1.5 text-[0.66rem] font-extrabold text-slate-300 hover:bg-white/10 hover:text-white"
+            type="button"
+            data-clear-clip-layout
+            onClick={props.onClearClipLayout}
+          >
+            Clear
+          </button>
+        </div>
+        <span className="mt-1 text-xs font-extrabold text-slate-400">Webcam style per clip</span>
+        <p className="text-[0.68rem] font-semibold leading-snug text-slate-500">
+          Applies this webcam shape and border while the selected clips are on screen, so one
+          video can switch style from clip to clip.
+        </p>
+        <div className="flex gap-1">
+          <button
+            className="editor-choice-button flex-1 rounded-md px-2 py-1.5 text-[0.66rem] font-extrabold text-slate-200 hover:bg-white/10 hover:text-white"
+            type="button"
+            data-apply-camera-style
+            onClick={props.onApplyCameraStyleToClips}
+          >
+            Apply style to selected
+          </button>
+          <button
+            className="editor-choice-button flex-1 rounded-md px-2 py-1.5 text-[0.66rem] font-extrabold text-slate-300 hover:bg-white/10 hover:text-white"
+            type="button"
+            data-clear-clip-camera-style
+            onClick={props.onClearClipCameraStyle}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
             <RangeControl
               label="Screen size"
               min={70}
@@ -152,6 +215,71 @@ export function LayoutPanel(props: {
               suffix="%"
               onChange={props.onScreenScaleChange}
             />
+            <div className="grid gap-2" data-screen-crop>
+                <span className="text-xs font-extrabold text-slate-400">Crop screen edges</span>
+                <p className="text-[0.68rem] font-semibold leading-snug text-slate-500">
+                  Removes the OS menu bar or a browser toolbar without touching the recording.
+                </p>
+                {(["top", "right", "bottom", "left"] as const).map((edge) => (
+                  <RangeControl
+                    key={edge}
+                    label={edge === "top" ? "Top" : edge === "right" ? "Right" : edge === "bottom" ? "Bottom" : "Left"}
+                    min={0}
+                    max={25}
+                    value={props.screenCrop[edge]}
+                    suffix="%"
+                    onChange={(value) => props.onScreenCropChange({ ...props.screenCrop, [edge]: value })}
+                  />
+                ))}
+                <button
+                  className="editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold text-slate-300 hover:bg-white/10 hover:text-white"
+                  type="button"
+                  onClick={() => props.onScreenCropChange({ top: 0, right: 0, bottom: 0, left: 0 })}
+                >
+                  Reset crop
+                </button>
+            </div>
+
+
+      <div className="grid gap-2" data-camera-background>
+        <span className="text-xs font-extrabold text-slate-400">Webcam background</span>
+        <p className="text-[0.68rem] font-semibold leading-snug text-slate-500">
+          Works without a green screen. Every frame is processed once and the stored mask is
+          reused by the preview.
+        </p>
+        {props.cameraMatteReady ? (
+          <span className="text-[0.7rem] font-bold text-emerald-300">Background removed</span>
+        ) : props.cameraBackgroundStatus.status === "processing" ||
+          props.cameraBackgroundStatus.status === "downloading-model" ? (
+          <div className="grid gap-1">
+            <span className="text-[0.7rem] font-bold text-slate-300">
+              {props.cameraBackgroundStatus.message ?? "Working…"}{" "}
+              {Math.round(props.cameraBackgroundStatus.progress * 100)}%
+            </span>
+            <button
+              className="editor-choice-button rounded-md px-2 py-1 text-xs font-extrabold text-slate-300 hover:bg-white/10 hover:text-white"
+              type="button"
+              onClick={props.onCancelCameraBackground}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            className="editor-choice-button rounded-md px-2 py-2 text-xs font-extrabold text-slate-200 hover:bg-white/10 hover:text-white"
+            type="button"
+            data-remove-camera-background
+            onClick={props.onPrepareCameraBackground}
+          >
+            Remove webcam background
+          </button>
+        )}
+        {props.cameraBackgroundStatus.status === "error" && props.cameraBackgroundStatus.message ? (
+          <span className="text-[0.7rem] font-semibold text-rose-300">
+            {props.cameraBackgroundStatus.message}
+          </span>
+        ) : null}
+      </div>
             {props.screenAspectEnabled ? (
               <div className="grid gap-2">
                 <span className="text-xs font-extrabold text-slate-400">Screen ratio</span>

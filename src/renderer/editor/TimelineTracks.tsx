@@ -1,5 +1,5 @@
 /** Track-lane composition for the editor timeline. */
-import { AudioLines, Captions, Film, Type, Volume2, VolumeX, ZoomIn } from "lucide-react";
+import { AudioLines, Captions, ChevronDown, ChevronUp, Eye, EyeOff, Film, Type, Volume2, VolumeX, ZoomIn } from "lucide-react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { SubtitleActivityRange } from "../../shared/subtitle-activity";
 import { getAudioLaneLevelKey, getEffectiveAudioLevel } from "../../shared/editor-domain";
@@ -16,7 +16,8 @@ import {
   TimelineZoomClip
 } from "./TimelineClips";
 import { TimelineTrack } from "./TimelineTrack";
-import { isTimelineTimedItemInRange } from "./timeline-utils";
+import { getTimelineClipGroupRoles, toTimelineGroupableClip } from "./timeline-groups";
+import { isTimelineTimedItemInRange, getVideoTimelineLaneId, normalizeTimelineLane } from "./timeline-utils";
 import type { TimelineTransitionBoundary } from "./transition-utils";
 import type {
   ClipTransition,
@@ -33,6 +34,8 @@ import type {
 type TimelineTracksProps = {
   renderDuration: number;
   videoClips: TimelineMediaClip[];
+  onToggleVideoLaneVisibility: (lane: number) => void;
+  onSwapVideoChannels: (firstLane: number, secondLane: number) => void;
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   zoomEffects: ZoomEffect[];
@@ -40,6 +43,7 @@ type TimelineTracksProps = {
   transitions: ClipTransition[];
   transitionBoundaries: TimelineTransitionBoundary[];
   transitionDropKey: string | null;
+  dropGuideTime?: number | null;
   subtitles: SubtitleSegment[];
   subtitleProcessing?: boolean;
   subtitleProcessingRanges?: SubtitleActivityRange[];
@@ -55,7 +59,7 @@ type TimelineTracksProps = {
   selectedTextOverlayId: string | null;
   onSetAudioLevel: (
     itemId: string,
-    patch: Partial<{ volume: number; muted: boolean }>
+    patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>
   ) => void;
   onSelectClip: (clip: TimelineMediaClip, additive: boolean) => void;
   onSelectZoom: (effect: ZoomEffect) => void;
@@ -97,8 +101,12 @@ export function TimelineTracks(props: TimelineTracksProps) {
   // Audio sits directly under the picture it belongs to, like other editors;
   // effect lanes follow. The DOM order below must match this list because the
   // marquee maps lanes by index.
+  const videoChannelLanes = [...new Set(props.videoClips.map((clip) => normalizeTimelineLane(clip.lane)))]
+    .sort((first, second) => first - second);
+  const extraVideoChannels = videoChannelLanes.filter((lane) => lane > 0);
   const orderedLaneIds: TimelineLaneId[] = [
     "video",
+    ...extraVideoChannels.map(getVideoTimelineLaneId),
     ...props.audioTracks.map((track) => getAudioTimelineLaneId(track.lane)),
     "zoom",
     "speed",
@@ -107,6 +115,125 @@ export function TimelineTracks(props: TimelineTracksProps) {
   ];
   const rangeSelectionSettled = Boolean(
     props.rangeSelection && !props.rangeSelection.dragging
+  );
+  // One grouping pass per render: every rendered clip looks up its own role in
+  // the block of abutting clips it belongs to instead of regrouping the lane.
+  const clipGroupRoles = getTimelineClipGroupRoles(
+    [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)].map(
+      toTimelineGroupableClip
+    )
+  );
+  const dropGuideRatio = props.dropGuideTime === null || props.dropGuideTime === undefined
+    ? 0
+    : Math.max(0, Math.min(1, props.dropGuideTime / Math.max(1, props.renderDuration)));
+
+  const renderChannelOrderControls = (lane: number) => (
+    <span className="inline-flex flex-none items-center" data-timeline-video-order={lane}>
+      <button
+        className="grid size-5 flex-none place-items-center rounded text-neutral-400 transition hover:bg-white/[0.08] hover:text-white disabled:pointer-events-none disabled:opacity-30"
+        type="button"
+        aria-label={`Move Video ${lane + 1} up`}
+        title="Move channel up"
+        disabled={lane === 0}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => props.onSwapVideoChannels(lane - 1, lane)}
+      >
+        <ChevronUp size={12} />
+      </button>
+      <button
+        className="grid size-5 flex-none place-items-center rounded text-neutral-400 transition hover:bg-white/[0.08] hover:text-white disabled:pointer-events-none disabled:opacity-30"
+        type="button"
+        aria-label={`Move Video ${lane + 1} down`}
+        title="Move channel down"
+        disabled={!videoChannelLanes.includes(lane + 1)}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => props.onSwapVideoChannels(lane, lane + 1)}
+      >
+        <ChevronDown size={12} />
+      </button>
+    </span>
+  );
+
+  const renderLaneControls = (lane: number) => (
+    <span className="inline-flex flex-none items-center gap-0.5">
+      {renderChannelOrderControls(lane)}
+      {renderVisibilityToggle(lane)}
+    </span>
+  );
+
+  const renderVisibilityToggle = (lane: number) => {
+    const laneClips = props.videoClips.filter((clip) => normalizeTimelineLane(clip.lane) === lane);
+    const allHidden = laneClips.length > 0 && laneClips.every((clip) => clip.hidden === true);
+    const action = allHidden ? "Show" : "Hide";
+    return (
+      <button
+        className="grid size-6 flex-none place-items-center rounded text-neutral-400 transition hover:bg-white/[0.08] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white"
+        type="button"
+        aria-label={`${action} Video ${lane + 1}`}
+        aria-pressed={allHidden}
+        title={`${action} Video ${lane + 1}`}
+        data-timeline-video-visibility={lane}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={() => props.onToggleVideoLaneVisibility(lane)}
+      >
+        {allHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+      </button>
+    );
+  };
+
+  // A transition belongs to the two clips it joins, so its marker and its drop
+  // target must render inside that channel's track — never on the first one.
+  const renderTransitionOverlays = (lane: number) => (
+    <>
+      {props.transitionDropKey
+        ? props.transitionBoundaries
+            .filter((boundary) => normalizeTimelineLane(boundary.from.lane) === lane)
+            .map((boundary) => (
+              <TimelineTransitionDropTarget
+                key={boundary.key}
+                cutTime={boundary.cutTime}
+                timelineDuration={props.renderDuration}
+                active={props.transitionDropKey === boundary.key}
+              />
+            ))
+        : null}
+      {props.transitions.map((transition) => {
+        const from = props.videoClips.find((clip) => clip.id === transition.fromSegmentId);
+        if (!from || normalizeTimelineLane(from.lane) !== lane) {
+          return null;
+        }
+        return (
+          <TimelineTransitionMarker
+            key={transition.id}
+            transition={transition}
+            cutTime={from.start + from.duration}
+            timelineDuration={props.renderDuration}
+            onSelect={() => props.onSelectTransition(transition)}
+          />
+        );
+      })}
+    </>
+  );
+
+  const renderVideoClip = (clip: TimelineMediaClip) => (
+    <TimelineClip
+      key={clip.id}
+      clip={clip}
+      groupRole={clipGroupRoles.get(clip.id)}
+      timelineDuration={props.renderDuration}
+      selected={
+        (!props.rangeSelection || rangeSelectionSettled) &&
+        props.selectedSegmentIds.includes(clip.id)
+      }
+      rangeSelected={
+        rangeSelectionSettled && props.selectedSegmentIds.includes(clip.id)
+      }
+      onSelect={(additive) => props.onSelectClip(clip, additive)}
+      onTrimPointerDown={props.onTrimPointerDown}
+      onMovePointerDown={props.onMovePointerDown}
+      onInteractionPointerMove={props.onInteractionPointerMove}
+      onInteractionPointerUp={props.onInteractionPointerUp}
+    />
   );
 
   return (
@@ -119,49 +246,39 @@ export function TimelineTracks(props: TimelineTracksProps) {
         selectedNoun={props.selectedNoun}
       />
 
-      <TimelineTrack laneId="video" label="Video 1" icon={<Film size={14} />}>
-        {props.videoClips.map((clip) => (
-          <TimelineClip
-            key={clip.id}
-            clip={clip}
-            timelineDuration={props.renderDuration}
-            selected={
-              (!props.rangeSelection || rangeSelectionSettled) &&
-              props.selectedSegmentIds.includes(clip.id)
-            }
-            rangeSelected={
-              rangeSelectionSettled && props.selectedSegmentIds.includes(clip.id)
-            }
-            onSelect={(additive) => props.onSelectClip(clip, additive)}
-            onTrimPointerDown={props.onTrimPointerDown}
-            onMovePointerDown={props.onMovePointerDown}
-            onInteractionPointerMove={props.onInteractionPointerMove}
-            onInteractionPointerUp={props.onInteractionPointerUp}
-          />
-        ))}
-        {props.transitionDropKey
-          ? props.transitionBoundaries.map((boundary) => (
-              <TimelineTransitionDropTarget
-                key={boundary.key}
-                cutTime={boundary.cutTime}
-                timelineDuration={props.renderDuration}
-                active={props.transitionDropKey === boundary.key}
-              />
-            ))
-          : null}
-        {props.transitions.map((transition) => {
-          const from = props.videoClips.find((clip) => clip.id === transition.fromSegmentId);
-          return from ? (
-            <TimelineTransitionMarker
-              key={transition.id}
-              transition={transition}
-              cutTime={from.start + from.duration}
-              timelineDuration={props.renderDuration}
-              onSelect={() => props.onSelectTransition(transition)}
-            />
-          ) : null;
-        })}
+      <TimelineTrack
+        laneId="video"
+        label="Video 1"
+        icon={<Film size={14} />}
+        labelControl={renderLaneControls(0)}
+      >
+        {props.videoClips
+          .filter((clip) => normalizeTimelineLane(clip.lane) === 0)
+          .map(renderVideoClip)}
+        {props.dropGuideTime !== null && props.dropGuideTime !== undefined ? (
+        <div
+          className="pointer-events-none absolute inset-y-0 z-[8] w-px bg-emerald-300/85 shadow-[0_0_12px_rgba(110,231,183,0.7)]"
+          data-timeline-drop-guide
+          style={{ left: `calc(var(--timeline-label-width) + var(--timeline-track-gap) + (100% - var(--timeline-label-width) - var(--timeline-track-gap)) * ${dropGuideRatio})` }}
+        />
+      ) : null}
+      {renderTransitionOverlays(0)}
       </TimelineTrack>
+
+      {extraVideoChannels.map((lane) => (
+        <TimelineTrack
+          key={lane}
+          laneId={getVideoTimelineLaneId(lane)}
+          label={`Video ${lane + 1}`}
+          icon={<Film size={14} />}
+          labelControl={renderLaneControls(lane)}
+        >
+          {props.videoClips
+            .filter((clip) => normalizeTimelineLane(clip.lane) === lane)
+            .map(renderVideoClip)}
+          {renderTransitionOverlays(lane)}
+        </TimelineTrack>
+      ))}
 
       {props.audioTracks.map((track) => {
         const laneId = getAudioTimelineLaneId(track.lane);
@@ -201,6 +318,7 @@ export function TimelineTracks(props: TimelineTracksProps) {
               <TimelineClip
                 key={clip.id}
                 clip={clip}
+                groupRole={clipGroupRoles.get(clip.id)}
                 audioLevel={getEffectiveAudioLevel(
                   props.audioLevels,
                   clip.item.id,

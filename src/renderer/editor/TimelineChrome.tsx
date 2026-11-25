@@ -3,6 +3,9 @@
  * right-click context menu.
  */
 import {
+  AlignHorizontalJustifyStart,
+  Eye,
+  EyeOff,
   Maximize2,
   Minus,
   Plus,
@@ -33,6 +36,7 @@ export function TimelineToolbar(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomChange: (zoom: number) => void;
 }) {
   return (
     <div className="timeline-toolbar flex min-h-11 flex-none items-center justify-between gap-2 border-t border-white/[0.05]">
@@ -73,6 +77,17 @@ export function TimelineToolbar(props: {
         >
           <Minus size={14} />
         </button>
+        <input
+          aria-label="Timeline zoom"
+          className="h-1.5 w-20 cursor-pointer accent-white"
+          type="range"
+          min={1}
+          max={10}
+          step={0.1}
+          value={props.timelineZoom}
+          onChange={(event) => props.onZoomChange(Number(event.target.value))}
+          title={`Timeline zoom ${Math.round(props.timelineZoom * 100)}% (Ctrl/Cmd + wheel also works)`}
+        />
         <span className="min-w-[2.9rem] text-center text-[0.66rem] font-bold tabular-nums">
           {Math.round(props.timelineZoom * 100)}%
         </span>
@@ -164,13 +179,24 @@ export function TimelinePlayhead(props: {
   );
 }
 
-/** Right-click menu for the timeline: split at the clicked time or delete. */
+/** Right-click menu for the timeline: volume/fades, split, hide and delete. */
 export function TimelineContextMenuView(props: {
   x: number;
   y: number;
   canSplit: boolean;
   canDelete: boolean;
+  canToggleHidden?: boolean;
+  /** Every addressed clip is already deactivated, so the command reads "Show". */
+  clipsHidden?: boolean;
+  /** Packs the addressed clips back to back, removing the empty space around them. */
+  onCloseGaps?: () => void;
+  volume?: number;
+  onVolumeChange?: (volume: number) => void;
+  fadeIn?: number;
+  fadeOut?: number;
+  onFadeChange?: (patch: { fadeIn?: number; fadeOut?: number }) => void;
   onSplit: () => void;
+  onToggleHidden?: () => void;
   onDelete: () => void;
 }) {
   const itemClassName =
@@ -182,9 +208,77 @@ export function TimelineContextMenuView(props: {
       style={{ left: props.x, top: props.y }}
       onPointerDown={(event) => event.stopPropagation()}
     >
+      {props.onVolumeChange ? (
+        <label className="grid gap-1 border-b border-white/10 px-2 py-2 text-[0.68rem] font-bold text-neutral-300">
+          <span className="flex items-center justify-between gap-2">
+            Clip volume
+            <span className="text-emerald-200">{Math.round(props.volume ?? 100)}%</span>
+          </span>
+          <input
+            aria-label="Clip volume"
+            className="w-40 accent-emerald-300"
+            max={100}
+            min={0}
+            type="range"
+            value={props.volume ?? 100}
+            onChange={(event) => props.onVolumeChange?.(Number(event.target.value))}
+          />
+        </label>
+      ) : null}
+      {props.onFadeChange ? (
+        <div className="grid gap-2 border-b border-white/10 px-2 py-2 text-[0.68rem] font-bold text-neutral-300">
+          <label className="grid gap-1">
+            <span>Fade in · {Math.round((props.fadeIn ?? 0) * 100) / 100}s</span>
+            <input
+              aria-label="Clip fade in"
+              className="w-40 accent-emerald-300"
+              max={10}
+              min={0}
+              step={0.1}
+              type="range"
+              value={props.fadeIn ?? 0}
+              onChange={(event) => props.onFadeChange?.({ fadeIn: Number(event.target.value) })}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span>Fade out · {Math.round((props.fadeOut ?? 0) * 100) / 100}s</span>
+            <input
+              aria-label="Clip fade out"
+              className="w-40 accent-emerald-300"
+              max={10}
+              min={0}
+              step={0.1}
+              type="range"
+              value={props.fadeOut ?? 0}
+              onChange={(event) => props.onFadeChange?.({ fadeOut: Number(event.target.value) })}
+            />
+          </label>
+        </div>
+      ) : null}
       <button type="button" className={itemClassName} disabled={!props.canSplit} onClick={props.onSplit}>
         <Scissors size={14} />
         Split
+      </button>
+      {props.onCloseGaps ? (
+        <button
+          type="button"
+          className={itemClassName}
+          data-context-menu-close-gaps
+          onClick={() => props.onCloseGaps?.()}
+        >
+          <AlignHorizontalJustifyStart size={14} />
+          Close gaps
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className={itemClassName}
+        data-context-menu-hide
+        disabled={!props.canToggleHidden}
+        onClick={() => props.onToggleHidden?.()}
+      >
+        {props.clipsHidden ? <Eye size={14} /> : <EyeOff size={14} />}
+        {props.clipsHidden ? "Show" : "Hide"}
       </button>
       <button
         type="button"

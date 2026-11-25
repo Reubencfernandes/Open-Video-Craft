@@ -1,6 +1,6 @@
 import type { AudioLevelState } from "./types";
 
-const defaultAudioLevel = { volume: 100, muted: false } as const;
+const defaultAudioLevel = { volume: 100, muted: false, fadeIn: 0, fadeOut: 0 } as const;
 
 /** Persisted audio-level key owned by one semantic audio timeline lane. */
 export function getAudioLaneLevelKey(lane: number): string {
@@ -15,15 +15,20 @@ export function getEffectiveAudioLevel(
   audioLevels: AudioLevelState,
   itemId: string,
   lane: number | null = null
-): { volume: number; muted: boolean } {
+): { volume: number; muted: boolean; fadeIn: number; fadeOut: number } {
   const source = audioLevels[itemId] ?? defaultAudioLevel;
   if (lane === null) {
-    return { volume: source.volume, muted: source.muted };
+    return {
+      volume: source.volume, muted: source.muted,
+      fadeIn: source.fadeIn ?? 0, fadeOut: source.fadeOut ?? 0
+    };
   }
 
   const laneLevel = audioLevels[getAudioLaneLevelKey(lane)] ?? defaultAudioLevel;
   return {
     volume: (source.volume * laneLevel.volume) / 100,
-    muted: source.muted || laneLevel.muted
+    muted: source.muted || laneLevel.muted,
+    fadeIn: source.fadeIn ?? 0,
+    fadeOut: source.fadeOut ?? 0
   };
 }

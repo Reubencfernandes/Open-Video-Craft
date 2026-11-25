@@ -3,7 +3,7 @@
  */
 import type { SpeedEffect, SpeedRate } from "./types";
 
-export const speedRates = [1, 2, 3, 4, 5] as const satisfies SpeedRate[];
+export const speedRates = [1, 1.25, 1.5, 2, 3, 4, 5] as const satisfies SpeedRate[];
 export const defaultSpeedRate: SpeedRate = 2;
 export const speedMinDurationSeconds = 0.2;
 
@@ -12,6 +12,15 @@ export function getActiveSpeedRate(effects: SpeedEffect[], time: number): SpeedR
     effects.find((effect) => time >= effect.start && time < effect.end)?.rate ??
     1
   );
+}
+
+/** Speed applies to picture clips only; audio-track music stays in real time. */
+export function getPlaybackRateForTrack(
+  track: "video" | "audio",
+  effects: SpeedEffect[],
+  time: number
+): SpeedRate {
+  return track === "audio" ? 1 : getActiveSpeedRate(effects, time);
 }
 
 export function isSpeedRate(value: number): value is SpeedRate {

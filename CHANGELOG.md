@@ -4,6 +4,35 @@ All notable changes to Open Video Craft are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Added conservative per-source voice cleanup for wind, room and steady noise. It is stored in the project, available in the Audio panel and applicable by Claude through `set_audio_cleanup`; FFmpeg applies the filter on export.
+- Added 1.25x and 1.5x speed rates across the editor, MCP operations and export.
+- Added a visible timeline zoom slider and Ctrl/Cmd +/-/0 shortcuts.
+- Added a customizable Matrix-style popup system with optional titles, animated entry/exit, configurable theme and position, renderer API and validated IPC broadcast.
+- Claude Max is now selectable in the editor AI assistant. It uses the authenticated Claude Code CLI with only Open Video Craft MCP tools, no built-in shell/file tools and no API key. Gemini remains available as a separate provider.
+
+### Changed
+
+- Startup update checks are disabled for the private fork until it publishes a release feed, preventing a 404 update modal in local ad-hoc builds.
+- Swift capture PoC tests now use Swift Testing with a local runner script, so they pass on the installed Command Line Tools without requiring the full Xcode IDE. Fixed a real host-clock overflow exposed by the monotonic clock test while keeping CMTime conversion exact with 128-bit integer arithmetic.
+- Added isolated G1-CAPTURE and G2-RENDER proof-of-concept harnesses with exact tick arithmetic, protocol v1, deterministic scene scheduling, bounded frame accounting and explicit PARTIAL/BLOCKED_EXTERNAL gate reporting. Hardware, TCC and notarization gates remain external; see `docs/baseline/g1-g2-pocs/REPORT.md`.
+- macOS DMG/ZIP targets cover Apple Silicon (arm64) and Intel (x64), with a
+  universal build script restored after native review. CI and release workflows
+  are SHA-pinned, least-privilege, and run a runtime dependency audit.
+- Runtime dependencies were updated, with no high/critical runtime advisories
+  remaining. Transformers.js v4 resolves its bundled ONNX Runtime assets from
+  `onnxruntime-web`.
+- Local ACE-Step music generation was removed; Lyria cloud generation remains
+  available.
+- A development-only `--bench` startup harness was added and cross-validated
+  against external measurements.
+
+### Removed
+
+- Windows build scripts, release verification, packaging configuration, and
+  Windows CI/release matrix entries.
+
 ## [1.0.6] - 2026-09-25
 
 Timeline editing now keeps a recording's voice in sync with its picture, and

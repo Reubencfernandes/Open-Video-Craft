@@ -1,0 +1,9 @@
+
+> open-video-craft@1.0.6 test:mcp
+> npm run build:main && node scripts/test-mcp-smoke.mjs
+
+
+> open-video-craft@1.0.6 build:main
+> tsc -p tsconfig.electron.json
+
+MCP smoke test passed.

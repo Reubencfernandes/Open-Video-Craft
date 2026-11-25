@@ -15,7 +15,9 @@ const packageJson = JSON.parse(readFileSync(join(projectRoot, "package.json"), "
 const version = packageJson.version;
 const appId = packageJson.build.appId;
 const productName = packageJson.build.productName;
-const expectedTeamIdentifier = process.env.OVC_MAC_TEAM_ID ?? "3XX79RB95N";
+// No default: the fork has no Apple Team ID of its own yet, and must never
+// fall back to upstream's. Release verification requires it to be set.
+const expectedTeamIdentifier = process.env.OVC_MAC_TEAM_ID;
 const releaseDirectory = join(projectRoot, "release", version);
 
 function run(command, args) {
@@ -229,6 +231,11 @@ export async function main() {
   if (process.platform !== "darwin") {
     throw new Error("macOS release verification must run on macOS.");
   }
+
+  assert(
+    expectedTeamIdentifier,
+    "OVC_MAC_TEAM_ID is not set. Release verification needs the Apple Team ID the archives were signed with; ad-hoc builds cannot be verified as notarized releases."
+  );
 
   const archives = findMacUpdateArchives();
   assert(archives.length > 0, `No macOS update ZIP archives found in ${releaseDirectory}.`);

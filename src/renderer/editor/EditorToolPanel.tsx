@@ -6,9 +6,10 @@ import type {
   ProviderKeysView,
   SttProviderId
 } from "../../shared/types";
+import type { AudioCleanupState } from "../../shared/editor-domain";
 import type { GeminiChatMessage } from "../../shared/types";
 import type { MusicGenerationForm, MusicGenerationState } from "./useMusicGeneration";
-import { AssistantPanel } from "./panels/AssistantPanel";
+import { AssistantPanel, type AssistantProvider } from "./panels/AssistantPanel";
 import { AudioPanel } from "./panels/AudioPanel";
 import { LayoutPanel } from "./panels/LayoutPanel";
 import { MusicPanel } from "./panels/MusicPanel";
@@ -26,6 +27,7 @@ import type {
   CameraPosition,
   CameraShape,
   ClipTransition,
+  ClipEdgeTransition,
   EditorMediaItem,
   EditorTool,
   LayoutMode,
@@ -36,13 +38,20 @@ import type {
   TextOverlay,
   TimelineMediaClip,
   VideoCornerStyle,
+  ScreenCrop,
   ZoomEffect
 } from "./types";
+import type { BackgroundRemovalStatus } from "../../shared/types";
 
 export function EditorToolPanel(props: {
   activeTool: EditorTool;
   layoutMode: LayoutMode;
   screenScale: number;
+  screenCrop: ScreenCrop;
+  cameraBackgroundStatus: BackgroundRemovalStatus;
+  cameraMatteReady: boolean;
+  onPrepareCameraBackground: () => void;
+  onCancelCameraBackground: () => void;
   screenAspectRatio: ScreenAspectRatio;
   screenAspectEnabled: boolean;
   cameraShape: CameraShape;
@@ -57,13 +66,19 @@ export function EditorToolPanel(props: {
   selectedZoomEffect: ZoomEffect | null;
   selectedSpeedEffect: SpeedEffect | null;
   transitions: ClipTransition[];
+  edgeTransitions: ClipEdgeTransition[];
   selectedTransitionId: string | null;
+  selectedSegmentId: string | null;
   videoClips: TimelineMediaClip[];
   sttStatus: "idle" | "loading" | "transcribing" | "done" | "error";
   sttDownloadProgress: number | null;
   sttModelLabel: string;
   sttProvider: SttProviderId;
   providerKeys: ProviderKeysView | null;
+  audioCleanup: AudioCleanupState;
+  onSetAudioCleanup: (itemId: string, settings: AudioCleanupState[string] | null) => void;
+  assistantProvider: AssistantProvider;
+  onAssistantProviderChange: (provider: AssistantProvider) => void;
   onCancelTranscription: () => void;
   onSttProviderChange: (provider: SttProviderId) => void;
   onCohereLanguageChange: (language: string) => void;
@@ -98,6 +113,12 @@ export function EditorToolPanel(props: {
   onSelectItem: (itemId: string) => void;
   onLayoutModeChange: (mode: LayoutMode) => void;
   onScreenScaleChange: (scale: number) => void;
+  onScreenCropChange: (crop: ScreenCrop) => void;
+  onApplyLayoutToClips: () => void;
+  onClearClipLayout: () => void;
+  /** Gives the selected clips this webcam style, or removes their own. */
+  onApplyCameraStyleToClips: () => void;
+  onClearClipCameraStyle: () => void;
   onScreenAspectRatioChange: (aspectRatio: ScreenAspectRatio) => void;
   onCameraShapeChange: (shape: CameraShape) => void;
   onCameraBorderStyleChange: (border: CameraBorderStyle) => void;
@@ -107,7 +128,7 @@ export function EditorToolPanel(props: {
   onCameraContentTransformReset: () => void;
   onMasterVolumeChange: (volume: number) => void;
   onAddBackgroundMusic: () => void;
-  onSetAudioLevel: (itemId: string, patch: Partial<{ volume: number; muted: boolean }>) => void;
+  onSetAudioLevel: (itemId: string, patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>) => void;
   onAddZoom: () => void;
   onUpdateZoom: (id: string, updates: Partial<ZoomEffect>) => void;
   onRemoveZoom: (id: string) => void;
@@ -117,6 +138,8 @@ export function EditorToolPanel(props: {
   onRemoveSpeed: (id: string) => void;
   onSetTransition: (input: Omit<ClipTransition, "id">) => void;
   onRemoveTransition: (fromSegmentId: string, toSegmentId: string) => void;
+  onSetEdgeTransition: (input: Omit<ClipEdgeTransition, "id">) => void;
+  onRemoveEdgeTransition: (id: string) => void;
   onAddSubtitle: () => void;
   onGenerateSubtitles: () => void;
   onSubtitleStyleChange: (style: SubtitleStyle) => void;
@@ -142,6 +165,11 @@ export function EditorToolPanel(props: {
         <LayoutPanel
           layoutMode={props.layoutMode}
           screenScale={props.screenScale}
+          screenCrop={props.screenCrop}
+          cameraBackgroundStatus={props.cameraBackgroundStatus}
+          cameraMatteReady={props.cameraMatteReady}
+          onPrepareCameraBackground={props.onPrepareCameraBackground}
+          onCancelCameraBackground={props.onCancelCameraBackground}
           screenAspectRatio={props.screenAspectRatio}
           screenAspectEnabled={props.screenAspectEnabled}
           cameraShape={props.cameraShape}
@@ -151,6 +179,11 @@ export function EditorToolPanel(props: {
           cameraSize={props.cameraSize}
           onLayoutModeChange={props.onLayoutModeChange}
           onScreenScaleChange={props.onScreenScaleChange}
+          onScreenCropChange={props.onScreenCropChange}
+          onApplyLayoutToClips={props.onApplyLayoutToClips}
+          onClearClipLayout={props.onClearClipLayout}
+          onApplyCameraStyleToClips={props.onApplyCameraStyleToClips}
+          onClearClipCameraStyle={props.onClearClipCameraStyle}
           onScreenAspectRatioChange={props.onScreenAspectRatioChange}
           onCameraShapeChange={props.onCameraShapeChange}
           onCameraBorderStyleChange={props.onCameraBorderStyleChange}
@@ -166,6 +199,8 @@ export function EditorToolPanel(props: {
           masterVolume={props.masterVolume}
           audioSources={props.audioSources}
           audioLevels={props.audioLevels}
+          audioCleanup={props.audioCleanup}
+          onSetAudioCleanup={props.onSetAudioCleanup}
           onMasterVolumeChange={props.onMasterVolumeChange}
           onAddBackgroundMusic={props.onAddBackgroundMusic}
           onSelectItem={props.onSelectItem}
@@ -198,8 +233,12 @@ export function EditorToolPanel(props: {
           videoClips={props.videoClips}
           transitions={props.transitions}
           selectedTransitionId={props.selectedTransitionId}
+          selectedSegmentId={props.selectedSegmentId}
+          edgeTransitions={props.edgeTransitions}
           onSetTransition={props.onSetTransition}
           onRemoveTransition={props.onRemoveTransition}
+          onSetEdgeTransition={props.onSetEdgeTransition}
+          onRemoveEdgeTransition={props.onRemoveEdgeTransition}
         />
       ) : null}
 
@@ -207,6 +246,8 @@ export function EditorToolPanel(props: {
         <AssistantPanel
           projectId={props.assistantProjectId}
           providerKeys={props.providerKeys}
+          provider={props.assistantProvider}
+          onProviderChange={props.onAssistantProviderChange}
           messages={props.assistantMessages}
           sending={props.assistantSending}
           statusMessage={props.assistantStatusMessage}

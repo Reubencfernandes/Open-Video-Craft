@@ -15,18 +15,40 @@ import {
   startProjectAnalysis
 } from "../main/editor-analysis";
 import { getEditorDuration } from "../shared/editor-domain";
+import { generateTranscriptCallouts } from "../shared/editor-domain/transcript-callouts";
+import { reelDuration, selectReelHighlights } from "../shared/editor-domain/reel-highlights";
+import { createReelProject, reelExportResolution } from "../main/reel-project";
+import { insertBrollCutaways, startBrollGeneration, getBrollGenerationJob, cancelBrollGenerationJob } from "../main/broll-import";
+import { imageGenerationModel } from "../shared/image-model";
+import { ProjectStore } from "../main/project-store";
+import { getProductVersion } from "../main/app-version";
 import type { EditorEditOperation } from "../shared/editor-domain";
 import { operationSchema as sharedOperationSchema } from "../shared/editor-domain/operation-schema";
 import { listCatalogProjects, resolveCatalogProject } from "./project-catalog";
+import { queryTranscriptExcerpts } from "./transcript-excerpt";
+import { querySilenceRanges } from "./silence-ranges";
 
 const { version: serverVersion } = require("../../package.json") as { version: string };
 const configuredUserDataPath = readArgument("--user-data") ?? process.env.OVC_USER_DATA;
 if (!configuredUserDataPath) throw new Error("Open Video Craft MCP requires --user-data <directory>.");
 const userDataPath: string = configuredUserDataPath;
 
+// A Claude Max chat starts this server with a single project bound in the
+// environment. This is enforced here, not only in the prompt, so a prompt
+// injection cannot switch to another local project.
+const scopedProjectId = process.env.OVC_MCP_PROJECT_ID;
+
+function assertScopedProject(projectId: string | undefined): string | undefined {
+  if (scopedProjectId === undefined) return projectId;
+  if (projectId !== undefined && projectId !== scopedProjectId) {
+    throw new Error("This assistant session is scoped to one project.");
+  }
+  return scopedProjectId;
+}
+
 const server = new McpServer(
   { name: "open-video-craft", version: serverVersion },
-  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
+  { instructions: "Inspect the project and run local analysis before making content-aware edits. Apply only the action categories explicitly requested by the user; never add generic cleanup, zoom, speed, captions, audio changes, or transitions unless requested. Read transcripts only through query_analysis_transcript and non-speech gaps only through query_analysis_silences; get_analysis returns a large blob for status and fingerprint. Speed effects apply to video clips only, never to music on an audio lane. For a constant YouTube-safe output level across all video clips, call set_youtube_volume; it normalizes the final mix to -14 LUFS and -1 dBTP by default. For music requests, use generate_music with engine claude-local, which renders locally without an API key. For topic callouts, use bounded transcript excerpts to choose timestamps and call set_text_overlay with title and box style. For audio fade requests, use set_audio with optional fadeIn/fadeOut seconds (0–10) on the audio item; fades are supported. For speech noise or wind, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100; the effect is a speech-preserving local filter applied in preview and export. Pass the current revision and one coherent plan. Preserve everything outside the user's stated intent." }
 );
 
 const projectIdSchema = z.string().min(1).max(128).optional().describe("Project ID. Omit to use the open or most recent project.");
@@ -39,13 +61,13 @@ server.registerResource("project-timeline", new ResourceTemplate("ovc://projects
   title: "Open Video Craft timeline", mimeType: "application/json"
 }, async (uri, variables) => ({ contents: [{
   uri: uri.href, mimeType: "application/json",
-  text: JSON.stringify(await inspectPayload(String(variables.projectId)), null, 2)
+  text: JSON.stringify(await inspectPayload(assertScopedProject(String(variables.projectId))), null, 2)
 }] }));
 
 server.registerResource("project-analysis", new ResourceTemplate("ovc://projects/{projectId}/analysis", { list: undefined }), {
   title: "Open Video Craft analysis", mimeType: "application/json"
 }, async (uri, variables) => {
-  const project = await resolveCatalogProject(userDataPath, String(variables.projectId));
+  const project = await resolveCatalogProject(userDataPath, assertScopedProject(String(variables.projectId)));
   const analysis = await readCachedAnalysis(project.rootPath);
   return { contents: [{
     uri: uri.href,
@@ -57,12 +79,23 @@ server.registerResource("project-analysis", new ResourceTemplate("ovc://projects
 server.registerResource("analysis-contact-sheet", new ResourceTemplate("ovc://projects/{projectId}/analysis/contact-sheet/{page}", { list: undefined }), {
   title: "Open Video Craft analysis contact sheet", mimeType: "image/jpeg"
 }, async (uri, variables) => {
-  const project = await resolveCatalogProject(userDataPath, String(variables.projectId));
+  const project = await resolveCatalogProject(userDataPath, assertScopedProject(String(variables.projectId)));
   const page = Number(variables.page);
   if (!Number.isInteger(page) || page < 0) throw new Error("Invalid contact-sheet page.");
   const data = await readContactSheet(project.rootPath, page);
   return { contents: [{ uri: uri.href, mimeType: "image/jpeg", blob: data.toString("base64") }] };
 });
+
+
+/**
+ * Store used to create derived projects (reels). It only needs to create a
+ * folder and read it back, so one instance is enough for the whole session.
+ */
+let reelProjectStore: ProjectStore | null = null;
+function getMcpProjectStore(): ProjectStore {
+  reelProjectStore ??= new ProjectStore({ appVersion: getProductVersion() });
+  return reelProjectStore;
+}
 
 server.registerTool("list_projects", {
   title: "List Open Video Craft projects",
@@ -74,7 +107,7 @@ server.registerTool("inspect_project", {
   title: "Inspect video project",
   description: "Read the complete saved editor state, media inventory, revision, and export capabilities.",
   inputSchema: { projectId: projectIdSchema }, annotations: { readOnlyHint: true, destructiveHint: false }
-}, async ({ projectId }) => success(await inspectPayload(projectId)));
+}, async ({ projectId }) => success(await inspectPayload(assertScopedProject(projectId))));
 
 server.registerTool("start_analysis", {
   title: "Analyze video locally",
@@ -83,16 +116,16 @@ server.registerTool("start_analysis", {
   annotations: { readOnlyHint: true, destructiveHint: false }
 }, async ({ projectId, thumbnailIntervalSeconds }) => {
   try {
-    const project = await resolveCatalogProject(userDataPath, projectId);
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const editor = await readEditorDocument(project.rootPath);
-    const job = await startProjectAnalysis({ rootPath: project.rootPath, project: project.project, editor, thumbnailIntervalSeconds });
-    return success(job as unknown as Record<string, unknown>);
+    const job = await startProjectAnalysis({ rootPath: project.rootPath, project: project.project, editor, userDataPath, thumbnailIntervalSeconds });
+    return success(toRecord(job));
   } catch (error) { return failure(error); }
 });
 
 server.registerTool("get_analysis", {
   title: "Get video analysis",
-  description: "Poll a background analysis job or return the latest cached analysis for a project.",
+  description: "Poll a background analysis job or return the full cached analysis. For reading transcript text, use query_analysis_transcript instead: this tool can exceed the assistant's context limit.",
   inputSchema: { projectId: projectIdSchema, jobId: z.string().optional() },
   annotations: { readOnlyHint: true, destructiveHint: false }
 }, async ({ projectId, jobId }) => {
@@ -100,11 +133,291 @@ server.registerTool("get_analysis", {
     if (jobId) {
       const job = getProjectAnalysisJob(jobId);
       if (!job) throw new Error(`Unknown analysis job "${jobId}".`);
-      return success(job as unknown as Record<string, unknown>);
+      const scopedId = assertScopedProject(projectId);
+      if (scopedId !== undefined && job.projectId !== scopedId) {
+        throw new Error("This analysis job belongs to a different project.");
+      }
+      return success(toRecord(job));
     }
-    const project = await resolveCatalogProject(userDataPath, projectId);
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const result = await readCachedAnalysis(project.rootPath);
-    return success((result ?? { status: "not-started" }) as unknown as Record<string, unknown>);
+    return success(toRecord(result ?? { status: "not-started" }));
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("query_analysis_transcript", {
+  title: "Query transcript excerpts",
+  description: "Read a small, bounded set of timestamped transcript excerpts. Use this instead of get_analysis when reading transcript text; omit query to sample the whole video, or pass keywords to find relevant moments.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    jobId: z.string().optional(),
+    query: z.string().max(200).optional().describe("Keywords that must all appear in the excerpt. Omit to sample across the timeline."),
+    limit: z.number().int().min(1).max(40).optional().describe("Maximum number of excerpts, at most 40."),
+    startSeconds: z.number().finite().min(0).optional(),
+    endSeconds: z.number().finite().min(0).optional()
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false }
+}, async ({ projectId, jobId, query, limit, startSeconds, endSeconds }) => {
+  try {
+    const analysis = await loadAnalysisResult(projectId, jobId);
+    return success(toRecord(queryTranscriptExcerpts({ analysis, query, limit, startSeconds, endSeconds })));
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("query_analysis_silences", {
+  title: "Query silence ranges",
+  description: "Read bounded timestamped non-speech gaps derived from the local transcript. Use the clip's timeline window from inspect_project. Use this instead of get_analysis when choosing speed-up ranges; never speed a range that overlaps speech.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    jobId: z.string().optional(),
+    startSeconds: z.number().finite().min(0).optional().describe("Clip start on the project timeline."),
+    endSeconds: z.number().finite().min(0).optional().describe("Clip end on the project timeline."),
+    minDurationSeconds: z.number().finite().min(0).max(60).optional(),
+    limit: z.number().int().min(1).max(40).optional().describe("Maximum number of ranges, at most 40.")
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false }
+}, async ({ projectId, jobId, startSeconds, endSeconds, minDurationSeconds, limit }) => {
+  try {
+    const analysis = await loadAnalysisResult(projectId, jobId);
+    return success(toRecord(querySilenceRanges({ analysis, startSeconds, endSeconds, minDurationSeconds, limit })));
+  } catch (error) { return failure(error); }
+});
+
+async function loadAnalysisResult(projectId: string | undefined, jobId: string | undefined): Promise<unknown> {
+  if (jobId) {
+    const job = getProjectAnalysisJob(jobId);
+    if (!job) throw new Error(`Unknown analysis job "${jobId}".`);
+    const scopedId = assertScopedProject(projectId);
+    if (scopedId !== undefined && job.projectId !== scopedId) {
+      throw new Error("This analysis job belongs to a different project.");
+    }
+    return job.result ?? { status: job.status };
+  }
+  const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+  return await readCachedAnalysis(project.rootPath) ?? { status: "not-started" };
+}
+
+server.registerTool("create_reel", {
+  title: "Create vertical highlight reel",
+  description: "Build a new vertical 9:16 reel project from the best spoken moments of a recording, with the subtitles kept and styled for TikTok. The original project is never modified.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    title: z.string().min(1).max(120).optional().describe("Name of the new reel project."),
+    maxDurationSeconds: z.number().min(10).max(180).optional().describe("Reel length budget; defaults to 90 seconds."),
+    maxClips: z.number().int().min(1).max(12).optional().describe("How many moments to use at most; defaults to 8."),
+    subtitleStyle: z.enum(["clean", "karaoke", "boxed", "pop"]).optional()
+      .describe("Subtitle look for the reel; defaults to karaoke.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
+}, async ({ projectId, title, maxDurationSeconds, maxClips, subtitleStyle }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const analysis = await readCachedAnalysis(project.rootPath);
+    if (!analysis) throw new Error("No cached analysis yet. Run start_analysis first.");
+    const ranges = selectReelHighlights(analysis.transcript.segments, {
+      maxDurationSeconds,
+      maxClips
+    });
+    if (ranges.length === 0) throw new Error("The transcript has no moment worth a reel yet.");
+    const document = await readEditorDocument(project.rootPath);
+    const reel = await createReelProject({
+      store: getMcpProjectStore(),
+      sourceProject: {
+        id: project.project.id,
+        name: project.project.name,
+        rootPath: project.rootPath,
+        durationMs: project.project.durationMs
+      },
+      ranges,
+      subtitles: document?.state.subtitles ?? [],
+      subtitleStyle,
+      title
+    });
+    return success({
+      sourceProjectId: project.project.id,
+      reelProjectId: reel.id,
+      reelName: reel.name,
+      rootPath: reel.rootPath,
+      resolution: reelExportResolution,
+      durationSeconds: reelDuration(ranges),
+      highlights: ranges
+    });
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("insert_transcript_callouts", {
+  title: "Insert transcript callouts",
+  description: "Generate animated informational boxes from the cached transcript at the moments they are talked about, and apply them to the text track. Use this instead of inventing callout timings by hand.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    baseRevision: z.number().int().nonnegative(),
+    userRequest: z.string().min(1).max(1_000)
+      .describe("The user's actual request, for example: add informational boxes where I explain the export settings."),
+    maxCallouts: z.number().int().min(1).max(12).optional()
+      .describe("How many boxes to create at most; defaults to 6."),
+    animation: z.enum(["fade", "pop", "slide-up"]).optional()
+      .describe("Entrance animation; defaults to pop.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
+}, async ({ projectId, baseRevision, userRequest, maxCallouts, animation }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const analysis = await readCachedAnalysis(project.rootPath);
+    if (!analysis) throw new Error("No cached analysis yet. Run start_analysis first.");
+    const cues = analysis.transcript.segments.map((segment) => ({
+      start: segment.start,
+      end: segment.end,
+      text: segment.text
+    }));
+    if (cues.length === 0) throw new Error("The analysis has no transcript, so there is nothing to explain.");
+    const overlays = generateTranscriptCallouts(cues, {
+      maxCallouts,
+      animation,
+      durationSeconds: analysis.timelineDurationSeconds
+    });
+    if (overlays.length === 0) throw new Error("The transcript has no informative moment worth a callout.");
+    const operations = overlays.map((overlay) => ({ type: "set_text_overlay" as const, overlay }));
+    const editingBasis = { mode: "analysis-guided" as const, analysisFingerprint: analysis.fingerprint };
+    await validateEditScope({
+      rootPath: project.rootPath,
+      userRequest,
+      requestedActions: ["text"],
+      editingBasis,
+      operations
+    });
+    const result = await applyAgentEdit({
+      rootPath: project.rootPath,
+      baseRevision,
+      summary: `Added ${overlays.length} transcript callout${overlays.length === 1 ? "" : "s"}.`,
+      operations
+    });
+    return success({
+      projectId: project.project.id,
+      revision: result.document.revision,
+      editId: result.editId,
+      calloutCount: overlays.length,
+      callouts: overlays.map((overlay) => ({ id: overlay.id, start: overlay.start, end: overlay.end, title: overlay.title })),
+      editingBasis
+    });
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("insert_broll_cutaways", {
+  title: "Insert B-roll cutaways",
+  description: "Insert image files as cutaways where the owner talks about them: the recording is split around each moment and the image takes its place. Images are copied into the project and the source file is never modified. Pass imagePaths for pictures that already exist. To generate the pictures locally instead, pass generate: the call returns a job id immediately, so poll it with get_broll_generation until it completes.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    baseRevision: z.number().int().nonnegative(),
+    imagePaths: z.array(z.string().min(3).max(1024)).min(1).max(12).optional()
+      .describe("Absolute paths of the image files to use."),
+    generate: z.object({
+      prompts: z.array(z.string().min(3).max(300)).min(1).max(6)
+        .describe("One English description per image, for example: a clean desk with a laptop."),
+      model: z.string().min(3).max(300).optional()
+        .describe("Local model directory or repository id; defaults to the app's SD-Turbo asset.")
+    }).optional()
+      .describe("Generate the images locally on this Mac; returns a job id instead of waiting."),
+    maxCutaways: z.number().int().min(1).max(12).optional()
+      .describe("How many cutaways to create at most; defaults to 6."),
+    summary: z.string().min(1).max(500).optional()
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
+}, async ({ projectId, baseRevision, imagePaths, generate, maxCutaways, summary }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const analysis = await readCachedAnalysis(project.rootPath);
+    const moments = analysis
+      ? analysis.transcript.segments.map((segment) => ({
+          start: segment.start,
+          end: segment.end,
+          text: segment.text
+        }))
+      : undefined;
+    const providedPaths = imagePaths ?? [];
+    if (generate === undefined && providedPaths.length === 0) {
+      throw new Error("Pass imagePaths with existing pictures, or generate with image descriptions.");
+    }
+    if (generate === undefined) {
+      const result = await insertBrollCutaways({
+        rootPath: project.rootPath,
+        baseRevision,
+        imagePaths: providedPaths,
+        moments,
+        maxCutaways,
+        summary
+      });
+      return success({
+        projectId: project.project.id,
+        revision: result.revision,
+        importedCount: result.importedCount,
+        cutaways: result.cutaways
+      });
+    }
+    // Local diffusion takes minutes: return a job so the chat keeps answering.
+    const job = await startBrollGeneration({
+      rootPath: project.rootPath,
+      baseRevision,
+      projectId: project.project.id,
+      imagePaths: providedPaths,
+      moments,
+      maxCutaways,
+      summary,
+      generate: {
+        prompts: generate.prompts,
+        model: generate.model ?? imageGenerationModel.pipelineId,
+        outputDirectory: resolveContainedProjectPath(project.rootPath, ".ovc/broll")
+      }
+    });
+    return success(toRecord(job));
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("get_broll_generation", {
+  title: "Check B-roll generation",
+  description: "Poll a job started by insert_broll_cutaways with generate. It returns progress, then the new revision and the placed cutaways; pass cancel: true to stop it. Poll instead of waiting, and never restart a generation just because it is still running.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    jobId: z.string().min(1).max(128).describe("Job id returned by insert_broll_cutaways."),
+    cancel: z.boolean().optional().describe("Stop the job and keep the project unchanged.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
+}, async ({ projectId, jobId, cancel }) => {
+  try {
+    const job = cancel === true ? cancelBrollGenerationJob(jobId) : getBrollGenerationJob(jobId);
+    if (!job) throw new Error(`Unknown b-roll job "${jobId}".`);
+    const scopedId = assertScopedProject(projectId);
+    if (scopedId !== undefined && job.projectId !== scopedId) {
+      throw new Error("This b-roll job belongs to a different project.");
+    }
+    return success(toRecord(job));
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("set_youtube_volume", {
+  title: "Normalize volume for YouTube",
+  description: "Set a constant YouTube-safe loudness ceiling for exported audio (-14 LUFS, -1 dBTP by default), applied to the final mix so every video clip stays at the same level and YouTube does not lower it.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    enabled: z.boolean().describe("Enable or disable YouTube loudness normalization."),
+    targetLufs: z.number().min(-24).max(-9).optional().describe("Integrated loudness target; default -14 LUFS."),
+    truePeakDb: z.number().min(-6).max(0).optional().describe("True-peak ceiling; default -1 dBTP.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true }
+}, async ({ projectId, enabled, targetLufs, truePeakDb }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const document = await readEditorDocument(project.rootPath);
+    if (!document) throw new Error("The project has no saved editor state.");
+    const operation = sharedOperationSchema.parse({
+      type: "set_youtube_volume", enabled, targetLufs, truePeakDb
+    });
+    const result = await applyAgentEdit({
+      rootPath: project.rootPath,
+      baseRevision: document.revision,
+      summary: enabled ? "Enable YouTube-safe volume normalization." : "Disable YouTube-safe volume normalization.",
+      operations: [operation]
+    });
+    return success(toRecord(result));
   } catch (error) { return failure(error); }
 });
 
@@ -147,12 +460,13 @@ server.registerTool("apply_edit_plan", {
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, async ({ projectId, baseRevision, userRequest, requestedActions, editingBasis, summary, operations }) => {
   try {
-    const project = await resolveCatalogProject(userDataPath, projectId);
-    const typedOperations = operations as EditorEditOperation[];
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const typedOperations: EditorEditOperation[] = operationSchema.array().parse(operations);
+    const typedActions: EditAction[] = editActionSchema.array().parse(requestedActions);
     await validateEditScope({
       rootPath: project.rootPath,
       userRequest,
-      requestedActions: requestedActions as EditAction[],
+      requestedActions: typedActions,
       editingBasis,
       operations: typedOperations
     });
@@ -183,7 +497,7 @@ server.registerTool("undo_agent_edit", {
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
 }, async ({ projectId, baseRevision, editId }) => {
   try {
-    const project = await resolveCatalogProject(userDataPath, projectId);
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const document = await undoAgentEdit({ rootPath: project.rootPath, baseRevision, editId });
     return success({ projectId: project.project.id, revision: document.revision, undoneEditId: editId });
   } catch (error) { return failure(error); }
@@ -196,13 +510,13 @@ server.registerTool("export_project", {
     projectId: projectIdSchema,
     expectedRevision: z.number().int().nonnegative(),
     format: z.enum(["mp4", "webm", "mov"]).default("mp4"),
-    resolution: z.enum(["source", "720p", "1080p", "1440p"]).default("1080p"),
+    resolution: z.enum(["source", "720p", "1080p", "1440p", "vertical"]).default("1080p"),
     subtitleMode: z.enum(["burn-in", "sidecar", "none"]).default("burn-in")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
 }, async ({ projectId, expectedRevision, format, resolution, subtitleMode }) => {
   try {
-    const record = await resolveCatalogProject(userDataPath, projectId);
+    const record = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
     const document = await readEditorDocument(record.rootPath);
     if (!document) throw new Error("The project has no saved editor timeline.");
     if (document.revision !== expectedRevision) throw new Error(`Editor revision changed from ${expectedRevision} to ${document.revision}. Inspect before exporting.`);
@@ -219,7 +533,8 @@ server.registerTool("export_project", {
 });
 
 async function projectListPayload() {
-  const projects = await listCatalogProjects(userDataPath);
+  const projects = (await listCatalogProjects(userDataPath))
+    .filter(({ project }) => scopedProjectId === undefined || project.id === scopedProjectId);
   return { projects: projects.map(({ project, active }) => ({
     id: project.id, name: project.name, status: project.status, durationMs: project.durationMs,
     updatedAt: project.updatedAt, active
@@ -298,6 +613,8 @@ function operationAction(operation: EditorEditOperation): EditAction {
     case "sequence_clips":
       return "restructure";
     case "set_audio":
+    case "set_youtube_volume":
+    case "set_audio_cleanup":
     case "set_audio_lane":
     case "set_master_volume":
     case "set_background_audio":
@@ -335,6 +652,13 @@ function operationAction(operation: EditorEditOperation): EditAction {
     case "set_export_range":
       return "export_range";
   }
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("Expected an object for MCP structured content.");
+  }
+  return Object.fromEntries(Object.entries(value));
 }
 
 function success(value: Record<string, unknown>) {

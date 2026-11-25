@@ -1,0 +1,17 @@
+{
+  "scenario": "normal startup without --bench",
+  "durationSecondsPerSide": 3,
+  "before": {
+    "code": 0,
+    "signal": null,
+    "stdout": "[auto-update] Skipping update checks in development.\n",
+    "stderr": ""
+  },
+  "after": {
+    "code": 0,
+    "signal": null,
+    "stdout": "[auto-update] Skipping update checks in development.\n",
+    "stderr": ""
+  },
+  "identical": true
+}

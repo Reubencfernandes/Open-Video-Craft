@@ -11,6 +11,11 @@ import { isMacAppStoreBuild } from "./security-scoped-resources";
 const STARTUP_UPDATE_CHECK_DELAY_MS = 5_000;
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1_000;
 
+// This fork is private and publishes no releases, so its GitHub feed returns
+// 404. Keep update checks off until the owner publishes a real signed release
+// feed; the local app must not surface a failed auto-update modal.
+const UPDATE_CHECKS_ENABLED = false;
+
 let updateCheckDelay: NodeJS.Timeout | null = null;
 let updateCheckInterval: NodeJS.Timeout | null = null;
 let updateCheckRunning = false;
@@ -49,6 +54,16 @@ export function startAutoUpdates(): void {
   configureAutoUpdater();
   registerAutoUpdateEvents();
 
+  if (!UPDATE_CHECKS_ENABLED) {
+    setUpdateStatus({
+      state: "disabled",
+      message: "Updates are unavailable in this local build.",
+      isPackaged: app.isPackaged
+    });
+    updateLogger.info("Skipping update checks: no published fork release feed.");
+    return;
+  }
+
   if (!app.isPackaged) {
     setUpdateStatus({
       state: "disabled",
@@ -78,6 +93,14 @@ export function startAutoUpdates(): void {
 
 export async function checkForAppUpdates(reason = "manual"): Promise<boolean> {
   if (isMacAppStoreBuild()) return false;
+  if (!UPDATE_CHECKS_ENABLED) {
+    setUpdateStatus({
+      state: "disabled",
+      message: "Updates are unavailable in this local build.",
+      isPackaged: app.isPackaged
+    });
+    return false;
+  }
   if (!app.isPackaged) {
     setUpdateStatus({
       state: "disabled",
@@ -134,8 +157,10 @@ export function installDownloadedUpdate(): boolean {
 
 function configureAutoUpdater(): void {
   autoUpdater.logger = updateLogger;
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  // Off until the fork publishes its own update feed: nothing is fetched or
+  // installed automatically.
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.autoRunAppAfterInstall = true;
   autoUpdater.allowPrerelease = false;
   autoUpdater.fullChangelog = false;
@@ -156,11 +181,11 @@ function registerAutoUpdateEvents(): void {
     setUpdateStatus({
       state: "available",
       latestVersion: info.version,
-      message: `Update ${info.version} is available. Downloading...`,
+      message: `Update ${info.version} is available.`,
       checkedAt: new Date().toISOString(),
       downloadProgress: null
     });
-    updateLogger.info(`Update ${info.version} is available. Downloading.`);
+    updateLogger.info(`Update ${info.version} is available. Automatic download is disabled.`);
   });
 
   autoUpdater.on("update-not-available", (info) => {

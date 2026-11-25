@@ -1,0 +1,51 @@
+objc[93214]: class `NSKVONotifying_AVCaptureScreenInput' not linked into application
+objc[93214]: class `NSKVONotifying_AVCaptureScreenInput' not linked into application
+objc[93214]: class `NSKVONotifying_AVCaptureScreenInput' not linked into application
+[AVFoundation indev @ 0x120606b40] Configuration of video device failed, falling back to default.
+[in#0 @ 0x122804bc0] Selected pixel format (yuv420p) is not supported by the input device.
+[in#0 @ 0x122804bc0] Supported pixel formats:
+[in#0 @ 0x122804bc0]   uyvy422
+[in#0 @ 0x122804bc0]   yuyv422
+[in#0 @ 0x122804bc0]   nv12
+[in#0 @ 0x122804bc0]   0rgb
+[in#0 @ 0x122804bc0]   bgr0
+[in#0 @ 0x122804bc0] Overriding selected pixel format to use uyvy422 instead.
+[in#0/avfoundation @ 0x122804bc0] Stream #0: not enough frames to estimate rate; consider increasing probesize
+Input #0, avfoundation, from 'Capture screen 0':
+  Duration: N/A, start: 69635.313667, bitrate: N/A
+  Stream #0:0: Video: rawvideo (UYVY / 0x59565955), uyvy422, 3440x1440, 1000k tbr, 1000k tbn, start 69635.313667
+Stream mapping:
+  Stream #0:0 -> #0:0 (rawvideo (native) -> h264 (libx264))
+Press [q] to stop, [?] for help
+[libx264 @ 0x12290c220] MB rate (19350000000) > level limit (16711680)
+[libx264 @ 0x12290c220] using cpu capabilities: ARMv8 NEON DotProd I8MM
+[libx264 @ 0x12290c220] profile High, level 6.2, 4:2:0, 8-bit
+[libx264 @ 0x12290c220] 264 - core 165 - H.264/MPEG-4 AVC codec - Copyleft 2003-2025 - http://www.videolan.org/x264.html - options: cabac=1 ref=3 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=7 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=16 chroma_me=1 trellis=1 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=27 lookahead_threads=4 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=40 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
+Output #0, mp4, to 'docs/baseline/missing-checks/raw/b2o/screen.mp4':
+  Metadata:
+    encoder         : Lavf62.12.102
+  Stream #0:0: Video: h264 (avc1 / 0x31637661), yuv420p(tv, progressive), 3440x1440, q=2-31, 1000k fps, 1000k tbn
+    Metadata:
+      encoder         : Lavc62.28.102 libx264
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.50    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:01.00    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:01.50    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:02.00    frame=    5 fps=2.0 q=29.0 size=       0KiB time=00:00:00.06 bitrate=   5.8kbits/s speed=0.0266x elapsed=0:00:02.50    frame=   20 fps=6.7 q=29.0 size=     256KiB time=00:00:00.56 bitrate=3701.5kbits/s speed=0.188x elapsed=0:00:03.00    frame=   35 fps= 10 q=29.0 size=     256KiB time=00:00:01.06 bitrate=1966.4kbits/s speed=0.304x elapsed=0:00:03.50    frame=   50 fps= 12 q=29.0 size=     256KiB time=00:00:01.56 bitrate=1338.9kbits/s speed=0.391x elapsed=0:00:04.00    frame=   65 fps= 14 q=29.0 size=     256KiB time=00:00:02.06 bitrate=1014.9kbits/s speed=0.458x elapsed=0:00:04.50    frame=  105 fps= 21 q=29.0 size=     256KiB time=00:00:03.40 bitrate= 616.9kbits/s speed=0.679x elapsed=0:00:05.00    [out#0/mp4 @ 0x6000023fc780] video:305KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 1.103595%
+frame=  150 fps= 29 q=-1.0 Lsize=     308KiB time=00:00:04.90 bitrate= 515.1kbits/s speed=0.963x elapsed=0:00:05.08    
+[libx264 @ 0x12290c220] frame I:1     Avg QP:18.73  size:207707
+[libx264 @ 0x12290c220] frame P:40    Avg QP:19.21  size:  1816
+[libx264 @ 0x12290c220] frame B:109   Avg QP:15.52  size:   285
+[libx264 @ 0x12290c220] consecutive B-frames:  2.0%  1.3%  6.0% 90.7%
+[libx264 @ 0x12290c220] mb I  I16..4: 24.7% 56.1% 19.2%
+[libx264 @ 0x12290c220] mb P  I16..4:  0.2%  0.2%  0.1%  P16..4:  0.3%  0.0%  0.0%  0.0%  0.0%    skip:99.1%
+[libx264 @ 0x12290c220] mb B  I16..4:  0.0%  0.0%  0.0%  B16..8:  0.6%  0.0%  0.0%  direct: 0.0%  skip:99.3%  L0:64.9% L1:32.6% BI: 2.5%
+[libx264 @ 0x12290c220] 8x8 transform intra:52.3% inter:43.8%
+[libx264 @ 0x12290c220] coded y,uvDC,uvAC intra: 13.7% 5.0% 2.2% inter: 0.0% 0.0% 0.0%
+[libx264 @ 0x12290c220] i16 v,h,dc,p: 48% 49%  1%  2%
+[libx264 @ 0x12290c220] i8 v,h,dc,ddl,ddr,vr,hd,vl,hu: 64%  6% 29%  0%  0%  0%  0%  0%  0%
+[libx264 @ 0x12290c220] i4 v,h,dc,ddl,ddr,vr,hd,vl,hu: 46% 22% 14%  1%  3%  3%  3%  3%  4%
+[libx264 @ 0x12290c220] i8c dc,h,v,p: 88%  9%  2%  0%
+[libx264 @ 0x12290c220] Weighted P-Frames: Y:0.0% UV:0.0%
+[libx264 @ 0x12290c220] ref P L0: 80.3% 10.4%  7.4%  2.0%
+[libx264 @ 0x12290c220] ref B L0: 30.4% 69.3%  0.2%
+[libx264 @ 0x12290c220] ref B L1: 98.1%  1.9%
+[libx264 @ 0x12290c220] kb/s:498.23

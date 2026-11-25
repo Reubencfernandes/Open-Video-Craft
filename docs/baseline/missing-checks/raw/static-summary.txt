@@ -1,0 +1,17 @@
+npm-ci exit=0 seconds=12
+electron-install exit=0
+verify-ffmpeg exit=0 seconds=0
+typecheck exit=0 seconds=3
+vitest-1 exit=0 seconds=3
+vitest-2 exit=0 seconds=2
+vitest-3 exit=0 seconds=2
+build exit=0 seconds=2
+test-mcp exit=0 seconds=2
+audit-runtime exit=0 seconds=1
+audit-full exit=1
+full-audit={"info":0,"low":0,"moderate":7,"high":17,"critical":2,"total":26}
+bench-startup exit=0 seconds=51
+diff-check exit=0
+original-manifest exit=0
+post-manifest exit=0
+audit-runtime exit=0

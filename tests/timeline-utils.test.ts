@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   calculateTimelineDuration,
   findSplittableTimelineSegment,
+  createTimelineClipStyle,
+  getSnappedInsertStart,
+  getContextMenuSplitSelectionIds,
   syncTimelineSegments,
   resolveAudioLane,
   trimTimelineSegment
@@ -17,6 +20,19 @@ const videoSegments: TimelineSegment[] = [
 
 describe("timeline trim and split geometry", () => {
   const item: EditorMediaItem = { id: "video-a", name: "A", url: "a.mp4", kind: "video", origin: "imported", track: "imported", duration: 60 };
+
+  it("snaps a newly inserted video clip to the end of the last clip", () => {
+    const existing: TimelineSegment[] = [
+      { id: "first", itemId: "video-a", track: "video", lane: 0, start: 0, end: 10, sourceStart: 0 }
+    ];
+    expect(getSnappedInsertStart(existing, "video", 5, 5, 20)).toBe(10);
+  });
+
+  it("renders a near-zero clip with a pixel-sized minimum width", () => {
+    const style = createTimelineClipStyle(0, 0.01, 1_000);
+    expect(style.width).toBe("0.001%");
+    expect(style.minWidth).toBe("2px");
+  });
 
   it("preserves deliberate short trims when media metadata resynchronizes", () => {
     const trimmed = trimTimelineSegment([videoSegments[0]], "first", "end", 0.5, new Map([[item.id, 60]]));
@@ -74,6 +90,24 @@ describe("timeline trim and split geometry", () => {
       new Map([["video-b", 12]])
     );
     expect(result.find((segment) => segment.id === "second")?.end).toBe(15);
+  });
+
+  it("trims a clip down to near zero duration", () => {
+    const audio: TimelineSegment = {
+      id: "music", itemId: "music", track: "audio", lane: 0, start: 0, end: 10, sourceStart: 0
+    };
+    const result = trimTimelineSegment([audio], "music", "end", 0.01, new Map([["music", 10]]));
+    expect(result[0]?.end).toBeCloseTo(0.01, 2);
+  });
+
+  it("keeps a near-zero trim when media metadata resynchronizes", () => {
+    const audio: TimelineSegment = {
+      id: "music", itemId: "music", track: "audio", lane: 0, start: 0, end: 10, sourceStart: 0
+    };
+    const trimmed = trimTimelineSegment([audio], "music", "end", 0.01, new Map([["music", 10]]));
+    const media: EditorMediaItem = { ...item, id: "music", kind: "audio", name: "Music" };
+    const synced = syncTimelineSegments(trimmed, [media], new Map([["music", 10]]), new Set());
+    expect(synced[0]?.end).toBeCloseTo(0.01, 2);
   });
 
   it("splits the clip under the playhead instead of a stale selected clip", () => {
@@ -176,5 +210,38 @@ describe("timeline composition duration", () => {
       [],
       68
     )).toBe(68);
+  });
+});
+
+describe("splitting from the timeline context menu", () => {
+  const segments: TimelineSegment[] = [
+    { id: "video-1", itemId: "video-a", track: "video", lane: 0, start: 0, end: 10, sourceStart: 0 },
+    { id: "audio-1", itemId: "audio-a", track: "audio", lane: 0, start: 0, end: 10, sourceStart: 0 },
+    { id: "video-2", itemId: "video-b", track: "video", lane: 0, start: 20, end: 30, sourceStart: 0 },
+    { id: "other", itemId: "video-c", track: "video", lane: 1, start: 0, end: 10, sourceStart: 0 }
+  ];
+  const menu = (segmentId: string | null, time: number) => ({ x: 0, y: 0, time, segmentId });
+
+  it("cuts every selected clip, not only the one that was right-clicked", () => {
+    const ids = getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1", "video-2"], menu("video-1", 4));
+    // video-2 does not span the cut time, so it is left out: it cannot be split there.
+    expect(ids).toEqual(["video-1", "audio-1"]);
+  });
+
+  it("leaves the unselected clips alone, even when they sit under the cut", () => {
+    const ids = getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1"], menu("audio-1", 4));
+    expect(ids).not.toContain("other");
+  });
+
+  it("falls back to the clicked clip when it is not part of the selection", () => {
+    expect(getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1"], menu("video-2", 25))).toBeNull();
+  });
+
+  it("falls back to the clicked clip when only one clip is selected", () => {
+    expect(getContextMenuSplitSelectionIds(segments, ["video-1"], menu("video-1", 4))).toBeNull();
+  });
+
+  it("falls back when the menu was opened on empty space", () => {
+    expect(getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1"], menu(null, 4))).toBeNull();
   });
 });

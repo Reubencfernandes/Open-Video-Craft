@@ -15,7 +15,7 @@
  *      ExportDialog, notifications).
  *
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ProjectView
 } from "../shared/types";
@@ -31,30 +31,61 @@ import { ToolRail } from "./editor/ToolRail";
 import { WorkspaceResizeHandle } from "./editor/WorkspaceResizeHandle";
 import { getCameraFrameFromPreset } from "./editor/layout-geometry";
 import { MediaPanel } from "./editor/panels/MediaPanel";
+import { applyCleanupPreviewUrls } from "./editor/cleanup-preview";
 import { useEditorDerivedData } from "./editor/useEditorDerivedData";
+import {
+  consumeAutoAnalyzeRequest,
+  shouldStartAutoTranscription
+} from "./editor/auto-transcription";
+import { generateAutoZoomEffects } from "../shared/editor-domain/auto-zoom";
+import { emptyScreenCrop } from "../shared/editor-domain/screen-crop";
+import { timelineCutTimes } from "./editor/timeline-utils";
+import { useCameraBackground } from "./editor/useCameraBackground";
+import type { ScreenCrop } from "../shared/editor-domain/types";
 import { useEditorExport } from "./editor/useEditorExport";
 import { useEditorMediaActions } from "./editor/useEditorMediaActions";
+import { useClaudeChat } from "./editor/useClaudeChat";
+import { useProjectClipRecorder } from "./editor/useProjectClipRecorder";
 import { useGeminiChat } from "./editor/useGeminiChat";
+import type { AssistantProvider } from "./editor/panels/AssistantPanel";
 import { useMusicGeneration } from "./editor/useMusicGeneration";
 import { useEditorPlayback } from "./editor/useEditorPlayback";
 import { useEditorPersistence } from "./editor/useEditorPersistence";
 import { usePreviewQuality } from "./editor/usePreviewQuality";
 import { usePreviewLayoutControls } from "./editor/usePreviewLayoutControls";
 import { useTimelineController } from "./editor/useTimelineController";
-import { useTimelineViewport } from "./editor/useTimelineViewport";
+import {
+  areTimelineSegmentsHidden,
+  resolveVisibilityToggleClipIds
+} from "./editor/useTimelineEditing";
+import {
+  getTimelineZoomAfterShortcut,
+  useTimelineViewport
+} from "./editor/useTimelineViewport";
 import { useWorkspacePanelResize } from "./editor/useWorkspacePanelResize";
 import { useAppUpdateStatus } from "./useAppUpdateStatus";
 import {
   formatSubtitleLanguage,
   whisperTranscriptionModelLabel
 } from "./editor/subtitle-transcription";
-import { canSplitTimelineSegmentAt, findSplittableTimelineSegment } from "./editor/timeline-utils";
+import {
+  canSplitTimelineSegmentAt,
+  canSplitTimelineSelectionAt,
+  getContextMenuSplitSelectionIds
+} from "./editor/timeline-utils";
 import { getLinkedRecordingAudioIdsForSelection } from "./editor/timeline-links";
+import { getTimelineClipGroupIds } from "./editor/timeline-groups";
 import { resolveTimelineClipPress } from "./editor/timeline-selection";
 import { clampNumber, createId } from "./editor/utils";
 import { getZoomPreviewTime } from "./editor/zoom-utils";
-import { sanitizeClipTransitions, validateClipTransitions } from "../shared/editor-domain";
+import {
+  sanitizeClipEdgeTransitions,
+  sanitizeClipTransitions,
+  validateClipEdgeTransitions,
+  validateClipTransitions
+} from "../shared/editor-domain";
 import type {
+  AudioCleanupState,
   PendingMediaImport,
   PendingMusicGeneration
 } from "../shared/editor-domain";
@@ -67,6 +98,7 @@ import type {
   CameraPosition,
   CameraShape,
   ClipTransition,
+  ClipEdgeTransition,
   EditorMediaItem,
   EditorTool,
   LayoutMode,
@@ -87,11 +119,26 @@ export function EditorView() {
   const [projectId, setProjectId] = useState(() =>
     new URLSearchParams(window.location.search).get("projectId")
   );
+  // A finished recording asks for one automatic transcription. Consume the
+  // flag now so a reload never runs it again over existing subtitles.
+  const [autoTranscriptionRequested] = useState(() => {
+    const consumed = consumeAutoAnalyzeRequest(window.location.search);
+    if (consumed.requested) {
+      window.history.replaceState(null, "", `${window.location.pathname}${consumed.search}`);
+    }
+    return consumed.requested;
+  });
+  const autoTranscriptionStartedRef = useRef(false);
+  const autoZoomStartedRef = useRef(false);
+  const cameraBackground = useCameraBackground(projectId);
   const [project, setProject] = useState<ProjectView | null>(null);
   // Name the user typed for a not-yet-created edit; applied when the project is
   // first saved to disk. Once a project exists, renames persist immediately.
   const [pendingProjectName, setPendingProjectName] = useState("");
   const [importedMedia, setImportedMedia] = useState<EditorMediaItem[]>([]);
+  const [cleanupPreviews, setCleanupPreviews] = useState<
+    Record<string, { key: string; url: string }>
+  >({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<MediaPanelTab>("all");
   const [activeTool, setActiveTool] = useState<EditorTool>("media");
@@ -108,6 +155,7 @@ export function EditorView() {
     y: 0,
     scale: 100
   });
+  const [screenCrop, setScreenCrop] = useState<ScreenCrop>(emptyScreenCrop);
   const [screenAspectRatio, setScreenAspectRatio] = useState<ScreenAspectRatio>("auto");
   const [screenMediaAspect, setScreenMediaAspect] = useState<number | null>(null);
   const [cameraSize, setCameraSize] = useState(24);
@@ -129,12 +177,14 @@ export function EditorView() {
   const [audioLevels, setAudioLevels] = useState<
     Record<string, { volume: number; muted: boolean }>
   >({});
+  const [audioCleanup, setAudioCleanup] = useState<AudioCleanupState>({});
   const [backgroundAudioIds, setBackgroundAudioIds] = useState<string[]>([]);
   const [zoomEffects, setZoomEffects] = useState<ZoomEffect[]>([]);
   const [selectedZoomId, setSelectedZoomId] = useState<string | null>(null);
   const [zoomPreviewTime, setZoomPreviewTime] = useState<number | null>(null);
   const [speedEffects, setSpeedEffects] = useState<SpeedEffect[]>([]);
   const [transitions, setTransitions] = useState<ClipTransition[]>([]);
+  const [edgeTransitions, setEdgeTransitions] = useState<ClipEdgeTransition[]>([]);
   const [selectedTransitionId, setSelectedTransitionId] = useState<string | null>(null);
   const [selectedSpeedId, setSelectedSpeedId] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<SubtitleSegment[]>([]);
@@ -168,6 +218,20 @@ export function EditorView() {
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const { updateStatus, installUpdate } = useAppUpdateStatus();
 
+  useEffect(() => {
+    function onZoomShortcut(event: KeyboardEvent) {
+      if (!event.ctrlKey && !event.metaKey) return;
+      const shortcut = event.key === "=" || event.key === "+" ? "in"
+        : event.key === "-" ? "out"
+          : event.key === "0" ? "fit" : null;
+      if (shortcut === null) return;
+      event.preventDefault();
+      setTimelineZoom((zoom) => getTimelineZoomAfterShortcut(zoom, shortcut));
+    }
+    window.addEventListener("keydown", onZoomShortcut);
+    return () => window.removeEventListener("keydown", onZoomShortcut);
+  }, []);
+
   const knownTimelineItemIdsRef = useRef<Set<string>>(new Set());
 
   const {
@@ -180,6 +244,7 @@ export function EditorView() {
     undoLastAgentEdit
   } = useEditorPersistence({
     activeBackgroundCategory,
+    audioCleanup,
     audioLevels,
     backgroundAudioIds,
     backgroundStyle,
@@ -208,8 +273,10 @@ export function EditorView() {
     previewQuality,
     previewZoom,
     screenAspectRatio,
+    screenCrop,
     screenPosition,
     setActiveBackgroundCategory,
+    setAudioCleanup,
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
@@ -231,6 +298,7 @@ export function EditorView() {
     setPreviewZoom,
     setProject,
     setScreenAspectRatio,
+    setScreenCrop,
     setScreenPosition,
     setSpeedEffects,
     setTransitions,
@@ -245,6 +313,8 @@ export function EditorView() {
     setZoomEffects,
     speedEffects,
     transitions,
+    setEdgeTransitions,
+    edgeTransitions,
     subtitleLanguage,
     subtitleStyle,
     subtitles,
@@ -257,6 +327,32 @@ export function EditorView() {
   });
 
   useEffect(() => {
+    if (!projectId) return;
+    let active = true;
+    for (const [itemId, settings] of Object.entries(audioCleanup)) {
+      if (!settings || settings.strength === 0) continue;
+      const mediaItem = importedMedia.find((item) => item.id === itemId);
+      if (!mediaItem) continue;
+      const key = `${settings.preset}:${settings.strength}`;
+      if (cleanupPreviews[itemId]?.key === key) continue;
+      const jobId = crypto.randomUUID();
+      void window.openVideoCraft.audio.prepareCleanup({
+        jobId, projectId, itemId, preset: settings.preset, strength: settings.strength
+      }).then((result) => {
+        if (active) setCleanupPreviews((current) => ({
+          ...current,
+          [itemId]: { key, url: result.url }
+        }));
+      }).catch(() => undefined);
+    }
+    return () => { active = false; };
+  }, [projectId, audioCleanup, cleanupPreviews, importedMedia]);
+
+  const previewImportedMedia = useMemo(
+    () => applyCleanupPreviewUrls(importedMedia, cleanupPreviews),
+    [importedMedia, cleanupPreviews]
+  );
+  useEffect(() => {
     const customBackground = customBackgroundImportId
       ? importedMedia.find((item) => item.id === customBackgroundImportId)
       : null;
@@ -268,6 +364,13 @@ export function EditorView() {
   useEffect(() => {
     setTransitions((current) => {
       const next = sanitizeClipTransitions(timelineSegments, current);
+      return next.length === current.length ? current : next;
+    });
+  }, [timelineSegments]);
+
+  useEffect(() => {
+    setEdgeTransitions((current) => {
+      const next = sanitizeClipEdgeTransitions(timelineSegments, current);
       return next.length === current.length ? current : next;
     });
   }, [timelineSegments]);
@@ -310,7 +413,6 @@ export function EditorView() {
   const {
     activeDuration,
     activeSubtitle,
-    activeVideoClip,
     allMedia,
     audioSources,
     audioTimelineClips,
@@ -319,19 +421,23 @@ export function EditorView() {
     cameraStyle,
     cameraVideoStyle,
     currentFrame,
-    isProjectCompositionSelected,
     mediaById,
     mediaDurationById,
     playheadPercent,
+    previewBaseClip,
+    previewCameraClip,
+    previewCameraItem,
     previewClassName,
     previewFrameStyle,
     previewItem,
-    projectCamera,
+    showNoCameraRecording,
     projectMedia,
     projectScreen,
     screenAspectEnabled,
     screenEditEnabled,
     screenStyle,
+    screenContentStyle,
+    cameraMaskUrl,
     selectedItem,
     selectedSubtitle,
     selectedTextOverlay,
@@ -357,10 +463,12 @@ export function EditorView() {
     currentTime,
     customBackgroundUrl,
     duration,
-    importedMedia,
+    importedMedia: previewImportedMedia,
     layoutMode,
     project,
     screenAspectRatio,
+    screenCrop,
+    cameraMaskUrl: cameraBackground.matteUrl,
     screenMediaAspect,
     screenPosition,
     selectedItemId,
@@ -378,6 +486,18 @@ export function EditorView() {
     zoomEffects,
     zoomPreviewTime
   });
+
+  const cleanupAudioUrls = useMemo(
+    () => Object.fromEntries(Object.entries(cleanupPreviews).map(([id, preview]) => [id, preview.url])),
+    [cleanupPreviews]
+  );
+  const cleanupVideoClips = useMemo(
+    () => videoTimelineClips.flatMap((clip) => {
+      const url = cleanupAudioUrls[clip.item.id];
+      return url ? [{ id: clip.id, url }] : [];
+    }),
+    [videoTimelineClips, cleanupAudioUrls]
+  );
 
   /** Creates a text overlay where the panel's text tile was dropped on the
    * timeline. Animation is opt-in: new text starts with none. */
@@ -424,6 +544,13 @@ export function EditorView() {
     setSelectedTextOverlayId((current) => current === id ? null : current);
   }
 
+  const projectRecorder = useProjectClipRecorder({
+    projectId,
+    onImported: (files) => {
+      ingestImportedFiles(files, { addToTimeline: true, timelineStart: currentTimeRef.current });
+    }
+  });
+
   const {
     audioElsRef,
     beginPlaybackInteraction,
@@ -438,17 +565,19 @@ export function EditorView() {
     syncMediaToTime,
     togglePlayback
   } = useEditorPlayback({
+    activeBaseClip: previewBaseClip,
+    activeCameraClip: previewCameraClip,
     activeDuration,
-    activeVideoClip,
     audioLevels,
+    audioCleanup,
     audioTimelineClips,
+    cleanupAudioUrls,
     currentTime,
     layoutMode,
     masterVolume,
     mediaById,
     playing,
-    previewItem,
-    projectCamera,
+    selectedTimelineSegmentId,
     setCurrentTime,
     setError,
     setPlaying,
@@ -481,6 +610,7 @@ export function EditorView() {
     zoomTimelineIn,
     zoomTimelineOut
   } = useTimelineViewport({
+    cutTimes: timelineCutTimes(timelineSegments),
     beginPlaybackInteraction,
     contentDuration: timelineDuration,
     endPlaybackInteraction,
@@ -568,15 +698,14 @@ export function EditorView() {
     void musicGeneration.generate({
       engine: request.engine,
       prompt: request.prompt,
-      lyrics: request.lyrics,
-      durationSeconds: 30,
-      inferSteps: 60,
-      guidanceScale: 15,
-      seed: null
+      lyrics: request.lyrics
     });
   }, [isEditorStateReady, pendingMusicGeneration, musicGeneration]);
 
   const geminiChat = useGeminiChat({ projectId: project?.id ?? null });
+  const claudeChat = useClaudeChat({ projectId: project?.id ?? null });
+  const [assistantProvider, setAssistantProvider] = useState<AssistantProvider>("claude-max");
+  const activeChat = assistantProvider === "claude-max" ? claudeChat : geminiChat;
 
   const {
     canExport,
@@ -647,6 +776,12 @@ export function EditorView() {
     beginZoomClipDrag,
     deleteSelectedTimelineSegment,
     deleteTimelineSegment,
+    setSelectedClipsLayout,
+    setSelectedClipsCameraStyle,
+    closeTimelineGaps,
+    toggleSelectedTimelineHidden,
+    toggleVideoLaneVisibility,
+    swapVideoChannels,
     endTimelineScrub,
     cancelTranscription,
     generateSubtitles,
@@ -663,6 +798,8 @@ export function EditorView() {
     removeSpeedEffect,
     removeZoomEffect,
     splitTimelineSegment,
+    splitSelectionAtPlayhead,
+    splitSelectedTimelineSegments,
     sttDownloadProgress,
     sttStatus,
     undoTimelineEdit,
@@ -671,6 +808,7 @@ export function EditorView() {
     updateZoomEffect
   } = useTimelineController({
     activeDuration,
+    layoutMode,
     activeTool,
     applyTimelineClipSelection,
     allMedia,
@@ -743,6 +881,61 @@ export function EditorView() {
     zoomEffects
   });
 
+  // Analyze a fresh recording once: transcribe speech into timestamped
+  // subtitles as soon as the persisted editor state is ready.
+  useEffect(() => {
+    // Without a connection the local model cannot be fetched yet; the owner
+    // starts the transcription from the Subtitles tool when it is available.
+    if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+    const shouldStart = shouldStartAutoTranscription({
+      requested: autoTranscriptionRequested,
+      editorReady: isEditorStateReady,
+      speechSourceCount: videoTimelineClips.length + audioTimelineClips.length,
+      subtitleCount: subtitles.length,
+      alreadyStarted: autoTranscriptionStartedRef.current
+    });
+    if (!shouldStart) return;
+    autoTranscriptionStartedRef.current = true;
+    generateSubtitles();
+  }, [
+    audioTimelineClips,
+    autoTranscriptionRequested,
+    generateSubtitles,
+    isEditorStateReady,
+    subtitles,
+    videoTimelineClips
+  ]);
+
+  // Turn the clicks recorded during a screen capture into editable 2x zooms on
+  // the zoom lane. Runs once, and never over zooms that already exist.
+  useEffect(() => {
+    if (!autoTranscriptionRequested || !isEditorStateReady || autoZoomStartedRef.current) return;
+    if (projectId === null || zoomEffects.length > 0) return;
+    autoZoomStartedRef.current = true;
+    void (async () => {
+      const capture = await window.openVideoCraft.capture.clicks(projectId);
+      if (capture.clicks.length === 0) return;
+      const durationSeconds = timelineDuration > 0
+        ? timelineDuration
+        : Math.max(0, (project?.durationMs ?? 0) / 1000);
+      const effects = generateAutoZoomEffects({
+        clicks: capture.clicks,
+        displays: capture.displays,
+        durationSeconds,
+        displayId: capture.displayId ?? undefined
+      });
+      if (effects.length > 0) setZoomEffects(effects);
+    })();
+  }, [
+    autoTranscriptionRequested,
+    isEditorStateReady,
+    projectId,
+    project,
+    setZoomEffects,
+    timelineDuration,
+    zoomEffects
+  ]);
+
   // The single write path for media clip selection: pointer presses, keyboard
   // activation, right-click, and trims all land here so the inspector item,
   // the other timed selections, and the marquee stay consistent.
@@ -770,6 +963,35 @@ export function EditorView() {
     timelineSegments,
     selectedTimelineSegmentIds
   );
+
+  // The context menu's Hide/Show item addresses the same clips its action does:
+  // the whole selection when the menu was opened on one of its clips, otherwise
+  // the clip under the press.
+  const contextMenuVisibilityClipIds = timelineContextMenu
+    ? resolveVisibilityToggleClipIds(
+        selectedTimelineSegmentIds,
+        timelineContextMenu.segmentId
+      )
+    : [];
+  const contextMenuClipsHidden = areTimelineSegmentsHidden(
+    timelineSegments,
+    contextMenuVisibilityClipIds
+  );
+  // Closing gaps acts on the selection when the menu was opened inside it, and
+  // on the addressed clip's whole channel otherwise.
+  const contextMenuCloseGapsIds = timelineContextMenu?.segmentId
+    ? selectedTimelineSegmentIds.includes(timelineContextMenu.segmentId)
+      ? selectedTimelineSegmentIds
+      : timelineSegments
+          .filter(
+            (segment) =>
+              segment.track === "video" &&
+              segment.hidden !== true &&
+              segment.lane ===
+                timelineSegments.find((item) => item.id === timelineContextMenu?.segmentId)?.lane
+          )
+          .map((segment) => segment.id)
+    : [];
 
   // ---------------------------------------------------------------------------
   // Render.
@@ -844,6 +1066,30 @@ export function EditorView() {
     setSelectedTransitionId(null);
   };
 
+  const setClipEdgeTransition = (input: Omit<ClipEdgeTransition, "id">) => {
+    const edgeId = `${input.segmentId}:${input.edge}:edge-transition`;
+    setEdgeTransitions((current) => {
+      const next = [
+        ...current.filter((item) =>
+          item.segmentId !== input.segmentId || item.edge !== input.edge
+        ),
+        { ...input, id: edgeId }
+      ];
+      try {
+        validateClipEdgeTransitions(timelineSegments, next);
+        setError(null);
+        return next;
+      } catch (edgeError) {
+        setError(edgeError instanceof Error ? edgeError.message : String(edgeError));
+        return current;
+      }
+    });
+  };
+
+  const removeClipEdgeTransition = (id: string) => {
+    setEdgeTransitions((current) => current.filter((item) => item.id !== id));
+  };
+
   return (
     <main className="editor-app grid h-dvh min-h-0 overflow-hidden bg-[#0b0b0d] p-0 text-[#f5f5f6]">
       <section
@@ -913,6 +1159,9 @@ export function EditorView() {
                     selectedItemId={selectedItem?.id ?? null}
                     onImport={() => void importMedia()}
                     onImportPaths={(filePaths) => void importMediaFromPaths(filePaths)}
+                    onRecordAudio={() => void (projectRecorder.kind === "audio" ? projectRecorder.stop() : projectRecorder.start("audio"))}
+                    onRecordVideo={() => void (projectRecorder.kind === "video" ? projectRecorder.stop() : projectRecorder.start("video"))}
+                    recordingKind={projectRecorder.kind}
                     onTabChange={setActivePanel}
                     onSelectItem={selectTimelineItem}
                     onItemDuration={updateMediaDuration}
@@ -923,6 +1172,11 @@ export function EditorView() {
             activeTool={activeTool}
             layoutMode={layoutMode}
             screenScale={screenPosition.scale}
+            screenCrop={screenCrop}
+            cameraBackgroundStatus={cameraBackground.status}
+            cameraMatteReady={cameraBackground.matteUrl !== null}
+            onPrepareCameraBackground={() => void cameraBackground.prepare()}
+            onCancelCameraBackground={() => void cameraBackground.cancel()}
             screenAspectRatio={screenAspectRatio}
             screenAspectEnabled={screenAspectEnabled}
             cameraShape={cameraShape}
@@ -937,13 +1191,24 @@ export function EditorView() {
             selectedZoomEffect={selectedZoomEffect}
             selectedSpeedEffect={selectedSpeedEffect}
             transitions={transitions}
+            edgeTransitions={edgeTransitions}
             selectedTransitionId={selectedTransitionId}
+            selectedSegmentId={selectedTimelineSegmentId}
             videoClips={videoTimelineClips}
             sttDownloadProgress={sttDownloadProgress}
             sttStatus={sttStatus}
             sttModelLabel={whisperTranscriptionModelLabel}
             sttProvider={sttProvider}
             providerKeys={providerKeys}
+            audioCleanup={audioCleanup}
+            onSetAudioCleanup={(itemId, settings) => setAudioCleanup((current) => {
+              const next = { ...current };
+              if (settings === null) delete next[itemId];
+              else next[itemId] = settings;
+              return next;
+            })}
+            assistantProvider={assistantProvider}
+            onAssistantProviderChange={setAssistantProvider}
             onCancelTranscription={cancelTranscription}
             onSttProviderChange={(provider) =>
               void updateProviderSettings({ sttProvider: provider })
@@ -958,13 +1223,13 @@ export function EditorView() {
             onMusicGenerate={(form) => void musicGeneration.generate(form)}
             onMusicCancel={musicGeneration.cancel}
             assistantProjectId={project?.id ?? null}
-            assistantMessages={geminiChat.messages}
-            assistantSending={geminiChat.sending}
-            assistantStatusMessage={geminiChat.statusMessage}
-            assistantError={geminiChat.chatError}
-            onAssistantSend={(message) => void geminiChat.send(message)}
-            onAssistantCancel={geminiChat.cancel}
-            onAssistantReset={() => void geminiChat.reset()}
+            assistantMessages={activeChat.messages}
+            assistantSending={activeChat.sending}
+            assistantStatusMessage={activeChat.statusMessage}
+            assistantError={activeChat.chatError}
+            onAssistantSend={(message) => void activeChat.send(message)}
+            onAssistantCancel={activeChat.cancel}
+            onAssistantReset={() => void activeChat.reset()}
             onAssistantUndoEdit={() => void undoLastAgentEdit()}
             subtitleLanguage={formatSubtitleLanguage(subtitleLanguage)}
             subtitleStyle={subtitleStyle}
@@ -989,6 +1254,13 @@ export function EditorView() {
             onScreenScaleChange={(scale) =>
               setScreenPosition((current) => ({ ...current, scale }))
             }
+            onScreenCropChange={setScreenCrop}
+            onApplyLayoutToClips={() => setSelectedClipsLayout(layoutMode)}
+            onClearClipLayout={() => setSelectedClipsLayout(null)}
+            onApplyCameraStyleToClips={() =>
+              setSelectedClipsCameraStyle({ shape: cameraShape, border: cameraBorderStyle })
+            }
+            onClearClipCameraStyle={() => setSelectedClipsCameraStyle(null)}
             onScreenAspectRatioChange={setScreenAspectRatio}
             onCameraShapeChange={setCameraShape}
             onCameraBorderStyleChange={setCameraBorderStyle}
@@ -1014,6 +1286,8 @@ export function EditorView() {
             onRemoveSpeed={removeSpeedEffect}
             onSetTransition={setClipTransition}
             onRemoveTransition={removeClipTransition}
+            onSetEdgeTransition={setClipEdgeTransition}
+            onRemoveEdgeTransition={removeClipEdgeTransition}
             onAddSubtitle={addSubtitle}
             onGenerateSubtitles={() => {
               // Keep the first click anchored to Subtitles while async audio
@@ -1056,11 +1330,14 @@ export function EditorView() {
             previewItem={previewItem}
             videoTimelineClips={videoTimelineClips}
             transitions={transitions}
+            edgeTransitions={edgeTransitions}
             audioTimelineClips={audioTimelineClips}
-            isProjectCompositionSelected={isProjectCompositionSelected}
-            projectCamera={projectCamera}
-            layoutMode={layoutMode}
+            previewCameraItem={previewCameraItem}
+            previewCameraClip={previewCameraClip}
+            showNoCameraRecording={showNoCameraRecording}
             screenStyle={screenStyle}
+            screenContentStyle={screenContentStyle}
+            cameraMaskUrl={cameraMaskUrl}
             cameraStyle={cameraStyle}
             cameraVideoStyle={cameraVideoStyle}
             screenEditEnabled={screenEditEnabled}
@@ -1082,6 +1359,7 @@ export function EditorView() {
             mainVideoRef={mainVideoRef}
             cameraRef={cameraRef}
             audioElsRef={audioElsRef}
+            cleanupClips={cleanupVideoClips}
             onScreenEditPointerDown={beginScreenLayoutDrag}
             onCameraEditPointerDown={beginCameraLayoutDrag}
             onMediaReady={() =>
@@ -1119,6 +1397,7 @@ export function EditorView() {
           onZoomIn={zoomTimelineIn}
           onZoomOut={zoomTimelineOut}
           onZoomReset={resetTimelineZoom}
+          onZoomChange={setTimelineZoom}
           onZoomWheel={zoomTimelineWithWheel}
           onRulerPointerDown={beginTimelineRulerPointer}
           onRulerPointerMove={moveTimelineRulerPointer}
@@ -1137,6 +1416,8 @@ export function EditorView() {
           contentDuration={timelineDuration}
           renderDuration={timelineRenderDuration}
           videoClips={videoTimelineClips}
+          onToggleVideoLaneVisibility={toggleVideoLaneVisibility}
+          onSwapVideoChannels={swapVideoChannels}
           audioTracks={audioTimelineTracks}
           audioLevels={audioLevels}
           onSetAudioLevel={setAudioLevel}
@@ -1158,23 +1439,39 @@ export function EditorView() {
           contextMenu={timelineContextMenu}
           canSplitAtContextMenu={
             timelineContextMenu
-              ? canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)
+              ? (getContextMenuSplitSelectionIds(
+                  timelineSegments,
+                  selectedTimelineSegmentIds,
+                  timelineContextMenu
+                )?.length ?? 0) > 0 ||
+                canSplitTimelineSegmentAt(timelineSegments, timelineContextMenu)
               : false
           }
-          canSplitAtPlayhead={Boolean(
-            findSplittableTimelineSegment(timelineSegments, selectedTimelineSegmentId, currentTime)
+          canSplitAtPlayhead={canSplitTimelineSelectionAt(
+            timelineSegments,
+            selectedTimelineSegmentIds,
+            selectedTimelineSegmentId,
+            currentTime
           )}
+          canToggleHidden={contextMenuVisibilityClipIds.length > 0}
+          selectedClipsHidden={contextMenuClipsHidden}
           onTogglePlayback={() => void togglePlayback()}
           onSeekFrame={seekFrame}
           onUndo={undoTimelineEdit}
           onRedo={redoTimelineEdit}
-          onSplitAtPlayhead={() =>
-            splitTimelineSegment(selectedTimelineSegmentId, currentTime)
-          }
+          onSplitAtPlayhead={() => splitSelectionAtPlayhead(currentTime)}
           onDeleteSelected={() => deleteSelectedTimelineSegment()}
           onSelectClip={(clip, additive) => {
             // Keyboard activation; pointer presses select through the drag hook.
-            const press = resolveTimelineClipPress(selectedTimelineSegmentIds, clip.id, additive);
+            const press = resolveTimelineClipPress(
+              selectedTimelineSegmentIds,
+              clip.id,
+              additive,
+              getTimelineClipGroupIds(
+                timelineSegments,
+                clip.id
+              )
+            );
             applyTimelineClipSelection(
               press.collapseOnRelease ? [clip.id] : press.ids,
               press.primaryId
@@ -1249,7 +1546,16 @@ export function EditorView() {
           onBodyDragOver={handleTimelineDragOver}
           onBodyDrop={handleTimelineDrop}
           onContextMenuSplit={() => {
-            if (timelineContextMenu) {
+            if (!timelineContextMenu) return;
+            // Right-clicking inside a multi-selection cuts the whole selection, like delete does.
+            const selectionIds = getContextMenuSplitSelectionIds(
+              timelineSegments,
+              selectedTimelineSegmentIds,
+              timelineContextMenu
+            );
+            if (selectionIds) {
+              splitSelectedTimelineSegments(timelineContextMenu.time, selectionIds);
+            } else {
               splitTimelineSegment(timelineContextMenu.segmentId, timelineContextMenu.time);
             }
           }}
@@ -1264,6 +1570,15 @@ export function EditorView() {
             } else {
               deleteTimelineSegment(timelineContextMenu.segmentId);
             }
+          }}
+          onContextMenuToggleHidden={() => {
+            if (contextMenuVisibilityClipIds.length === 0) return;
+            // Hide/Show stays one undoable step for the whole selection.
+            toggleSelectedTimelineHidden(contextMenuVisibilityClipIds);
+          }}
+          onContextMenuCloseGaps={() => {
+            if (contextMenuCloseGapsIds.length === 0) return;
+            closeTimelineGaps(contextMenuCloseGapsIds);
           }}
         />
       </section>

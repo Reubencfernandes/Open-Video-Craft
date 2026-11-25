@@ -24,8 +24,8 @@ describe("formatSpeechToTextError", () => {
     expect(formatSpeechToTextError("Cohere rate limit reached.", "cohere")).toBe(
       "Cohere's rate limit has been reached. Wait a moment and try again."
     );
-    expect(formatSpeechToTextError("Error: network request failed", "whisper-local")).toBe(
-      "Whisper could not be reached. Check your internet connection and try again."
-    );
+    const whisper = formatSpeechToTextError("Error: network request failed", "whisper-local");
+    expect(whisper).toContain("one-time download");
+    expect(whisper).toContain("Gemini");
   });
 });

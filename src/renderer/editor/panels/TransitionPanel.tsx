@@ -2,7 +2,7 @@ import { Blend, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { RangeControl } from "../controls";
 import { FloatingSelect } from "../FloatingSelect";
-import type { ClipTransition, ClipTransitionType, TimelineMediaClip } from "../types";
+import type { ClipEdgeTransition, ClipTransition, ClipTransitionType, TimelineMediaClip } from "../types";
 import { transitionDragType } from "../types";
 import {
   getMaxTransitionDuration,
@@ -16,8 +16,12 @@ export function TransitionPanel(props: {
   videoClips: TimelineMediaClip[];
   transitions: ClipTransition[];
   selectedTransitionId: string | null;
+  selectedSegmentId: string | null;
+  edgeTransitions: ClipEdgeTransition[];
   onSetTransition: (input: Omit<ClipTransition, "id">) => void;
   onRemoveTransition: (fromSegmentId: string, toSegmentId: string) => void;
+  onSetEdgeTransition: (input: Omit<ClipEdgeTransition, "id">) => void;
+  onRemoveEdgeTransition: (id: string) => void;
 }) {
   const boundaries = useMemo(
     () => getTimelineTransitionBoundaries(props.videoClips),
@@ -134,6 +138,50 @@ export function TransitionPanel(props: {
           <Trash2 size={14} /> Remove transition
         </button>
       ) : null}
+
+      <div className="grid gap-2 rounded-lg bg-white/[0.04] p-2" data-edge-transitions>
+        <span className="text-xs font-extrabold text-slate-400">Clip edges</span>
+        <p className="m-0 text-[0.68rem] font-semibold leading-snug text-slate-500">
+          Apply the selected transition to the start or end of the selected clip.
+        </p>
+        {props.selectedSegmentId ? (
+          <div className="grid gap-2">
+            {(["start", "end"] as const).map((edge) => {
+              const current = props.edgeTransitions.find((item) =>
+                item.segmentId === props.selectedSegmentId && item.edge === edge
+              );
+              return (
+                <div className="flex items-center gap-1" key={edge}>
+                  <button
+                    type="button"
+                    className="editor-choice-button flex-1 rounded-md px-2 py-1.5 text-[0.66rem] font-extrabold text-slate-200 hover:bg-white/10 hover:text-white"
+                    onClick={() => props.onSetEdgeTransition({
+                      segmentId: props.selectedSegmentId ?? "",
+                      edge,
+                      type,
+                      duration
+                    })}
+                  >
+                    {current ? `Update ${edge}` : `Add ${edge}`}
+                  </button>
+                  {current ? (
+                    <button
+                      type="button"
+                      aria-label={`Remove ${edge} transition`}
+                      className="grid size-7 place-items-center rounded text-red-300 hover:bg-red-400/10"
+                      onClick={() => props.onRemoveEdgeTransition(current.id)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <span className="text-[0.68rem] text-slate-500">Select a video clip first.</span>
+        )}
+      </div>
     </div>
   );
 }

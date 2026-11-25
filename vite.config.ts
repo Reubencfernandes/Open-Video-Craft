@@ -10,8 +10,9 @@ import react from "@vitejs/plugin-react";
 // its CSP only allows huggingface.co, so that fetch fails with "no available
 // backend". Bundle the runtime next to index.html and serve it in dev instead;
 // useSubtitleGeneration points env.backends.onnx.wasm.wasmPaths at this origin.
-const transformersDist = path.dirname(
-  createRequire(import.meta.url).resolve("@huggingface/transformers")
+// Transformers.js v4 resolves these files through its onnxruntime-web dependency.
+const ortRuntimeDist = path.dirname(
+  createRequire(import.meta.url).resolve("onnxruntime-web")
 );
 const ortRuntimeFiles = ["ort-wasm-simd-threaded.jsep.mjs", "ort-wasm-simd-threaded.jsep.wasm"];
 
@@ -32,7 +33,7 @@ function bundleOrtRuntime(): Plugin {
           "Content-Type",
           requested.endsWith(".mjs") ? "text/javascript" : "application/wasm"
         );
-        createReadStream(path.join(transformersDist, requested)).pipe(res);
+        createReadStream(path.join(ortRuntimeDist, requested)).pipe(res);
       });
     },
     generateBundle() {
@@ -40,7 +41,7 @@ function bundleOrtRuntime(): Plugin {
         this.emitFile({
           type: "asset",
           fileName: file,
-          source: readFileSync(path.join(transformersDist, file))
+          source: readFileSync(path.join(ortRuntimeDist, file))
         });
       }
     }
@@ -61,7 +62,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     exclude: process.platform === "win32"
       ? ["tests/ffmpeg-release-scripts.test.ts"]
       : []

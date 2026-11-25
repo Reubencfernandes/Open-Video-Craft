@@ -1,0 +1,14 @@
+Input #0, avfoundation, from ':0':
+  Duration: N/A, start: 69652.854708, bitrate: 3072 kb/s
+  Stream #0:0: Audio: pcm_f32le, 48000 Hz, stereo, flt, 3072 kb/s, start 69652.854708
+Stream mapping:
+  Stream #0:0 -> #0:0 (pcm_f32le (native) -> pcm_s16le (native))
+Press [q] to stop, [?] for help
+Output #0, wav, to 'docs/baseline/missing-checks/raw/b2o/system.wav':
+  Metadata:
+    ISFT            : Lavf62.12.102
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, stereo, s16, 1536 kb/s
+    Metadata:
+      encoder         : Lavc62.28.102 pcm_s16le
+size=      88KiB time=00:00:00.50 bitrate=1439.2kbits/s speed=   1x elapsed=0:00:00.50    size=     176KiB time=00:00:00.99 bitrate=1454.0kbits/s speed=0.992x elapsed=0:00:01.00    size=     256KiB time=00:00:01.50 bitrate=1394.4kbits/s speed=   1x elapsed=0:00:01.50    size=     256KiB time=00:00:02.00 bitrate=1045.8kbits/s speed=   1x elapsed=0:00:02.00    size=     256KiB time=00:00:02.50 bitrate= 836.6kbits/s speed=   1x elapsed=0:00:02.50    size=     512KiB time=00:00:03.00 bitrate=1394.4kbits/s speed=   1x elapsed=0:00:03.00    size=     512KiB time=00:00:03.50 bitrate=1195.2kbits/s speed=   1x elapsed=0:00:03.50    size=     512KiB time=00:00:04.00 bitrate=1048.6kbits/s speed=0.998x elapsed=0:00:04.00    size=     768KiB time=00:00:04.50 bitrate=1397.7kbits/s speed=0.998x elapsed=0:00:04.50    [out#0/wav @ 0x600000d3c300] video:0KiB audio:906KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.008412%
+size=     906KiB time=00:00:05.00 bitrate=1483.7kbits/s speed=0.997x elapsed=0:00:05.01    

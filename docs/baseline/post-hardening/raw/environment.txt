@@ -1,0 +1,60 @@
+date: 2026-11-19T18:17:03Z
+commit: a97a7004c49ef7e1f6b0fb3331355d72e9cf44c7
+node: v22.23.1
+npm: 10.9.8
+arch: arm64
+ProductName:		macOS
+ProductVersion:		27.2.1
+BuildVersion:		26B131
+--- hardware
+Hardware:
+
+    Hardware Overview:
+
+      Model Name: Mac Studio
+      Model Identifier: Mac17,14
+      Model Number: Z1U4000FEGR/A
+      Chip: Apple M5 Max
+      Total Number of Cores: 18 (6 Super and 12 Performance)
+      Memory: 36 GB
+      System Firmware Version: 20457.41.3
+      OS Loader Version: 20457.41.3
+      Serial Number (system): [REDACTED]
+      Hardware UUID: [REDACTED]
+      Provisioning UDID: [REDACTED]
+      Activation Lock Status: [REDACTED]
+
+--- memory
+38654705664
+18
+--- power
+Now drawing from 'AC Power'
+--- thermal
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+--- displays
+Graphics/Displays:
+
+    Apple M5 Max:
+
+      Chipset Model: Apple M5 Max
+      Type: GPU
+      Bus: Built-In
+      Total Number of Cores: 32
+      Vendor: Apple (0x106b)
+      Metal Support: Metal 4
+      Displays:
+        LG HDR WQHD:
+          Resolution: 3440 x 1440 (UWQHD - Ultra-Wide Quad HD)
+          UI Looks like: 3440 x 1440 @ 50.00Hz
+          Main Display: Yes
+          Mirror: Off
+          Online: Yes
+          Rotation: Supported
+
+--- disk
+Filesystem      Size    Used   Avail Capacity iused ifree %iused  Mounted on
+/dev/disk3s5   926Gi   182Gi   719Gi    21%    3.3M  7.5G    0%   /System/Volumes/Data
+--- lockfile
+6ab91f370c521d44bd32d77d7f040293419eed1559ff169b6f7582155b8ad452  package-lock.json

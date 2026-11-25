@@ -75,6 +75,25 @@ describe("recording audio links", () => {
       ]);
   });
 
+  it("keeps the linked audio consistent when the cut sits 50ms from the clip start", () => {
+    const result = splitTimelineSegments(recording(), "screen", 0.05, createId);
+    expect(result).not.toBeNull();
+    expect(result!.splitTime).toBe(0.05);
+    expect(result!.left).toMatchObject({ start: 0, end: 0.05 });
+    expect(result!.right).toMatchObject({ start: 0.05, sourceStart: 0.05 });
+
+    // Voice and picture are cut at the same instant, so both stay in sync.
+    const audioPieces = result!.segments.filter((segment) => segment.track === "audio");
+    expect(audioPieces).toHaveLength(4);
+    expect(audioPieces.map((piece) => piece.end).sort((a, b) => a - b)).toEqual([
+      0.05,
+      0.05,
+      20,
+      20
+    ]);
+    expect(audioPieces.map(offset)).toEqual([0, 0, 0, 0]);
+  });
+
   it("does not split imported music when blading the picture", () => {
     const segments: TimelineSegment[] = [
       ...recording(),
@@ -101,18 +120,31 @@ describe("recording audio links", () => {
     const result = removeTimelineSegmentsWithLinkedAudio(segments, ["b"], createId);
     const audio = result.segments.filter((segment) => segment.track === "audio");
 
-    expect(audio.map(({ start, end, sourceStart }) => ({ start, end, sourceStart }))).toEqual([
-      { start: 0, end: 5, sourceStart: 0 },
-      { start: 10, end: 20, sourceStart: 10 }
+    // Audio and video are independent: the sound of that moment stays intact.
+    expect(audio.map(({ start, end }) => ({ start, end }))).toEqual([{ start: 0, end: 20 }]);
+    expect(result.removedIds).toEqual(["b"]);
+  });
+
+  it("deletes the linked audio when the caller asks for it explicitly", () => {
+    const segments: TimelineSegment[] = [
+      { id: "a", itemId: "p1:screen", track: "video", lane: 0, start: 0, end: 5, sourceStart: 0 },
+      { id: "b", itemId: "p1:screen", track: "video", lane: 0, start: 5, end: 10, sourceStart: 5 },
+      { id: "c", itemId: "p1:screen", track: "video", lane: 0, start: 10, end: 20, sourceStart: 10 },
+      { id: "mic", itemId: "p1:audio", track: "audio", lane: 0, start: 0, end: 20, sourceStart: 0 }
+    ];
+    const result = removeTimelineSegmentsWithLinkedAudio(segments, ["b"], createId, { linked: true });
+    const audio = result.segments.filter((segment) => segment.track === "audio");
+
+    expect(audio.map(({ start, end }) => ({ start, end }))).toEqual([
+      { start: 0, end: 5 },
+      { start: 10, end: 20 }
     ]);
     expect(result.removedIds).toContain("b");
     expect(result.removedIds).toHaveLength(2);
   });
 
-  it("keeps the audio when asked to delete only the picture", () => {
-    const result = removeTimelineSegmentsWithLinkedAudio(recording(), ["screen"], createId, {
-      linked: false
-    });
+  it("keeps the audio when only the picture is deleted", () => {
+    const result = removeTimelineSegmentsWithLinkedAudio(recording(), ["screen"], createId);
     expect(result.segments.map((segment) => segment.id)).toEqual(["mic", "system"]);
   });
 
@@ -187,9 +219,9 @@ describe("video trim bounds", () => {
 
   it("never shrinks a clip that is already shorter than the minimum", () => {
     const tiny: TimelineSegment[] = [
-      { id: "tiny", itemId: "v", track: "video", lane: 0, start: 4, end: 4.1, sourceStart: 4 }
+      { id: "tiny", itemId: "v", track: "video", lane: 0, start: 4, end: 4.005, sourceStart: 4 }
     ];
-    expect(byId(trimTimelineSegment(tiny, "tiny", "start", 4.09, durations), "tiny").start).toBe(4);
-    expect(byId(trimTimelineSegment(tiny, "tiny", "end", 4.01, durations), "tiny").end).toBe(4.1);
+    expect(byId(trimTimelineSegment(tiny, "tiny", "start", 4.009, durations), "tiny").start).toBe(4);
+    expect(byId(trimTimelineSegment(tiny, "tiny", "end", 4.001, durations), "tiny").end).toBeCloseTo(4.005, 3);
   });
 });

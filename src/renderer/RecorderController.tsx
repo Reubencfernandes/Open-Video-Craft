@@ -1,32 +1,40 @@
 /**
- * Floating recorder state machine: source/device selection, capture streams
- * (screen, camera, mic, system audio), MediaRecorder chunk writing over IPC,
+ * Floating recorder state machine: multi-source screen/camera selection,
+ * device selection, capture streams (screens, cameras, mic, system audio),
+ * one MediaRecorder per selected source with chunk writing over IPC,
  * pause/resume/stop/cancel, and the border-overlay lifecycle. Rendering is
  * delegated to recorder/RecorderControllerView.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  MediaTrackKey,
   ProjectSource,
   ProjectView,
-  RecordingTrack,
   SourceSummary
 } from "../shared/types";
 import {
   createDisplayCaptureOptions,
   recordingRuntime
 } from "./recording-runtime";
+import { analyzeAudioSamples, smoothMeterLevel } from "./recorder/audio-meter";
 import { RecorderControllerView } from "./recorder/RecorderControllerView";
 import {
   audioMimeCandidates,
+  captureDisplayStreamsSequentially,
   createProjectDevices,
+  createRecordingCaptures,
   createRecorders,
   getDeviceLabel,
   getOptionalCameraStream,
   getOptionalMicStream,
   getSupportedMimeType,
+  reconcileCameraSelection,
+  reconcileSourceSelection,
   runCountdown,
   stopRecorder,
   toErrorMessage,
+  toggleCameraSelection,
+  toggleSourceSelection,
   videoMimeCandidates
 } from "./recorder/recorder-utils";
 import {
@@ -35,6 +43,11 @@ import {
   type CameraQuality,
   type ScreenQuality
 } from "./recorder/quality";
+import {
+  createDefaultRecorderSettings,
+  reconcileRecorderSettings,
+  type RecorderSettings
+} from "../shared/recorder-settings";
 import type {
   DeviceOption,
   FloatingState,
@@ -42,19 +55,28 @@ import type {
   WriteQueues
 } from "./recorder/types";
 
+interface AcquiredCamera {
+  deviceId: string;
+  label: string;
+  stream: MediaStream;
+}
+
 export function RecorderController() {
   const [sources, setSources] = useState<SourceSummary[]>([]);
-  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [sourceThumbnails, setSourceThumbnails] = useState<Record<string, string>>({});
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [baseDirectory, setBaseDirectory] = useState<string | null>(null);
   const [microphones, setMicrophones] = useState<DeviceOption[]>([]);
   const [cameras, setCameras] = useState<DeviceOption[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(null);
-  const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+  const [selectedCameraIds, setSelectedCameraIds] = useState<string[]>([]);
   const [micEnabled, setMicEnabled] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
-  const [cameraPreviewStream, setCameraPreviewStream] = useState<MediaStream | null>(null);
+  const [cameraPreviewStreams, setCameraPreviewStreams] = useState<Record<string, MediaStream>>(
+    {}
+  );
   const [screenQuality, setScreenQuality] = useState<ScreenQuality>("source");
-  const [cameraQuality, setCameraQuality] = useState<CameraQuality>("720p");
+  const [cameraQuality, setCameraQuality] = useState<CameraQuality>("1080p");
   const [state, setState] = useState<FloatingState>("ready");
   const [countdown, setCountdown] = useState(3);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -62,9 +84,18 @@ export function RecorderController() {
   const [project, setProject] = useState<ProjectView | null>(null);
   const [compact, setCompact] = useState(false);
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(false);
+  const [microphoneLevel, setMicrophoneLevel] = useState(0);
+  // undefined = still loading, null = genuine first run, object = saved.
+  const [storedSettings, setStoredSettings] = useState<
+    RecorderSettings | null | undefined
+  >(undefined);
+  const [sourcesLoaded, setSourcesLoaded] = useState(false);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
+  const [settingsApplied, setSettingsApplied] = useState(false);
 
-  const screenStreamRef = useRef<MediaStream | null>(null);
-  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamsRef = useRef<MediaStream[]>([]);
+  const cameraStreamsRef = useRef<MediaStream[]>([]);
+  const cameraPreviewStreamsRef = useRef<MediaStream[]>([]);
   const micStreamRef = useRef<MediaStream | null>(null);
   const systemStreamRef = useRef<MediaStream | null>(null);
   const recordersRef = useRef<RecorderMap>({});
@@ -74,26 +105,55 @@ export function RecorderController() {
   const activeRecordedMsRef = useRef(0);
   const activeSegmentStartedAtRef = useRef<number | null>(null);
   const lastProjectUiSyncAtRef = useRef(0);
+  const meterContextRef = useRef<AudioContext | null>(null);
   const stoppingRef = useRef(false);
   const failingRef = useRef(false);
   const abortStartupRef = useRef(false);
+  const settingsAppliedRef = useRef(false);
+  const persistedSettingsRef = useRef<string | null>(null);
 
-  const selectedSource = useMemo(
-    () => sources.find((source) => source.id === selectedSourceId) ?? null,
-    [selectedSourceId, sources]
+  const selectedSources = useMemo(
+    () =>
+      selectedSourceIds
+        .map((sourceId) => sources.find((source) => source.id === sourceId))
+        .filter((source): source is SourceSummary => Boolean(source)),
+    [selectedSourceIds, sources]
   );
-  const selectedCameraLabel = getDeviceLabel(cameras, selectedCameraId, "Camera");
+  const selectedCameraOptions = useMemo(
+    () => cameras.filter((camera) => selectedCameraIds.includes(camera.deviceId)),
+    [cameras, selectedCameraIds]
+  );
   const canStart = state === "ready" || state === "complete" || state === "failed";
+
+  // Everything the owner picked, persisted at app level (never per project).
+  const recorderSettings = useMemo<RecorderSettings>(
+    () => ({
+      schemaVersion: 1,
+      sourceIds: selectedSourceIds,
+      cameraIds: selectedCameraIds,
+      micId: selectedMicId,
+      micEnabled,
+      cameraEnabled,
+      systemAudioEnabled,
+      screenQuality,
+      cameraQuality
+    }),
+    [
+      selectedSourceIds,
+      selectedCameraIds,
+      selectedMicId,
+      micEnabled,
+      cameraEnabled,
+      systemAudioEnabled,
+      screenQuality,
+      cameraQuality
+    ]
+  );
+
   const refreshSources = useCallback(async () => {
     const nextSources = await window.openVideoCraft.sources.list();
     setSources(nextSources);
-    setSelectedSourceId((current) => {
-      if (current && nextSources.some((source) => source.id === current)) {
-        return current;
-      }
-
-      return nextSources.find((source) => source.kind === "screen")?.id ?? nextSources[0]?.id ?? null;
-    });
+    setSelectedSourceIds((current) => reconcileSourceSelection(nextSources, current));
   }, []);
 
   const refreshDevices = useCallback(async () => {
@@ -122,19 +182,114 @@ export function RecorderController() {
         ? current
         : nextMicrophones[0]?.deviceId ?? null
     );
-    setSelectedCameraId((current) =>
-      current && nextCameras.some((device) => device.deviceId === current)
-        ? current
-        : nextCameras[0]?.deviceId ?? null
-    );
+    setSelectedCameraIds((current) => {
+      const available = reconcileCameraSelection(nextCameras, current);
+      return available.length > 0 ? available : nextCameras[0] ? [nextCameras[0].deviceId] : [];
+    });
     setMicEnabled((enabled) => (nextMicrophones.length > 0 ? enabled : false));
     setCameraEnabled((enabled) => (nextCameras.length > 0 ? enabled : false));
   }, []);
 
   useEffect(() => {
-    void refreshSources().catch((error) => setErrorMessage(toErrorMessage(error)));
-    void refreshDevices().catch(() => undefined);
+    void refreshSources()
+      .catch((error) => setErrorMessage(toErrorMessage(error)))
+      .finally(() => setSourcesLoaded(true));
+    void refreshDevices()
+      .catch(() => undefined)
+      .finally(() => setDevicesLoaded(true));
   }, [refreshDevices, refreshSources]);
+
+  // App-level preferences: a genuine first run (no saved file) selects every
+  // screen and webcam at maximum quality with the microphone on, while a saved
+  // selection is reconciled against the devices that still exist. Never stored
+  // per project, so every new recording starts from the owner's own setup.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      let settings: RecorderSettings | null = null;
+      try {
+        settings = await window.openVideoCraft.recorder.getSettings();
+      } catch {
+        // An unreadable preferences file behaves like a first run.
+        settings = null;
+      }
+      if (!cancelled) setStoredSettings(settings);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      settingsAppliedRef.current ||
+      storedSettings === undefined ||
+      !sourcesLoaded ||
+      !devicesLoaded
+    ) {
+      return;
+    }
+    settingsAppliedRef.current = true;
+
+    const available = { sources, cameras, microphones };
+    const firstRun = storedSettings === null;
+    const reconciled = reconcileRecorderSettings(
+      firstRun ? createDefaultRecorderSettings(available) : storedSettings,
+      available
+    );
+    // A first run never falls back to a window: only screens are preselected.
+    const sourceIds = firstRun
+      ? reconciled.sourceIds
+      : reconcileSourceSelection(sources, reconciled.sourceIds);
+    const cameraIds = reconcileCameraSelection(cameras, reconciled.cameraIds);
+    const applied: RecorderSettings = {
+      ...reconciled,
+      sourceIds,
+      cameraIds,
+      micEnabled: reconciled.micEnabled && microphones.length > 0,
+      cameraEnabled: reconciled.cameraEnabled && cameraIds.length > 0
+    };
+
+    setSelectedSourceIds(applied.sourceIds);
+    setSelectedCameraIds(applied.cameraIds);
+    setSelectedMicId(applied.micId);
+    setMicEnabled(applied.micEnabled);
+    setCameraEnabled(applied.cameraEnabled);
+    setScreenQuality(applied.screenQuality);
+    setCameraQuality(applied.cameraQuality);
+    setSystemAudioEnabled(applied.systemAudioEnabled);
+
+    persistedSettingsRef.current = JSON.stringify(applied);
+    setSettingsApplied(true);
+    if (firstRun) {
+      // Persist the first-run defaults so they are a one-time initialization
+      // instead of re-running on every launch.
+      void window.openVideoCraft.recorder.saveSettings(applied).catch(() => undefined);
+    }
+  }, [
+    storedSettings,
+    sourcesLoaded,
+    devicesLoaded,
+    sources,
+    cameras,
+    microphones
+  ]);
+
+  // Remember every change to the source/camera/quality selection so the next
+  // recording (and the next app launch) reuses it without touching a project.
+  useEffect(() => {
+    if (!settingsApplied || state !== "ready") {
+      return;
+    }
+    const serialized = JSON.stringify(recorderSettings);
+    if (persistedSettingsRef.current === serialized) {
+      return;
+    }
+    persistedSettingsRef.current = serialized;
+    void window.openVideoCraft.recorder
+      .saveSettings(recorderSettings)
+      .catch(() => undefined);
+  }, [recorderSettings, settingsApplied, state]);
 
   useEffect(() => {
     if (!navigator.mediaDevices?.addEventListener) {
@@ -200,20 +355,33 @@ export function RecorderController() {
     };
   }, []);
 
+  // Multi-source preview grid: fetch a real still frame for every listed screen
+  // and window (one main-process capture pass) and keep the previous frames
+  // while the list refreshes.
   useEffect(() => {
-    if (!selectedSourceId) {
-      return;
+    if (sources.length === 0) {
+      return undefined;
     }
 
-    void window.openVideoCraft.capture
-      .selectDisplaySource(selectedSourceId)
+    let cancelled = false;
+    void window.openVideoCraft.sources
+      .thumbnails(sources.map((source) => source.id))
+      .then((thumbnails) => {
+        if (!cancelled) {
+          setSourceThumbnails((current) => ({ ...current, ...thumbnails }));
+        }
+      })
       .catch(() => undefined);
-  }, [selectedSourceId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sources]);
 
   // Display-sized transparent overlay windows are deliberately not used here.
   // On some macOS/Windows compositor configurations they can be promoted to an
   // opaque surface and cover the selected display. Always close a stale overlay
-  // when the controller mounts and when it leaves; the selected source remains
+  // when the controller mounts and when it leaves; the selected sources remain
   // clearly identified inside the recorder window instead.
   useEffect(() => {
     void window.openVideoCraft.overlays.hideSourceBorder();
@@ -234,49 +402,94 @@ export function RecorderController() {
     return () => window.clearInterval(timer);
   }, [state]);
 
-  // Live camera preview while idle: whenever the camera is enabled and a device
-  // is chosen (and we are not mid-capture), open the camera so the user can see
-  // and frame their face before recording. During capture the recording stream
-  // drives the preview instead, so this effect only owns and releases the idle
-  // preview stream.
   useEffect(() => {
-    if (!cameraEnabled || !selectedCameraId || state !== "ready") {
+    const stream = micStreamRef.current;
+    const audioTrack = stream?.getAudioTracks()[0];
+    if (!micEnabled || audioTrack === undefined || audioTrack.readyState !== "live") {
+      setMicrophoneLevel(0);
+      return undefined;
+    }
+
+    const AudioContextConstructor = window.AudioContext;
+    if (!AudioContextConstructor) return undefined;
+    const context = new AudioContextConstructor();
+    meterContextRef.current = context;
+    const source = context.createMediaStreamSource(new MediaStream([audioTrack]));
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 1024;
+    source.connect(analyser);
+    const samples = new Float32Array(analyser.fftSize);
+    let current = 0;
+    const timer = window.setInterval(() => {
+      analyser.getFloatTimeDomainData(samples);
+      current = smoothMeterLevel(current, analyzeAudioSamples(samples).percent);
+      setMicrophoneLevel(current);
+    }, 80);
+
+    return () => {
+      window.clearInterval(timer);
+      source.disconnect();
+      void context.close();
+      if (meterContextRef.current === context) meterContextRef.current = null;
+      setMicrophoneLevel(0);
+    };
+  }, [micEnabled, micStreamRef.current, state]);
+
+  // Live camera previews while idle: whenever cameras are enabled and some
+  // devices are chosen (and we are not mid-capture), open every selected camera
+  // (bounded) so each webcam card shows a real feed before recording. During
+  // capture the recording streams drive the cards instead, so this effect only
+  // owns and releases the idle preview streams.
+  const selectedCameraKey = selectedCameraIds.join(",");
+
+  useEffect(() => {
+    if (!cameraEnabled || selectedCameraKey.length === 0 || state !== "ready") {
       return undefined;
     }
 
     let cancelled = false;
-    let previewStream: MediaStream | null = null;
+    const acquired: Record<string, MediaStream> = {};
 
     void (async () => {
-      const acquired = await getOptionalCameraStream(
-        true,
-        selectedCameraId,
-        cameraQualityPresets[cameraQuality],
-        setErrorMessage
-      );
+      for (const deviceId of selectedCameraKey.split(",").slice(0, 4)) {
+        const stream = await getOptionalCameraStream(
+          true,
+          deviceId,
+          cameraQualityPresets[cameraQuality],
+          setErrorMessage
+        );
+        if (cancelled) {
+          stream?.getTracks().forEach((track) => track.stop());
+          continue;
+        }
+        if (stream) {
+          acquired[deviceId] = stream;
+        }
+      }
+
       if (cancelled) {
-        acquired?.getTracks().forEach((track) => track.stop());
         return;
       }
-      if (!acquired) {
+
+      const streams = Object.values(acquired);
+      if (streams.length === 0) {
         setCameraEnabled(false);
         return;
       }
 
-      previewStream = acquired;
-      cameraStreamRef.current = acquired;
-      setCameraPreviewStream(acquired);
+      cameraPreviewStreamsRef.current = streams;
+      setCameraPreviewStreams(acquired);
     })();
 
     return () => {
       cancelled = true;
-      previewStream?.getTracks().forEach((track) => track.stop());
-      if (cameraStreamRef.current === previewStream) {
-        cameraStreamRef.current = null;
-      }
-      setCameraPreviewStream((current) => (current === previewStream ? null : current));
+      Object.values(acquired).forEach((stream) =>
+        stream.getTracks().forEach((track) => track.stop())
+      );
+      cameraPreviewStreamsRef.current = [];
+      setCameraPreviewStreams({});
     };
-  }, [cameraEnabled, selectedCameraId, cameraQuality, state]);
+  }, [cameraEnabled, selectedCameraKey, cameraQuality, state]);
 
   async function chooseFolder() {
     const folder = await window.openVideoCraft.projects.chooseBaseDirectory();
@@ -289,6 +502,15 @@ export function RecorderController() {
   async function setCompactMode(nextCompact: boolean) {
     setCompact(nextCompact);
     await window.openVideoCraft.windows.setRecorderCompact(nextCompact);
+  }
+
+  function toggleSource(sourceId: string) {
+    setSelectedSourceIds((current) => toggleSourceSelection(current, sourceId));
+  }
+
+  function toggleCameraDevice(deviceId: string) {
+    setSelectedCameraIds((current) => toggleCameraSelection(current, deviceId));
+    setCameraEnabled(true);
   }
 
   function pauseRecording() {
@@ -324,8 +546,10 @@ export function RecorderController() {
   }
 
   async function startRecording() {
-    if (!selectedSource) {
-      setErrorMessage("No screen is available to record.");
+    const recordingSources = selectedSources;
+
+    if (recordingSources.length === 0) {
+      setErrorMessage("Select at least one screen or window to record.");
       return;
     }
 
@@ -345,61 +569,68 @@ export function RecorderController() {
       }
 
       setBaseDirectory(folder);
-      await window.openVideoCraft.capture.selectDisplaySource(selectedSource.id);
 
-      const wantsSystemAudio = systemAudioEnabled;
       const screenMaxHeight = screenQualityPresets[screenQuality].maxHeight;
-      let screenStream: MediaStream;
-      try {
-        screenStream = await navigator.mediaDevices.getDisplayMedia(
-          createDisplayCaptureOptions(wantsSystemAudio, screenMaxHeight)
-        );
-      } catch (captureError) {
-        if (!wantsSystemAudio) {
-          throw captureError;
-        }
-        // Some platforms/OS versions reject a display capture that also asks for
-        // audio. Retry video-only so recording still works without system audio.
-        screenStream = await navigator.mediaDevices.getDisplayMedia(
-          createDisplayCaptureOptions(false, screenMaxHeight)
-        );
-      }
-      screenStreamRef.current = screenStream;
+      const displayResult = await captureDisplayStreamsSequentially({
+        sourceIds: recordingSources.map((source) => source.id),
+        systemAudio: systemAudioEnabled,
+        createOptions: (withSystemAudio) =>
+          createDisplayCaptureOptions(withSystemAudio, screenMaxHeight),
+        selectSource: (sourceId) =>
+          window.openVideoCraft.capture.selectDisplaySource(sourceId),
+        releaseSource: () => window.openVideoCraft.capture.releaseDisplaySource(),
+        getDisplayMedia: (options) => navigator.mediaDevices.getDisplayMedia(options)
+      });
 
-      // Move the loopback audio onto its own stream so the screen video track
-      // stays audio-free (the editor treats screen.webm as a video-only track).
-      let systemStream: MediaStream | null = null;
-      const systemAudioTracks = screenStream.getAudioTracks();
-      if (systemAudioTracks.length > 0) {
-        systemStream = new MediaStream(systemAudioTracks);
-        systemAudioTracks.forEach((track) => screenStream.removeTrack(track));
-      }
+      const screenStreams = displayResult.screens.map(
+        ({ stream }) => new MediaStream(stream.getVideoTracks())
+      );
+      screenStreamsRef.current = screenStreams;
+
+      // Move the loopback audio onto its own stream so the screen video tracks
+      // stay audio-free (the editor treats screen.webm as a video-only track).
+      // System audio is captured once, with the first display, and never mixed
+      // with the microphone track.
+      const systemStream = displayResult.systemAudioTracks.length > 0
+        ? new MediaStream(displayResult.systemAudioTracks)
+        : null;
       systemStreamRef.current = systemStream;
-      if (wantsSystemAudio && !systemStream) {
+      if (systemAudioEnabled && !systemStream) {
         setSystemAudioEnabled(false);
       }
 
-      const cameraStream = await getOptionalCameraStream(
-        cameraEnabled,
-        selectedCameraId,
-        cameraQualityPresets[cameraQuality],
-        setErrorMessage
+      const acquiredCameras: AcquiredCamera[] = [];
+      if (cameraEnabled) {
+        for (const camera of selectedCameraOptions) {
+          const stream = await getOptionalCameraStream(
+            true,
+            camera.deviceId,
+            cameraQualityPresets[cameraQuality],
+            setErrorMessage
+          );
+          if (stream) {
+            acquiredCameras.push({ deviceId: camera.deviceId, label: camera.label, stream });
+          }
+        }
+      }
+      cameraStreamsRef.current = acquiredCameras.map((camera) => camera.stream);
+      setCameraPreviewStreams(
+        Object.fromEntries(acquiredCameras.map((camera) => [camera.deviceId, camera.stream]))
       );
-      cameraStreamRef.current = cameraStream;
-      setCameraPreviewStream(cameraStream);
-      const micStream = await getOptionalMicStream(micEnabled, selectedMicId, setErrorMessage);
-      micStreamRef.current = micStream;
-
-      if (!cameraStream) {
+      if (acquiredCameras.length === 0) {
         setCameraEnabled(false);
       }
 
+      const micStream = await getOptionalMicStream(micEnabled, selectedMicId, setErrorMessage);
+      micStreamRef.current = micStream;
       if (!micStream) {
         setMicEnabled(false);
       }
 
       const screenMimeType = getSupportedMimeType(videoMimeCandidates);
-      const cameraMimeType = cameraStream ? getSupportedMimeType(videoMimeCandidates) : null;
+      const cameraMimeType = acquiredCameras.length > 0
+        ? getSupportedMimeType(videoMimeCandidates)
+        : null;
       const micMimeType = micStream ? getSupportedMimeType(audioMimeCandidates) : null;
       const systemMimeType = systemStream ? getSupportedMimeType(audioMimeCandidates) : null;
 
@@ -409,23 +640,70 @@ export function RecorderController() {
       });
       setProject(createdProject);
       projectRef.current = createdProject;
-      const source: ProjectSource = {
-        id: selectedSource.id,
-        name: selectedSource.name,
-        kind: selectedSource.kind,
-        displayId: selectedSource.displayId
-      };
+
+      const sourcesForProject: ProjectSource[] = recordingSources.map((source) => ({
+        id: source.id,
+        name: source.name,
+        kind: source.kind,
+        displayId: source.displayId
+      }));
+      const [source] = sourcesForProject;
       const devices = createProjectDevices({
         microphones,
         cameras,
         micEnabled: Boolean(micStream),
-        cameraEnabled: Boolean(cameraStream),
+        cameraEnabled: acquiredCameras.length > 0,
         selectedMicId,
-        selectedCameraId
+        selectedCameraId: acquiredCameras[0]?.deviceId ?? selectedCameraIds[0] ?? null
       });
+      const capturePlan = createRecordingCaptures({
+        screens: displayResult.screens.map((screen, index) => ({
+          sourceId: screen.sourceId,
+          label: recordingSources[index]?.name ?? "Screen",
+          mimeType: screenMimeType
+        })),
+        cameras: acquiredCameras.map((camera) => ({
+          deviceId: camera.deviceId,
+          label: camera.label,
+          mimeType: cameraMimeType ?? screenMimeType
+        })),
+        mic: micStream && micMimeType
+          ? {
+              deviceId: selectedMicId ?? "",
+              label: getDeviceLabel(microphones, selectedMicId, "Microphone"),
+              mimeType: micMimeType
+            }
+          : null,
+        system: systemStream && systemMimeType ? { mimeType: systemMimeType } : null
+      });
+
+      // Pair every planned track with the stream that feeds its recorder.
+      const streamsByTrackId = new Map<string, MediaStream>();
+      let screenIndex = 0;
+      let cameraIndex = 0;
+      for (const capture of capturePlan) {
+        if (capture.kind === "screen") {
+          const stream = screenStreams[screenIndex];
+          screenIndex += 1;
+          if (stream) streamsByTrackId.set(capture.trackId, stream);
+        } else if (capture.kind === "camera") {
+          const camera = acquiredCameras[cameraIndex];
+          cameraIndex += 1;
+          if (camera) streamsByTrackId.set(capture.trackId, camera.stream);
+        } else if (capture.kind === "mic" && micStream) {
+          streamsByTrackId.set(capture.trackId, micStream);
+        } else if (capture.kind === "system" && systemStream) {
+          streamsByTrackId.set(capture.trackId, systemStream);
+        }
+      }
+      const captures = capturePlan.filter((capture) =>
+        streamsByTrackId.has(capture.trackId)
+      );
+
       const startedProject = await window.openVideoCraft.recording.start({
         projectId: createdProject.id,
         source,
+        sources: sourcesForProject,
         devices,
         tracks: {
           screen: {
@@ -433,7 +711,7 @@ export function RecorderController() {
             mimeType: screenMimeType
           },
           camera: {
-            enabled: Boolean(cameraStream),
+            enabled: acquiredCameras.length > 0,
             mimeType: cameraMimeType
           },
           mic: {
@@ -444,39 +722,42 @@ export function RecorderController() {
             enabled: Boolean(systemStream),
             mimeType: systemMimeType
           }
-        }
+        },
+        captures
       });
 
       setProject(startedProject);
       projectRef.current = startedProject;
 
       recordersRef.current = createRecorders({
-        screenStream,
-        cameraStream,
-        micStream,
-        systemStream,
-        screenMimeType,
-        cameraMimeType,
-        micMimeType,
-        systemMimeType,
-        screenBitsPerSecond: screenQualityPresets[screenQuality].videoBitsPerSecond,
-        onChunk: (track, blob) => queueChunkWrite(startedProject.id, track, blob),
+        captures: captures.map((capture) => ({
+          trackId: capture.trackId,
+          stream: streamsByTrackId.get(capture.trackId)!,
+          mimeType: capture.mimeType,
+          kind: capture.kind === "screen" || capture.kind === "camera" ? "video" : "audio",
+          videoBitsPerSecond: capture.kind === "screen"
+            ? screenQualityPresets[screenQuality].videoBitsPerSecond
+            : undefined
+        })),
+        onChunk: (trackId, blob) => queueChunkWrite(startedProject.id, trackId, blob),
         onError: (error) => void failRecording(toErrorMessage(error))
       });
 
-      screenStream.getVideoTracks().forEach((track) => {
-        track.addEventListener("ended", () => {
-          if (stateRef.current === "recording" || stateRef.current === "paused") {
-            void stopRecording();
-            return;
-          }
+      for (const stream of screenStreams) {
+        stream.getVideoTracks().forEach((track) => {
+          track.addEventListener("ended", () => {
+            if (stateRef.current === "recording" || stateRef.current === "paused") {
+              void stopRecording();
+              return;
+            }
 
-          void failRecording("Screen sharing ended before recording could start.");
+            void failRecording("Screen sharing ended before recording could start.");
+          });
         });
-      });
+      }
 
       // A camera/mic/system device unplugged mid-recording ends its track
-      // silently — only the screen track was watched before. Warn without
+      // silently — only the screen tracks end the recording. Warn without
       // failing the whole recording. Our own stopAllStreams uses track.stop(),
       // which does not fire "ended", so this only triggers on real device loss.
       const warnDeviceLost = (label: string) => () => {
@@ -487,8 +768,12 @@ export function RecorderController() {
           );
         }
       };
-      cameraStream?.getVideoTracks().forEach((track) =>
-        track.addEventListener("ended", warnDeviceLost("Camera"), { once: true })
+      acquiredCameras.forEach((camera) =>
+        camera.stream.getVideoTracks().forEach((track) =>
+          track.addEventListener("ended", warnDeviceLost(`Camera "${camera.label}"`), {
+            once: true
+          })
+        )
       );
       micStream?.getAudioTracks().forEach((track) =>
         track.addEventListener("ended", warnDeviceLost("Microphone"), { once: true })
@@ -567,7 +852,9 @@ export function RecorderController() {
       projectRef.current = preparedProject;
       setElapsedMs(preparedProject.durationMs ?? durationMs);
       setState("complete");
-      await window.openVideoCraft.windows.openEditor(preparedProject.id);
+      await window.openVideoCraft.windows.openEditor(preparedProject.id, {
+        autoAnalyze: true
+      });
       await refreshSources();
     } catch (error) {
       await failRecording(toErrorMessage(error));
@@ -643,6 +930,8 @@ export function RecorderController() {
     failingRef.current = true;
     stoppingRef.current = true;
     stopAllStreams();
+    // A failed startup must not leave a reserved display source behind.
+    await window.openVideoCraft.capture.releaseDisplaySource().catch(() => undefined);
     await window.openVideoCraft.windows.showCurrent();
     await setCompactMode(false);
     setErrorMessage(message);
@@ -663,17 +952,17 @@ export function RecorderController() {
     }
   }
 
-  function queueChunkWrite(projectId: string, track: RecordingTrack, blob: Blob) {
+  function queueChunkWrite(projectId: string, trackId: MediaTrackKey, blob: Blob) {
     if (blob.size === 0) {
       return;
     }
 
-    const previous = writeQueuesRef.current[track] ?? Promise.resolve();
+    const previous = writeQueuesRef.current[trackId] ?? Promise.resolve();
     const write = previous.then(async () => {
       const chunk = await blob.arrayBuffer();
       const updatedProject = await window.openVideoCraft.recording.writeChunk({
         projectId,
-        track,
+        track: trackId,
         chunk
       });
       projectRef.current = updatedProject;
@@ -691,9 +980,9 @@ export function RecorderController() {
       if (stoppingRef.current || failingRef.current) {
         return;
       }
-      void failRecording(`Could not save ${track} recording data: ${toErrorMessage(error)}`);
+      void failRecording(`Could not save ${trackId} recording data: ${toErrorMessage(error)}`);
     });
-    writeQueuesRef.current[track] = write;
+    writeQueuesRef.current[trackId] = write;
   }
 
   function stopAllStreams() {
@@ -705,19 +994,21 @@ export function RecorderController() {
     recordersRef.current = {};
 
     for (const stream of [
-      screenStreamRef.current,
-      cameraStreamRef.current,
+      ...screenStreamsRef.current,
+      ...cameraStreamsRef.current,
+      ...cameraPreviewStreamsRef.current,
       micStreamRef.current,
       systemStreamRef.current
     ]) {
       stream?.getTracks().forEach((track) => track.stop());
     }
 
-    screenStreamRef.current = null;
-    cameraStreamRef.current = null;
+    screenStreamsRef.current = [];
+    cameraStreamsRef.current = [];
+    cameraPreviewStreamsRef.current = [];
     micStreamRef.current = null;
     systemStreamRef.current = null;
-    setCameraPreviewStream(null);
+    setCameraPreviewStreams({});
   }
 
   function getCurrentRecordedDurationMs(): number {
@@ -739,16 +1030,16 @@ export function RecorderController() {
       errorMessage={errorMessage}
       systemAudioEnabled={systemAudioEnabled}
       sources={sources}
-      selectedSourceId={selectedSourceId}
+      sourceThumbnails={sourceThumbnails}
+      selectedSourceIds={selectedSourceIds}
       baseDirectory={baseDirectory}
       microphones={microphones}
       cameras={cameras}
       selectedMicId={selectedMicId}
-      selectedCameraId={selectedCameraId}
-      selectedCameraLabel={selectedCameraLabel}
+      selectedCameraIds={selectedCameraIds}
       micEnabled={micEnabled}
       cameraEnabled={cameraEnabled}
-      cameraPreviewStream={cameraPreviewStream}
+      cameraPreviewStreams={cameraPreviewStreams}
       screenQuality={screenQuality}
       cameraQuality={cameraQuality}
       canStart={canStart}
@@ -770,10 +1061,14 @@ export function RecorderController() {
         setCameraEnabled((enabled) => (cameras.length > 0 ? !enabled : false))
       }
       onMicChange={setSelectedMicId}
-      onCameraChange={setSelectedCameraId}
-      onSourceChange={setSelectedSourceId}
+      onToggleSource={toggleSource}
+      onToggleCameraDevice={toggleCameraDevice}
       onScreenQualityChange={setScreenQuality}
       onCameraQualityChange={setCameraQuality}
+      microphoneLevel={microphoneLevel}
+      onResizeWindow={(width, height) =>
+        void window.openVideoCraft.windows.setRecorderSize(width, height)
+      }
     />
   );
 }

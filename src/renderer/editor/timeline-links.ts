@@ -20,7 +20,7 @@ const recordingVideoSuffix = ":screen";
 const recordingAudioSuffixes = [":audio", ":system-audio"];
 const syncToleranceSeconds = 0.001;
 /** Linked pieces thinner than this are treated as already aligned. */
-export const minimumLinkedPieceSeconds = 0.05;
+export const minimumLinkedPieceSeconds = 0.01;
 
 type SegmentIdFactory = (sourceId: string) => string;
 
@@ -163,9 +163,12 @@ export function removeTimelineSegmentsWithLinkedAudio(
   options: { linked?: boolean } = {}
 ): { segments: TimelineSegment[]; removedIds: string[] } {
   const requested = new Set(segmentIds);
-  const isolated = options.linked === false
-    ? { segments: [...segments], linkedIds: [] }
-    : isolateLinkedRecordingAudio(segments, segmentIds, createSegmentId, requested);
+  // Audio and video are independent by default: deleting the picture keeps the
+  // sound that played under it. Callers pass `linked: true` when they really
+  // want the recorded audio to go away with the clip.
+  const isolated = options.linked === true
+    ? isolateLinkedRecordingAudio(segments, segmentIds, createSegmentId, requested)
+    : { segments: [...segments], linkedIds: [] };
   const removed = new Set([...requested, ...isolated.linkedIds]);
   return {
     segments: isolated.segments.filter((segment) => !removed.has(segment.id)),

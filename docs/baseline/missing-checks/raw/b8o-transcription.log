@@ -1,0 +1,19 @@
+No language specified - defaulting to English (en).
+{
+  "model": "onnx-community/whisper-base_timestamped",
+  "modelReadyMs": 2867,
+  "inferenceMs": 422,
+  "audioSeconds": 4.839125,
+  "result": {
+    "text": " Open Video TRIFT Verification, the Quick Brown Fox Unbsouver de Lazy Dog.",
+    "chunks": [
+      {
+        "timestamp": [
+          0,
+          4.6
+        ],
+        "text": " Open Video TRIFT Verification, the Quick Brown Fox Unbsouver de Lazy Dog."
+      }
+    ]
+  }
+}

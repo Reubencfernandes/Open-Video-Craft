@@ -8,7 +8,7 @@
   "productName": "Open Video Craft",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Reubencfernandes/Open-Video-Craft.git"
+    "url": "git+https://github.com/micio86dev/openvideocraft.git"
   },
   "type": "commonjs",
   "main": "dist-electron/main/main.js",
@@ -19,26 +19,25 @@
     "build:main": "tsc -p tsconfig.electron.json",
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
+    "bench:startup": "node scripts/bench/startup.mjs",
     "prepare:ffmpeg:mac": "node scripts/prepare-ffmpeg.mjs --all-mac",
-    "prepare:ffmpeg:win": "node scripts/prepare-windows-ffmpeg.mjs",
     "prepare:mas-profile": "node scripts/prepare-mas-profile.mjs",
     "verify:ffmpeg": "node scripts/verify-ffmpeg.mjs",
     "dist": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder",
-    "dist:win": "npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --win",
     "dist:mac": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac",
     "dist:mas": "npm run prepare:ffmpeg:mac && npm run prepare:mas-profile && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas",
     "dist:mas:dev": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas-dev",
     "verify:mac-release": "node scripts/verify-mac-release.mjs",
-    "verify:windows-release": "node scripts/verify-windows-release.mjs",
-    "dist:mac:adhoc": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=- -c.mac.forceCodeSigning=false -c.mac.notarize=false",
+    "dist:mac:adhoc": "npm run prepare:click-capture && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=- -c.mac.forceCodeSigning=false -c.mac.notarize=false",
     "dist:mac:universal": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "test:mcp": "npm run build:main && node scripts/test-mcp-smoke.mjs",
-    "start": "electron dist-electron/main/main.js"
+    "start": "electron dist-electron/main/main.js",
+    "prepare:click-capture": "node scripts/prepare-click-capture.mjs"
   },
   "build": {
-    "appId": "com.openvideocraft.app",
+    "appId": "dev.micio86dev.openvideocraft",
     "productName": "Open Video Craft",
     "copyright": "Copyright (c) 2026 Reuben Chagas Fernandes",
     "asar": true,
@@ -52,7 +51,9 @@
     "afterPack": "scripts/after-pack.cjs",
     "asarUnpack": [
       "node_modules/ffmpeg-static/**/*",
-      "node_modules/onnxruntime-node/**/*"
+      "node_modules/onnxruntime-node/**/*",
+      "node_modules/@img/**/*",
+      "node_modules/sharp/**/*"
     ],
     "electronUpdaterCompatibility": ">=2.16",
     "directories": {
@@ -62,9 +63,7 @@
     "files": [
       "dist-electron/**/*",
       "dist-renderer/**/*",
-      "package.json",
-      "!node_modules/sharp/**/*",
-      "!node_modules/@img/**/*"
+      "package.json"
     ],
     "extraResources": [
       {
@@ -72,12 +71,12 @@
         "to": "app.png"
       },
       {
-        "from": "resources/acestep_generate.py",
-        "to": "acestep_generate.py"
-      },
-      {
         "from": "resources/fonts",
         "to": "fonts"
+      },
+      {
+        "from": "resources/models",
+        "to": "models"
       },
       {
         "from": "THIRD_PARTY_NOTICES.md",
@@ -92,8 +91,8 @@
         "to": "FFMPEG_MACOS_BUILD_NOTES.md"
       },
       {
-        "from": "FFMPEG_WINDOWS_BUILD_NOTES.md",
-        "to": "FFMPEG_WINDOWS_BUILD_NOTES.md"
+        "from": "resources/bin",
+        "to": "bin"
       }
     ],
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",
@@ -115,9 +114,22 @@
         "NSMicrophoneUsageDescription": "Open Video Craft uses the microphone when recording audio.",
         "NSScreenCaptureDescription": "Open Video Craft records the selected screen or window."
       },
+      "minimumSystemVersion": "26.5.2",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ]
     },
     "mas": {
@@ -134,38 +146,10 @@
       "notarize": false,
       "hardenedRuntime": false
     },
-    "win": {
-      "icon": "build/icon.ico",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "artifactName": "Open-Video-Craft-Setup-${version}-${os}-${arch}.${ext}",
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    },
-    "portable": {
-      "artifactName": "Open-Video-Craft-Portable-${version}-${os}-${arch}.${ext}"
-    },
     "publish": {
       "provider": "github",
-      "owner": "Reubencfernandes",
-      "repo": "Open-Video-Craft"
+      "owner": "micio86dev",
+      "repo": "openvideocraft"
     }
   },
   "devDependencies": {
@@ -177,11 +161,10 @@
     "autoprefixer": "^10.5.2",
     "concurrently": "^9.2.4",
     "cross-env": "^10.1.0",
-    "electron": "^43.0.0",
+    "electron": "43.8.10",
     "electron-builder": "^26.15.3",
     "jsdom": "^29.1.1",
     "postcss": "^8.5.16",
-    "sharp": "0.35.3",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vite": "^8.1.2",
@@ -189,9 +172,9 @@
     "wait-on": "^9.0.10"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "^4.3.2",
     "@lobehub/icons": "^5.14.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "electron-updater": "^6.8.9",
     "ffmpeg-static": "5.3.0",
     "lucide-react": "^1.22.0",
@@ -199,8 +182,9 @@
     "react-dom": "^19.2.7",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "sharp": "0.35.5",
     "wavesurfer.js": "^7.12.8",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "overrides": {
     "minimatch@3.1.5": {
@@ -213,7 +197,7 @@
       "brace-expansion": "2.1.2"
     },
     "@hono/node-server": "2.0.11",
-    "fast-uri": "3.1.4",
-    "sharp": "0.35.3"
+    "fast-uri": "3.1.9",
+    "sharp": "0.35.5"
   }
 }

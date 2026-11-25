@@ -1,4 +1,4 @@
-import type { ClipTransition, ClipTransitionType, TimelineMediaClip } from "./types";
+import type { ClipEdgeTransition, ClipTransition, ClipTransitionType, TimelineMediaClip } from "./types";
 
 export const transitionOptions: ReadonlyArray<{
   type: ClipTransitionType;
@@ -26,13 +26,20 @@ export type ActiveTimelineTransition = TimelineTransitionBoundary & {
 export function getTimelineTransitionBoundaries(
   clips: TimelineMediaClip[]
 ): TimelineTransitionBoundary[] {
-  const ordered = [...clips].sort((a, b) => a.start - b.start);
-  return ordered.slice(0, -1).flatMap((from, index) => {
-    const to = ordered[index + 1];
-    const cutTime = from.start + from.duration;
-    return Math.abs(cutTime - to.start) <= 0.05
-      ? [{ key: getTransitionBoundaryKey(from.id, to.id), from, to, cutTime }]
-      : [];
+  const byLane = new Map<number, TimelineMediaClip[]>();
+  for (const clip of clips.filter((item) => item.hidden !== true)) {
+    const lane = clip.lane;
+    byLane.set(lane, [...(byLane.get(lane) ?? []), clip]);
+  }
+  return [...byLane.values()].flatMap((laneClips) => {
+    const ordered = [...laneClips].sort((a, b) => a.start - b.start);
+    return ordered.slice(0, -1).flatMap((from, index) => {
+      const to = ordered[index + 1];
+      const cutTime = from.start + from.duration;
+      return Math.abs(cutTime - to.start) <= 0.05
+        ? [{ key: getTransitionBoundaryKey(from.id, to.id), from, to, cutTime }]
+        : [];
+    });
   });
 }
 
@@ -61,6 +68,38 @@ export function getNearestTransitionBoundary(
       ? boundary
       : nearest;
   }, null);
+}
+
+export type ActiveClipEdgeTransition = {
+  clip: TimelineMediaClip;
+  transition: ClipEdgeTransition;
+  edge: "start" | "end";
+  progress: number;
+};
+
+/** Active isolated start/end transition for preview at a given timeline time. */
+export function getActiveClipEdgeTransition(
+  clips: readonly TimelineMediaClip[],
+  transitions: readonly ClipEdgeTransition[],
+  time: number
+): ActiveClipEdgeTransition | null {
+  for (const clip of clips) {
+    for (const transition of transitions) {
+      if (transition.segmentId !== clip.id) continue;
+      const start = transition.edge === "start"
+        ? clip.start
+        : clip.start + clip.duration - transition.duration;
+      const end = start + transition.duration;
+      if (time < start || time > end) continue;
+      return {
+        clip,
+        transition,
+        edge: transition.edge,
+        progress: Math.max(0, Math.min(1, (time - start) / transition.duration))
+      };
+    }
+  }
+  return null;
 }
 
 export function isClipTransitionType(value: string): value is ClipTransitionType {

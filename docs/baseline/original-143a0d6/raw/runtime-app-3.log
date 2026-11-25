@@ -1,0 +1,2 @@
+[auto-update] Skipping update checks in development.
+~/ovc-baseline-143a0d6/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron exited with signal SIGTERM

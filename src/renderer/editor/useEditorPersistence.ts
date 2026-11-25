@@ -15,6 +15,7 @@ import {
   restoreEditorStateSnapshot
 } from "./editor-state-storage";
 import type {
+  AudioCleanupState,
   AudioLevelState,
   PendingMediaImport,
   PendingMusicGeneration,
@@ -22,6 +23,7 @@ import type {
   ScreenPositionState,
   TrimRange
 } from "./editor-state-storage";
+import type { ScreenCrop } from "../../shared/editor-domain/types";
 import type {
   BackgroundCategory,
   BackgroundStyle,
@@ -31,6 +33,7 @@ import type {
   CameraPosition,
   CameraShape,
   ClipTransition,
+  ClipEdgeTransition,
   EditorMediaItem,
   LayoutMode,
   ScreenAspectRatio,
@@ -45,6 +48,7 @@ import type {
 
 type UseEditorPersistenceParams = {
   activeBackgroundCategory: BackgroundCategory;
+  audioCleanup: AudioCleanupState;
   audioLevels: AudioLevelState;
   backgroundAudioIds: string[];
   backgroundStyle: BackgroundStyle;
@@ -69,7 +73,9 @@ type UseEditorPersistenceParams = {
   projectId: string | null;
   screenAspectRatio: ScreenAspectRatio;
   screenPosition: ScreenPositionState;
+  screenCrop?: ScreenCrop;
   setActiveBackgroundCategory: Dispatch<SetStateAction<BackgroundCategory>>;
+  setAudioCleanup: Dispatch<SetStateAction<AudioCleanupState>>;
   setAudioLevels: Dispatch<SetStateAction<AudioLevelState>>;
   setBackgroundAudioIds: Dispatch<SetStateAction<string[]>>;
   setBackgroundStyle: Dispatch<SetStateAction<BackgroundStyle>>;
@@ -91,9 +97,11 @@ type UseEditorPersistenceParams = {
   setPreviewZoom: Dispatch<SetStateAction<number>>;
   setProject: Dispatch<SetStateAction<ProjectView | null>>;
   setScreenAspectRatio: Dispatch<SetStateAction<ScreenAspectRatio>>;
+  setScreenCrop?: Dispatch<SetStateAction<ScreenCrop>>;
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
   setTransitions: Dispatch<SetStateAction<ClipTransition[]>>;
+  setEdgeTransitions: Dispatch<SetStateAction<ClipEdgeTransition[]>>;
   setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitleStyle: Dispatch<SetStateAction<SubtitleStyle>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
@@ -105,6 +113,7 @@ type UseEditorPersistenceParams = {
   setZoomEffects: Dispatch<SetStateAction<ZoomEffect[]>>;
   speedEffects: SpeedEffect[];
   transitions: ClipTransition[];
+  edgeTransitions: ClipEdgeTransition[];
   subtitleStyle: SubtitleStyle;
   subtitleLanguage: string | null;
   subtitles: SubtitleSegment[];
@@ -117,8 +126,10 @@ type UseEditorPersistenceParams = {
 };
 
 type RestoreActionParams = {
+  setScreenCrop?: (value: ScreenCrop) => void;
   knownTimelineItemIdsRef: MutableRefObject<Set<string>>;
   setActiveBackgroundCategory: Dispatch<SetStateAction<BackgroundCategory>>;
+  setAudioCleanup: Dispatch<SetStateAction<AudioCleanupState>>;
   setAudioLevels: Dispatch<SetStateAction<AudioLevelState>>;
   setBackgroundAudioIds: Dispatch<SetStateAction<string[]>>;
   setBackgroundStyle: Dispatch<SetStateAction<BackgroundStyle>>;
@@ -139,6 +150,7 @@ type RestoreActionParams = {
   setScreenPosition: Dispatch<SetStateAction<ScreenPositionState>>;
   setSpeedEffects: Dispatch<SetStateAction<SpeedEffect[]>>;
   setTransitions: Dispatch<SetStateAction<ClipTransition[]>>;
+  setEdgeTransitions: Dispatch<SetStateAction<ClipEdgeTransition[]>>;
   setSubtitleLanguage: Dispatch<SetStateAction<string | null>>;
   setSubtitleStyle: Dispatch<SetStateAction<SubtitleStyle>>;
   setSubtitles: Dispatch<SetStateAction<SubtitleSegment[]>>;
@@ -196,6 +208,7 @@ export function trackSaveInFlight(
 export function useEditorPersistence(params: UseEditorPersistenceParams) {
   const {
     activeBackgroundCategory,
+    audioCleanup,
     audioLevels,
     backgroundAudioIds,
     backgroundStyle,
@@ -220,7 +233,9 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     previewZoom,
     screenAspectRatio,
     screenPosition,
+    screenCrop,
     setActiveBackgroundCategory,
+    setAudioCleanup,
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
@@ -242,6 +257,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setPreviewZoom,
     setProject,
     setScreenAspectRatio,
+    setScreenCrop,
     setScreenPosition,
     setSpeedEffects,
     setTransitions,
@@ -256,6 +272,8 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     setZoomEffects,
     speedEffects,
     transitions,
+    edgeTransitions,
+    setEdgeTransitions,
     subtitleStyle,
     subtitleLanguage,
     subtitles,
@@ -323,6 +341,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
           const restored = applySavedState(savedState, {
             knownTimelineItemIdsRef,
             setActiveBackgroundCategory,
+            setAudioCleanup,
             setAudioLevels,
             setBackgroundAudioIds,
             setBackgroundStyle,
@@ -344,6 +363,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             setScreenPosition,
             setSpeedEffects,
             setTransitions,
+            setEdgeTransitions,
             setSubtitleLanguage,
             setSubtitleStyle,
             setSubtitles,
@@ -365,6 +385,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
             restoreEditorStateSnapshot(legacyState, createRestoreActions({
               knownTimelineItemIdsRef,
               setActiveBackgroundCategory,
+              setAudioCleanup,
               setAudioLevels,
               setBackgroundAudioIds,
               setBackgroundStyle,
@@ -382,9 +403,11 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
               setPreviewQuality,
               setPreviewZoom,
               setScreenAspectRatio,
+              setScreenCrop,
               setScreenPosition,
               setSpeedEffects,
               setTransitions,
+            setEdgeTransitions,
               setSubtitleLanguage,
               setSubtitleStyle,
               setSubtitles,
@@ -415,6 +438,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     knownTimelineItemIdsRef,
     projectId,
     setActiveBackgroundCategory,
+    setAudioCleanup,
     setAudioLevels,
     setBackgroundAudioIds,
     setBackgroundStyle,
@@ -457,6 +481,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     () =>
       createEditorStateSnapshot({
         activeBackgroundCategory,
+        audioCleanup,
         audioLevels,
         backgroundAudioIds,
         backgroundStyle,
@@ -475,8 +500,10 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
         previewZoom,
         screenAspectRatio,
         screenPosition,
+    screenCrop,
         speedEffects,
         transitions,
+        edgeTransitions,
         subtitleLanguage,
         subtitleStyle,
         subtitles,
@@ -489,6 +516,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       }),
     [
       activeBackgroundCategory,
+      audioCleanup,
       audioLevels,
       backgroundAudioIds,
       backgroundStyle,
@@ -509,6 +537,7 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       screenPosition,
       speedEffects,
       transitions,
+      edgeTransitions,
       subtitleLanguage,
       subtitleStyle,
       subtitles,
@@ -658,11 +687,12 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
       }
       const restored = applySavedState(external, {
         knownTimelineItemIdsRef,
-        setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
+        setActiveBackgroundCategory, setAudioCleanup, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
         setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
         setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
         setMasterVolume, setPendingMediaImport, setPendingMusicGeneration, setPreviewQuality,
         setPreviewZoom, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
+            setEdgeTransitions,
         setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTextOverlays, setTimelineSegments,
         setTimelineZoom, setTrimRange,
         setVideoCornerStyle, setZoomEffects
@@ -699,11 +729,12 @@ export function useEditorPersistence(params: UseEditorPersistenceParams) {
     });
     if (!applySavedState(restored, {
       knownTimelineItemIdsRef,
-      setActiveBackgroundCategory, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
+      setActiveBackgroundCategory, setAudioCleanup, setAudioLevels, setBackgroundAudioIds, setBackgroundStyle,
       setCameraBorderStyle, setCameraContentTransform, setCameraFrame, setCameraPosition,
       setCameraShape, setCameraSize, setCustomBackgroundImportId, setImportedMedia, setLayoutMode,
       setMasterVolume, setPendingMediaImport, setPendingMusicGeneration, setPreviewQuality,
       setPreviewZoom, setScreenAspectRatio, setScreenPosition, setSpeedEffects, setTransitions,
+            setEdgeTransitions,
       setSubtitleLanguage, setSubtitleStyle, setSubtitles, setTimelineSegments, setTimelineZoom, setTrimRange,
       setTextOverlays,
       setVideoCornerStyle, setZoomEffects
@@ -786,6 +817,7 @@ function createRestoreActions(actions: RestoreActionParams) {
   return {
     addKnownTimelineItemId: (itemId: string) => actions.knownTimelineItemIdsRef.current.add(itemId),
     setActiveBackgroundCategory: actions.setActiveBackgroundCategory,
+    setAudioCleanup: actions.setAudioCleanup,
     setAudioLevels: actions.setAudioLevels,
     setBackgroundAudioIds: actions.setBackgroundAudioIds,
     setBackgroundStyle: actions.setBackgroundStyle,
@@ -804,9 +836,11 @@ function createRestoreActions(actions: RestoreActionParams) {
     setPreviewQuality: actions.setPreviewQuality,
     setPreviewZoom: actions.setPreviewZoom,
     setScreenAspectRatio: actions.setScreenAspectRatio,
+    setScreenCrop: actions.setScreenCrop,
     setScreenPosition: actions.setScreenPosition,
     setSpeedEffects: actions.setSpeedEffects,
     setTransitions: actions.setTransitions,
+    setEdgeTransitions: actions.setEdgeTransitions,
     setSubtitleLanguage: actions.setSubtitleLanguage,
     setSubtitleStyle: actions.setSubtitleStyle,
     setSubtitles: actions.setSubtitles,

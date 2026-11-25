@@ -14,9 +14,14 @@ export type EditorShortcutsParams = {
   copyClip: () => void;
   cutClip: () => void;
   pasteClip: () => void;
-  splitAtPlayhead: (segmentId: string | null, time: number) => void;
+  /** Splits the current selection (every selected clip, or the single one) at the playhead. */
+  splitAtPlayhead: (time: number) => void;
   togglePlayback: () => void;
   deleteSelected: (options?: { linked?: boolean }) => void;
+  /** Deactivates or reactivates the selected clips. */
+  toggleHidden: () => void;
+  /** Selects every timeline clip. */
+  selectAll: () => void;
 };
 
 /**
@@ -79,9 +84,27 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
       // Timeline regions are rendered as accessible buttons. Delete must still
       // remove the selected timeline item when one of those buttons has focus.
       // Alt+Delete removes a recording's picture but keeps its audio.
+      // H (or its E alias) deactivates the selected clips without deleting them,
+      // so recorded channels can be taken off screen while keeping their range.
+      // A focused clip is itself a button and is exactly where the shortcut gets
+      // pressed after a selection, so that focus must not swallow the toggle.
+      if ((key === "h" || key === "e") && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (isKeyboardInteractiveTarget(event.target) && !isTimelineClip) return;
+        event.preventDefault();
+        p.toggleHidden();
+        return;
+      }
+
       if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
-        p.deleteSelected(event.altKey ? { linked: false } : undefined);
+        p.deleteSelected(event.shiftKey ? { linked: true } : undefined);
+        return;
+      }
+
+      // Ctrl/Cmd+A selects the whole timeline, like a document.
+      if (accel && key === "a") {
+        event.preventDefault();
+        p.selectAll();
         return;
       }
 
@@ -136,10 +159,11 @@ export function useEditorShortcuts(params: EditorShortcutsParams) {
         return;
       }
 
-      // Ctrl/Cmd+B blades the selected clip at the playhead.
+      // Ctrl/Cmd+B blades the selection at the playhead: every selected clip
+      // when there is a multi-selection, otherwise just the selected clip.
       if (accel && key === "b") {
         event.preventDefault();
-        p.splitAtPlayhead(p.selectedTimelineSegmentId, p.currentTime);
+        p.splitAtPlayhead(p.currentTime);
         return;
       }
 

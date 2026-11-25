@@ -20,6 +20,7 @@ import {
   TimelineToolbar
 } from "./TimelineChrome";
 import { TimelineTracks } from "./TimelineTracks";
+import { getEffectiveAudioLevel } from "../../shared/editor-domain";
 import { isTimelineTimedItemInRange } from "./timeline-utils";
 import { formatSeconds } from "./utils";
 import {
@@ -62,6 +63,7 @@ export function Timeline(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomChange: (zoom: number) => void;
   onZoomWheel: (event: ReactWheelEvent<HTMLElement>) => void;
   onRulerPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onRulerPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -82,11 +84,13 @@ export function Timeline(props: {
   /** User-controlled visible duration; never smaller than contentDuration. */
   renderDuration: number;
   videoClips: TimelineMediaClip[];
+  onToggleVideoLaneVisibility: (lane: number) => void;
+  onSwapVideoChannels: (firstLane: number, secondLane: number) => void;
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   onSetAudioLevel: (
     itemId: string,
-    patch: Partial<{ volume: number; muted: boolean }>
+    patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>
   ) => void;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
@@ -107,6 +111,10 @@ export function Timeline(props: {
   contextMenu: TimelineContextMenu;
   canSplitAtContextMenu: boolean;
   canSplitAtPlayhead: boolean;
+  /** The context menu addresses at least one clip, so Hide/Show applies. */
+  canToggleHidden: boolean;
+  /** Every clip the context menu addresses is already deactivated. */
+  selectedClipsHidden: boolean;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
   onUndo: () => void;
@@ -153,6 +161,9 @@ export function Timeline(props: {
   onBodyDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onBodyDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onContextMenuSplit: () => void;
+  onContextMenuToggleHidden: () => void;
+  /** Packs the clips the context menu addresses back to back. */
+  onContextMenuCloseGaps: () => void;
   onContextMenuDelete: () => void;
 }) {
   const transitionBoundaries = useMemo(
@@ -160,6 +171,7 @@ export function Timeline(props: {
     [props.videoClips]
   );
   const [transitionDropKey, setTransitionDropKey] = useState<string | null>(null);
+  const [dropGuideTime, setDropGuideTime] = useState<number | null>(null);
   const rangeTimedItemCount = props.rangeSelection
     ? props.zoomEffects.filter((item) =>
         isTimelineTimedItemInRange(props.rangeSelection, "zoom", item.start, item.end)
@@ -192,8 +204,30 @@ export function Timeline(props: {
     return getNearestTransitionBoundary(transitionBoundaries, ratio * props.renderDuration);
   }
 
+  function findNearestClipEdge(clientX: number): number | null {
+    const lane = document.querySelector<HTMLElement>("[data-timeline-body] .track-lane");
+    if (!lane || lane.clientWidth <= 0) return null;
+    const bounds = lane.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
+    const time = ratio * props.renderDuration;
+    const edges = [
+      0,
+      ...props.videoClips.flatMap((clip) => [clip.start, clip.start + clip.duration]),
+      ...props.audioTracks.flatMap((track) =>
+        track.clips.flatMap((clip) => [clip.start, clip.start + clip.duration])
+      )
+    ];
+    const nearest = edges.reduce((best, edge) =>
+      Math.abs(edge - time) < Math.abs(best - time) ? edge : best, 0
+    );
+    return Math.abs(nearest - time) <= Math.max(0.01, props.renderDuration * 0.01)
+      ? nearest
+      : time;
+  }
+
   function handleBodyDragOver(event: ReactDragEvent<HTMLDivElement>) {
     if (!event.dataTransfer.types.includes(transitionDragType)) {
+      setDropGuideTime(findNearestClipEdge(event.clientX));
       props.onBodyDragOver(event);
       return;
     }
@@ -204,9 +238,11 @@ export function Timeline(props: {
 
   function handleBodyDrop(event: ReactDragEvent<HTMLDivElement>) {
     if (!event.dataTransfer.types.includes(transitionDragType)) {
+      setDropGuideTime(null);
       props.onBodyDrop(event);
       return;
     }
+    setDropGuideTime(null);
     event.preventDefault();
     const type = event.dataTransfer.getData(transitionDragType);
     const boundary = getTransitionBoundaryAtClientX(event.clientX);
@@ -302,6 +338,7 @@ export function Timeline(props: {
             onDragLeave={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
                 setTransitionDropKey(null);
+                setDropGuideTime(null);
               }
             }}
             onDrop={handleBodyDrop}
@@ -318,6 +355,8 @@ export function Timeline(props: {
         <TimelineTracks
           renderDuration={props.renderDuration}
           videoClips={props.videoClips}
+          onToggleVideoLaneVisibility={props.onToggleVideoLaneVisibility}
+          onSwapVideoChannels={props.onSwapVideoChannels}
           audioTracks={props.audioTracks}
           audioLevels={props.audioLevels}
           onSetAudioLevel={props.onSetAudioLevel}
@@ -326,6 +365,7 @@ export function Timeline(props: {
           transitions={props.transitions}
           transitionBoundaries={transitionBoundaries}
           transitionDropKey={transitionDropKey}
+          dropGuideTime={dropGuideTime}
           subtitles={props.subtitles}
           subtitleProcessing={props.subtitleProcessing}
           subtitleProcessingRanges={props.subtitleProcessingRanges}
@@ -369,6 +409,7 @@ export function Timeline(props: {
         onZoomIn={props.onZoomIn}
         onZoomOut={props.onZoomOut}
         onZoomReset={props.onZoomReset}
+        onZoomChange={props.onZoomChange}
       />
 
       {props.contextMenu ? (
@@ -377,7 +418,48 @@ export function Timeline(props: {
           y={props.contextMenu.y}
           canSplit={props.canSplitAtContextMenu}
           canDelete={Boolean(props.contextMenu.segmentId)}
+          canToggleHidden={props.canToggleHidden}
+          clipsHidden={props.selectedClipsHidden}
+          volume={(() => {
+            const clip = [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip) return undefined;
+            return getEffectiveAudioLevel(
+              props.audioLevels, clip.item.id, clip.track === "audio" ? clip.lane : null
+            ).volume;
+          })()}
+          onVolumeChange={(() => {
+            const clip = [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip) return undefined;
+            return (volume: number) => props.onSetAudioLevel(clip.item.id, { volume });
+          })()}
+          fadeIn={(() => {
+            const clip = [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip || clip.track !== "audio") return undefined;
+            return getEffectiveAudioLevel(
+              props.audioLevels, clip.item.id, clip.lane
+            ).fadeIn;
+          })()}
+          fadeOut={(() => {
+            const clip = [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip || clip.track !== "audio") return undefined;
+            return getEffectiveAudioLevel(
+              props.audioLevels, clip.item.id, clip.lane
+            ).fadeOut;
+          })()}
+          onFadeChange={(() => {
+            const clip = [...props.audioTracks.flatMap((track) => track.clips)]
+              .find((item) => item.id === props.contextMenu?.segmentId);
+            if (!clip) return undefined;
+            return (patch: { fadeIn?: number; fadeOut?: number }) =>
+              props.onSetAudioLevel(clip.item.id, patch);
+          })()}
           onSplit={props.onContextMenuSplit}
+          onToggleHidden={props.onContextMenuToggleHidden}
+          onCloseGaps={props.onContextMenuCloseGaps}
           onDelete={props.onContextMenuDelete}
         />
       ) : null}

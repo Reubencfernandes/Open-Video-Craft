@@ -59,7 +59,7 @@ export function SpeedPanel(props: {
         </>
       ) : (
         <div className="rounded-lg border border-dashed border-white/10 p-4 text-center text-sm font-bold text-slate-400">
-          Add a speed section, then pick 1x-5x and drag its box on the timeline.
+          Add a speed section, then pick 1x, 1.25x, 1.5x, 2x, 3x, 4x or 5x and drag its box on the timeline.
         </div>
       )}
     </div>

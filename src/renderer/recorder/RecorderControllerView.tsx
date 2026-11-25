@@ -10,7 +10,6 @@ import {
   Mic,
   MicOff,
   Minimize2,
-  MonitorUp,
   Pause,
   Play,
   Video,
@@ -20,6 +19,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { analyzeAudioSamples, smoothMeterLevel } from "./audio-meter";
 import type { SourceSummary } from "../../shared/types";
 import appLogo from "../assets/app.png";
 import { cx } from "../classNames";
@@ -33,7 +33,6 @@ import {
   type CameraQuality,
   type ScreenQuality
 } from "./quality";
-import { truncateLabel } from "./recorder-utils";
 import type { DeviceOption, FloatingState } from "./types";
 
 export function RecorderControllerView(props: {
@@ -44,16 +43,18 @@ export function RecorderControllerView(props: {
   errorMessage: string | null;
   systemAudioEnabled: boolean;
   sources: SourceSummary[];
-  selectedSourceId: string | null;
+  /** Real still preview per source id; falls back to the source thumbnail. */
+  sourceThumbnails: Record<string, string>;
+  selectedSourceIds: string[];
   baseDirectory: string | null;
   microphones: DeviceOption[];
   cameras: DeviceOption[];
   selectedMicId: string | null;
-  selectedCameraId: string | null;
-  selectedCameraLabel: string;
+  selectedCameraIds: string[];
   micEnabled: boolean;
   cameraEnabled: boolean;
-  cameraPreviewStream: MediaStream | null;
+  /** Live preview per selected camera device id. */
+  cameraPreviewStreams: Record<string, MediaStream>;
   screenQuality: ScreenQuality;
   cameraQuality: CameraQuality;
   canStart: boolean;
@@ -71,10 +72,12 @@ export function RecorderControllerView(props: {
   onToggleMic: () => void;
   onToggleCamera: () => void;
   onMicChange: (deviceId: string | null) => void;
-  onCameraChange: (deviceId: string | null) => void;
-  onSourceChange: (sourceId: string) => void;
+  onToggleSource: (sourceId: string) => void;
+  onToggleCameraDevice: (deviceId: string) => void;
   onScreenQualityChange: (quality: ScreenQuality) => void;
   onCameraQualityChange: (quality: CameraQuality) => void;
+  microphoneLevel?: number;
+  onResizeWindow?: (width: number, height: number) => void;
 }) {
   if (props.compact) {
     return <CompactRecorderView {...props} />;
@@ -141,11 +144,37 @@ function CompactRecorderView(props: Parameters<typeof RecorderControllerView>[0]
 
 function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0]) {
   const isRecordingActive = props.state === "recording" || props.state === "paused";
-  const dockCameraRecordingControls =
-    isRecordingActive && props.cameraPreviewStream !== null;
+  const hasCameraStreams = Object.keys(props.cameraPreviewStreams).length > 0;
+  const dockCameraRecordingControls = isRecordingActive && hasCameraStreams;
   const systemAudioLabel = props.systemAudioEnabled
     ? "System audio on"
     : "System audio off";
+  const resizeStartRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+
+  function beginResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (!props.onResizeWindow) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      width: window.innerWidth,
+      height: window.innerHeight
+    };
+  }
+
+  function moveResize(event: React.PointerEvent<HTMLDivElement>) {
+    const start = resizeStartRef.current;
+    if (!start || !props.onResizeWindow) return;
+    const maxWidth = Math.max(460, window.screen.availWidth - 16);
+    const maxHeight = Math.max(460, window.screen.availHeight - 16);
+    const width = Math.min(maxWidth, Math.max(460, start.width + event.clientX - start.x));
+    const height = Math.min(maxHeight, Math.max(460, start.height + event.clientY - start.y));
+    void props.onResizeWindow(Math.round(width), Math.round(height));
+  }
+
+  function endResize() {
+    resizeStartRef.current = null;
+  }
 
   return (
     <main className="grid size-full place-items-center bg-transparent">
@@ -198,6 +227,19 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
 
         <RecorderBody {...props} />
 
+        {props.onResizeWindow ? (
+          <div
+            className="absolute bottom-0.5 right-0.5 z-40 size-6 cursor-nwse-resize rounded-tr-lg [-webkit-app-region:no-drag] [background:repeating-linear-gradient(135deg,transparent_0,transparent_4px,rgba(255,255,255,0.5)_4px,rgba(255,255,255,0.5)_6px)]"
+            data-recorder-resize-grip
+            aria-label="Resize recorder"
+            title="Drag to resize"
+            onPointerDown={beginResize}
+            onPointerMove={moveResize}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+          />
+        ) : null}
+
         {dockCameraRecordingControls ? (
           <div className="flex-none px-3 pt-2">
             <RecordingControls {...props} docked />
@@ -240,7 +282,6 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
                 onToggle={props.onToggleMic}
                 onValueChange={props.onMicChange}
               />
-
               <button
                 className={cx(
                   "grid min-h-16 place-items-center gap-1 rounded-xl border-0 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-neutral-300 transition-[transform,background-color,color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45",
@@ -269,19 +310,40 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
                 <span>{props.baseDirectory ? "Project set" : "Project"}</span>
               </button>
 
-              <FloatingDeviceControl
-                enabled={props.cameraEnabled}
-                enabledIcon={<Video size={25} />}
-                disabledIcon={<VideoOff size={25} />}
-                enabledLabel={truncateLabel(props.selectedCameraLabel)}
-                disabledLabel="Camera off"
-                options={props.cameras}
-                value={props.selectedCameraId}
-                disabled={!props.canStart}
-                onToggle={props.onToggleCamera}
-                onValueChange={props.onCameraChange}
-              />
+              <button
+                className={cx(
+                  "grid min-h-16 place-items-center gap-1 rounded-xl border-0 bg-white/[0.045] px-2 text-center text-[0.68rem] font-extrabold text-neutral-300 transition-[transform,background-color,color] duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-45",
+                  props.cameraEnabled && "bg-[#ff3b9d]/10 text-white"
+                )}
+                type="button"
+                onClick={props.onToggleCamera}
+                disabled={!props.canStart || props.cameras.length === 0}
+                aria-pressed={props.cameraEnabled}
+                data-camera-toggle
+                title={
+                  props.cameraEnabled
+                    ? `Recording ${props.selectedCameraIds.length} camera(s)`
+                    : "Camera off"
+                }
+              >
+                <span className={props.cameraEnabled ? "text-[#ff6db7]" : "text-neutral-500"}>
+                  {props.cameraEnabled ? <Video size={25} /> : <VideoOff size={25} />}
+                </span>
+                <span>
+                  {props.cameraEnabled && props.selectedCameraIds.length > 0
+                    ? `${props.selectedCameraIds.length} cam`
+                    : "Camera off"}
+                </span>
+              </button>
             </footer>
+
+            <CameraMultiSelect
+              cameras={props.cameras}
+              selectedCameraIds={props.selectedCameraIds}
+              previewStreams={props.cameraPreviewStreams}
+              disabled={!props.canStart}
+              onToggleDevice={props.onToggleCameraDevice}
+            />
           </>
         )}
       </section>
@@ -289,13 +351,123 @@ function ExpandedRecorderView(props: Parameters<typeof RecorderControllerView>[0
   );
 }
 
-function CameraPreview(props: { stream: MediaStream }) {
+function MicrophoneMeter(props: { level: number; enabled: boolean }) {
+  const percent = Math.max(0, Math.min(100, Math.round(props.level)));
+  return (
+    <div
+      className="pointer-events-none absolute bottom-3 right-3 z-10 w-28 rounded-lg border border-white/10 bg-black/55 p-2 backdrop-blur-md"
+      data-microphone-meter={percent}
+      aria-label="Microphone level"
+    >
+      <div className="mb-1 flex items-center justify-between text-[0.58rem] font-bold uppercase tracking-wide text-neutral-400">
+        <span>Mic</span>
+        <span>{props.enabled ? `${percent}%` : "off"}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div
+          className={props.enabled && percent > 0 ? "h-full bg-emerald-400" : "h-full bg-neutral-600"}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Shared card surface so screens, windows and webcams read as the same kind
+// of large source tile instead of three different controls.
+function sourceCardClassName(selected: boolean): string {
+  return cx(
+    "grid min-w-0 gap-1 rounded-lg border-2 p-1 text-left transition-[border-color,background-color] duration-200 disabled:cursor-not-allowed disabled:opacity-55",
+    selected
+      ? "border-[#ff3b9d] bg-[#ff3b9d]/15"
+      : "border-white/10 bg-white/[0.04] hover:border-white/25"
+  );
+}
+
+function SourceGridCard(props: {
+  source: SourceSummary;
+  thumbnail: string;
+  selected: boolean;
+  disabled: boolean;
+  onToggle: (sourceId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-source-card={props.source.id}
+      aria-pressed={props.selected}
+      aria-label={`Select ${props.source.name}`}
+      title={props.source.name}
+      disabled={props.disabled}
+      onClick={() => props.onToggle(props.source.id)}
+      className={sourceCardClassName(props.selected)}
+    >
+      <img
+        className="aspect-video w-full rounded object-cover"
+        src={props.thumbnail}
+        alt=""
+      />
+      <span className="truncate text-[0.58rem] font-bold text-neutral-200">
+        {props.source.name}
+      </span>
+    </button>
+  );
+}
+
+function SourceGrid(props: {
+  sources: SourceSummary[];
+  thumbnails: Record<string, string>;
+  selectedSourceIds: string[];
+  disabled: boolean;
+  onToggle: (sourceId: string) => void;
+}) {
+  const screens = props.sources.filter((source) => source.kind === "screen");
+  const windows = props.sources.filter((source) => source.kind === "window");
+
+  const renderGroup = (label: string, group: SourceSummary[]) =>
+    group.length === 0 ? null : (
+      <div className="grid gap-1" key={label}>
+        <span className="text-[0.52rem] font-extrabold uppercase tracking-[0.14em] text-neutral-500">
+          {label}
+        </span>
+        <div className="grid grid-cols-3 gap-1.5">
+          {group.map((source) => (
+            <SourceGridCard
+              key={source.id}
+              source={source}
+              thumbnail={props.thumbnails[source.id] ?? source.thumbnail}
+              selected={props.selectedSourceIds.includes(source.id)}
+              disabled={props.disabled}
+              onToggle={props.onToggle}
+            />
+          ))}
+        </div>
+      </div>
+    );
+
+  return (
+    <div
+      className="grid min-h-0 gap-2 overflow-y-auto rounded-xl bg-black/70 p-2 backdrop-blur-md [-webkit-app-region:no-drag]"
+      aria-label="Screens and windows to record"
+      role="group"
+      data-source-grid
+    >
+      {props.sources.length === 0 ? (
+        <span className="text-[0.6rem] font-bold text-neutral-400">No source available</span>
+      ) : null}
+      {renderGroup("Screens", screens)}
+      {renderGroup("Windows", windows)}
+    </div>
+  );
+}
+
+function CameraCardVideo(props: { label: string; stream: MediaStream }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) {
-      return;
+      return undefined;
     }
 
     video.srcObject = props.stream;
@@ -309,52 +481,81 @@ function CameraPreview(props: { stream: MediaStream }) {
   return (
     <video
       ref={videoRef}
-      className="pointer-events-none absolute inset-0 size-full bg-black object-cover"
+      className="aspect-video w-full rounded object-cover"
       autoPlay
       muted
       playsInline
-      aria-label="Camera preview"
+      aria-label={`Camera ${props.label} preview`}
     />
   );
 }
 
-function CaptureSourceSelect(props: {
-  sources: SourceSummary[];
-  selectedSourceId: string | null;
+function CameraSourceCard(props: {
+  camera: DeviceOption;
+  stream: MediaStream | undefined;
+  selected: boolean;
   disabled: boolean;
-  onChange: (sourceId: string) => void;
+  onToggle: (deviceId: string) => void;
 }) {
-  const screens = props.sources.filter((source) => source.kind === "screen");
-  const windows = props.sources.filter((source) => source.kind === "window");
+  return (
+    <button
+      type="button"
+      data-camera-card={props.camera.deviceId}
+      aria-pressed={props.selected}
+      aria-label={`Record camera ${props.camera.label}`}
+      title={props.camera.label}
+      disabled={props.disabled}
+      onClick={() => props.onToggle(props.camera.deviceId)}
+      className={sourceCardClassName(props.selected)}
+    >
+      {props.stream ? (
+        <CameraCardVideo label={props.camera.label} stream={props.stream} />
+      ) : (
+        <span className="grid aspect-video w-full place-items-center rounded bg-black/40 text-neutral-600">
+          <VideoOff size={20} />
+        </span>
+      )}
+      <span className="truncate text-[0.58rem] font-bold text-neutral-200">
+        {props.camera.label}
+      </span>
+    </button>
+  );
+}
+
+function CameraMultiSelect(props: {
+  cameras: DeviceOption[];
+  selectedCameraIds: string[];
+  previewStreams: Record<string, MediaStream>;
+  disabled: boolean;
+  onToggleDevice: (deviceId: string) => void;
+}) {
+  if (props.cameras.length === 0) {
+    return null;
+  }
 
   return (
-    <label className="absolute left-1/2 top-3 z-20 inline-flex max-w-[88%] -translate-x-1/2 items-center gap-2 rounded-xl bg-black/65 p-1.5 pl-3 text-[0.64rem] font-bold text-neutral-300 backdrop-blur-md [-webkit-app-region:no-drag]">
-      <MonitorUp className="shrink-0 text-[#ff6db7]" size={14} />
-      <span className="sr-only">Screen or window to record</span>
-      <select
-        className="themed-select h-8 min-w-0 max-w-[18rem] cursor-pointer border-0 bg-transparent text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-55"
-        value={props.selectedSourceId ?? ""}
-        disabled={props.disabled || props.sources.length === 0}
-        onChange={(event) => props.onChange(event.target.value)}
-        aria-label="Screen or window to record"
-      >
-        {props.sources.length === 0 ? <option value="">No source available</option> : null}
-        {screens.length > 0 ? (
-          <optgroup label="Screens">
-            {screens.map((source) => (
-              <option key={source.id} value={source.id}>{source.name}</option>
-            ))}
-          </optgroup>
-        ) : null}
-        {windows.length > 0 ? (
-          <optgroup label="Windows">
-            {windows.map((source) => (
-              <option key={source.id} value={source.id}>{source.name}</option>
-            ))}
-          </optgroup>
-        ) : null}
-      </select>
-    </label>
+    <div
+      className="mx-3 mt-2 grid max-h-56 flex-none gap-1 overflow-y-auto rounded-xl bg-white/[0.035] px-3 py-2 [-webkit-app-region:no-drag]"
+      aria-label="Cameras to record"
+      role="group"
+      data-camera-picker
+    >
+      <span className="text-[0.52rem] font-extrabold uppercase tracking-[0.14em] text-neutral-500">
+        Cameras
+      </span>
+      <div className="grid grid-cols-2 gap-1.5">
+        {props.cameras.map((camera) => (
+          <CameraSourceCard
+            key={camera.deviceId}
+            camera={camera}
+            stream={props.previewStreams[camera.deviceId]}
+            selected={props.selectedCameraIds.includes(camera.deviceId)}
+            disabled={props.disabled}
+            onToggle={props.onToggleDevice}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -367,10 +568,10 @@ function QualitySelect<T extends string>(props: {
   onChange: (value: T) => void;
 }) {
   return (
-    <label className="grid gap-1 rounded-xl bg-white/[0.035] px-3 py-2 text-[0.58rem] font-bold uppercase tracking-[0.12em] text-neutral-500 transition-colors hover:bg-white/[0.055] [-webkit-app-region:no-drag]">
+    <label className="grid gap-1.5 rounded-xl bg-white/[0.035] px-4 py-3 text-[0.62rem] font-bold uppercase tracking-[0.12em] text-neutral-400 transition-colors hover:bg-white/[0.055] [-webkit-app-region:no-drag]">
       <span>{props.label}</span>
       <select
-        className="themed-select w-full cursor-pointer border-0 bg-transparent py-1 text-xs font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-45"
+        className="themed-select h-9 w-full cursor-pointer border-0 bg-transparent px-2 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-45"
         value={props.value}
         disabled={props.disabled}
         onChange={(event) => props.onChange(event.target.value as T)}
@@ -474,61 +675,32 @@ function RecordingControls(
 function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
   const isRecordingActive = props.state === "recording" || props.state === "paused";
   const isBusy = ["preparing", "countdown", "processing", "stopping"].includes(props.state);
-  const showCameraPreview = props.cameraPreviewStream !== null;
 
   const statusText = getRecorderStatusText(props);
 
   return (
-    <div className="relative grid min-h-0 flex-1 place-items-center overflow-hidden px-4 pb-5 pt-3">
-      {showCameraPreview ? (
-        <>
-          <CameraPreview stream={props.cameraPreviewStream!} />
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgb(0_0_0_/_0.5)_0%,rgb(0_0_0_/_0.12)_42%,rgb(0_0_0_/_0.56)_100%)]" />
-        </>
-      ) : null}
-
-      <CaptureSourceSelect
+    <div className="relative grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] gap-3 overflow-hidden px-4 pb-3 pt-3">
+      <SourceGrid
         sources={props.sources}
-        selectedSourceId={props.selectedSourceId}
+        thumbnails={props.sourceThumbnails}
+        selectedSourceIds={props.selectedSourceIds}
         disabled={!props.canStart}
-        onChange={props.onSourceChange}
+        onToggle={props.onToggleSource}
       />
 
+      <MicrophoneMeter level={props.microphoneLevel ?? 0} enabled={props.micEnabled} />
+
       <div
-        className={cx(
-          "recorder-state-enter z-10 flex flex-col items-center gap-4",
-          showCameraPreview && !isRecordingActive
-            ? "absolute inset-x-0 bottom-4 px-4"
-            : "relative"
-        )}
+        className="recorder-state-enter z-30 grid flex-none justify-items-center gap-3"
         key={props.state}
       >
         {isRecordingActive ? (
-          showCameraPreview ? null : <RecordingControls {...props} />
-        ) : showCameraPreview ? (
-          <button
-            className="inline-flex h-12 items-center gap-3 rounded-full border border-white/15 bg-[#101012] py-1.5 pl-2 pr-5 text-white shadow-[0_12px_36px_rgb(0_0_0_/_0.42)] transition-[background-color,transform] duration-200 hover:-translate-y-0.5 hover:bg-[#18181b] active:translate-y-0 disabled:cursor-wait disabled:opacity-70"
-            type="button"
-            disabled={isBusy}
-            onClick={props.onStartRecording}
-            aria-label="Start recording"
-            title="Start recording"
-            data-recorder-start
-          >
-            <span className="grid size-9 place-items-center rounded-full border-2 border-white bg-red-600 shadow-[0_0_0_4px_rgb(0_0_0_/_0.2)]">
-              {props.state === "countdown" ? (
-                <strong className="text-base">{props.countdown}</strong>
-              ) : isBusy ? (
-                <LoaderCircle className="animate-spin" size={18} />
-              ) : null}
-            </span>
-            <strong className="text-sm font-extrabold">{statusText}</strong>
-          </button>
+          <RecordingControls {...props} />
         ) : (
-          <div className="grid justify-items-center gap-3">
-            <div className="relative grid size-28 place-items-center">
+          <>
+            <div className="relative grid size-32 place-items-center">
               <button
-                className="relative z-[1] grid size-[88px] place-items-center rounded-full border-2 border-white bg-red-600 text-white transition-colors duration-200 hover:bg-red-500 active:bg-red-700 disabled:cursor-wait disabled:opacity-70"
+                className="relative z-[30] grid size-[104px] place-items-center rounded-full border-2 border-white bg-red-600 text-white shadow-[0_0_0_8px_rgb(220_38_38_/_0.18)] transition-colors duration-200 hover:bg-red-500 active:bg-red-700 disabled:cursor-wait disabled:opacity-70"
                 type="button"
                 disabled={isBusy}
                 onClick={props.onStartRecording}
@@ -546,7 +718,7 @@ function RecorderBody(props: Parameters<typeof RecorderControllerView>[0]) {
             <div className="grid justify-items-center text-center">
               <strong className="text-sm font-extrabold text-white">{statusText}</strong>
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>

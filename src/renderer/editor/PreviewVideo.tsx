@@ -3,10 +3,11 @@
  * Low mode keeps that decoder as the playback clock and paints a 640 px frame
  * to canvas, so quality changes never alter project media or timing.
  */
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   MutableRefObject,
   RefObject,
+  SyntheticEvent,
   VideoHTMLAttributes
 } from "react";
 import {
@@ -25,10 +26,22 @@ export function PreviewVideo({
   className,
   style,
   src,
+  onLoadedData,
+  onSeeked,
   ...videoProps
 }: PreviewVideoProps) {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Two persistent decoders, so a clip swap loads the incoming source while the
+  // outgoing one keeps painting its last frame. Swapping `src` in place instead
+  // blanks the element until the new source has data, which reads as a flash at
+  // every cut between different media.
+  const [presentedSrc, setPresentedSrc] = useState(src);
+  const [activeSlot, setActiveSlot] = useState<0 | 1>(0);
+
+  const pendingSrc = presentedSrc === src ? null : src;
+  const driverSlot = pendingSrc === null ? activeSlot : activeSlot === 0 ? 1 : 0;
+  const driverSrc = pendingSrc ?? presentedSrc;
 
   const assignVideoRef = useCallback(
     (element: HTMLVideoElement | null) => {
@@ -36,6 +49,40 @@ export function PreviewVideo({
       (videoRef as MutableRefObject<HTMLVideoElement | null>).current = element;
     },
     [videoRef]
+  );
+
+  const retainFrameRef = useCallback((element: HTMLVideoElement | null) => {
+    // The outgoing decoder must freeze on its last frame, otherwise it keeps
+    // playing past the cut and shows frames the edit removed.
+    element?.pause();
+  }, []);
+
+  const promotePendingSrc = useCallback(() => {
+    const video = localVideoRef.current;
+    if (!video || !pendingSrc) {
+      return;
+    }
+    if (video.seeking || video.getAttribute("src") !== pendingSrc) {
+      return;
+    }
+    setPresentedSrc(pendingSrc);
+    setActiveSlot((slot) => (slot === 0 ? 1 : 0));
+  }, [pendingSrc]);
+
+  const handleLoadedData = useCallback(
+    (event: SyntheticEvent<HTMLVideoElement>) => {
+      promotePendingSrc();
+      onLoadedData?.(event);
+    },
+    [onLoadedData, promotePendingSrc]
+  );
+
+  const handleSeeked = useCallback(
+    (event: SyntheticEvent<HTMLVideoElement>) => {
+      promotePendingSrc();
+      onSeeked?.(event);
+    },
+    [onSeeked, promotePendingSrc]
   );
 
   useEffect(() => {
@@ -89,17 +136,32 @@ export function PreviewVideo({
       video.removeEventListener("seeked", drawFrame);
       video.removeEventListener("timeupdate", drawFrame);
     };
-  }, [quality, src]);
+  }, [quality, driverSrc]);
+
+  const renderSlot = (slot: 0 | 1) => {
+    const isActive = slot === activeSlot;
+    const isDriver = slot === driverSlot;
+    return (
+      <video
+        key={slot}
+        {...videoProps}
+        ref={isDriver ? assignVideoRef : retainFrameRef}
+        className={className}
+        style={{
+          ...style,
+          opacity: quality === "low" ? 0 : isActive ? style?.opacity : 0
+        }}
+        src={isActive ? presentedSrc : pendingSrc ?? undefined}
+        onLoadedData={isDriver ? handleLoadedData : undefined}
+        onSeeked={isDriver ? handleSeeked : undefined}
+      />
+    );
+  };
 
   return (
     <>
-      <video
-        {...videoProps}
-        ref={assignVideoRef}
-        className={className}
-        style={{ ...style, opacity: quality === "low" ? 0 : style?.opacity }}
-        src={src}
-      />
+      {renderSlot(0)}
+      {renderSlot(1)}
       {quality === "low" ? (
         <canvas
           ref={canvasRef}

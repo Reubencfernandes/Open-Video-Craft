@@ -59,7 +59,7 @@ Craft's recent-project library and verifies each project manifest.
 
 MCP tools fall into three groups:
 
-- Inspection: `list_projects`, `inspect_project`, and `get_analysis`.
+- Inspection: `list_projects`, `inspect_project`, `get_analysis`, `query_analysis_transcript`, and `query_analysis_silences`.
 - Background work: `start_analysis`.
 - Mutations: `apply_edit_plan`, `undo_agent_edit`, and `export_project`.
 
@@ -89,7 +89,29 @@ review candidates only: the server instructions explicitly forbid treating a
 detection as permission to remove content.
 
 The tool returns a job ID immediately. Agents poll with `get_analysis`, avoiding
-long MCP calls while transcription or image generation is in progress.
+long MCP calls while transcription or image generation is in progress. Transcript
+text must be read with `query_analysis_transcript` and silences with
+`query_analysis_silences`; both return at most 40 short timestamped records.
+`get_analysis` returns the full analysis blob and can exceed the assistant's
+context limit.
+
+### YouTube volume
+
+`set_youtube_volume` enables a YouTube-safe loudness ceiling on the final
+export (-14 LUFS integrated, -1 dBTP true peak by default). It keeps playback
+level constant across all video clips instead of relying on per-clip gains.
+
+### Audio clip fades
+
+`set_audio` accepts optional `fadeIn` and `fadeOut` durations in seconds
+(0–10). The same values are used by FFmpeg export and the preview envelope.
+
+### Claude Max local music
+
+Music requests through Claude Max use `generate_music` with engine
+`claude-local`. The main process renders a deterministic WAV with a local
+synth, so no Gemini API key, network call or audio upload is required. Lyria
+engines remain available when a Gemini key is configured.
 
 ### Composition export
 

@@ -8,6 +8,12 @@
  * - operations: atomic timeline-edit geometry
  */
 export * from "./editor-domain/types";
+export * from "./editor-domain/screen-crop";
+export * from "./editor-domain/transcript-callouts";
+export * from "./editor-domain/subtitle-export-style";
+export * from "./editor-domain/reel-highlights";
+export * from "./editor-domain/timeline-visibility";
 export * from "./editor-domain/schema";
 export * from "./editor-domain/operations";
 export * from "./editor-domain/audio-levels";
+export * from "./editor-domain/audio-cleanup";

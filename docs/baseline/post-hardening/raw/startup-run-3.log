@@ -1,0 +1,3 @@
+[auto-update] Skipping update checks in development.
+2026-11-19 18:27:08.248 Electron[65339:389029] Warning: Window move completed without beginning
+2026-11-19 18:27:45.392 Electron[65339:389029] Warning: Window move completed without beginning

@@ -15,10 +15,6 @@ export type MusicGenerationForm = {
   engine: MusicEngine;
   prompt: string;
   lyrics: string;
-  durationSeconds: number;
-  inferSteps: number;
-  guidanceScale: number;
-  seed: number | null;
 };
 
 export function useMusicGeneration(params: {
@@ -48,11 +44,7 @@ export function useMusicGeneration(params: {
         jobId,
         engine: form.engine,
         prompt: form.prompt,
-        lyrics: form.lyrics,
-        durationSeconds: form.durationSeconds,
-        inferSteps: form.inferSteps,
-        guidanceScale: form.guidanceScale,
-        seed: form.seed
+        lyrics: form.lyrics
       });
       setLastLyrics(result.lyrics);
       params.onGenerated(result);

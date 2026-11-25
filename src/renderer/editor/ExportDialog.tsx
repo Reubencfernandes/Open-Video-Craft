@@ -10,7 +10,7 @@ import type {
 } from "../../shared/types";
 
 const exportFormats: ExportVideoFormat[] = ["mp4", "webm", "mov"];
-const exportResolutions: ExportResolution[] = ["source", "720p", "1080p", "1440p"];
+const exportResolutions: ExportResolution[] = ["source", "720p", "1080p", "1440p", "vertical"];
 
 /** Modal for picking the export resolution/format and kicking off the export. */
 export function ExportDialog(props: {

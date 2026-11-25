@@ -6,7 +6,15 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type {
   AiConnectionStatus,
   AiProvider,
+  ClaudeChatRequest,
+  ClaudeChatResult,
   AppInfo,
+  AudioCleanupPreviewRequest,
+  MicTranscriptionRequest,
+  ImportRecordedClipRequest,
+  MicTranscriptionResult,
+  AudioCleanupPreviewResult,
+  BenchSnapshot,
   ConfigureAiProviderRequest,
   CreateProjectRequest,
   DesktopPermissionKind,
@@ -24,8 +32,7 @@ import type {
   MusicGenerateProgressEvent,
   MusicGenerateRequest,
   MusicGenerateResult,
-  MusicSetupProgressEvent,
-  MusicSetupStatus,
+  MatrixPopupRequest,
   ProjectLibraryEntry,
   ProjectView,
   ProviderKeyId,
@@ -44,6 +51,9 @@ import type {
   UndoAgentEditRequest,
   WriteChunkRequest
 } from "../shared/types";
+import type { ClickCaptureResult } from "../main/click-capture";
+import type { BackgroundRemovalStatus } from "../shared/types";
+import type { RecorderSettings } from "../shared/recorder-settings";
 
 function subscribe<Payload>(channel: string) {
   return (callback: (payload: Payload) => void): (() => void) => {
@@ -66,9 +76,28 @@ const api = {
     disconnect: (provider: AiProvider): Promise<AiConnectionStatus> =>
       ipcRenderer.invoke("ai:disconnect", provider)
   },
+  audio: {
+    transcribeMic: (request: MicTranscriptionRequest): Promise<MicTranscriptionResult> =>
+      ipcRenderer.invoke("audio:transcribe-mic", request),
+    prepareCleanup: (request: AudioCleanupPreviewRequest): Promise<AudioCleanupPreviewResult> =>
+      ipcRenderer.invoke("audio:prepare-cleanup", request)
+  },
+  claude: {
+    send: (request: ClaudeChatRequest): Promise<ClaudeChatResult> =>
+      ipcRenderer.invoke("claude:chat", request),
+    cancel: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("claude:cancel", projectId)
+  },
   app: {
     getInfo: (): Promise<AppInfo> => ipcRenderer.invoke("app:get-info"),
     openExternal: (url: string): Promise<boolean> => ipcRenderer.invoke("app:open-external", url)
+  },
+  popups: {
+    show: (request: MatrixPopupRequest): Promise<boolean> =>
+      ipcRenderer.invoke("popups:show", request),
+    onShow: subscribe<MatrixPopupRequest>("popups:show-request"),
+    clear: (): Promise<boolean> => ipcRenderer.invoke("popups:clear"),
+    onClear: subscribe<null>("popups:clear-request")
   },
   providers: {
     get: (): Promise<ProviderKeysView> => ipcRenderer.invoke("providers:get"),
@@ -84,12 +113,9 @@ const api = {
     onProgress: subscribe<SttProgressEvent>("stt:progress")
   },
   music: {
-    getStatus: (): Promise<MusicSetupStatus> => ipcRenderer.invoke("music:get-status"),
-    install: (): Promise<MusicSetupStatus> => ipcRenderer.invoke("music:install"),
     generate: (request: MusicGenerateRequest): Promise<MusicGenerateResult> =>
       ipcRenderer.invoke("music:generate", request),
     cancel: (jobId: string): Promise<boolean> => ipcRenderer.invoke("music:cancel", jobId),
-    onSetupProgress: subscribe<MusicSetupProgressEvent>("music:setup-progress"),
     onGenerateProgress: subscribe<MusicGenerateProgressEvent>("music:generate-progress")
   },
   gemini: {
@@ -114,7 +140,23 @@ const api = {
     }
   },
   sources: {
-    list: (): Promise<SourceSummary[]> => ipcRenderer.invoke("sources:list")
+    list: (): Promise<SourceSummary[]> => ipcRenderer.invoke("sources:list"),
+    thumbnail: (sourceId: string): Promise<string | null> =>
+      ipcRenderer.invoke("sources:thumbnail", sourceId),
+    /** Real still previews for many sources, used by the multi-source grid. */
+    thumbnails: (sourceIds: string[]): Promise<Record<string, string>> =>
+      ipcRenderer.invoke("sources:thumbnails", sourceIds)
+  },
+  background: {
+    prepare: (projectId: string): Promise<BackgroundRemovalStatus> =>
+      ipcRenderer.invoke("background:prepare", projectId),
+    status: (projectId: string): Promise<BackgroundRemovalStatus> =>
+      ipcRenderer.invoke("background:status", projectId),
+    cancel: (projectId: string): Promise<boolean> =>
+      ipcRenderer.invoke("background:cancel", projectId),
+    matteUrl: (projectId: string): Promise<string | null> =>
+      ipcRenderer.invoke("background:matte-url", projectId),
+    onProgress: subscribe<BackgroundRemovalStatus>("background:progress")
   },
   permissions: {
     getStatus: (): Promise<DesktopPermissionStatus> =>
@@ -130,7 +172,13 @@ const api = {
   },
   capture: {
     selectDisplaySource: (sourceId: string): Promise<boolean> =>
-      ipcRenderer.invoke("capture:select-display-source", sourceId)
+      ipcRenderer.invoke("capture:select-display-source", sourceId),
+    /** Release a reservation whose getDisplayMedia call never consumed it. */
+    releaseDisplaySource: (): Promise<boolean> =>
+      ipcRenderer.invoke("capture:release-display-source"),
+    /** Global clicks recorded next to a project, for automatic zooms. */
+    clicks: (projectId: string): Promise<ClickCaptureResult> =>
+      ipcRenderer.invoke("capture:clicks", projectId)
   },
   projects: {
     chooseBaseDirectory: (): Promise<string | null> =>
@@ -162,6 +210,13 @@ const api = {
     fail: (request: FailRecordingRequest): Promise<ProjectView> =>
       ipcRenderer.invoke("recording:fail", request)
   },
+  recorder: {
+    /** App-level source/quality preferences; null means a genuine first run. */
+    getSettings: (): Promise<RecorderSettings | null> =>
+      ipcRenderer.invoke("recorder:get-settings"),
+    saveSettings: (settings: RecorderSettings): Promise<RecorderSettings> =>
+      ipcRenderer.invoke("recorder:save-settings", settings)
+  },
   ffmpeg: {
     prepareAudio: (projectId: string): Promise<ProjectView> =>
       ipcRenderer.invoke("ffmpeg:prepare-audio", projectId)
@@ -175,11 +230,15 @@ const api = {
     showCurrent: (): Promise<boolean> => ipcRenderer.invoke("windows:show-current"),
     setRecorderCompact: (compact: boolean): Promise<boolean> =>
       ipcRenderer.invoke("windows:set-recorder-compact", compact),
-    openEditor: (projectId?: string | null): Promise<boolean> =>
-      ipcRenderer.invoke("windows:open-editor", projectId),
+    setRecorderSize: (width: number, height: number): Promise<boolean> =>
+      ipcRenderer.invoke("windows:set-recorder-size", width, height),
+    openEditor: (projectId?: string | null, options?: { autoAnalyze?: boolean }): Promise<boolean> =>
+      ipcRenderer.invoke("windows:open-editor", projectId, options),
     openMain: (): Promise<boolean> => ipcRenderer.invoke("windows:open-main")
   },
   editor: {
+    importRecordedClip: (request: ImportRecordedClipRequest): Promise<ImportedMediaFile[]> =>
+      ipcRenderer.invoke("editor:import-recorded-clip", request),
     importMedia: (): Promise<ImportedMediaFile[]> => ipcRenderer.invoke("editor:import-media"),
     importMediaPaths: (filePaths: string[]): Promise<ImportedMediaFile[]> => {
       const grantedPaths = filePaths.filter((filePath) => {
@@ -251,5 +310,11 @@ const api = {
 };
 
 contextBridge.exposeInMainWorld("openVideoCraft", api);
+
+if (process.env.OVC_BENCH_MODE === "1") {
+  contextBridge.exposeInMainWorld("ovcBench", {
+    snapshot: (): Promise<BenchSnapshot> => ipcRenderer.invoke("bench:snapshot")
+  });
+}
 
 export type OpenVideoCraftApi = typeof api;

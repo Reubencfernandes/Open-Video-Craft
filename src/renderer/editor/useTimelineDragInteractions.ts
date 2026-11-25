@@ -27,6 +27,7 @@ import {
   getTimelineLaneIdsBetween,
   getTimelineSegmentIdsInRange
 } from "./timeline-utils";
+import { resolveTimelineContextMenuTarget } from "./timeline-selection";
 import { useTimelineEffectDragInteractions } from "./useTimelineEffectDragInteractions";
 import {
   type ApplyTimelineClipSelection,
@@ -55,7 +56,8 @@ type UseTimelineDragInteractionsParams = {
   mediaDurationById: Map<string, number>;
   scheduleTimelinePlaybackSync: (segments: TimelineSegment[]) => void;
   seek: (time: number) => void;
-  seekTimelinePointer: (clientX: number) => void;
+  /** `snap: false` seeks exactly, for presses that must not lock onto a cut. */
+  seekTimelinePointer: (clientX: number, options?: { snap?: boolean }) => void;
   setActiveTool: Dispatch<SetStateAction<EditorTool>>;
   setScrubbingTimeline: Dispatch<SetStateAction<boolean>>;
   setSelectedItemId: Dispatch<SetStateAction<string | null>>;
@@ -215,21 +217,25 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     }
 
     const target = event.target instanceof Element ? event.target : null;
-    const targetSegmentId =
-      target?.closest<HTMLElement>("[data-segment-id]")?.dataset.segmentId ??
-      findTimelineSegmentAtTime(timelineSegments, time)?.id ??
-      null;
+    const clipElementId =
+      target?.closest<HTMLElement>("[data-segment-id]")?.dataset.segmentId ?? null;
+    const menuTarget = resolveTimelineContextMenuTarget({
+      selectedIds: selectedTimelineSegmentIds,
+      clipElementId,
+      clipAtTimeId: findTimelineSegmentAtTime(timelineSegments, time)?.id ?? null
+    });
 
-    // Right-clicking inside a multi-selection keeps it, like other editors.
-    if (targetSegmentId && !selectedTimelineSegmentIds.includes(targetSegmentId)) {
-      applyTimelineClipSelection([targetSegmentId], targetSegmentId);
+    // Right-clicking inside a multi-selection keeps it, like other editors;
+    // pressing another clip re-targets the selection to that clip.
+    if (menuTarget.selectId) {
+      applyTimelineClipSelection([menuTarget.selectId], menuTarget.selectId);
     }
 
     setTimelineContextMenu({
       x: event.clientX,
       y: event.clientY,
       time,
-      segmentId: targetSegmentId
+      segmentId: menuTarget.segmentId
     });
   }
 
@@ -372,7 +378,8 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
     timelineDragRef.current = true;
     setScrubbingTimeline(true);
     event.currentTarget.setPointerCapture(event.pointerId);
-    seekTimelinePointer(event.clientX);
+    // A press is a click on a time, not a cut: only the drag that follows snaps.
+    seekTimelinePointer(event.clientX, { snap: false });
   }
 
   function moveTimelineScrub(event: ReactPointerEvent<HTMLElement>) {
@@ -395,7 +402,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
       return;
     }
 
-    if (updateMediaClipDrag(event.clientX)) {
+    if (updateMediaClipDrag(event.clientX, event.clientY)) {
       return;
     }
 
@@ -421,7 +428,7 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
         setTimelineRangeSelection(null);
         setSelectedTimelineSegmentIds([]);
         setSelectedTimelineSegmentId(null);
-        seekTimelinePointer(event.clientX);
+        seekTimelinePointer(event.clientX, { snap: false });
       } else {
         setTimelineRangeSelection((selection) =>
           selection ? { ...selection, dragging: false } : selection
@@ -458,14 +465,16 @@ export function useTimelineDragInteractions(params: UseTimelineDragInteractionsP
   };
 }
 
-function parseTimelineLaneId(value: string | undefined): TimelineLaneId | null {
+export function parseTimelineLaneId(value: string | undefined): TimelineLaneId | null {
   if (
     value === "video" ||
     value === "zoom" ||
     value === "speed" ||
     value === "subtitles" ||
     value === "text" ||
-    (value !== undefined && /^audio:\d+$/.test(value))
+    // Extra video channels are real rows: a marquee must be able to reach them,
+    // otherwise dragging over three video tracks selects only the first one.
+    (value !== undefined && /^(audio|video):\d+$/.test(value))
   ) {
     return value as TimelineLaneId;
   }

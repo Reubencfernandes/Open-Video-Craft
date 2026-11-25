@@ -191,6 +191,12 @@ const api = {
     getInfo: async () => appInfo,
     openExternal: async () => true
   },
+  popups: {
+    show: async () => true,
+    onShow: () => () => undefined,
+    clear: async () => true,
+    onClear: () => () => undefined
+  },
   providers: {
     get: async () => ({
       sttProvider: "whisper-local",
@@ -207,21 +213,10 @@ const api = {
     onProgress: () => () => undefined
   },
   music: {
-    getStatus: async () => ({
-      pythonPath: "/usr/local/bin/python3.12",
-      pythonVersion: "3.12",
-      venvReady: true,
-      acestepInstalled: true,
-      checkpointsDownloaded: true,
-      installing: false,
-      generatingJobId: null
-    }),
-    install: async () => api.music.getStatus(),
     generate: async () => {
       throw new Error("Music generation is unavailable in the screenshot harness.");
     },
     cancel: async () => true,
-    onSetupProgress: () => () => undefined,
     onGenerateProgress: () => () => undefined
   },
   gemini: {
@@ -237,6 +232,13 @@ const api = {
     install: async () => true,
     onStatus: () => () => undefined
   },
+  background: {
+    prepare: async () => ({ status: "idle", progress: 0, message: null }),
+    status: async () => ({ status: "idle", progress: 0, message: null }),
+    cancel: async () => true,
+    matteUrl: async () => null,
+    onProgress: () => () => undefined
+  },
   sources: {
     list: async () => [
       {
@@ -247,7 +249,10 @@ const api = {
         thumbnail: sourceThumbnail,
         appIcon: null
       }
-    ]
+    ],
+    thumbnail: async () => sourceThumbnail,
+    thumbnails: async (sourceIds) =>
+      Object.fromEntries((sourceIds ?? []).map((sourceId) => [sourceId, sourceThumbnail]))
   },
   permissions: {
     getStatus: async () => permissionStatus,
@@ -276,6 +281,21 @@ const api = {
     stop: async () => demoProject,
     fail: async () => demoProject
   },
+  recorder: {
+    // Demo preferences: the built-in display at maximum quality, cameras off.
+    getSettings: async () => ({
+      schemaVersion: 1,
+      sourceIds: ["screen:0:0"],
+      cameraIds: [],
+      micId: null,
+      micEnabled: false,
+      cameraEnabled: false,
+      systemAudioEnabled: false,
+      screenQuality: "source",
+      cameraQuality: "1080p"
+    }),
+    saveSettings: async (settings) => settings
+  },
   ffmpeg: {
     prepareAudio: async () => demoProject
   },
@@ -286,6 +306,7 @@ const api = {
     hideCurrent: async () => true,
     showCurrent: async () => true,
     setRecorderCompact: async () => true,
+    setRecorderSize: async () => true,
     openEditor: async () => true,
     openMain: async () => true
   },

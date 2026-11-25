@@ -11,6 +11,7 @@ import {
   systemPreferences
 } from "electron";
 import path from "node:path";
+import { takeReservedDisplayCaptureSource } from "./desktop-sources";
 import type {
   DesktopPermissionKind,
   DesktopPermissionState,
@@ -56,18 +57,24 @@ export function registerPermissionRequestHandlers(
   // renderer's "record system audio" toggle stays in full control. Loopback is
   // supported on Windows and on macOS 13+ (ScreenCaptureKit); where it is not,
   // the renderer falls back to a video-only capture.
+  //
+  // The recorder captures several displays in a row, so each call consumes the
+  // source reserved for that specific capture; the last selected source stays as
+  // a fallback for retries (for example a video-only retry after audio fails).
   session.defaultSession.setDisplayMediaRequestHandler(
     (_request, callback) => {
+      const reservedSource = takeReservedDisplayCaptureSource();
       const selectedDisplaySource = dependencies.getSelectedDisplaySource();
-      if (!selectedDisplaySource) {
+      const target = reservedSource ?? selectedDisplaySource;
+      if (!target) {
         callback({});
         return;
       }
 
       callback({
         video: {
-          id: selectedDisplaySource.id,
-          name: selectedDisplaySource.name
+          id: target.id,
+          name: target.name
         },
         audio: "loopback"
       });

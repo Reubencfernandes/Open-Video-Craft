@@ -10,7 +10,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(scriptDirectory, "..");
-const applicationBundleId = "com.openvideocraft.app";
+const applicationBundleId = "dev.micio86dev.openvideocraft";
 const destinationPath = path.join(projectDirectory, "build", "mas.provisionprofile");
 
 function extractProfileValue(profileXml, key, valueTag) {

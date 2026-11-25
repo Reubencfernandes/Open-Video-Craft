@@ -250,3 +250,157 @@ describe("ProjectStore", () => {
     ).resolves.toBe("audio");
   });
 });
+
+describe("ProjectStore multi-source recording", () => {
+  const multiSourceRequest = (projectId: string) => ({
+    projectId,
+    source: {
+      id: "screen:0:0",
+      name: "Display 1",
+      kind: "screen" as const,
+      displayId: "1"
+    },
+    sources: [
+      { id: "screen:0:0", name: "Display 1", kind: "screen" as const, displayId: "1" },
+      { id: "screen:1:0", name: "Display 2", kind: "screen" as const, displayId: "2" }
+    ],
+    devices: {
+      microphone: { enabled: true, deviceId: "mic-1", label: "Microphone" },
+      camera: { enabled: true, deviceId: "camera-1", label: "Face" }
+    },
+    tracks: {
+      screen: { enabled: true as const, mimeType: "video/webm" },
+      camera: { enabled: true, mimeType: "video/webm" },
+      mic: { enabled: true, mimeType: "audio/webm" },
+      system: { enabled: true, mimeType: "audio/webm" }
+    },
+    captures: [
+      { trackId: "screen", kind: "screen" as const, sourceId: "screen:0:0", label: "Display 1", mimeType: "video/webm" },
+      { trackId: "screen-2", kind: "screen" as const, sourceId: "screen:1:0", label: "Display 2", mimeType: "video/webm" },
+      { trackId: "camera", kind: "camera" as const, sourceId: "camera-1", label: "Face", mimeType: "video/webm" },
+      { trackId: "camera-2", kind: "camera" as const, sourceId: "camera-2", label: "Desk", mimeType: "video/webm" },
+      { trackId: "micWebm", kind: "mic" as const, sourceId: "mic-1", label: "Microphone", mimeType: "audio/webm" },
+      { trackId: "systemWebm", kind: "system" as const, sourceId: null, label: "System audio", mimeType: "audio/webm" }
+    ]
+  });
+
+  it("creates one media file per selected screen, camera, microphone, and system source", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Multi", baseDirectory: tmpDir });
+    const started = await store.startRecording(multiSourceRequest(project.id));
+
+    expect(started.tracks.screen?.path).toBe("media/screen.webm");
+    expect(started.tracks["screen-2"]?.path).toBe("media/screen-2.webm");
+    expect(started.tracks["camera-2"]?.path).toBe("media/camera-2.webm");
+    expect(started.tracks.micWebm?.path).toBe("media/mic.webm");
+    expect(started.tracks.systemWebm?.path).toBe("media/system.webm");
+    expect(started.recordingTracks?.map((track) => track.trackId)).toEqual([
+      "screen",
+      "screen-2",
+      "camera",
+      "camera-2",
+      "micWebm",
+      "systemWebm"
+    ]);
+    expect(started.sources?.map((source) => source.id)).toEqual(["screen:0:0", "screen:1:0"]);
+    for (const relativePath of [
+      "media/screen.webm",
+      "media/screen-2.webm",
+      "media/camera.webm",
+      "media/camera-2.webm",
+      "media/mic.webm",
+      "media/system.webm"
+    ]) {
+      await expect(fs.stat(path.join(project.rootPath, relativePath))).resolves.toBeTruthy();
+    }
+  });
+
+  it("writes chunks to the selected track and keeps accepting the legacy recording kinds", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Multi chunks", baseDirectory: tmpDir });
+    await store.startRecording(multiSourceRequest(project.id));
+
+    await store.appendChunk(project.id, "screen-2", Buffer.from("second-screen"));
+    await store.appendChunk(project.id, "camera-2", Buffer.from("second-camera"));
+    await store.appendChunk(project.id, "mic", Buffer.from("mic"));
+    const updated = await store.appendChunk(project.id, "systemWebm", Buffer.from("pc-audio"));
+
+    expect(updated.tracks["screen-2"]?.bytesWritten).toBe("second-screen".length);
+    expect(updated.tracks["camera-2"]?.bytesWritten).toBe("second-camera".length);
+    expect(updated.tracks.micWebm?.bytesWritten).toBe(3);
+    expect(updated.tracks.systemWebm?.bytesWritten).toBe("pc-audio".length);
+    expect(
+      await fs.readFile(path.join(project.rootPath, "media", "screen-2.webm"), "utf8")
+    ).toBe("second-screen");
+    expect(
+      await fs.readFile(path.join(project.rootPath, "media", "system.webm"), "utf8")
+    ).toBe("pc-audio");
+  });
+
+  it("reports every recorded track so post-processing covers each one", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Multi post", baseDirectory: tmpDir });
+    await store.startRecording(multiSourceRequest(project.id));
+
+    expect(store.getRecordedTracks(project.id).map((track) => `${track.kind}:${track.trackId}`))
+      .toEqual([
+        "screen:screen",
+        "screen:screen-2",
+        "camera:camera",
+        "camera:camera-2",
+        "mic:micWebm",
+        "system:systemWebm"
+      ]);
+    expect(store.getWavOutputPath(project.id, "micWebm")).toBe(
+      path.join(project.rootPath, "media", "mic.wav")
+    );
+    expect(store.getWavOutputPath(project.id, "mic-2")).toBe(
+      path.join(project.rootPath, "media", "mic-2.wav")
+    );
+    expect(store.getWavOutputPath(project.id, "screen-2")).toBeNull();
+  });
+
+  it("keeps microphone and system audio on separate WAV outputs", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Audio tracks", baseDirectory: tmpDir });
+    await store.startRecording(multiSourceRequest(project.id));
+
+    await store.appendChunk(project.id, "micWebm", Buffer.from("mic"));
+    const stopped = await store.stopRecording({ projectId: project.id, durationMs: 5000 });
+    expect(stopped.status).toBe("processing");
+
+    const completed = await store.completeAudio(project.id, [
+      { trackId: "micWebm", bytes: 11 },
+      { trackId: "systemWebm", bytes: 22 }
+    ], 5200);
+
+    expect(completed.status).toBe("complete");
+    expect(completed.durationMs).toBe(5200);
+    expect(completed.tracks.micWav?.path).toBe("media/mic.wav");
+    expect(completed.tracks.micWav?.bytesWritten).toBe(11);
+    expect(completed.tracks.systemWav?.path).toBe("media/system.wav");
+    expect(completed.tracks.systemWav?.bytesWritten).toBe(22);
+  });
+
+  it("does not add a recording plan to legacy single-source requests", async () => {
+    const store = new ProjectStore({ appVersion: "1.0.0" });
+    const project = await store.createProject({ name: "Legacy", baseDirectory: tmpDir });
+    const started = await store.startRecording({
+      projectId: project.id,
+      source: { id: "screen:0:0", name: "Display", kind: "screen", displayId: "1" },
+      devices: {
+        microphone: { enabled: false, deviceId: null, label: null },
+        camera: { enabled: false, deviceId: null, label: null }
+      },
+      tracks: {
+        screen: { enabled: true, mimeType: "video/webm" },
+        camera: { enabled: false, mimeType: null },
+        mic: { enabled: false, mimeType: null }
+      }
+    });
+
+    expect(started.recordingTracks).toBeUndefined();
+    expect(started.tracks.screen?.path).toBe("media/screen.webm");
+    expect(store.getRecordedTracks(project.id)).toEqual([{ trackId: "screen", kind: "screen" }]);
+  });
+});

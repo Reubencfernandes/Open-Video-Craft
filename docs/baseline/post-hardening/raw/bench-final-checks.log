@@ -1,0 +1,22 @@
+
+ RUN  v4.1.9 <repository root>
+
+ ✓ tests/bench.test.ts > bench mode > enables only the exact --bench flag in an unpackaged app 1ms
+ ✓ tests/bench.test.ts > bench mode > overwrites an inherited environment flag 0ms
+ ✓ tests/bench.test.ts > bench IPC > returns aggregate app memory and uptime only to the main renderer 1ms
+ ✓ tests/bench.test.ts > bench IPC > rejects every sender while the main window is unavailable 0ms
+ ✓ tests/bench.test.ts > bench IPC > reports zero when Electron supplies no process metrics 0ms
+ ✓ tests/bench.test.ts > bench IPC > does not register the channel outside bench mode 0ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --samples 0 22ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --samples 1.5 20ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --settle=-1 20ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed (9)
+   Start at  22:49:55
+   Duration  150ms (transform 13ms, setup 0ms, import 19ms, tests 65ms, environment 0ms)
+
+
+> open-video-craft@1.0.6 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+

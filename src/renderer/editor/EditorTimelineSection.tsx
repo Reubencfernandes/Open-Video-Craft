@@ -33,6 +33,7 @@ export function EditorTimelineSection(props: {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onZoomReset: () => void;
+  onZoomChange: (zoom: number) => void;
   onZoomWheel: (event: ReactWheelEvent<HTMLElement>) => void;
   onRulerPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
   onRulerPointerMove: (event: ReactPointerEvent<HTMLElement>) => void;
@@ -51,11 +52,13 @@ export function EditorTimelineSection(props: {
   contentDuration: number;
   renderDuration: number;
   videoClips: TimelineMediaClip[];
+  onToggleVideoLaneVisibility: (lane: number) => void;
+  onSwapVideoChannels: (firstLane: number, secondLane: number) => void;
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   onSetAudioLevel: (
     itemId: string,
-    patch: Partial<{ volume: number; muted: boolean }>
+    patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>
   ) => void;
   zoomEffects: ZoomEffect[];
   speedEffects: SpeedEffect[];
@@ -75,6 +78,8 @@ export function EditorTimelineSection(props: {
   contextMenu: TimelineContextMenu;
   canSplitAtContextMenu: boolean;
   canSplitAtPlayhead: boolean;
+  canToggleHidden: boolean;
+  selectedClipsHidden: boolean;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
   onUndo: () => void;
@@ -121,6 +126,8 @@ export function EditorTimelineSection(props: {
   onBodyDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onBodyDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onContextMenuSplit: () => void;
+  onContextMenuToggleHidden: () => void;
+  onContextMenuCloseGaps: () => void;
   onContextMenuDelete: () => void;
 }) {
   if (!props.visible) {
@@ -138,6 +145,7 @@ export function EditorTimelineSection(props: {
       onZoomIn={props.onZoomIn}
       onZoomOut={props.onZoomOut}
       onZoomReset={props.onZoomReset}
+      onZoomChange={props.onZoomChange}
       onZoomWheel={props.onZoomWheel}
       onRulerPointerDown={props.onRulerPointerDown}
       onRulerPointerMove={props.onRulerPointerMove}
@@ -156,6 +164,8 @@ export function EditorTimelineSection(props: {
       contentDuration={props.contentDuration}
       renderDuration={props.renderDuration}
       videoClips={props.videoClips}
+      onToggleVideoLaneVisibility={props.onToggleVideoLaneVisibility}
+      onSwapVideoChannels={props.onSwapVideoChannels}
       audioTracks={props.audioTracks}
       audioLevels={props.audioLevels}
       onSetAudioLevel={props.onSetAudioLevel}
@@ -177,6 +187,8 @@ export function EditorTimelineSection(props: {
       contextMenu={props.contextMenu}
       canSplitAtContextMenu={props.canSplitAtContextMenu}
       canSplitAtPlayhead={props.canSplitAtPlayhead}
+      canToggleHidden={props.canToggleHidden}
+      selectedClipsHidden={props.selectedClipsHidden}
       onTogglePlayback={props.onTogglePlayback}
       onSeekFrame={props.onSeekFrame}
       onUndo={props.onUndo}
@@ -203,6 +215,8 @@ export function EditorTimelineSection(props: {
       onBodyDragOver={props.onBodyDragOver}
       onBodyDrop={props.onBodyDrop}
       onContextMenuSplit={props.onContextMenuSplit}
+      onContextMenuToggleHidden={props.onContextMenuToggleHidden}
+      onContextMenuCloseGaps={props.onContextMenuCloseGaps}
       onContextMenuDelete={props.onContextMenuDelete}
     />
   );

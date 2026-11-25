@@ -332,7 +332,7 @@ export function useEditorMediaActions(params: UseEditorMediaActionsParams) {
     );
   }
 
-  function setAudioLevel(itemId: string, patch: Partial<{ volume: number; muted: boolean }>) {
+  function setAudioLevel(itemId: string, patch: Partial<{ volume: number; muted: boolean; fadeIn: number; fadeOut: number }>) {
     setAudioLevels((current) => {
       const previous = current[itemId] ?? { volume: 100, muted: false };
       return { ...current, [itemId]: { ...previous, ...patch } };

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "scenario": "startup-idle",
+  "launchMode": "unpackaged --bench",
+  "settleSeconds": 10,
+  "sampleCount": 40,
+  "medianWorkingSetMb": 460.0546875,
+  "minWorkingSetMb": 457.390625,
+  "maxWorkingSetMb": 462.421875,
+  "mainFirstUptimeSeconds": 0.345564166,
+  "benchErrors": []
+}

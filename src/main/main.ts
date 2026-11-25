@@ -16,14 +16,38 @@ import {
   screen as electronScreen,
   shell,
 } from "electron";
-import { promises as fs, watch as watchFs } from "node:fs";
+import { execFile } from "node:child_process";
+import { mkdirSync, promises as fs, watch as watchFs } from "node:fs";
+import os from "node:os";
+import { promisify } from "node:util";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createMacApplicationMenuTemplate } from "./application-menu";
 import { configureAppIdentity, getAppIconPath } from "./app-shell";
+import { resolveRendererBaseUrl } from "./renderer-url";
 import { AiConnectionManager } from "./ai-connection";
+import { ClaudeAgentManager } from "./claude-agent";
 import { registerAppStatusIpc } from "./app-status-ipc";
+import {
+  cancelBackgroundRemoval,
+  getBackgroundRemovalStatus,
+  hasCameraMatte,
+  startBackgroundRemoval
+} from "./background-removal";
+import { cameraMatteRelativePath } from "./background-removal";
+import {
+  startClickCaptureSession,
+  resolveClickCaptureExecutable,
+  type ClickCaptureSession
+} from "./click-capture-session";
+import { emptyClickCapture, readClickCapture } from "./click-capture";
 import { getProductVersion } from "./app-version";
+import {
+  attachBenchInstrumentation,
+  configureBenchMode,
+  isBenchMode,
+  registerBenchIpc
+} from "./bench";
 import { startAutoUpdates } from "./auto-updates";
 import { shouldEnableDevTools } from "./dev-tools";
 import {
@@ -36,7 +60,14 @@ import {
   requestMediaPermission,
   startAppBundleDrag
 } from "./desktop-permissions";
-import { createFallbackThumbnail, listDesktopCapturerSources } from "./desktop-sources";
+import {
+  captureSourceThumbnail,
+  captureSourceThumbnails,
+  createFallbackThumbnail,
+  listDesktopCapturerSources,
+  releaseDisplayCaptureSource,
+  reserveDisplayCaptureSource
+} from "./desktop-sources";
 import {
   getDisplayOverlayStripBounds,
   resolveDisplayForOverlay
@@ -49,19 +80,29 @@ import {
 } from "./file-dialogs";
 import {
   convertWebmAudioToWav,
+  resolveFfmpegPath,
   killActiveFfmpegProcesses,
   probeMediaDurationMs,
   remuxWebm
 } from "./ffmpeg";
 import { exportEditorVideo } from "./editor-export";
+import { transcribeAudio } from "./editor-analysis";
+import { resolveContainedProjectPath } from "./project-containment";
+import { resolveArnndnModelPath } from "./audio-model-path";
+import { buildAudioCleanupFilter } from "../shared/editor-domain";
 import { ExportJobRegistry } from "./export-jobs";
 import { GeminiAgentManager } from "./gemini-agent";
-import { MusicGenerationManager } from "./music-generation";
 import { generateLyria } from "./music-lyria";
+import { renderLocalMusic } from "./music-local";
 import { ProviderKeysManager } from "./provider-keys";
 import {
+  assertAudioCleanupPreviewRequest,
+  assertMicTranscriptionRequest,
+  assertImportRecordedClipRequest,
+  assertClaudeChatRequest,
   assertExportVideoRequest,
   assertGeminiChatSendRequest,
+  assertMatrixPopupRequest,
   assertMusicGenerateRequest,
   assertProviderKeyId,
   assertSaveEditorProjectStateRequest,
@@ -72,17 +113,25 @@ import {
 import { killActiveSttProcesses, transcribeCloud } from "./stt-cloud";
 import { registerMediaProtocol as registerCustomMediaProtocol } from "./media-protocols";
 import { ProjectLibrary } from "./project-library";
+import { RecorderSettingsStore } from "./recorder-settings";
+import { getExpandedRecorderWindowSize } from "./recorder-window-size";
+import {
+  RecorderWindowBoundsStore,
+  clampRecorderWindowBounds,
+  parseRecorderWindowBounds,
+  resolveRecorderWindowBounds,
+  type RecorderWindowBounds
+} from "./recorder-window-bounds";
 import { assertProjectDeletionTarget } from "./project-deletion";
 import { setEditorSessionState, undoAgentEdit } from "./editor-document-store";
 import { writeJsonFileAtomic } from "./project-file";
 import { createMediaUrl, ProjectStore } from "./project-store";
-import {
-  isMacAppStoreBuild,
-  SecurityScopedResourceManager
-} from "./security-scoped-resources";
+import { SecurityScopedResourceManager } from "./security-scoped-resources";
+import type { BackgroundRemovalStatus } from "../shared/types";
 import type {
   AiConnectionStatus,
   AiProvider,
+  ClaudeChatResult,
   ConfigureAiProviderRequest,
   CreateProjectRequest,
   DesktopPermissionStatus,
@@ -95,10 +144,11 @@ import type {
   GeminiChatMessage,
   GeminiChatSendRequest,
   ImportedMediaFile,
+  MediaTrackKey,
   MusicGenerateProgressEvent,
   MusicGenerateRequest,
   MusicGenerateResult,
-  MusicSetupStatus,
+  MatrixPopupRequest,
   ProjectLibraryEntry,
   ProjectView,
   ProviderKeyId,
@@ -115,6 +165,11 @@ import type {
   UpdateProviderKeysRequest,
   WriteChunkRequest
 } from "../shared/types";
+import { parseMediaTrackKey } from "../shared/types";
+import type { RecorderSettings } from "../shared/recorder-settings";
+
+const benchMode = isBenchMode({ argv: process.argv, isPackaged: app.isPackaged });
+configureBenchMode(benchMode);
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -160,18 +215,65 @@ let selectedDisplaySource: Electron.DesktopCapturerSource | null = null;
 let mainWindow: BrowserWindow | null = null;
 let recorderWindow: BrowserWindow | null = null;
 let activeRecordingProjectId: string | null = null;
+
+/** Global click sidecar for the recording in flight, if it started. */
+let activeClickCapture: ClickCaptureSession | null = null;
+/** Why automatic zooms could not be captured, surfaced instead of hidden. */
+let activeClickCaptureWarnings: string[] = [];
+
+function stopActiveClickCapture(): void {
+  activeClickCapture?.stop();
+  activeClickCapture = null;
+}
+
+function clickCaptureOutputPath(rootPath: string): string {
+  return path.join(rootPath, ".ovc", "clicks.jsonl");
+}
+
+function startClickCaptureFor(project: { rootPath: string }, displayId: string | null): void {
+  stopActiveClickCapture();
+  activeClickCaptureWarnings = [];
+  const outputPath = clickCaptureOutputPath(project.rootPath);
+  mkdirSync(path.dirname(outputPath), { recursive: true });
+  activeClickCapture = startClickCaptureSession({
+    executablePath: resolveClickCaptureExecutable({
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      repoRoot: path.join(__dirname, "../..")
+    }),
+    outputPath,
+    displayId,
+    onUnavailable: (reason) => {
+      activeClickCaptureWarnings.push(`Automatic zooms are unavailable: ${reason}`);
+      console.warn("Click capture unavailable:", reason);
+    },
+    onStderr: (line) => {
+      activeClickCaptureWarnings.push(line);
+      console.warn("Click capture:", line);
+    }
+  });
+}
 let displayOverlayWindows: BrowserWindow[] = [];
 let activeDisplayOverlaySourceId: string | null = null;
 let activeDisplayOverlayDisplayId: string | null = null;
 let permissionGuideWindow: BrowserWindow | null = null;
 let projectLibrary: ProjectLibrary | null = null;
+let recorderSettingsStore: RecorderSettingsStore | null = null;
+let recorderWindowBoundsStore: RecorderWindowBoundsStore | null = null;
+let savedRecorderWindowBounds: RecorderWindowBounds | null = null;
+let recorderWindowCompact = false;
+let persistRecorderBoundsTimer: ReturnType<typeof setTimeout> | null = null;
 let securityScopedResources: SecurityScopedResourceManager | null = null;
 let aiConnectionManager: AiConnectionManager | null = null;
 let providerKeysManager: ProviderKeysManager | null = null;
-let musicGenerationManager: MusicGenerationManager | null = null;
 let geminiAgentManager: GeminiAgentManager | null = null;
+let claudeAgentManager: ClaudeAgentManager | null = null;
 const sttJobs = new Map<string, AbortController>();
 const lyriaJobs = new Map<string, AbortController>();
+function isMediaTrackKey(value: string): value is MediaTrackKey {
+  return parseMediaTrackKey(value) !== null;
+}
+
 let editorStateWatcher: ReturnType<typeof watchFs> | null = null;
 let editorStateWatchTimer: NodeJS.Timeout | null = null;
 let watchedEditorProjectId: string | null = null;
@@ -188,20 +290,50 @@ const displayOverlayStripColor = "#34d399";
 // Slightly translucent so the Windows border can be seen through.
 const displayOverlayBorderColor = "rgba(52, 211, 153, 0.55)";
 
-const recorderWindowSize = {
-  expanded: {
-    width: 460,
-    height: 560
-  },
-  compact: {
-    width: 340,
-    height: 86
-  }
+const recorderCompactWindowSize = {
+  width: 340,
+  height: 86
 };
+
+function getRecorderWindowSize(compact: boolean): { width: number; height: number } {
+  if (compact) return recorderCompactWindowSize;
+  const saved = savedRecorderWindowBounds ?? resolveRecorderWindowBounds(null, electronScreen.getPrimaryDisplay().workArea);
+  return { width: saved.width, height: saved.height };
+}
+
+function persistRecorderWindowBounds(): void {
+  if (!recorderWindow || recorderWindow.isDestroyed() || recorderWindowCompact) return;
+  const parsed = parseRecorderWindowBounds(recorderWindow.getBounds());
+  if (!parsed) return;
+  savedRecorderWindowBounds = parsed;
+  void getRecorderWindowBoundsStore().write(parsed).catch(() => undefined);
+}
+
+function scheduleRecorderBoundsPersist(): void {
+  if (persistRecorderBoundsTimer) clearTimeout(persistRecorderBoundsTimer);
+  persistRecorderBoundsTimer = setTimeout(() => {
+    persistRecorderBoundsTimer = null;
+    persistRecorderWindowBounds();
+  }, 400);
+}
 
 function getProjectLibrary(): ProjectLibrary {
   projectLibrary ??= new ProjectLibrary(path.join(app.getPath("userData"), "projects.json"));
   return projectLibrary;
+}
+
+function getRecorderSettingsStore(): RecorderSettingsStore {
+  recorderSettingsStore ??= new RecorderSettingsStore(
+    path.join(app.getPath("userData"), "recorder-settings.json")
+  );
+  return recorderSettingsStore;
+}
+
+function getRecorderWindowBoundsStore(): RecorderWindowBoundsStore {
+  recorderWindowBoundsStore ??= new RecorderWindowBoundsStore(
+    path.join(app.getPath("userData"), "recorder-window-bounds.json")
+  );
+  return recorderWindowBoundsStore;
 }
 
 function getSecurityScopedResources(): SecurityScopedResourceManager {
@@ -259,14 +391,13 @@ function getGeminiAgentManager(): GeminiAgentManager {
   return geminiAgentManager;
 }
 
-function getMusicGenerationManager(): MusicGenerationManager {
-  musicGenerationManager ??= new MusicGenerationManager({
+function getClaudeAgentManager(): ClaudeAgentManager {
+  claudeAgentManager ??= new ClaudeAgentManager({
     userDataPath: app.getPath("userData"),
-    wrapperScriptPath: app.isPackaged
-      ? path.join(process.resourcesPath, "acestep_generate.py")
-      : path.join(app.getAppPath(), "resources", "acestep_generate.py")
+    electronExecutable: process.execPath,
+    serverEntrypoint: path.join(__dirname, "../mcp/server.js")
   });
-  return musicGenerationManager;
+  return claudeAgentManager;
 }
 
 function getAiConnectionManager(): AiConnectionManager {
@@ -294,6 +425,8 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false
     }
   });
+
+  attachBenchInstrumentation(mainWindow, benchMode);
 
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -334,15 +467,23 @@ function attachUnsavedChangesGuard(window: BrowserWindow): void {
 }
 
 async function createRecorderWindow(): Promise<void> {
+  const workArea = electronScreen.getPrimaryDisplay().workArea;
+  savedRecorderWindowBounds = resolveRecorderWindowBounds(
+    await getRecorderWindowBoundsStore().read(),
+    workArea
+  );
   if (recorderWindow && !recorderWindow.isDestroyed()) {
     recorderWindow.show();
     recorderWindow.focus();
     return;
   }
 
+  const initialBounds = savedRecorderWindowBounds ?? resolveRecorderWindowBounds(null, workArea);
   recorderWindow = new BrowserWindow({
-    width: recorderWindowSize.expanded.width,
-    height: recorderWindowSize.expanded.height,
+    x: initialBounds.x,
+    y: initialBounds.y,
+    width: initialBounds.width,
+    height: initialBounds.height,
     frame: false,
     resizable: false,
     transparent: true,
@@ -369,6 +510,8 @@ async function createRecorderWindow(): Promise<void> {
   });
 
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
+  recorderWindow.on("resize", scheduleRecorderBoundsPersist);
+  recorderWindow.on("moved", scheduleRecorderBoundsPersist);
   recorderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   // Belt and braces: if the OS still forces the window into fullscreen or a
   // maximize despite the flags above, bounce straight back to the floating
@@ -376,13 +519,15 @@ async function createRecorderWindow(): Promise<void> {
   recorderWindow.on("enter-full-screen", () => {
     if (recorderWindow && !recorderWindow.isDestroyed()) {
       recorderWindow.setFullScreen(false);
-      recorderWindow.setSize(recorderWindowSize.expanded.width, recorderWindowSize.expanded.height);
+      const size = getRecorderWindowSize(false);
+      recorderWindow.setSize(size.width, size.height);
     }
   });
   recorderWindow.on("maximize", () => {
     if (recorderWindow && !recorderWindow.isDestroyed()) {
       recorderWindow.unmaximize();
-      recorderWindow.setSize(recorderWindowSize.expanded.width, recorderWindowSize.expanded.height);
+      const size = getRecorderWindowSize(false);
+      recorderWindow.setSize(size.width, size.height);
     }
   });
   recorderWindow.once("ready-to-show", () => {
@@ -439,6 +584,10 @@ async function createRecorderWindow(): Promise<void> {
     }
   });
   recorderWindow.on("closed", () => {
+    if (persistRecorderBoundsTimer) {
+      clearTimeout(persistRecorderBoundsTimer);
+      persistRecorderBoundsTimer = null;
+    }
     recorderCloseRequested = false;
     if (recorderCloseTimeout) {
       clearTimeout(recorderCloseTimeout);
@@ -464,10 +613,13 @@ async function loadRendererView(
   view: "main" | "controller" | "editor" | "permission-guide",
   params: Record<string, string> = {}
 ): Promise<void> {
-  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
-  const url = devServerUrl
-    ? new URL(devServerUrl)
-    : new URL(pathToFileURL(path.join(__dirname, "../../dist-renderer/index.html")).toString());
+  const url = new URL(
+    resolveRendererBaseUrl({
+      isPackaged: app.isPackaged,
+      devServerUrl: process.env.VITE_DEV_SERVER_URL,
+      fileUrl: pathToFileURL(path.join(__dirname, "../../dist-renderer/index.html")).toString()
+    })
+  );
 
   url.searchParams.set("view", view);
 
@@ -559,7 +711,10 @@ function getPermissionGuidePosition(
   };
 }
 
-async function openEditorWindow(projectId?: string | null): Promise<void> {
+async function openEditorWindow(
+  projectId?: string | null,
+  options: { autoAnalyze?: boolean } = {}
+): Promise<void> {
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = new BrowserWindow({
       width: 1360,
@@ -586,7 +741,12 @@ async function openEditorWindow(projectId?: string | null): Promise<void> {
     attachDevToolsShortcuts(mainWindow);
   }
 
-  await loadRendererView(mainWindow, "editor", projectId ? { projectId } : {});
+  const query: Record<string, string> = {};
+  if (projectId) query["projectId"] = projectId;
+  // One-shot: the renderer consumes and strips this flag, so a reload never
+  // restarts automatic transcription over existing subtitles.
+  if (options.autoAnalyze === true) query["autoAnalyze"] = "1";
+  await loadRendererView(mainWindow, "editor", query);
   mainWindow.show();
   mainWindow.focus();
 }
@@ -860,6 +1020,51 @@ function registerRecordingPowerHandlers(): void {
 
 function registerIpc(): void {
   registerAppStatusIpc();
+  registerBenchIpc({
+    enabled: benchMode,
+    ipc: ipcMain,
+    getAppMetrics: () => app.getAppMetrics().map((metric) => ({
+      workingSetSize: metric.memory.workingSetSize
+    })),
+    getMainWebContentsId: () => mainWindow?.webContents.id ?? -1,
+    now: () => new Date().toISOString(),
+    uptime: () => process.uptime()
+  });
+
+  function broadcastMatrixPopup(request: MatrixPopupRequest): void {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("popups:show-request", request);
+    }
+  }
+
+  function broadcastMatrixPopupClear(): void {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send("popups:clear-request", null);
+    }
+  }
+
+  ipcMain.handle("popups:show", async (_event, request: unknown): Promise<boolean> => {
+    assertMatrixPopupRequest(request);
+    broadcastMatrixPopup(request);
+    return true;
+  });
+
+  ipcMain.handle("popups:clear", async (): Promise<boolean> => {
+    broadcastMatrixPopupClear();
+    return true;
+  });
+
+  ipcMain.handle("claude:chat", async (_event, request: unknown): Promise<ClaudeChatResult> => {
+    assertClaudeChatRequest(request);
+    return getClaudeAgentManager().send(request);
+  });
+
+  ipcMain.handle("claude:cancel", (_event, projectId: unknown): boolean => {
+    if (typeof projectId !== "string" || projectId.length === 0 || projectId.length > 128) {
+      throw new Error("Invalid Claude chat cancellation request.");
+    }
+    return getClaudeAgentManager().cancel(projectId);
+  });
 
   ipcMain.handle("ai:get-status", (): Promise<AiConnectionStatus> =>
     getAiConnectionManager().getStatus()
@@ -925,28 +1130,6 @@ function registerIpc(): void {
     return Boolean(control);
   });
 
-  ipcMain.handle("music:get-status", (): Promise<MusicSetupStatus> => {
-    if (isMacAppStoreBuild()) {
-      return Promise.resolve({
-        pythonPath: null,
-        pythonVersion: null,
-        venvReady: false,
-        acestepInstalled: false,
-        checkpointsDownloaded: false,
-        installing: false,
-        generatingJobId: null
-      });
-    }
-    return getMusicGenerationManager().getStatus();
-  });
-  ipcMain.handle("music:install", (event): Promise<MusicSetupStatus> => {
-    if (isMacAppStoreBuild()) {
-      return Promise.reject(new Error("Local music setup is unavailable in the Mac App Store build."));
-    }
-    return getMusicGenerationManager().install((progress) => {
-      if (!event.sender.isDestroyed()) event.sender.send("music:setup-progress", progress);
-    });
-  });
   ipcMain.handle(
     "music:generate",
     async (event, request: MusicGenerateRequest): Promise<MusicGenerateResult> => {
@@ -954,26 +1137,27 @@ function registerIpc(): void {
       const sendProgress = (progress: MusicGenerateProgressEvent) => {
         if (!event.sender.isDestroyed()) event.sender.send("music:generate-progress", progress);
       };
-
-      let outputPath: string;
-      let extension: string;
-      let lyrics: string | null = null;
-
-      if (request.engine === "acestep") {
-        if (isMacAppStoreBuild()) {
-          throw new Error("Local ACE-Step music generation is unavailable in the Mac App Store build.");
-        }
-        const generated = await getMusicGenerationManager().generateAceStep(request, sendProgress);
-        outputPath = generated.outputPath;
-        extension = "wav";
-      } else {
-        const apiKey = await getProviderKeysManager().getGeminiKey();
-        if (!apiKey) {
-          throw new Error("No Gemini API key is saved. Add one in the AI settings.");
-        }
-        const control = new AbortController();
-        lyriaJobs.set(request.jobId, control);
-        try {
+      const control = new AbortController();
+      lyriaJobs.set(request.jobId, control);
+      try {
+        const local = request.engine === "claude-local";
+        let audio: Buffer;
+        let extension: string;
+        let lyrics: string | null = null;
+        if (local) {
+          sendProgress({
+            jobId: request.jobId,
+            phase: "generating",
+            percent: null,
+            message: "Composing locally with Claude…"
+          });
+          audio = renderLocalMusic({ prompt: request.prompt, lyrics: request.lyrics });
+          extension = "wav";
+        } else {
+          const apiKey = await getProviderKeysManager().getGeminiKey();
+          if (!apiKey) {
+            throw new Error("No Gemini API key is saved. Add one in the AI settings.");
+          }
           sendProgress({
             jobId: request.jobId,
             phase: "generating",
@@ -987,49 +1171,115 @@ function registerIpc(): void {
             apiKey,
             signal: control.signal
           });
+          audio = output.audio;
           extension = output.mimeType.includes("wav") ? "wav" : "mp3";
-          outputPath = path.join(
-            app.getPath("userData"), "acestep", "output", `${request.jobId}.${extension}`
-          );
-          await fs.mkdir(path.dirname(outputPath), { recursive: true });
-          await fs.writeFile(outputPath, output.audio);
           lyrics = output.lyrics;
-        } finally {
-          lyriaJobs.delete(request.jobId);
         }
+        const outputDirectory = local ? "music-local" : "lyria";
+        const outputPath = path.join(
+          app.getPath("userData"), outputDirectory, "output", `${request.jobId}.${extension}`
+        );
+        await fs.mkdir(path.dirname(outputPath), { recursive: true });
+        await fs.writeFile(outputPath, audio);
+        sendProgress({
+          jobId: request.jobId,
+          phase: "saving",
+          percent: 100,
+          message: "Adding to timeline…"
+        });
+        const durationMs = await probeMediaDurationMs(outputPath).catch(() => null);
+        const importId = request.jobId;
+        importedMediaCache.set(importId, outputPath);
+        const promptSlug = request.prompt.trim().slice(0, 40) || "AI music";
+        return {
+          id: importId,
+          name: `${promptSlug}.${extension}`,
+          path: outputPath,
+          url: `ovc-import://file/${encodeURIComponent(importId)}`,
+          kind: "audio",
+          extension,
+          duration: durationMs === null ? null : durationMs / 1000,
+          lyrics
+        };
+      } finally {
+        lyriaJobs.delete(request.jobId);
       }
+    }
+  );
+  ipcMain.handle("editor:import-recorded-clip", async (_event, request: unknown) => {
+    assertImportRecordedClipRequest(request);
+    const project = projectStore.getProject(request.projectId);
+    if (!project) throw new Error("The project is no longer open.");
+    const filePath = resolveContainedProjectPath(
+      project.rootPath, `imports/recorded-${request.requestId}.webm`
+    );
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, Buffer.from(new Uint8Array(request.data)));
+    return importMediaFromPaths(
+      [filePath],
+      (id, resolvedPath) => importedMediaCache.set(id, resolvedPath),
+      getDialogParentWindow()
+    );
+  });
 
-      sendProgress({
-        jobId: request.jobId,
-        phase: "saving",
-        percent: 100,
-        message: "Adding to timeline…"
-      });
-
-      const durationMs = await probeMediaDurationMs(outputPath).catch(() => null);
-      const importId = request.jobId;
-      importedMediaCache.set(importId, outputPath);
-      const promptSlug = request.prompt.trim().slice(0, 40) || "AI music";
+  ipcMain.handle("audio:transcribe-mic", async (_event, request: unknown) => {
+    assertMicTranscriptionRequest(request);
+    const inputPath = path.join(os.tmpdir(), `ovc-mic-${request.requestId}.webm`);
+    await fs.writeFile(inputPath, Buffer.from(new Uint8Array(request.audio)));
+    try {
+      const transcript = await transcribeAudio(inputPath, app.getPath("userData"));
       return {
-        id: importId,
-        name: `${promptSlug}.${extension}`,
+        text: transcript.segments.map((segment) => segment.text).join(" ").replace(/\s+/gu, " ").trim(),
+        language: transcript.language
+      };
+    } finally {
+      await fs.rm(inputPath, { force: true }).catch(() => undefined);
+    }
+  });
+
+  ipcMain.handle(
+    "audio:prepare-cleanup",
+    async (_event, request: unknown) => {
+      assertAudioCleanupPreviewRequest(request);
+      const jobId = request.jobId;
+      const trackedPath = importedMediaCache.get(request.itemId);
+      const trackSuffix = request.itemId.startsWith(`${request.projectId}:`)
+        ? request.itemId.slice(request.projectId.length + 1)
+        : "";
+      const projectPath = isMediaTrackKey(trackSuffix)
+        ? projectStore.getMediaPath(request.projectId, trackSuffix)
+        : null;
+      const sourcePath = trackedPath ?? projectPath;
+      if (!sourcePath) throw new Error("The selected audio source is no longer available.");
+      const outputPath = path.join(
+        app.getPath("userData"), "audio-cleanup", "output", `${jobId}.wav`
+      );
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+      const filter = buildAudioCleanupFilter(
+        { preset: request.preset, strength: request.strength },
+        resolveArnndnModelPath(process.resourcesPath)
+      );
+      await promisify(execFile)(resolveFfmpegPath(), [
+        "-y", "-i", sourcePath, "-af", filter,
+        "-ar", "48000", "-c:a", "pcm_s16le", outputPath
+      ], { maxBuffer: 8 * 1024 * 1024 });
+      const durationMs = await probeMediaDurationMs(outputPath).catch(() => null);
+      importedMediaCache.set(jobId, outputPath);
+      return {
+        id: jobId,
+        url: `ovc-import://file/${encodeURIComponent(jobId)}`,
         path: outputPath,
-        url: `ovc-import://file/${encodeURIComponent(importId)}`,
-        kind: "audio",
-        extension,
-        duration: durationMs === null ? null : durationMs / 1000,
-        lyrics
+        duration: durationMs === null ? null : durationMs / 1000
       };
     }
   );
+
   ipcMain.handle("music:cancel", (_event, jobId: unknown): boolean => {
     if (typeof jobId !== "string") return false;
-    const lyria = lyriaJobs.get(jobId);
-    if (lyria) {
-      lyria.abort();
-      return true;
-    }
-    return getMusicGenerationManager().cancel(jobId);
+    const control = lyriaJobs.get(jobId);
+    if (!control) return false;
+    control.abort();
+    return true;
   });
 
   ipcMain.handle(
@@ -1107,6 +1357,81 @@ function registerIpc(): void {
     return summaries;
   });
 
+  ipcMain.handle("sources:thumbnail", async (_event, sourceId: unknown): Promise<string | null> => {
+    if (typeof sourceId !== "string" || sourceId.length === 0 || sourceId.length > 256) {
+      throw new Error("Invalid capture source id.");
+    }
+    return captureSourceThumbnail(sourceId);
+  });
+
+  ipcMain.handle(
+    "sources:thumbnails",
+    async (_event, sourceIds: unknown): Promise<Record<string, string>> => {
+      if (
+        !Array.isArray(sourceIds) ||
+        sourceIds.length > 64 ||
+        !sourceIds.every((sourceId) =>
+          typeof sourceId === "string" && sourceId.length > 0 && sourceId.length <= 256
+        )
+      ) {
+        throw new Error("Invalid capture source ids.");
+      }
+      return captureSourceThumbnails(sourceIds as string[]);
+    }
+  );
+
+  ipcMain.handle("recorder:get-settings", async (): Promise<RecorderSettings | null> =>
+    getRecorderSettingsStore().read());
+
+  ipcMain.handle(
+    "recorder:save-settings",
+    async (_event, settings: unknown): Promise<RecorderSettings> =>
+      getRecorderSettingsStore().write(settings)
+  );
+
+
+  ipcMain.handle("background:prepare", async (event, projectId: unknown): Promise<BackgroundRemovalStatus> => {
+    if (typeof projectId !== "string" || projectId.length === 0 || projectId.length > 128) {
+      throw new Error("Invalid project id.");
+    }
+    const project = projectStore.getProject(projectId);
+    const sender = event.sender;
+    return startBackgroundRemoval({
+      projectId,
+      rootPath: project.rootPath,
+      deps: {
+        modelsDirectory: path.join(app.getPath("userData"), "models"),
+        onProgress: (status) => {
+          if (!sender.isDestroyed()) sender.send("background:progress", status);
+        }
+      }
+    });
+  });
+
+  ipcMain.handle("background:status", async (_event, projectId: unknown): Promise<BackgroundRemovalStatus> => {
+    if (typeof projectId !== "string" || projectId.length === 0 || projectId.length > 128) {
+      throw new Error("Invalid project id.");
+    }
+    return getBackgroundRemovalStatus(projectId);
+  });
+
+  ipcMain.handle("background:cancel", async (_event, projectId: unknown): Promise<boolean> => {
+    if (typeof projectId !== "string" || projectId.length === 0 || projectId.length > 128) {
+      throw new Error("Invalid project id.");
+    }
+    return cancelBackgroundRemoval(projectId);
+  });
+
+  ipcMain.handle("background:matte-url", async (_event, projectId: unknown): Promise<string | null> => {
+    if (typeof projectId !== "string" || projectId.length === 0 || projectId.length > 128) {
+      throw new Error("Invalid project id.");
+    }
+    const project = projectStore.getProject(projectId);
+    return (await hasCameraMatte(project.rootPath))
+      ? createMediaUrl(project.id, cameraMatteRelativePath)
+      : null;
+  });
+
   ipcMain.handle("permissions:get-status", (): DesktopPermissionStatus => {
     return getDesktopPermissionStatus();
   });
@@ -1127,6 +1452,29 @@ function registerIpc(): void {
     return requestMediaPermission(assertMediaPermissionKind(kind));
   });
 
+  // Click events recorded next to a project, used to seed editable auto zooms.
+  ipcMain.handle("capture:clicks", async (_event, projectId: unknown) => {
+    if (typeof projectId !== "string" || projectId.length === 0 || projectId.length > 128) {
+      throw new Error("Invalid project id.");
+    }
+    if (!projectStore.hasProject(projectId)) {
+      return { ...emptyClickCapture, warnings: [] };
+    }
+    const project = projectStore.getProject(projectId);
+    const relativePath = ".ovc/clicks.jsonl";
+    let jsonl = "";
+    try {
+      jsonl = await fs.readFile(resolveContainedProjectPath(project.rootPath, relativePath), "utf8");
+    } catch {
+      return { ...emptyClickCapture, warnings: [...activeClickCaptureWarnings] };
+    }
+    const displayId = project.sources?.[0]?.displayId ?? null;
+    return {
+      ...readClickCapture(jsonl, displayId),
+      warnings: [...activeClickCaptureWarnings]
+    };
+  });
+
   ipcMain.on("permissions:start-app-drag", (event): void => {
     startAppBundleDrag(event, getAppIconPath);
   });
@@ -1142,7 +1490,15 @@ function registerIpc(): void {
       throw new Error("Selected display source is no longer available.");
     }
 
+    // Reserve this display for the next getDisplayMedia call. A second capture
+    // cannot silently steal the selection while one is still being prepared.
+    reserveDisplayCaptureSource({ id: source.id, name: source.name });
     selectedDisplaySource = source;
+    return true;
+  });
+
+  ipcMain.handle("capture:release-display-source", (): boolean => {
+    releaseDisplayCaptureSource();
     return true;
   });
 
@@ -1203,8 +1559,28 @@ function registerIpc(): void {
     return true;
   });
 
-  ipcMain.handle("windows:open-editor", async (_event, projectId?: string | null): Promise<boolean> => {
-    await openEditorWindow(projectId);
+  ipcMain.handle("windows:set-recorder-size", (_event, width: unknown, height: unknown): boolean => {
+    if (!recorderWindow || recorderWindow.isDestroyed() || recorderWindowCompact) return false;
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return false;
+    const current = recorderWindow.getBounds();
+    const parsed = parseRecorderWindowBounds({
+      ...current,
+      width: Math.round(width as number),
+      height: Math.round(height as number)
+    });
+    if (!parsed) return false;
+    const clamped = clampRecorderWindowBounds(
+      parsed,
+      electronScreen.getDisplayMatching(current).workArea
+    );
+    recorderWindow.setBounds(clamped, false);
+    savedRecorderWindowBounds = clamped;
+    void getRecorderWindowBoundsStore().write(clamped).catch(() => undefined);
+    return true;
+  });
+
+  ipcMain.handle("windows:open-editor", async (_event, projectId?: string | null, options?: unknown): Promise<boolean> => {
+    await openEditorWindow(projectId, { autoAnalyze: isAutoAnalyzeOption(options) });
     finishRequestedRecorderClose();
     return true;
   });
@@ -1281,7 +1657,7 @@ function registerIpc(): void {
     "editor:export-video",
     async (event, request: ExportVideoRequest): Promise<ExportVideoResult | null> => {
       assertExportVideoRequest(request);
-      const jobId = request.jobId as string;
+      const jobId = request.jobId;
       const control = exportJobs.begin(jobId, (progress) => {
         if (!event.sender.isDestroyed()) event.sender.send("editor:export-progress", progress);
       });
@@ -1486,6 +1862,8 @@ function registerIpc(): void {
       assertStartRecordingRequest(request);
       const project = await projectStore.startRecording(request);
       activeRecordingProjectId = project.id;
+      const firstSource = request.sources?.[0] ?? request.source;
+      startClickCaptureFor(project, firstSource?.displayId ?? null);
       registerRecordingShortcut();
       await getProjectLibrary().upsert(project);
       return project;
@@ -1503,6 +1881,7 @@ function registerIpc(): void {
   ipcMain.handle(
     "recording:stop",
     async (_event, request: StopRecordingRequest) => {
+      stopActiveClickCapture();
       const project = await projectStore.stopRecording(request);
       activeRecordingProjectId = null;
       unregisterRecordingShortcut();
@@ -1527,15 +1906,26 @@ function registerIpc(): void {
   );
 
   ipcMain.handle("ffmpeg:prepare-audio", async (_event, projectId: string) => {
-    // Rewrite the recorded video containers with duration + seek cues so the
-    // editor can seek them. A failed remux keeps the raw recording playable.
+    // Rewrite every recorded video container with duration + seek cues so the
+    // editor can seek them, and give every recorded audio track its own WAV
+    // output. Microphone and system audio stay on separate files.
     const recordedVideoPaths: string[] = [];
-    for (const track of ["screen", "camera"] as const) {
-      const mediaPath = projectStore.getMediaPath(projectId, track);
-      if (mediaPath) {
+    const audioOutputs: Array<{ trackId: string; bytes: number }> = [];
+
+    for (const track of projectStore.getRecordedTracks(projectId)) {
+      const mediaPath = projectStore.getMediaPath(projectId, track.trackId);
+      if (!mediaPath) continue;
+
+      if (track.kind === "screen" || track.kind === "camera") {
         await remuxWebm(mediaPath).catch(() => undefined);
         recordedVideoPaths.push(mediaPath);
+        continue;
       }
+
+      const wavOutputPath = projectStore.getWavOutputPath(projectId, track.trackId);
+      if (!wavOutputPath) continue;
+      const wavBytes = await convertWebmAudioToWav(mediaPath, wavOutputPath);
+      audioOutputs.push({ trackId: track.trackId, bytes: wavBytes });
     }
 
     let mediaDurationMs: number | null = null;
@@ -1544,23 +1934,21 @@ function registerIpc(): void {
       if (mediaDurationMs !== null) break;
     }
 
-    const micInputPath = projectStore.getMicWebmPath(projectId);
-    const systemInputPath = projectStore.getSystemWebmPath(projectId);
-
-    const micBytes = micInputPath
-      ? await convertWebmAudioToWav(micInputPath, projectStore.getMicWavPath(projectId))
-      : 0;
-    const systemBytes = systemInputPath
-      ? await convertWebmAudioToWav(systemInputPath, projectStore.getSystemWavPath(projectId))
-      : 0;
-
-    const project = await projectStore.completeAudio(projectId, {
-      mic: micBytes,
-      system: systemBytes
-    }, mediaDurationMs);
+    const project = await projectStore.completeAudio(
+      projectId,
+      audioOutputs,
+      mediaDurationMs
+    );
     await getProjectLibrary().upsert(project);
     return project;
   });
+}
+
+/** Accepts only the explicit one-shot auto-analysis opt-in from the recorder. */
+function isAutoAnalyzeOption(value: unknown): boolean {
+  return typeof value === "object" &&
+    value !== null &&
+    (value as { autoAnalyze?: unknown }).autoAnalyze === true;
 }
 
 function assertAiProvider(value: unknown): asserts value is AiProvider {
@@ -1593,8 +1981,13 @@ function setRecorderWindowCompact(compact: boolean): void {
   if (!recorderWindow || recorderWindow.isDestroyed()) {
     return;
   }
+  recorderWindowCompact = compact;
+  if (persistRecorderBoundsTimer) {
+    clearTimeout(persistRecorderBoundsTimer);
+    persistRecorderBoundsTimer = null;
+  }
 
-  const size = compact ? recorderWindowSize.compact : recorderWindowSize.expanded;
+  const size = getRecorderWindowSize(compact);
   const bounds = recorderWindow.getBounds();
   const x = Math.round(bounds.x + bounds.width / 2 - size.width / 2);
   const y = Math.round(bounds.y + bounds.height / 2 - size.height / 2);
@@ -1611,6 +2004,8 @@ function setRecorderWindowCompact(compact: boolean): void {
   recorderWindow.show();
   recorderWindow.focus();
   recorderWindow.setAlwaysOnTop(true, "screen-saver");
+  recorderWindow.on("resize", scheduleRecorderBoundsPersist);
+  recorderWindow.on("moved", scheduleRecorderBoundsPersist);
 }
 
 function toEditorProjectStateView(
@@ -1764,7 +2159,6 @@ app.on("will-quit", () => {
   closePermissionGuideWindow();
   killActiveFfmpegProcesses();
   killActiveSttProcesses();
-  musicGenerationManager?.killActiveProcesses();
   globalShortcut.unregisterAll();
   securityScopedResources?.stopAll();
 });

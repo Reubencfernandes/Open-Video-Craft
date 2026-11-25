@@ -1,13 +1,21 @@
 /**
  * Capture-quality presets for the recorder: screen encode resolution/bitrate
  * and camera capture resolution. Kept in one place so the picker UI and the
- * capture pipeline stay in agreement.
+ * capture pipeline stay in agreement. The quality ids and their best-first
+ * order live in the shared recorder-settings contract, which the app-level
+ * persistence validates against.
  */
-export type ScreenQuality = "source" | "1440p" | "1080p" | "720p";
-export type CameraQuality = "1080p" | "720p" | "480p";
+import {
+  cameraQualityIds,
+  screenQualityIds,
+  type CameraQuality,
+  type ScreenQuality
+} from "../../shared/recorder-settings";
 
-export const screenQualities: ScreenQuality[] = ["source", "1440p", "1080p", "720p"];
-export const cameraQualities: CameraQuality[] = ["1080p", "720p", "480p"];
+export type { CameraQuality, ScreenQuality };
+
+export const screenQualities: ScreenQuality[] = [...screenQualityIds];
+export const cameraQualities: CameraQuality[] = [...cameraQualityIds];
 
 // `maxHeight: null` keeps the display's native resolution — i.e. the full
 // screen at full quality; the lower tiers downscale to shrink the file.

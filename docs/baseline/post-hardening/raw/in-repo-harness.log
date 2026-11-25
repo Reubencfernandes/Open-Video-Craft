@@ -1,0 +1,5 @@
+
+> open-video-craft@1.0.6 bench:startup
+> node scripts/bench/startup.mjs --out docs/baseline/post-hardening/raw/in-repo-startup --settle 10 --samples 40
+
+{"schemaVersion":1,"scenario":"startup-idle","launchMode":"unpackaged --bench","settleSeconds":10,"sampleCount":40,"medianWorkingSetMb":467.328125,"minWorkingSetMb":464.515625,"maxWorkingSetMb":468.453125,"rendererFirstUptimeSeconds":0.472411792,"benchErrors":[]}

@@ -5,6 +5,7 @@ import type {
   EditorEditResult,
   EditorStateSnapshot,
   ClipTransition,
+  ClipEdgeTransition,
   SpeedEffect,
   SubtitleSegment,
   SubtitleWord,
@@ -66,7 +67,7 @@ export function applyEditorOperations(
         const target = next.timelineSegments[index];
         const start = operation.timelineStart ?? target.start;
         const end = operation.timelineEnd ?? target.end;
-        if (start < 0 || end - start < 0.1 || start >= target.end || end <= target.start) {
+        if (start < 0 || end - start < 0.01 || start >= target.end || end <= target.start) {
           throw new Error(`Invalid trim for clip "${target.id}".`);
         }
         next.timelineSegments[index] = {
@@ -106,10 +107,37 @@ export function applyEditorOperations(
         if (!Number.isFinite(operation.gainDb) || operation.gainDb < -60 || operation.gainDb > 12) {
           throw new Error("Audio gain must be between -60 dB and +12 dB.");
         }
+        const previous = next.audioLevels[operation.itemId] ?? {};
         next.audioLevels[operation.itemId] = {
           volume: Math.round(Math.pow(10, operation.gainDb / 20) * 10000) / 100,
-          muted: operation.muted
+          muted: operation.muted,
+          ...(operation.fadeIn !== undefined
+            ? { fadeIn: Math.max(0, Math.min(10, operation.fadeIn)) }
+            : previous.fadeIn === undefined ? {} : { fadeIn: previous.fadeIn }),
+          ...(operation.fadeOut !== undefined
+            ? { fadeOut: Math.max(0, Math.min(10, operation.fadeOut)) }
+            : previous.fadeOut === undefined ? {} : { fadeOut: previous.fadeOut })
         };
+        break;
+      }
+      case "set_youtube_volume": {
+        const previous = next.youtubeVolume ?? { enabled: false, targetLufs: -14, truePeakDb: -1 };
+        next.youtubeVolume = {
+          enabled: operation.enabled,
+          targetLufs: operation.targetLufs ?? previous.targetLufs,
+          truePeakDb: operation.truePeakDb ?? previous.truePeakDb
+        };
+        break;
+      }
+      case "set_audio_cleanup": {
+        next.audioCleanup = {
+          ...(next.audioCleanup ?? {}),
+          [operation.itemId]: {
+            preset: operation.preset,
+            strength: Math.max(0, Math.min(100, Math.round(operation.strength)))
+          }
+        };
+        affected.add(operation.itemId);
         break;
       }
       case "set_audio_lane": {
@@ -231,7 +259,7 @@ export function applyEditorOperations(
           rate: operation.rate
         };
         validateEffectRange(effect, getEditorDuration(next), "Speed");
-        if (![1, 2, 3, 4, 5].includes(effect.rate)) throw new Error("Speed rate must be from 1x to 5x.");
+        if (![1, 1.25, 1.5, 2, 3, 4, 5].includes(effect.rate)) throw new Error("Speed rate must be 1x, 1.25x, 1.5x, 2x, 3x, 4x or 5x.");
         next.speedEffects = upsertTimedEffect(next.speedEffects, effect);
         validateNonOverlappingEffects(next.speedEffects, "Speed");
         addClipsInRange(next.timelineSegments, effect.start, effect.end, affected);
@@ -396,6 +424,7 @@ function sequenceClips(
 function validateFinalState(state: EditorStateSnapshot): void {
   validateTimeline(state.timelineSegments);
   validateClipTransitions(state.timelineSegments, state.transitions ?? []);
+  validateClipEdgeTransitions(state.timelineSegments, state.edgeTransitions ?? []);
   if (!validateEditorStateSnapshot(state)) throw new Error("The edit plan produced an invalid editor state.");
   const duration = getEditorDuration(state);
   if (duration <= 0) return;
@@ -415,7 +444,8 @@ function validateFinalState(state: EditorStateSnapshot): void {
  */
 export function sanitizeClipTransitions(
   segments: TimelineSegment[],
-  transitions: readonly ClipTransition[]
+  transitions: readonly ClipTransition[],
+  edgeTransitions: readonly ClipEdgeTransition[] = []
 ): ClipTransition[] {
   const accepted: ClipTransition[] = [];
   for (const transition of transitions) {
@@ -429,12 +459,56 @@ export function sanitizeClipTransitions(
   return accepted;
 }
 
+/** Drops edge-transition metadata whose clip no longer exists. */
+export function sanitizeClipEdgeTransitions(
+  segments: readonly TimelineSegment[],
+  transitions: readonly ClipEdgeTransition[]
+): ClipEdgeTransition[] {
+  const ids = new Set(segments.filter((item) => item.track === "video").map((item) => item.id));
+  return transitions.filter((transition) => ids.has(transition.segmentId));
+}
+
+/** Validates isolated clip-start/clip-end transitions against their clips. */
+export function validateClipEdgeTransitions(
+  segments: readonly TimelineSegment[],
+  transitions: readonly ClipEdgeTransition[]
+): void {
+  const byId = new Map(segments.filter((item) => item.track === "video").map((item) => [item.id, item]));
+  const used = new Set<string>();
+  for (const transition of transitions) {
+    if (!Number.isFinite(transition.duration) || transition.duration < 0.1 || transition.duration > 2) {
+      throw new Error("Edge transition duration must be between 0.1 and 2 seconds.");
+    }
+    const clip = byId.get(transition.segmentId);
+    if (!clip) throw new Error(`Edge transition references unknown clip "${transition.segmentId}".`);
+    const key = `${transition.segmentId} ${transition.edge}`;
+    if (used.has(key)) throw new Error("A clip edge can contain only one transition.");
+    used.add(key);
+    if (transition.duration > clip.end - clip.start - 0.1) {
+      throw new Error(`Clip "${clip.id}" is too short for its edge transition.`);
+    }
+  }
+}
+
 export function validateClipTransitions(
   segments: TimelineSegment[],
   transitions: readonly ClipTransition[]
 ): void {
-  const videos = segments.filter((item) => item.track === "video").sort((a, b) => a.start - b.start);
-  const indexById = new Map(videos.map((segment, index) => [segment.id, index]));
+  const videos = segments.filter((item) => item.track === "video");
+  const byLane = new Map<number, TimelineSegment[]>();
+  for (const segment of videos) {
+    byLane.set(segment.lane, [...(byLane.get(segment.lane) ?? []), segment]);
+  }
+  const orderedByLane = new Map(
+    [...byLane].map(([lane, laneClips]) => [
+      lane,
+      [...laneClips].sort((a, b) => a.start - b.start)
+    ])
+  );
+  const indexById = new Map<string, { lane: number; index: number }>();
+  for (const [lane, laneClips] of orderedByLane) {
+    laneClips.forEach((segment, index) => indexById.set(segment.id, { lane, index }));
+  }
   const handleUsage = new Map<string, { incoming: number; outgoing: number }>();
   const boundaries = new Set<string>();
 
@@ -442,13 +516,21 @@ export function validateClipTransitions(
     if (!Number.isFinite(transition.duration) || transition.duration < 0.1 || transition.duration > 2) {
       throw new Error("Transition duration must be between 0.1 and 2 seconds.");
     }
-    const fromIndex = indexById.get(transition.fromSegmentId);
-    const toIndex = indexById.get(transition.toSegmentId);
-    if (fromIndex === undefined || toIndex !== fromIndex + 1) {
-      throw new Error("Transitions must connect adjacent video clips in timeline order.");
+    const fromLocation = indexById.get(transition.fromSegmentId);
+    const toLocation = indexById.get(transition.toSegmentId);
+    if (
+      fromLocation === undefined ||
+      toLocation === undefined ||
+      fromLocation.lane !== toLocation.lane ||
+      toLocation.index !== fromLocation.index + 1
+    ) {
+      throw new Error("Transitions must connect adjacent video clips in the same channel.");
     }
-    const from = videos[fromIndex];
-    const to = videos[toIndex];
+    const from = orderedByLane.get(fromLocation.lane)?.[fromLocation.index];
+    const to = orderedByLane.get(toLocation.lane)?.[toLocation.index];
+    if (!from || !to) {
+      throw new Error("Transitions must connect adjacent video clips in the same channel.");
+    }
     if (Math.abs(from.end - to.start) > 0.05) {
       throw new Error("Transitions require clips that meet at the same cut without a gap.");
     }
@@ -607,7 +689,7 @@ function isProjectLinkedAudioId(itemId: string): boolean {
 }
 
 function shiftSegment(segment: TimelineSegment, delta: number): TimelineSegment {
-  return { ...segment, start: Math.max(0, segment.start + delta), end: Math.max(0.1, segment.end + delta) };
+  return { ...segment, start: Math.max(0, segment.start + delta), end: Math.max(0.01, segment.end + delta) };
 }
 
 function findSegmentIndex(state: EditorStateSnapshot, id: string): number {
@@ -616,16 +698,23 @@ function findSegmentIndex(state: EditorStateSnapshot, id: string): number {
   return index;
 }
 
-function validateTimeline(segments: TimelineSegment[]): void {
+export function validateTimeline(segments: TimelineSegment[]): void {
   for (const segment of segments) {
-    if (!isTimelineSegment(segment) || segment.start < 0 || segment.end - segment.start < 0.1) {
+    if (!isTimelineSegment(segment) || segment.start < 0 || segment.end - segment.start < 0.01) {
       throw new Error(`Invalid timeline clip "${segment.id}".`);
     }
   }
-  const videos = segments.filter((item) => item.track === "video").sort((a, b) => a.start - b.start);
-  for (let index = 1; index < videos.length; index += 1) {
-    if (videos[index].start < videos[index - 1].end - 0.01) {
-      throw new Error(`Video clips "${videos[index - 1].id}" and "${videos[index].id}" overlap.`);
+  const videos = segments.filter((item) => item.track === "video");
+  const byLane = new Map<number, TimelineSegment[]>();
+  for (const segment of videos) {
+    byLane.set(segment.lane, [...(byLane.get(segment.lane) ?? []), segment]);
+  }
+  for (const laneClips of byLane.values()) {
+    const ordered = [...laneClips].sort((a, b) => a.start - b.start);
+    for (let index = 1; index < ordered.length; index += 1) {
+      if (ordered[index].start < ordered[index - 1].end - 0.01) {
+        throw new Error(`Video clips "${ordered[index - 1].id}" and "${ordered[index].id}" overlap.`);
+      }
     }
   }
 }

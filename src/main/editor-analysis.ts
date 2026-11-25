@@ -1,3 +1,4 @@
+import { deriveNonSpeechRanges } from "../shared/analysis/non-speech-ranges";
 /** Local, cacheable media analysis used by the MCP server. */
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
@@ -5,6 +6,7 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { resolveFfmpegPath } from "./ffmpeg";
 import { resolveContainedProjectPath } from "./project-containment";
+import { resolveLocalModelPaths } from "../shared/local-model-paths";
 import type { EditorProjectStateFile, ProjectFile } from "../shared/types";
 import type { SubtitleSegment, SubtitleWord } from "../shared/editor-domain";
 
@@ -49,6 +51,7 @@ export async function startProjectAnalysis(input: {
   rootPath: string;
   project: ProjectFile;
   editor: EditorProjectStateFile | null;
+  userDataPath: string;
   thumbnailIntervalSeconds?: number;
 }): Promise<AnalysisJobStatus> {
   const fingerprint = await createFingerprint(input.rootPath, input.project, input.editor);
@@ -88,7 +91,7 @@ export async function readContactSheet(rootPath: string, page: number): Promise<
 
 async function runAnalysis(
   job: AnalysisJobStatus,
-  input: { rootPath: string; project: ProjectFile; editor: EditorProjectStateFile | null; thumbnailIntervalSeconds?: number },
+  input: { rootPath: string; project: ProjectFile; editor: EditorProjectStateFile | null; userDataPath: string; thumbnailIntervalSeconds?: number },
   fingerprint: string
 ) {
   job.status = "analyzing"; job.progress = 5; job.message = "Preparing local media analysis.";
@@ -109,11 +112,6 @@ async function runAnalysis(
     0
   ) ?? 0;
   const knownDuration = Math.max(0, (input.project.durationMs ?? 0) / 1000, importedDuration, editorDuration);
-
-  job.progress = 15; job.message = "Detecting silence.";
-  const silenceRanges = audioPath ? await detectSilence(audioPath).catch((error) => {
-    warnings.push(`Silence detection failed: ${messageOf(error)}`); return [];
-  }) : [];
 
   job.progress = 35; job.message = "Creating visual contact sheet.";
   const contactSheets: ProjectAnalysis["contactSheets"] = [];
@@ -153,10 +151,16 @@ async function runAnalysis(
   let language = input.editor?.state.subtitleLanguage ?? null;
   if (segments.length === 0 && audioPath) {
     try {
-      const transcript = await transcribeAudio(audioPath);
+      const transcript = await transcribeAudio(audioPath, input.userDataPath);
       segments = transcript.segments; language = transcript.language;
     } catch (error) { warnings.push(`Local transcription failed: ${messageOf(error)}`); }
   }
+
+  job.progress = 65; job.message = "Detecting non-speech gaps.";
+  const energyRanges = audioPath ? await detectSilence(audioPath).catch((error) => {
+    warnings.push(`Silence detection failed: ${messageOf(error)}`); return [];
+  }) : [];
+  const silenceRanges = deriveNonSpeechRanges(segments, knownDuration, energyRanges);
 
   const fillerWords = segments.flatMap((segment) => segment.words ?? [])
     .filter((word) => /^(?:um+|uh+|erm+|hmm+)\b/i.test(word.text.trim()))
@@ -178,11 +182,16 @@ async function runAnalysis(
   job.status = "complete"; job.progress = 100; job.message = "Analysis complete."; job.result = result;
 }
 
-async function transcribeAudio(audioPath: string): Promise<{ language: string | null; segments: SubtitleSegment[] }> {
+export async function transcribeAudio(audioPath: string, userDataPath: string): Promise<{ language: string | null; segments: SubtitleSegment[] }> {
   const pcm = await captureStdout(resolveFfmpegPath(), ["-i", audioPath, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "pipe:1"]);
   const floats = new Float32Array(pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength));
   const transformers = await import("@huggingface/transformers");
+  const paths = resolveLocalModelPaths(userDataPath);
+  await fs.mkdir(paths.localModelPath, { recursive: true });
+  await fs.mkdir(paths.cacheDir, { recursive: true });
   transformers.env.allowLocalModels = false;
+  transformers.env.localModelPath = paths.localModelPath;
+  transformers.env.cacheDir = paths.cacheDir;
   cachedTranscriber ??= transformers.pipeline("automatic-speech-recognition", "onnx-community/whisper-base_timestamped");
   const transcriber = await cachedTranscriber;
   const output = await transcriber(floats, { return_timestamps: "word", chunk_length_s: 30, stride_length_s: 5 });
@@ -207,18 +216,36 @@ async function detectSilence(filePath: string) {
   return starts.map((start, index) => ({ start, end: ends[index] ?? start, duration: Math.max(0, (ends[index] ?? start) - start) })).filter((range) => range.duration > 0);
 }
 
+export function createAnalysisFingerprintInput(
+  project: ProjectFile,
+  editor: EditorProjectStateFile | null,
+  fileSignatures: readonly string[]
+): string {
+  const state = editor?.state;
+  return JSON.stringify({
+    projectId: project.id,
+    files: fileSignatures,
+    timeline: state?.timelineSegments ?? [],
+    speed: state?.speedEffects ?? [],
+    zoom: state?.zoomEffects ?? [],
+    text: state?.textOverlays ?? [],
+    subtitles: state?.subtitles ?? [],
+    trim: state?.trimRange ?? { start: 0, end: 0 }
+  });
+}
+
 async function createFingerprint(rootPath: string, project: ProjectFile, editor: EditorProjectStateFile | null) {
-  const hash = createHash("sha256");
+  const fileSignatures: string[] = [];
   for (const track of Object.values(project.tracks)) {
     if (!track) continue;
     const stats = await fs.stat(resolveContainedProjectPath(rootPath, track.path)).catch(() => null);
-    hash.update(`${track.path}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0};`);
+    fileSignatures.push(`${track.path}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0}`);
   }
   for (const imported of editor?.imports ?? []) {
     const stats = await fs.stat(resolveContainedProjectPath(rootPath, imported.relativePath)).catch(() => null);
-    hash.update(`${imported.relativePath}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0};`);
+    fileSignatures.push(`${imported.relativePath}:${stats?.size ?? 0}:${stats?.mtimeMs ?? 0}`);
   }
-  return hash.digest("hex").slice(0, 20);
+  return createHash("sha256").update(createAnalysisFingerprintInput(project, editor, fileSignatures)).digest("hex").slice(0, 20);
 }
 function resolveTrack(rootPath: string, project: ProjectFile, keys: string[]): string | null {
   for (const key of keys) {

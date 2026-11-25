@@ -5,13 +5,14 @@
  */
 import { useEffect, useRef } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import { getEffectiveAudioLevel } from "../../shared/editor-domain";
+import { getEffectiveAudioLevel, type AudioCleanupState } from "../../shared/editor-domain";
 import { AudioMeter } from "./audio-meter";
 import { canDriftSeek } from "./media-utils";
 import { resolveNextTimelineTime } from "./playback-clock";
 import {
   getSafeMediaSeekTarget,
   getMediaTimeForTimelineTime,
+  isContiguousAudioCut,
   isMediaTimePlayable,
   type PlaybackSyncReason,
   shouldSeekPrimaryVideo,
@@ -22,7 +23,12 @@ import {
   createClipPlaybackKey,
   createTimelineMediaClips
 } from "./timeline-utils";
-import { getActiveSpeedRate } from "./speed-utils";
+import { withCompositionRoles, type CompositionMediaClip } from "./composition-layers";
+import {
+  resolveCompositionLayers,
+  type CompositionLayers
+} from "../../shared/editor-domain/timeline-visibility";
+import { getActiveSpeedRate, getPlaybackRateForTrack } from "./speed-utils";
 import { frameRate } from "./types";
 import type {
   EditorMediaItem,
@@ -42,17 +48,20 @@ type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
 const audioPreRollSeconds = 1.5;
 
 type UseEditorPlaybackParams = {
+  activeBaseClip: TimelineMediaClip | null;
+  activeCameraClip: TimelineMediaClip | null;
   activeDuration: number;
-  activeVideoClip: TimelineMediaClip | null;
   audioLevels: AudioLevelState;
+  audioCleanup: AudioCleanupState;
+  cleanupAudioUrls: Readonly<Record<string, string>>;
   audioTimelineClips: TimelineMediaClip[];
   currentTime: number;
   layoutMode: LayoutMode;
   masterVolume: number;
   mediaById: Map<string, EditorMediaItem>;
   playing: boolean;
-  previewItem: EditorMediaItem | null;
-  projectCamera: EditorMediaItem | null;
+  /** Clip the owner selected; an active webcam clip wins the camera layer. */
+  selectedTimelineSegmentId: string | null;
   setCurrentTime: Dispatch<SetStateAction<number>>;
   setError: Dispatch<SetStateAction<string | null>>;
   setPlaying: Dispatch<SetStateAction<boolean>>;
@@ -86,17 +95,19 @@ type UseEditorPlaybackResult = {
 
 export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPlaybackResult {
   const {
+    activeBaseClip,
+    activeCameraClip,
     activeDuration,
-    activeVideoClip,
     audioLevels,
+    audioCleanup,
+    cleanupAudioUrls,
     audioTimelineClips,
     currentTime,
     layoutMode,
     masterVolume,
     mediaById,
     playing,
-    previewItem,
-    projectCamera,
+    selectedTimelineSegmentId,
     setCurrentTime,
     setError,
     setPlaying,
@@ -128,17 +139,21 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   const pendingPlayElementsRef = useRef(new WeakSet<HTMLMediaElement>());
   const masterVolumeRef = useRef(100);
   const audioLevelsRef = useRef<AudioLevelState>({});
+  const audioCleanupRef = useRef<AudioCleanupState>({});
+  const cleanupAudioUrlsRef = useRef<Readonly<Record<string, string>>>({});
   const timelineDurationRef = useRef(0);
   const audioMeterRef = useRef<AudioMeter | null>(null);
   const playbackInteractionRef = useRef(false);
   const resumeAfterInteractionRef = useRef(false);
+  const selectedSegmentIdRef = useRef<string | null>(null);
 
   function getAudioMeter(): AudioMeter {
     audioMeterRef.current ??= new AudioMeter();
     return audioMeterRef.current;
   }
 
-  function applyAudioGain(element: HTMLMediaElement, sourceGain: number) {
+  function applyAudioGain(element: HTMLMediaElement, sourceGain: number, itemId?: string) {
+    void itemId;
     const connected = getAudioMeter().setElementGain(element, sourceGain);
     element.volume = connected
       ? 1
@@ -193,6 +208,14 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   }, [audioLevels]);
 
   useEffect(() => {
+    audioCleanupRef.current = audioCleanup;
+  }, [audioCleanup]);
+
+  useEffect(() => {
+    cleanupAudioUrlsRef.current = cleanupAudioUrls;
+  }, [cleanupAudioUrls]);
+
+  useEffect(() => {
     timelineDurationRef.current = timelineDuration;
   }, [timelineDuration]);
 
@@ -205,17 +228,25 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   }, [currentTime]);
 
   useEffect(() => {
+    selectedSegmentIdRef.current = selectedTimelineSegmentId;
+  }, [selectedTimelineSegmentId]);
+
+  useEffect(() => {
     syncMediaToTime(currentTimeRef.current, playingRef.current, "clip-change");
     // The media element is swapped by React when the active clip/source changes;
     // sync after commit so the new element starts at the timeline time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    activeVideoClip?.id,
-    activeVideoClip?.start,
-    activeVideoClip?.duration,
-    activeVideoClip?.sourceStart,
-    previewItem?.url,
-    projectCamera?.url,
+    activeBaseClip?.id,
+    activeBaseClip?.start,
+    activeBaseClip?.duration,
+    activeBaseClip?.sourceStart,
+    activeBaseClip?.item.url,
+    activeCameraClip?.id,
+    activeCameraClip?.start,
+    activeCameraClip?.duration,
+    activeCameraClip?.sourceStart,
+    activeCameraClip?.item.url,
     layoutMode
   ]);
 
@@ -255,8 +286,8 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
 
       currentTimeRef.current = next;
       syncMediaToTime(next, true, "tick");
-      const previousClipKey = findVideoClipAtTime(previous)?.id ?? null;
-      const nextClipKey = findVideoClipAtTime(next)?.id ?? null;
+      const previousClipKey = resolveLayersAt(previous).primary?.id ?? null;
+      const nextClipKey = resolveLayersAt(next).primary?.id ?? null;
       const frameInterval = isZoomActiveAtTime(zoomEffectsRef.current, next) ? 16 : 33;
       if (previousClipKey !== nextClipKey || now - lastUiUpdate >= frameInterval) {
         lastUiUpdate = now;
@@ -294,10 +325,10 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
         continue;
       }
       const level = getEffectiveAudioLevel(audioLevels, clip.item.id, clip.lane);
-      applyAudioGain(element, level.muted ? 0 : level.volume / 100);
+      applyAudioGain(element, level.muted ? 0 : level.volume / 100, clip.item.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [masterVolume, audioLevels, audioTimelineClips]);
+  }, [masterVolume, audioLevels, audioCleanup, activeBaseClip, activeCameraClip, audioTimelineClips]);
 
   function getClipVolume(clip: TimelineMediaClip): number {
     const level = getEffectiveAudioLevel(
@@ -316,21 +347,38 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     return audioMeterRef.current?.sample() ?? 0;
   }
 
-  function findVideoClipAtTime(time: number): TimelineMediaClip | null {
-    return (
-      videoClipsRef.current.find(
-        (clip) => time >= clip.start && time < clip.start + clip.duration
-      ) ?? null
+  /** Base and camera layers covering `time`, resolved exactly like the canvas. */
+  function resolveLayersAt(time: number): CompositionLayers<CompositionMediaClip> {
+    return resolveCompositionLayers(
+      withCompositionRoles(videoClipsRef.current),
+      time,
+      selectedSegmentIdRef.current
     );
   }
 
-  function getPrimaryPlaybackVideoElement(): HTMLVideoElement | null {
-    return mainVideoRef.current ?? cameraRef.current;
+  /**
+   * Decoder that owns timeline time. The base picture drives it whenever it is
+   * mounted; a camera-only preset or a cut-away screen falls through to the
+   * webcam, whose element then owns the clock with its own source offset.
+   */
+  function resolveClockSource(
+    layers: CompositionLayers<CompositionMediaClip>
+  ): { clip: TimelineMediaClip | null; element: HTMLVideoElement | null } {
+    const base = layers.base;
+    if (base !== null && base.item.kind === "video" && mainVideoRef.current) {
+      return { clip: base, element: mainVideoRef.current };
+    }
+    const camera = layers.camera;
+    if (camera !== null && camera.item.kind === "video" && cameraRef.current) {
+      return { clip: camera, element: cameraRef.current };
+    }
+    return { clip: layers.primary, element: null };
   }
 
   function getNextPlaybackTime(dt: number): number {
-    const clockClip = findVideoClipAtTime(currentTimeRef.current);
-    const videoEl = getPrimaryPlaybackVideoElement();
+    const { clip: clockClip, element: videoEl } = resolveClockSource(
+      resolveLayersAt(currentTimeRef.current)
+    );
     const videoClock =
       clockClip?.item.kind === "video" && videoEl
         ? {
@@ -444,15 +492,33 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       input.pendingSeekKeyRef.current = null;
     }
 
-    input.element.muted = input.muted;
-    if (input.muted) {
+    const cleanupUrl = cleanupAudioUrlsRef.current[input.videoClip.item.id];
+    input.element.muted = input.muted || Boolean(cleanupUrl);
+    if (input.muted || cleanupUrl) {
       audioMeterRef.current?.setElementGain(input.element, 0);
       input.element.volume = 0;
     } else {
       const connected = getAudioMeter().setElementGain(input.element, 1);
       input.element.volume = connected ? 1 : input.volume;
     }
-    input.element.playbackRate = getPlaybackRate(input.timelineTime);
+    if (cleanupUrl) {
+      const cleanupElement = audioElsRef.current.get(`cleanup:${input.videoClip.id}`);
+      if (cleanupElement) {
+        syncSecondaryMediaElement({
+          element: cleanupElement,
+          clip: input.videoClip,
+          timelineTime: input.timelineTime,
+          isPlaying: input.isPlaying,
+          reason: input.reason,
+          syncKey: `cleanup:${input.videoClip.id}`,
+          clipChanged,
+          volume: input.volume,
+          label: "cleanup audio",
+          useEngine: true
+        });
+      }
+    }
+    input.element.playbackRate = getPlaybackRateForTrack("video", speedEffectsRef.current, input.timelineTime);
     if (
       input.isPlaying &&
       input.element.paused &&
@@ -503,7 +569,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     } else {
       input.element.volume = input.volume;
     }
-    input.element.playbackRate = getPlaybackRate(input.timelineTime);
+    input.element.playbackRate = getPlaybackRateForTrack(input.clip.track, speedEffectsRef.current, input.timelineTime);
     if (
       input.isPlaying &&
       playable &&
@@ -512,6 +578,14 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
       !input.element.ended
     ) {
       playMediaElement(input.element, input.label);
+      if (input.clip.track === "audio") {
+        const level = getEffectiveAudioLevel(
+          audioLevelsRef.current, input.clip.item.id, input.clip.lane
+        );
+        getAudioMeter().scheduleFade(
+          input.element, level.fadeIn ?? 0, level.fadeOut ?? 0, input.clip.duration
+        );
+      }
     } else if ((!input.isPlaying || !playable) && !input.element.paused) {
       input.element.pause();
     }
@@ -526,7 +600,13 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
   ) {
     const master = Math.min(1, Math.max(0, masterVolumeRef.current / 100));
     getAudioMeter().setMasterGain(masterVolumeRef.current / 100);
-    const videoClip = findVideoClipAtTime(time);
+    // The base picture and the webcam are independent layers: each one is on
+    // its own channel and may be hidden, cut away or replaced by the next
+    // visible channel, exactly as the canvas resolves them.
+    const layers = resolveLayersAt(time);
+    const videoClip = layers.base;
+    // A single-camera recording has no camera clip and rides the base picture.
+    const cameraClip = layers.camera ?? layers.base;
 
     const videoEl = mainVideoRef.current;
     if (videoEl && videoClip && videoClip.item.kind === "video") {
@@ -552,14 +632,17 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     }
 
     const cameraEl = cameraRef.current;
-    if (cameraEl && videoClip && videoClip.item.kind === "video") {
-      const clipPlaybackKey = createClipPlaybackKey(videoClip);
+    if (cameraEl && cameraClip && cameraClip.item.kind === "video") {
+      const clipPlaybackKey = createClipPlaybackKey(cameraClip);
       const clipChanged = syncedCameraClipKeyRef.current !== clipPlaybackKey;
+      // With no base picture on screen the webcam is the only picture, so it
+      // drives the clock instead of following it.
+      const clockIsCamera = !videoEl || videoClip === null || videoClip.item.kind !== "video";
 
-      if (!videoEl) {
+      if (clockIsCamera) {
         syncPrimaryVideoElement({
           element: cameraEl,
-          videoClip,
+          videoClip: cameraClip,
           timelineTime: time,
           isPlaying,
           reason,
@@ -574,7 +657,7 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
         pendingCameraSeekKeyRef.current = null;
         syncSecondaryMediaElement({
           element: cameraEl,
-          clip: videoClip,
+          clip: cameraClip,
           timelineTime: time,
           isPlaying,
           reason,
@@ -594,14 +677,18 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
     // The picture is the timeline clock: while it seeks or buffers (after every
     // cut, and at play start) the clock holds, so hold the audio as well or the
     // voice runs ahead of the video by the decoder's seek latency.
-    const clockElement =
-      videoClip?.item.kind === "video" ? getPrimaryPlaybackVideoElement() : null;
+    const clockSource = resolveClockSource(layers);
+    const clockElement = clockSource.clip?.item.kind === "video" ? clockSource.element : null;
     const holdAudioForPicture = Boolean(
       isPlaying &&
         clockElement &&
         !clockElement.ended &&
         (clockElement.seeking ||
           clockElement.readyState < HTMLMediaElement.HAVE_FUTURE_DATA)
+    );
+
+    const activeAudioClip = audioClipsRef.current.find(
+      (clip) => time >= clip.start && time < clip.start + clip.duration
     );
 
     for (const clip of audioClipsRef.current) {
@@ -625,6 +712,18 @@ export function useEditorPlayback(params: UseEditorPlaybackParams): UseEditorPla
           useEngine: true
         });
       } else {
+        // A split keeps the same element playing across its own cut. Stopping
+        // it here and starting the next half produces an audible click even
+        // though the waveform is continuous.
+        const reachedCut =
+          activeAudioClip !== undefined &&
+          isContiguousAudioCut(clip, activeAudioClip) &&
+          !element.paused &&
+          element.currentTime >=
+            Math.max(0, (Number.isFinite(element.duration) ? element.duration : clip.duration) - 0.05);
+        if (reachedCut) {
+          continue;
+        }
         if (!element.paused) {
           element.pause();
         }

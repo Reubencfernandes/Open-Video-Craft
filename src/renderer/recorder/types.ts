@@ -1,8 +1,6 @@
 /**
  * Types shared by the recorder controller and its view.
  */
-import type { RecordingTrack } from "../../shared/types";
-
 export type FloatingState =
   | "ready"
   | "preparing"
@@ -19,5 +17,7 @@ export type DeviceOption = {
   label: string;
 };
 
-export type RecorderMap = Partial<Record<RecordingTrack, MediaRecorder>>;
-export type WriteQueues = Partial<Record<RecordingTrack, Promise<unknown>>>;
+import type { MediaTrackKey } from "../../shared/types";
+
+export type RecorderMap = Partial<Record<MediaTrackKey, MediaRecorder>>;
+export type WriteQueues = Partial<Record<MediaTrackKey, Promise<unknown>>>;

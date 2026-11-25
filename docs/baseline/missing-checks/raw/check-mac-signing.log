@@ -1,0 +1,4 @@
+Missing Developer ID Application signing certificate.
+Install a Developer ID Application certificate in Keychain Access, or set CSC_LINK/CSC_NAME for CI.
+Current codesigning identities:
+0 valid identities found

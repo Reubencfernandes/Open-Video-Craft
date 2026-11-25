@@ -1,7 +1,9 @@
+import { isAudioCleanupPreset } from "./audio-cleanup";
 import type {
   AudioLevelState,
   CameraContentTransform,
   ClipTransition,
+  ClipEdgeTransition,
   EditorDocument,
   EditorImportRecord,
   EditorMutation,
@@ -19,14 +21,14 @@ import type {
 export function createDefaultEditorState(): EditorStateSnapshot {
   return {
     v: 2,
-    timelineSegments: [], zoomEffects: [], speedEffects: [], transitions: [], subtitles: [], textOverlays: [],
+    timelineSegments: [], zoomEffects: [], speedEffects: [], transitions: [], edgeTransitions: [], subtitles: [], textOverlays: [],
     subtitleLanguage: null, subtitleStyle: "karaoke", layoutMode: "bubble",
     backgroundStyle: "real-world-6", activeBackgroundCategory: "image",
     cameraSize: 24, cameraPosition: "bottom-right", cameraShape: "circle",
     cameraBorderStyle: "light", cameraContentTransform: { x: 0, y: 0, scale: 100, mirrored: false },
     videoCornerStyle: "soft", screenPosition: { x: 0, y: 0, scale: 100 },
     screenAspectRatio: "auto", cameraFrame: { x: 72, y: 72, size: 24 },
-    masterVolume: 100, audioLevels: {}, backgroundAudioIds: [],
+    masterVolume: 100, audioLevels: {}, audioCleanup: {}, youtubeVolume: { enabled: false, targetLufs: -14, truePeakDb: -1 }, backgroundAudioIds: [],
     customBackgroundImportId: null, trimRange: { start: 0, end: 0 },
     previewQuality: "high", timelineZoom: 1, previewZoom: 1,
     pendingMediaImport: null, pendingMusicGeneration: null
@@ -77,12 +79,23 @@ export function parseEditorDocument(value: unknown): EditorDocument | null {
   return null;
 }
 
+/** A crop is kept inside the frame and never removes the whole picture. */
+export function isScreenCrop(value: unknown): value is { top: number; right: number; bottom: number; left: number } {
+  if (!isRecord(value)) return false;
+  const { top, right, bottom, left } = value;
+  if (!finite(top) || !finite(right) || !finite(bottom) || !finite(left)) return false;
+  if (top < 0 || right < 0 || bottom < 0 || left < 0) return false;
+  if (top > 60 || right > 60 || bottom > 60 || left > 60) return false;
+  return top + bottom < 90 && left + right < 90;
+}
+
 /** Runtime guard used at every renderer, main-process, and MCP trust boundary. */
 export function validateEditorStateSnapshot(value: unknown): value is EditorStateSnapshot {
   if (!isRecord(value) || value.v !== 2) return false;
   return isArrayOf(value.timelineSegments, isTimelineSegment) &&
     isArrayOf(value.zoomEffects, isZoomEffect) && isArrayOf(value.speedEffects, isSpeedEffect) &&
     isArrayOf(value.transitions ?? [], isClipTransition) &&
+    isArrayOf(value.edgeTransitions ?? [], isClipEdgeTransition) &&
     isArrayOf(value.subtitles, isSubtitleSegment) &&
     isArrayOf(value.textOverlays ?? [], isTextOverlay) &&
     (value.subtitleLanguage === null || typeof value.subtitleLanguage === "string") &&
@@ -95,7 +108,16 @@ export function validateEditorStateSnapshot(value: unknown): value is EditorStat
     oneOf(value.cameraBorderStyle, ["none", "light", "accent"]) &&
     isCameraContentTransform(value.cameraContentTransform) && oneOf(value.videoCornerStyle, ["flat", "soft", "round"]) &&
     isXYZ(value.screenPosition, ["x", "y", "scale"]) && oneOf(value.screenAspectRatio, ["auto", "16:9", "16:10", "4:3"]) &&
+    (value.screenCrop === undefined || isScreenCrop(value.screenCrop)) &&
     isXYZ(value.cameraFrame, ["x", "y", "size"]) && finite(value.masterVolume) && isAudioLevels(value.audioLevels) &&
+    (value.youtubeVolume === undefined || (() => {
+      const setting = value.youtubeVolume as { enabled?: unknown; targetLufs?: unknown; truePeakDb?: unknown };
+      return typeof setting === "object" && setting !== null &&
+        typeof setting.enabled === "boolean" &&
+        finite(setting.targetLufs) && setting.targetLufs >= -24 && setting.targetLufs <= -9 &&
+        finite(setting.truePeakDb) && setting.truePeakDb >= -6 && setting.truePeakDb <= 0;
+    })()) &&
+    isAudioCleanupState(value.audioCleanup) &&
     isArrayOf(value.backgroundAudioIds, (item): item is string => typeof item === "string") &&
     (value.customBackgroundImportId === null || typeof value.customBackgroundImportId === "string") &&
     isRange(value.trimRange) &&
@@ -112,8 +134,22 @@ export function isSubtitleSegment(value: unknown): value is SubtitleSegment {
       isRecord(word) && typeof word.text === "string" && finite(word.start) && finite(word.end) && word.end >= word.start));
 }
 
+function isCalloutBoxStyle(value: unknown): boolean {
+  return isRecord(value) &&
+    typeof value.backgroundColor === "string" && /^#[0-9a-f]{6}$/i.test(value.backgroundColor) &&
+    finite(value.backgroundOpacity) && value.backgroundOpacity >= 0 && value.backgroundOpacity <= 100 &&
+    typeof value.borderColor === "string" && /^#[0-9a-f]{6}$/i.test(value.borderColor) &&
+    finite(value.borderWidth) && value.borderWidth >= 0 && value.borderWidth <= 16 &&
+    finite(value.borderRadius) && value.borderRadius >= 0 && value.borderRadius <= 64 &&
+    finite(value.padding) && value.padding >= 0 && value.padding <= 80 &&
+    typeof value.titleColor === "string" && /^#[0-9a-f]{6}$/i.test(value.titleColor) &&
+    finite(value.titleSize) && value.titleSize >= 10 && value.titleSize <= 160;
+}
+
 export function isTextOverlay(value: unknown): value is TextOverlay {
   return hasTimedId(value) && typeof value.text === "string" &&
+    (value.title === undefined || (typeof value.title === "string" && value.title.length <= 200)) &&
+    (value.box === undefined || isCalloutBoxStyle(value.box)) &&
     finite(value.x) && value.x >= 0 && value.x <= 100 &&
     finite(value.y) && value.y >= 0 && value.y <= 100 &&
     finite(value.size) && value.size >= 12 && value.size <= 240 &&
@@ -121,7 +157,14 @@ export function isTextOverlay(value: unknown): value is TextOverlay {
     (value.fontFamily === undefined || oneOf(value.fontFamily, ["sans", "rounded", "serif", "mono"])) &&
     (value.opacity === undefined || (finite(value.opacity) && value.opacity >= 0 && value.opacity <= 100)) &&
     [400, 600, 700, 800].includes(value.weight as number) &&
-    oneOf(value.animation, ["none", "fade", "pop", "slide-up"]);
+    oneOf(value.animation, ["none", "fade", "pop", "slide-up", "fade-in-out", "pop-in-out", "slide-in-out"]);
+}
+
+function isClipEdgeTransition(value: unknown): value is ClipEdgeTransition {
+  return isRecord(value) && typeof value.id === "string" &&
+    typeof value.segmentId === "string" && oneOf(value.edge, ["start", "end"]) &&
+    oneOf(value.type, ["crossfade", "fade-black", "slide-left", "wipe-left"]) &&
+    finite(value.duration) && value.duration >= 0.1 && value.duration <= 2;
 }
 
 function isClipTransition(value: unknown): value is ClipTransition {
@@ -150,7 +193,7 @@ function isPendingMediaImport(value: unknown): boolean {
 
 function isPendingMusicGeneration(value: unknown): boolean {
   return isRecord(value) && typeof value.requestId === "string" && value.requestId.length > 0 &&
-    oneOf(value.engine, ["lyria-clip", "lyria-pro"]) &&
+    oneOf(value.engine, ["claude-local", "lyria-clip", "lyria-pro"]) &&
     typeof value.prompt === "string" && value.prompt.trim().length > 0 &&
     typeof value.lyrics === "string";
 }
@@ -163,7 +206,18 @@ function isEditorMutation(value: unknown): value is EditorMutation {
 function isTimelineSegment(value: unknown): value is TimelineSegment {
   return hasTimedId(value) && typeof value.itemId === "string" && oneOf(value.track, ["video", "audio"]) &&
     finite(value.lane) && Number.isSafeInteger(value.lane) && value.lane >= 0 && finite(value.sourceStart) && value.sourceStart >= 0 &&
-    (value.pendingDuration === undefined || typeof value.pendingDuration === "boolean");
+    (value.pendingDuration === undefined || typeof value.pendingDuration === "boolean") &&
+    (value.hidden === undefined || typeof value.hidden === "boolean") &&
+    (value.layout === undefined ||
+      oneOf(value.layout, ["screen-only", "camera-only", "bubble", "bubble-fill", "presenter", "side-by-side", "side-overlap"])) &&
+    (value.cameraStyle === undefined || isCameraClipStyle(value.cameraStyle));
+}
+
+/** Clip-level webcam shape/border, each property optional. */
+function isCameraClipStyle(value: unknown): boolean {
+  return isRecord(value) &&
+    (value.shape === undefined || oneOf(value.shape, ["circle", "rounded", "square"])) &&
+    (value.border === undefined || oneOf(value.border, ["none", "light", "accent"]));
 }
 
 function isZoomEffect(value: unknown): value is ZoomEffect {
@@ -174,7 +228,7 @@ function isZoomEffect(value: unknown): value is ZoomEffect {
 }
 
 function isSpeedEffect(value: unknown): value is SpeedEffect {
-  return hasTimedId(value) && [1, 2, 3, 4, 5].includes(value.rate as number);
+  return hasTimedId(value) && [1, 1.25, 1.5, 2, 3, 4, 5].includes(value.rate as number);
 }
 
 function hasTimedId(value: unknown): value is Record<string, unknown> {
@@ -188,6 +242,16 @@ function isCameraContentTransform(value: unknown): value is CameraContentTransfo
 function isAudioLevels(value: unknown): value is AudioLevelState {
   return isRecord(value) && Object.values(value).every((level) =>
     isRecord(level) && finite(level.volume) && typeof level.muted === "boolean");
+}
+
+function isAudioCleanupState(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((entry) =>
+    isRecord(entry) &&
+    isAudioCleanupPreset(entry.preset) &&
+    finite(entry.strength) && entry.strength >= 0 && entry.strength <= 100
+  );
 }
 
 function isRange(value: unknown): value is TrimRange {

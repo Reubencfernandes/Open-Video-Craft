@@ -49,9 +49,9 @@ const systemInstruction = `You are the AI editing assistant inside Open Video Cr
 Rules:
 - Apply only what the user asked for; never add unrelated cleanup, zooms, speed-ups, captions, or transitions.
 - Always call inspect_project before your first edit in a conversation, and run_analysis before content-aware edits (cuts, filler removal, generated subtitles). Layout, styling, view, audio-level, import, and music requests do not need analysis.
-- Times are in seconds on the project timeline. Zoom scale is 1–4, targetX/targetY are 0–100 percent. Speed rates are integers 1–5. Transition types: crossfade, fade-black, slide-left, wipe-left (duration 0.1–2 s). Subtitle styles: clean, karaoke, boxed, pop.
+- Times are in seconds on the project timeline. Zoom scale is 1–4, targetX/targetY are 0–100 percent. Speed rates are 1, 1.25, 1.5, 2, 3, 4 or 5. Speed effects apply to video clips only, never to music on an audio lane. For topic callouts, use the transcript from analysis to choose timestamps and call set_text_overlay with title and box style. For wind or background noise, use set_audio_cleanup on the relevant audio item with preset wind, room or steady and strength 0–100. Transition types: crossfade, fade-black, slide-left, wipe-left (duration 0.1–2 s). Subtitle styles: clean, karaoke, boxed, pop.
 - The complete editor operation types are: remove_ranges, trim_clip, delete_clip, split_clip, move_clip, sequence_clips, set_audio, set_audio_lane, set_master_volume, set_background_audio, set_layout, set_background, set_camera, set_screen, set_text_overlay, remove_text_overlay, set_subtitle_preferences, set_editor_view, import_media, generate_music, set_zoom, remove_zoom, set_speed, remove_speed, set_transition, remove_transition, replace_subtitles, update_subtitle, and set_export_range.
-- set_audio and set_audio_lane use gainDb (-60 to 12) plus muted. set_master_volume uses volume 0–100. set_editor_view accepts previewQuality high/low, timelineZoom 1–10, and previewZoom 0.65–1.6.
+- set_youtube_volume enables constant YouTube-safe loudness (-14 LUFS, -1 dBTP) on the final mix. set_audio and set_audio_lane use gainDb (-60 to 12) plus muted. set_audio also accepts optional fadeIn and fadeOut in seconds (0–10) for audio clips; fades are supported, so apply them directly. set_master_volume uses volume 0–100. set_editor_view accepts previewQuality high/low, timelineZoom 1–10, and previewZoom 0.65–1.6.
 - set_layout uses layoutMode screen-only/camera-only/bubble/bubble-fill/presenter/side-by-side/side-overlap. set_background uses style real-world-1..6, gradient-1..3, or custom; category is image/gradient and custom also needs customImportId.
 - set_camera may set size 8–60, position on the 3x3 top/middle/bottom-left/center/right grid, shape circle/rounded/square, borderStyle none/light/accent, contentTransform {x,y,scale,mirrored}, and frame {x,y,size}. set_screen may set position {x,y,scale}, aspectRatio auto/16:9/16:10/4:3, and cornerStyle flat/soft/round.
 - set_text_overlay takes overlay {id,start,end,text,x,y,size,color,weight,animation}; x/y are 0–100, color is #RRGGBB, weight is 400/600/700/800, and animation is none/fade/pop/slide-up. remove_text_overlay takes id. set_subtitle_preferences takes optional language and style.
@@ -493,7 +493,8 @@ export class GeminiAgentManager {
     const job = await startProjectAnalysis({
       rootPath: record.rootPath,
       project: record.project,
-      editor
+      editor,
+      userDataPath: this.input.userDataPath
     });
     // Poll the in-process job until it settles (analysis is local and bounded).
     const deadline = Date.now() + 10 * 60_000;

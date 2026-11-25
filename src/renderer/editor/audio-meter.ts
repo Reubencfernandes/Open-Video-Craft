@@ -2,6 +2,8 @@
 type ElementAudioNodes = {
   source: MediaElementAudioSourceNode;
   gain: GainNode;
+  baseVolume: number;
+  envelopeUntil: number;
 };
 
 export class AudioMeter {
@@ -15,22 +17,23 @@ export class AudioMeter {
   connectElement(element: HTMLMediaElement, volume: number): boolean {
     const existing = this.elements.get(element);
     if (existing) {
-      existing.gain.gain.value = sanitizeGain(volume);
+      existing.baseVolume = sanitizeGain(volume);
+      const now = this.context?.currentTime ?? 0;
+      if (existing.envelopeUntil <= now) existing.gain.gain.value = existing.baseVolume;
       return true;
     }
 
     const context = this.ensureContext();
-    if (!context || !this.masterGain) {
-      return false;
-    }
+    if (!context || !this.masterGain) return false;
 
     try {
       const source = context.createMediaElementSource(element);
       const gain = context.createGain();
-      gain.gain.value = sanitizeGain(volume);
+      const baseVolume = sanitizeGain(volume);
+      gain.gain.value = baseVolume;
       source.connect(gain);
       gain.connect(this.masterGain);
-      this.elements.set(element, { source, gain });
+      this.elements.set(element, { source, gain, baseVolume, envelopeUntil: 0 });
       return true;
     } catch {
       return false;
@@ -41,31 +44,46 @@ export class AudioMeter {
     return this.connectElement(element, volume);
   }
 
+  scheduleFade(
+    element: HTMLMediaElement,
+    fadeIn: number,
+    fadeOut: number,
+    duration: number
+  ): boolean {
+    const nodes = this.elements.get(element);
+    if (!nodes || !this.context) return false;
+    const now = this.context.currentTime;
+    nodes.envelopeUntil = now + Math.max(0.01, duration);
+    const gain = nodes.gain.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(nodes.baseVolume, now);
+    if (fadeIn > 0) {
+      gain.setValueAtTime(0, now);
+      gain.linearRampToValueAtTime(nodes.baseVolume, now + Math.min(fadeIn, duration / 2));
+    }
+    if (fadeOut > 0) {
+      const start = now + Math.max(fadeIn, duration - fadeOut);
+      gain.setValueAtTime(nodes.baseVolume, start);
+      gain.linearRampToValueAtTime(0, now + duration);
+    }
+    return true;
+  }
+
   setMasterGain(volume: number): void {
     this.masterVolume = sanitizeGain(volume);
-    if (this.masterGain) {
-      this.masterGain.gain.value = this.masterVolume;
-    }
+    if (this.masterGain) this.masterGain.gain.value = this.masterVolume;
   }
 
   async resume(): Promise<void> {
     const context = this.ensureContext();
-    if (context?.state === "suspended") {
-      await context.resume();
-    }
+    if (context?.state === "suspended") await context.resume();
   }
 
-  /** Current mixed sample peak. Values above 1 indicate clipping. */
   sample(): number {
-    if (!this.analyser || !this.samples) {
-      return 0;
-    }
-
+    if (!this.analyser || !this.samples) return 0;
     this.analyser.getFloatTimeDomainData(this.samples);
     let peak = 0;
-    for (const sample of this.samples) {
-      peak = Math.max(peak, Math.abs(sample));
-    }
+    for (const sample of this.samples) peak = Math.max(peak, Math.abs(sample));
     return peak;
   }
 
@@ -77,9 +95,7 @@ export class AudioMeter {
     this.elements.clear();
     this.masterGain?.disconnect();
     this.analyser?.disconnect();
-    if (this.context) {
-      void this.context.close().catch(() => undefined);
-    }
+    if (this.context) void this.context.close().catch(() => undefined);
     this.context = null;
     this.masterGain = null;
     this.analyser = null;
@@ -87,18 +103,12 @@ export class AudioMeter {
   }
 
   private ensureContext(): AudioContext | null {
-    if (this.context) {
-      return this.context;
-    }
-
+    if (this.context) return this.context;
     try {
       const AudioContextCtor =
         window.AudioContext ??
         (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) {
-        return null;
-      }
-
+      if (!AudioContextCtor) return null;
       const context = new AudioContextCtor();
       const masterGain = context.createGain();
       const analyser = context.createAnalyser();
@@ -106,7 +116,6 @@ export class AudioMeter {
       masterGain.gain.value = this.masterVolume;
       masterGain.connect(analyser);
       analyser.connect(context.destination);
-
       this.context = context;
       this.masterGain = masterGain;
       this.analyser = analyser;

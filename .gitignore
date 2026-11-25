@@ -3,11 +3,13 @@ dist-electron/
 dist-renderer/
 release/
 coverage/
+/bench/
 .vite/
 .ffmpeg-bin/
 /build/mas.provisionprofile
 
 *.log
+!docs/baseline/**/*.log
 .env
 .env.*
 !.env.example
@@ -16,3 +18,8 @@ Thumbs.db
 .DS_Store
 demo-assets/
 __pycache__/
+resources/bin/
+
+# Local agent state (never shared)
+.engram/
+.pi/

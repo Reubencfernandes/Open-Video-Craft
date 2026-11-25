@@ -3,6 +3,10 @@
  * process, MCP server, export worker, and tests. Keep this module free of
  * runtime dependencies so every process agrees on the persisted file shape.
  */
+import type { AudioCleanupPreset, AudioCleanupSettings, AudioCleanupState } from "./audio-cleanup";
+
+export type { AudioCleanupPreset, AudioCleanupSettings, AudioCleanupState };
+
 export type LayoutMode =
   | "screen-only"
   | "camera-only"
@@ -23,19 +27,31 @@ export type CameraPosition =
   | "bottom-left" | "bottom-center" | "bottom-right";
 export type CameraShape = "circle" | "rounded" | "square";
 export type CameraBorderStyle = "none" | "light" | "accent";
+
+/**
+ * Camera presentation a single clip imposes while it is on screen. Every
+ * property is optional and falls back to the project style, so a clip can
+ * restyle only the border or only the shape.
+ */
+export interface CameraClipStyle {
+  shape?: CameraShape;
+  border?: CameraBorderStyle;
+}
 export type VideoCornerStyle = "flat" | "soft" | "round";
 export type ScreenAspectRatio = "auto" | "16:9" | "16:10" | "4:3";
 export type TimelineTrackKind = "video" | "audio";
 export type ZoomSpeed = "slow" | "medium" | "fast";
 export type ZoomEasing = "linear" | "ease-in" | "ease-out" | "ease-in-out" | "custom";
-export type SpeedRate = 1 | 2 | 3 | 4 | 5;
+export type SpeedRate = 1 | 1.25 | 1.5 | 2 | 3 | 4 | 5;
 export type SubtitleStyle = "clean" | "karaoke" | "boxed" | "pop";
-export type TextAnimation = "none" | "fade" | "pop" | "slide-up";
+export type TextAnimation =
+  | "none" | "fade" | "pop" | "slide-up"
+  | "fade-in-out" | "pop-in-out" | "slide-in-out";
 export type TextFontFamily = "sans" | "rounded" | "serif" | "mono";
 export type ClipTransitionType = "crossfade" | "fade-black" | "slide-left" | "wipe-left";
 export type PreviewQuality = "high" | "low";
 export type AgentMediaPlacement = "media-bin" | "timeline" | "background-audio" | "custom-background";
-export type AgentMusicEngine = "lyria-clip" | "lyria-pro";
+export type AgentMusicEngine = "claude-local" | "lyria-clip" | "lyria-pro";
 
 export interface TimelineSegment {
   id: string;
@@ -47,6 +63,21 @@ export interface TimelineSegment {
   sourceStart: number;
   /** Only automatically created clips awaiting media metadata may grow. */
   pendingDuration?: boolean;
+  /**
+   * Deactivated clip: it stays on the timeline so its range is not lost, but it
+   * is not shown or heard. Used to pick which recording channel is on screen.
+   */
+  hidden?: boolean;
+  /**
+   * Layout that applies while this clip is on screen, overriding the project
+   * layout for that stretch of the timeline.
+   */
+  layout?: LayoutMode;
+  /**
+   * Webcam shape and border that apply while this clip is on screen,
+   * overriding the project style for that stretch of the timeline.
+   */
+  cameraStyle?: CameraClipStyle;
 }
 
 export interface ZoomEffect {
@@ -77,6 +108,15 @@ export interface ClipTransition {
   duration: number;
 }
 
+/** A transition at the isolated start or end edge of one clip. */
+export interface ClipEdgeTransition {
+  id: string;
+  segmentId: string;
+  edge: "start" | "end";
+  type: ClipTransitionType;
+  duration: number;
+}
+
 export interface SubtitleWord { start: number; end: number; text: string }
 export interface SubtitleSegment {
   id: string;
@@ -86,12 +126,28 @@ export interface SubtitleSegment {
   words?: SubtitleWord[];
 }
 
+/** Visual style for a titled callout panel around overlay text. */
+export interface CalloutBoxStyle {
+  readonly backgroundColor: string;
+  readonly backgroundOpacity: number;
+  readonly borderColor: string;
+  readonly borderWidth: number;
+  readonly borderRadius: number;
+  readonly padding: number;
+  readonly titleColor: string;
+  readonly titleSize: number;
+}
+
 /** Timed freeform text rendered independently from captions/subtitles. */
 export interface TextOverlay {
   id: string;
   start: number;
   end: number;
   text: string;
+  /** Optional heading; when absent the overlay remains plain text. */
+  title?: string;
+  /** Optional panel style; when absent the overlay has no visible box. */
+  box?: CalloutBoxStyle;
   x: number;
   y: number;
   size: number;
@@ -105,9 +161,35 @@ export interface TextOverlay {
 }
 
 export interface ScreenPositionState { x: number; y: number; scale: number }
+
+/**
+ * Non-destructive crop of the recorded screen, in percent of the source frame.
+ * Used to remove OS chrome such as a menu bar or a browser address bar without
+ * touching the recorded file.
+ */
+export interface ScreenCrop {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
 export interface CameraFrame { x: number; y: number; size: number }
 export interface CameraContentTransform { x: number; y: number; scale: number; mirrored: boolean }
-export type AudioLevelState = Record<string, { volume: number; muted: boolean }>;
+export interface AudioLevel {
+  volume: number;
+  muted: boolean;
+  /** Optional so older editor documents stay valid. */
+  fadeIn?: number;
+  fadeOut?: number;
+}
+
+export interface YouTubeVolumeSettings {
+  enabled: boolean;
+  targetLufs: number;
+  truePeakDb: number;
+}
+
+export type AudioLevelState = Record<string, AudioLevel>;
 export interface TrimRange { start: number; end: number }
 
 /** One-shot renderer command persisted by an AI edit and consumed by the open app. */
@@ -133,6 +215,7 @@ export interface EditorStateSnapshot {
   speedEffects: SpeedEffect[];
   /** Optional so existing schema-v2 projects load without a visible migration. */
   transitions?: ClipTransition[];
+  edgeTransitions?: ClipEdgeTransition[];
   subtitles: SubtitleSegment[];
   /** Optional so schema-v2 projects saved before text overlays still load. */
   textOverlays?: TextOverlay[];
@@ -148,10 +231,16 @@ export interface EditorStateSnapshot {
   cameraContentTransform: CameraContentTransform;
   videoCornerStyle: VideoCornerStyle;
   screenPosition: ScreenPositionState;
+  /** Optional so projects saved before cropping stay valid. */
+  screenCrop?: ScreenCrop;
   screenAspectRatio: ScreenAspectRatio;
   cameraFrame: CameraFrame;
   masterVolume: number;
   audioLevels: AudioLevelState;
+  /** Optional YouTube-safe loudness normalization for exported audio. */
+  youtubeVolume?: YouTubeVolumeSettings;
+  /** Optional so older schema-v2 projects load without migration. */
+  audioCleanup?: AudioCleanupState;
   backgroundAudioIds: string[];
   customBackgroundImportId: string | null;
   trimRange: TrimRange;
@@ -200,7 +289,9 @@ export type EditorEditOperation =
   | { type: "delete_clip"; segmentId: string; ripple: boolean }
   | { type: "move_clip"; segmentId: string; timelineStart: number; lane?: number }
   | { type: "sequence_clips"; segmentIds: string[]; start: number; gap: number }
-  | { type: "set_audio"; itemId: string; gainDb: number; muted: boolean }
+  | { type: "set_audio"; itemId: string; gainDb: number; muted: boolean; fadeIn?: number; fadeOut?: number }
+  | { type: "set_youtube_volume"; enabled: boolean; targetLufs?: number; truePeakDb?: number }
+  | { type: "set_audio_cleanup"; itemId: string; preset: AudioCleanupPreset; strength: number }
   | { type: "set_audio_lane"; lane: number; gainDb: number; muted: boolean }
   | { type: "set_master_volume"; volume: number }
   | { type: "set_background_audio"; itemIds: string[] }

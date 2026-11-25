@@ -13,10 +13,11 @@ import {
 } from "../shared/defaults";
 import {
   createProjectFolderName,
+  createWavTrackId,
   getMediaTrackRelativePath,
   importsDirectoryName,
   mediaDirectoryName,
-  mediaTrackRelativePaths,
+  parseMediaTrackKey,
   recordingTrackToMediaTrack,
   slugify
 } from "./project-paths";
@@ -38,8 +39,10 @@ import type {
   FailRecordingRequest,
   MediaTrackKey,
   ProjectFile,
+  ProjectRecordingTrack,
   ProjectTrack,
   ProjectView,
+  RecordingCapture,
   RecordingTrack,
   StartRecordingRequest,
   StopRecordingRequest
@@ -178,11 +181,15 @@ export class ProjectStore {
         updatedAt: now,
         status: "recording",
         source: request.source,
+        ...(request.sources?.length ? { sources: request.sources } : {}),
         devices: request.devices,
         startedAt: now,
         stoppedAt: null,
         durationMs: null,
         error: null,
+        ...(request.captures?.length
+          ? { recordingTracks: createProjectRecordingTracks(request.captures) }
+          : {}),
         tracks: this.createRecordingTracks(request, now)
       };
 
@@ -201,7 +208,7 @@ export class ProjectStore {
 
   async appendChunk(
     projectId: string,
-    track: RecordingTrack,
+    track: string,
     chunk: ArrayBuffer | Buffer
   ): Promise<ProjectView> {
     return this.runProjectOperation(projectId, async () => {
@@ -210,10 +217,10 @@ export class ProjectStore {
         throw new Error("Cannot append media after recording has stopped.");
       }
 
-      const mediaTrack = recordingTrackToMediaTrack[track];
-      const projectTrack = record.file.tracks[mediaTrack];
+      const mediaTrack = resolveRecordingMediaTrack(record.file.tracks, track);
+      const projectTrack = mediaTrack ? record.file.tracks[mediaTrack] : undefined;
 
-      if (!projectTrack) {
+      if (!mediaTrack || !projectTrack) {
         throw new Error(`Track "${track}" is not enabled for project "${projectId}".`);
       }
 
@@ -245,9 +252,7 @@ export class ProjectStore {
       }
 
       const now = this.clock().toISOString();
-      const hasRecordedAudio = Boolean(
-        record.file.tracks.micWebm || record.file.tracks.systemWebm
-      );
+      const hasRecordedAudio = hasRecordedAudioTracks(record.file);
       record.file = {
         ...record.file,
         updatedAt: now,
@@ -263,33 +268,32 @@ export class ProjectStore {
 
   async completeAudio(
     projectId: string,
-    wavBytes: { mic: number; system: number },
+    wavBytes: { mic: number; system: number } | Array<{ trackId: string; bytes: number }>,
     mediaDurationMs: number | null = null
   ): Promise<ProjectView> {
     return this.runProjectOperation(projectId, async () => {
       const record = this.getRecord(projectId);
       const now = this.clock().toISOString();
+      const outputs = Array.isArray(wavBytes)
+        ? wavBytes.map((output) => ({
+            trackId: createWavTrackId(output.trackId as MediaTrackKey),
+            bytes: output.bytes
+          }))
+        : [
+            { trackId: createWavTrackId("micWebm"), bytes: wavBytes.mic },
+            { trackId: createWavTrackId("systemWebm"), bytes: wavBytes.system }
+          ];
 
-      if (wavBytes.mic > 0) {
-        record.file.tracks.micWav = {
-          path: getMediaTrackRelativePath("micWav"),
+      for (const output of outputs) {
+        if (!output.trackId || output.bytes <= 0) continue;
+        record.file.tracks[output.trackId] = {
+          path: getMediaTrackRelativePath(output.trackId),
           mimeType: "audio/wav",
-          bytesWritten: wavBytes.mic,
+          bytesWritten: output.bytes,
           createdAt: now,
           updatedAt: now
         };
       }
-
-      if (wavBytes.system > 0) {
-        record.file.tracks.systemWav = {
-          path: getMediaTrackRelativePath("systemWav"),
-          mimeType: "audio/wav",
-          bytesWritten: wavBytes.system,
-          createdAt: now,
-          updatedAt: now
-        };
-      }
-
       record.file = {
         ...record.file,
         updatedAt: now,
@@ -384,24 +388,85 @@ export class ProjectStore {
     return projectTrack ? this.resolveProjectFile(projectId, projectTrack.path) : null;
   }
 
+  /**
+   * Every track this recording is producing, in capture order. Legacy projects
+   * (written before multi-source support) only persisted the legacy track keys,
+   * so they are derived here instead of requiring a project.json migration.
+   */
+  getRecordedTracks(
+    projectId: string
+  ): Array<{ trackId: MediaTrackKey; kind: RecordingTrack }> {
+    const file = this.getRecord(projectId).file;
+    if (file.recordingTracks?.length) {
+      return file.recordingTracks.map((track) => ({
+        trackId: track.trackId,
+        kind: track.kind
+      }));
+    }
+
+    const legacy: Array<{ trackId: MediaTrackKey; kind: RecordingTrack }> = [];
+    if (file.tracks.screen) legacy.push({ trackId: "screen", kind: "screen" });
+    if (file.tracks.camera) legacy.push({ trackId: "camera", kind: "camera" });
+    if (file.tracks.micWebm) legacy.push({ trackId: "micWebm", kind: "mic" });
+    if (file.tracks.systemWebm) legacy.push({ trackId: "systemWebm", kind: "system" });
+    return legacy;
+  }
+
+  /** Absolute output path for the post-processed WAV of an audio track. */
+  getWavOutputPath(projectId: string, trackId: MediaTrackKey): string | null {
+    const wavTrackId = createWavTrackId(trackId);
+    return wavTrackId
+      ? this.resolveProjectFile(projectId, getMediaTrackRelativePath(wavTrackId))
+      : null;
+  }
+
   private createRecordingTracks(
     request: StartRecordingRequest,
     now: string
   ): Partial<Record<MediaTrackKey, ProjectTrack>> {
+    if (request.captures?.length) {
+      const tracks: Partial<Record<MediaTrackKey, ProjectTrack>> = {};
+
+      for (const capture of request.captures) {
+        if (tracks[capture.trackId]) {
+          throw new Error(`Recording plan contains track "${capture.trackId}" twice.`);
+        }
+        tracks[capture.trackId] = this.createTrack(
+          capture.trackId,
+          capture.mimeType,
+          now
+        );
+      }
+
+      return tracks;
+    }
+
     const tracks: Partial<Record<MediaTrackKey, ProjectTrack>> = {
-      screen: this.createTrack("screen", request.tracks.screen.mimeType, now)
+      [recordingTrackToMediaTrack.screen]: this.createTrack("screen", request.tracks.screen.mimeType, now)
     };
 
     if (request.tracks.camera.enabled && request.tracks.camera.mimeType) {
-      tracks.camera = this.createTrack("camera", request.tracks.camera.mimeType, now);
+      tracks[recordingTrackToMediaTrack.camera] = this.createTrack(
+        "camera",
+        request.tracks.camera.mimeType,
+        now
+      );
     }
 
     if (request.tracks.mic.enabled && request.tracks.mic.mimeType) {
-      tracks.micWebm = this.createTrack("micWebm", request.tracks.mic.mimeType, now);
+      tracks[recordingTrackToMediaTrack.mic] = this.createTrack(
+        "micWebm",
+        request.tracks.mic.mimeType,
+        now
+      );
     }
 
     if (request.tracks.system?.enabled && request.tracks.system.mimeType) {
-      tracks.systemWebm = this.createTrack("systemWebm", request.tracks.system.mimeType, now);
+      tracks[recordingTrackToMediaTrack.system] = this.createTrack(
+        "systemWebm",
+        request.tracks.system.mimeType,
+        now
+      );
     }
 
     return tracks;
@@ -536,4 +601,44 @@ export function createMediaUrl(projectId: string, relativePath: string): string 
     .join("/");
 
   return `ovc-media://project/${encodeURIComponent(projectId)}/${encodedPath}`;
+}
+
+/** Resolve the media track a recording chunk belongs to. */
+function resolveRecordingMediaTrack(
+  tracks: ProjectFile["tracks"],
+  requestedTrack: string
+): MediaTrackKey | null {
+  const exact = parseMediaTrackKey(requestedTrack);
+  if (exact && tracks[exact]) {
+    return exact;
+  }
+
+  // Older renderers write chunks under the recording kind instead of the media
+  // track id; keep those payloads working.
+  const legacyTrack = recordingTrackToMediaTrack[requestedTrack as RecordingTrack];
+  return legacyTrack && tracks[legacyTrack] ? legacyTrack : null;
+}
+
+function createProjectRecordingTracks(
+  captures: RecordingCapture[]
+): ProjectRecordingTrack[] {
+  return captures.map((capture) => ({
+    trackId: capture.trackId,
+    kind: capture.kind,
+    sourceId: capture.sourceId,
+    label: capture.label
+  }));
+}
+
+/** True when the recording still has audio track work to post-process. */
+function hasRecordedAudioTracks(file: ProjectFile): boolean {
+  if (file.recordingTracks?.length) {
+    return file.recordingTracks.some(
+      (track) =>
+        (track.kind === "mic" || track.kind === "system") &&
+        Boolean(file.tracks[track.trackId])
+    );
+  }
+
+  return Boolean(file.tracks.micWebm || file.tracks.systemWebm);
 }

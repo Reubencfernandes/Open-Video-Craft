@@ -5,6 +5,7 @@
  * ./types.ts.
  */
 import { z } from "zod";
+import { AUDIO_CLEANUP_PRESETS } from "./audio-cleanup";
 
 export const editRangeSchema = z.object({
   start: z.number().nonnegative(),
@@ -34,7 +35,13 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("delete_clip"), segmentId: z.string(), ripple: z.boolean() }),
   z.object({ type: z.literal("move_clip"), segmentId: z.string(), timelineStart: z.number().nonnegative(), lane: z.number().int().nonnegative().optional() }),
   z.object({ type: z.literal("sequence_clips"), segmentIds: z.array(z.string()).min(1), start: z.number().nonnegative(), gap: z.number().nonnegative() }),
-  z.object({ type: z.literal("set_audio"), itemId: z.string(), gainDb: z.number().min(-60).max(12), muted: z.boolean() }),
+  z.object({ type: z.literal("set_audio"), itemId: z.string(), gainDb: z.number().min(-60).max(12), muted: z.boolean(), fadeIn: z.number().min(0).max(10).optional(), fadeOut: z.number().min(0).max(10).optional() }),
+  z.object({
+    type: z.literal("set_youtube_volume"), enabled: z.boolean(),
+    targetLufs: z.number().min(-24).max(-9).optional(),
+    truePeakDb: z.number().min(-6).max(0).optional()
+  }),
+  z.object({ type: z.literal("set_audio_cleanup"), itemId: z.string().min(1).max(128), preset: z.enum(AUDIO_CLEANUP_PRESETS), strength: z.number().min(0).max(100) }),
   z.object({ type: z.literal("set_audio_lane"), lane: z.number().int().nonnegative(), gainDb: z.number().min(-60).max(12), muted: z.boolean() }),
   z.object({ type: z.literal("set_master_volume"), volume: z.number().min(0).max(100) }),
   z.object({ type: z.literal("set_background_audio"), itemIds: z.array(z.string()).max(200) }),
@@ -62,10 +69,23 @@ export const operationSchema = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("set_text_overlay"), overlay: z.object({
     id: z.string().min(1).max(128), start: z.number().nonnegative(), end: z.number().positive(),
-    text: z.string().max(500), x: z.number().min(0).max(100), y: z.number().min(0).max(100),
+    text: z.string().max(500), title: z.string().max(200).optional(),
+    box: z.object({
+      backgroundColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+      backgroundOpacity: z.number().min(0).max(100),
+      borderColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+      borderWidth: z.number().min(0).max(16),
+      borderRadius: z.number().min(0).max(64),
+      padding: z.number().min(0).max(80),
+      titleColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+      titleSize: z.number().min(10).max(160)
+    }).optional(),
+    x: z.number().min(0).max(100), y: z.number().min(0).max(100),
     size: z.number().min(12).max(240), color: z.string().regex(/^#[0-9a-f]{6}$/i),
+    fontFamily: z.enum(["sans", "rounded", "serif", "mono"]).optional(),
+    opacity: z.number().min(0).max(100).optional(),
     weight: z.union([z.literal(400), z.literal(600), z.literal(700), z.literal(800)]),
-    animation: z.enum(["none", "fade", "pop", "slide-up"])
+    animation: z.enum(["none", "fade", "pop", "slide-up", "fade-in-out", "pop-in-out", "slide-in-out"])
   }) }),
   z.object({ type: z.literal("remove_text_overlay"), id: z.string().min(1).max(128) }),
   z.object({ type: z.literal("set_subtitle_preferences"), language: z.string().nullable().optional(), style: z.enum(["clean", "karaoke", "boxed", "pop"]).optional() }),
@@ -75,7 +95,7 @@ export const operationSchema = z.discriminatedUnion("type", [
     placement: z.enum(["media-bin", "timeline", "background-audio", "custom-background"]),
     timelineStart: z.number().nonnegative().optional()
   }),
-  z.object({ type: z.literal("generate_music"), engine: z.enum(["lyria-clip", "lyria-pro"]), prompt: z.string().min(1).max(2000), lyrics: z.string().max(5000).optional() }),
+  z.object({ type: z.literal("generate_music"), engine: z.enum(["claude-local", "lyria-clip", "lyria-pro"]), prompt: z.string().min(1).max(2000), lyrics: z.string().max(5000).optional() }),
   z.object({
     type: z.literal("set_zoom"),
     id: z.string().min(1).max(128),
@@ -91,7 +111,7 @@ export const operationSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remove_zoom"), id: z.string().min(1).max(128) }),
   z.object({
     type: z.literal("set_speed"), id: z.string().min(1).max(128),
-    start: z.number().nonnegative(), end: z.number().positive(), rate: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
+    start: z.number().nonnegative(), end: z.number().positive(), rate: z.union([z.literal(1), z.literal(1.25), z.literal(1.5), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
   }),
   z.object({ type: z.literal("remove_speed"), id: z.string().min(1).max(128) }),
   z.object({

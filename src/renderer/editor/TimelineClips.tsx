@@ -11,6 +11,7 @@ import type { SubtitleActivityRange } from "../../shared/subtitle-activity";
 import { cx } from "../classNames";
 import { BezierAudioWaveform } from "./BezierAudioWaveform";
 import { useMediaFilmstrip } from "./thumbnail-cache";
+import type { TimelineClipGroupRole } from "./timeline-groups";
 import { VideoFilmstrip } from "./VideoFilmstrip";
 import { SpeedIcon } from "./SpeedIcon";
 import { createTimelineClipStyle } from "./timeline-utils";
@@ -43,6 +44,7 @@ export function TimelineTransitionMarker(props: {
       )}
       onClick={(event) => { event.stopPropagation(); props.onSelect(); }}
       onPointerDown={(event) => event.stopPropagation()}
+      data-timeline-transition-id={props.transition.id}
     >
       <Blend size={12} />
     </button>
@@ -109,6 +111,25 @@ const rangeSelectedOutlineClassName =
 /** Recording audio that will follow the selected picture through every edit. */
 const linkedOutlineClassName =
   "outline outline-1 -outline-offset-1 outline-dashed outline-[#ff4b93]/80";
+/**
+ * A deactivated clip keeps its place and stays selectable, but must read as
+ * switched off at a glance: dimmed, desaturated and struck through.
+ */
+const hiddenClipClassName =
+  "opacity-40 saturate-0 brightness-75 [&_strong]:line-through [&_strong]:decoration-1";
+/**
+ * Members of one block must read as a single piece. Only the outer corners of a
+ * block keep their rounding and only its outer edges keep a border, so the seam
+ * between two neighbours disappears. `rounded-r/l-none`, `border-x/r/l-0` are
+ * longhands of the base `rounded-md`/`border`, so they win regardless of class
+ * order and leave the selection border untouched on the outer edges.
+ */
+const groupRoleClassName: Record<TimelineClipGroupRole, string> = {
+  single: "",
+  start: "rounded-r-none border-r-0",
+  middle: "rounded-l-none rounded-r-none border-x-0",
+  end: "rounded-l-none border-l-0"
+};
 
 function getClipSelectionClassName(selected: boolean, rangeSelected?: boolean): string {
   if (!selected) return idleBorderClassName;
@@ -198,6 +219,8 @@ export function TimelineClip(props: {
   rangeSelected?: boolean;
   /** Follows the selected recording picture through edits. */
   linked?: boolean;
+  /** Position inside its block of abutting clips; a lone clip is "single". */
+  groupRole?: TimelineClipGroupRole;
   audioLevel?: { volume: number; muted: boolean };
   onSelect: (additive: boolean) => void;
   onTrimPointerDown: (
@@ -210,6 +233,8 @@ export function TimelineClip(props: {
   onInteractionPointerUp: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const item = props.clip.item;
+  const hidden = props.clip.hidden === true;
+  const groupRole = props.groupRole ?? "single";
   const { frames } = useMediaFilmstrip(item);
   const fillClassName =
     item.kind === "audio"
@@ -217,6 +242,13 @@ export function TimelineClip(props: {
       : item.kind === "image"
         ? "bg-[#2a2a2e]"
         : "bg-[#222226]";
+  const title = [
+    item.name,
+    hidden ? "hidden" : null,
+    props.linked ? "moves with the selected recording" : null
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <button
@@ -224,14 +256,19 @@ export function TimelineClip(props: {
         clipBaseClassName,
         fillClassName,
         getClipSelectionClassName(props.selected, props.rangeSelected),
-        !props.selected && props.linked && linkedOutlineClassName
+        !props.selected && props.linked && linkedOutlineClassName,
+        hidden && hiddenClipClassName,
+        groupRoleClassName[groupRole]
       )}
       type="button"
       data-segment-id={props.clip.id}
+      data-group-role={groupRole}
       data-selected={props.selected ? "true" : undefined}
       data-linked={props.linked ? "true" : undefined}
+      data-hidden={hidden ? "true" : undefined}
       aria-pressed={props.selected}
-      title={props.linked ? `${item.name} · moves with the selected recording` : item.name}
+      aria-label={hidden ? `${item.name} (hidden)` : undefined}
+      title={title}
       style={createTimelineClipStyle(props.clip.start, props.clip.duration, props.timelineDuration)}
       onClick={(event) => {
         if (isKeyboardActivation(event)) {
@@ -240,6 +277,17 @@ export function TimelineClip(props: {
       }}
       onPointerDown={(event) => props.onMovePointerDown(event, props.clip.id)}
     >
+      {hidden ? (
+        <span
+          className="pointer-events-none absolute inset-0 z-[3] rounded-[inherit]"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(135deg, transparent 0, transparent 6px, rgba(0,0,0,0.45) 6px, rgba(0,0,0,0.45) 12px)"
+          }}
+          data-hidden-overlay
+          aria-hidden="true"
+        />
+      ) : null}
       {item.kind !== "audio" ? <VideoFilmstrip frames={frames} /> : null}
       {item.kind === "audio" ? (
         <BezierAudioWaveform

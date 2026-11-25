@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openvideocraft.local/protocol/capture/v1/schema.json",
+  "title": "OVC capture helper protocol v1",
+  "description": "One JSON object per line on stdout. HostNs fields are decimal strings, never JSON numbers. Display geometry and click points share the Quartz global display coordinate space in points, never pixels.",
+  "type": "object",
+  "required": ["v", "seq", "tHostNs", "event"],
+  "properties": {
+    "v": { "const": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "tHostNs": { "type": "string", "pattern": "^-?[0-9]+$" },
+    "event": {
+      "enum": [
+        "session.start",
+        "devices",
+        "stats",
+        "track.first_pts",
+        "pauses",
+        "track.finalized",
+        "session.finalized",
+        "device.lost",
+        "display.metrics",
+        "input.click",
+        "input.permission"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "const": "session.start" } } },
+      "then": {
+        "required": ["sessionId", "engine", "clockDomain", "anchorHostNs", "mode", "codec", "fps", "durationSeconds", "out"],
+        "properties": {
+          "engine": { "const": "native" },
+          "clockDomain": { "const": "host" },
+          "mode": { "enum": ["dry-run", "live"] },
+          "codec": { "enum": ["h264", "hevc"] },
+          "fps": { "enum": [30, 60] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "devices" } } },
+      "then": {
+        "required": ["displays", "cameras", "microphones", "systemAudio", "source"],
+        "properties": {
+          "systemAudio": { "enum": ["sck", "tap"] },
+          "source": { "enum": ["dry-run", "live"] }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "stats" } } },
+      "then": { "required": ["elapsedSeconds", "tracks"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "track.first_pts" } } },
+      "then": { "required": ["trackId", "firstPtsHostNs"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "pauses" } } },
+      "then": { "required": ["pauseIndex", "startHostNs", "endHostNs"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "track.finalized" } } },
+      "then": { "required": ["trackId", "file", "firstPtsHostNs", "lastPtsHostNs", "framesWritten", "framesDropped", "segments", "status"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "session.finalized" } } },
+      "then": { "required": ["sessionId", "endedAtHostNs", "manifestPath", "trackIds", "status"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "device.lost" } } },
+      "then": { "required": ["trackId", "reason"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "display.metrics" } } },
+      "then": {
+        "required": ["displayId", "originXPoints", "originYPoints", "widthPoints", "heightPoints", "scaleFactor", "primary"],
+        "properties": {
+          "displayId": { "type": "string" },
+          "originXPoints": { "type": "number" },
+          "originYPoints": { "type": "number" },
+          "widthPoints": { "type": "number", "exclusiveMinimum": 0 },
+          "heightPoints": { "type": "number", "exclusiveMinimum": 0 },
+          "scaleFactor": { "type": "number", "exclusiveMinimum": 0 },
+          "primary": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "input.click" } } },
+      "then": {
+        "required": ["clickIndex", "clickHostNs", "button", "displayId", "xPoints", "yPoints"],
+        "properties": {
+          "clickIndex": { "type": "integer", "minimum": 0 },
+          "clickHostNs": { "type": "string", "pattern": "^[0-9]+$" },
+          "button": { "const": "left" },
+          "displayId": { "type": "string" },
+          "xPoints": { "type": "number" },
+          "yPoints": { "type": "number" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "input.permission" } } },
+      "then": {
+        "required": ["capability", "status"],
+        "properties": {
+          "capability": { "const": "input-monitoring" },
+          "status": { "enum": ["granted", "denied", "not-determined", "unavailable"] }
+        }
+      }
+    }
+  ],
+  "unevaluatedProperties": false
+}

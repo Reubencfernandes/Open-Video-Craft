@@ -1,0 +1,4 @@
+?? .engram/
+?? .pi/
+?? docs/baseline/
+?? odd/tasks/p0c-post-hardening-baseline.md

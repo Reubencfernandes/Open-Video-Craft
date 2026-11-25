@@ -4,18 +4,32 @@
  * request is asserted before use. These guards are pure (no app state).
  */
 import type {
+  ClaudeChatRequest,
+  ClaudeChatTurn,
+  AudioCleanupPreviewRequest,
+  MicTranscriptionRequest,
+  ImportRecordedClipRequest,
   DeviceSelection,
   ExportVideoRequest,
   GeminiChatSendRequest,
+  MatrixPopupRequest,
   MusicGenerateRequest,
   ProviderKeyId,
   ProjectDevices,
   ProjectSource,
+  RecordingCapture,
+  RecordingTrack,
   SaveEditorProjectStateRequest,
   StartRecordingRequest,
   SttTranscribeRequest,
   SttTranscribeSource,
   UpdateProviderKeysRequest
+} from "../shared/types";
+import {
+  getRecordingKindForTrackId,
+  isWavMediaTrackKey,
+  maxRecordingTracksPerKind,
+  parseMediaTrackKey
 } from "../shared/types";
 import { isTextOverlay, validateEditorStateSnapshot } from "../shared/editor-domain";
 
@@ -28,6 +42,8 @@ export function assertStartRecordingRequest(
     typeof request !== "object" ||
     !isNonEmptyBoundedString(request.projectId, 128) ||
     !isValidProjectSource(request.source) ||
+    !isValidProjectSources(request.sources) ||
+    !isValidRecordingCaptures(request.captures) ||
     !isValidProjectDevices(request.devices) ||
     !isValidRecordingTracks(request.tracks)
   ) {
@@ -75,7 +91,7 @@ export function assertExportVideoRequest(value: unknown): asserts value is Expor
     !request.source ||
     !sourceIdValid ||
     !["mp4", "webm", "mov"].includes(request.format ?? "") ||
-    !["source", "720p", "1080p", "1440p"].includes(request.resolution ?? "") ||
+    !["source", "720p", "1080p", "1440p", "vertical"].includes(request.resolution ?? "") ||
     typeof request.trimStart !== "number" || !Number.isFinite(request.trimStart) || request.trimStart < 0 ||
     (request.trimEnd !== null && (typeof request.trimEnd !== "number" || !Number.isFinite(request.trimEnd) || request.trimEnd < 0)) ||
     typeof request.volume !== "number" || !Number.isFinite(request.volume) || request.volume < 0 || request.volume > 4 ||
@@ -116,6 +132,58 @@ function isValidProjectSource(value: unknown): value is ProjectSource {
       (source.kind === "screen" || source.kind === "window") &&
       isNullableBoundedString(source.displayId, 128)
   );
+}
+
+const recordingTrackKinds: RecordingTrack[] = ["screen", "camera", "mic", "system"];
+
+function isValidProjectSources(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length > 0 &&
+      value.length <= maxRecordingTracksPerKind &&
+      value.every(isValidProjectSource))
+  );
+}
+
+function isValidRecordingCaptures(value: unknown): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxRecordingTracksPerKind * 4) {
+    return false;
+  }
+
+  const seenTrackIds = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return false;
+    }
+
+    const capture = entry as Partial<RecordingCapture>;
+    const trackId = typeof capture.trackId === "string"
+      ? parseMediaTrackKey(capture.trackId)
+      : null;
+    const kind = capture.kind;
+
+    if (
+      !trackId ||
+      isWavMediaTrackKey(trackId) ||
+      !kind ||
+      !recordingTrackKinds.includes(kind) ||
+      getRecordingKindForTrackId(trackId) !== kind ||
+      !isNullableBoundedString(capture.sourceId, 512) ||
+      !isNonEmptyBoundedString(capture.label, 512) ||
+      !isNonEmptyBoundedString(capture.mimeType, 255) ||
+      seenTrackIds.has(trackId)
+    ) {
+      return false;
+    }
+
+    seenTrackIds.add(trackId);
+  }
+
+  return true;
 }
 
 function isValidDeviceSelection(value: unknown): value is DeviceSelection {
@@ -240,27 +308,83 @@ export function assertMusicGenerateRequest(
     !request ||
     typeof request !== "object" ||
     !isUuid(request.jobId) ||
-    !["acestep", "lyria-clip", "lyria-pro"].includes(request.engine ?? "") ||
+    !["claude-local", "lyria-clip", "lyria-pro"].includes(request.engine ?? "") ||
     typeof request.prompt !== "string" ||
     request.prompt.trim().length === 0 ||
     request.prompt.length > 2000 ||
     typeof request.lyrics !== "string" ||
-    request.lyrics.length > 10000 ||
-    typeof request.durationSeconds !== "number" ||
-    !Number.isFinite(request.durationSeconds) ||
-    request.durationSeconds < 5 ||
-    request.durationSeconds > 240 ||
-    !Number.isInteger(request.inferSteps) ||
-    (request.inferSteps ?? 0) < 10 ||
-    (request.inferSteps ?? 0) > 100 ||
-    typeof request.guidanceScale !== "number" ||
-    !Number.isFinite(request.guidanceScale) ||
-    request.guidanceScale < 1 ||
-    request.guidanceScale > 30 ||
-    !(request.seed === null || (Number.isInteger(request.seed) && (request.seed ?? -1) >= 0))
+    request.lyrics.length > 10000
   ) {
     throw new Error("Invalid music generation request.");
   }
+}
+
+const MATRIX_POPUP_POSITIONS = [
+  "top-left", "top-center", "top-right", "center",
+  "bottom-left", "bottom-center", "bottom-right"
+] as const;
+const MATRIX_POPUP_TONES = ["info", "success", "warning", "error"] as const;
+
+function isCssPopupValue(value: unknown): boolean {
+  return typeof value === "string" && value.length <= 120
+    && !/[;{}<>\\]/u.test(value) && !/url\s*\(/iu.test(value);
+}
+
+export function assertMatrixPopupRequest(value: unknown): asserts value is MatrixPopupRequest {
+  const request = value as Partial<MatrixPopupRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    typeof request.text !== "string" || request.text.length === 0 || request.text.length > 2_000 ||
+    (request.title !== undefined && (typeof request.title !== "string" || request.title.length > 200)) ||
+    (request.position !== undefined && !MATRIX_POPUP_POSITIONS.includes(request.position)) ||
+    (request.tone !== undefined && !MATRIX_POPUP_TONES.includes(request.tone)) ||
+    (request.durationMs !== undefined && (!Number.isFinite(request.durationMs) || request.durationMs < 0 || request.durationMs > 3_600_000)) ||
+    (request.id !== undefined && (!isNonEmptyBoundedString(request.id, 128))) ||
+    (request.accentColor !== undefined && !isCssPopupValue(request.accentColor)) ||
+    (request.backgroundColor !== undefined && !isCssPopupValue(request.backgroundColor)) ||
+    (request.textColor !== undefined && !isCssPopupValue(request.textColor)) ||
+    (request.fontFamily !== undefined && !isCssPopupValue(request.fontFamily)) ||
+    (request.fontSize !== undefined && (!Number.isInteger(request.fontSize) || request.fontSize < 10 || request.fontSize > 32)) ||
+    (request.fontWeight !== undefined && (!Number.isInteger(request.fontWeight) || request.fontWeight < 400 || request.fontWeight > 900)) ||
+    (request.borderRadius !== undefined && (!Number.isInteger(request.borderRadius) || request.borderRadius < 0 || request.borderRadius > 32)) ||
+    (request.padding !== undefined && (!Number.isInteger(request.padding) || request.padding < 4 || request.padding > 64)) ||
+    (request.width !== undefined && (!Number.isInteger(request.width) || request.width < 180 || request.width > 900)) ||
+    (request.scanlines !== undefined && typeof request.scanlines !== "boolean") ||
+    (request.closable !== undefined && typeof request.closable !== "boolean") ||
+    (request.pauseOnHover !== undefined && typeof request.pauseOnHover !== "boolean")
+  ) {
+    throw new Error("Invalid matrix popup request.");
+  }
+}
+
+export function assertClaudeChatRequest(value: unknown): asserts value is ClaudeChatRequest {
+  const request = value as Partial<ClaudeChatRequest> | null;
+  if (
+    !request ||
+    typeof request !== "object" ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    typeof request.message !== "string" ||
+    request.message.trim().length === 0 ||
+    request.message.length > 8_000
+  ) {
+    throw new Error("Invalid Claude chat request.");
+  }
+  if (request.history === undefined) return;
+  if (!Array.isArray(request.history) || request.history.length > 12) {
+    throw new Error("Invalid Claude chat request.");
+  }
+  for (const turn of request.history) {
+    if (!isClaudeChatTurn(turn)) throw new Error("Invalid Claude chat request.");
+  }
+}
+
+function isClaudeChatTurn(value: unknown): value is ClaudeChatTurn {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  if (!("role" in value) || !("text" in value)) return false;
+  const role: unknown = value.role;
+  const text: unknown = value.text;
+  return (role === "user" || role === "assistant") &&
+    typeof text === "string" && text.trim().length > 0 && text.length <= 4_000;
 }
 
 export function assertGeminiChatSendRequest(
@@ -277,5 +401,55 @@ export function assertGeminiChatSendRequest(
     typeof request.includeVideo !== "boolean"
   ) {
     throw new Error("Invalid AI chat request.");
+  }
+}
+
+
+export function assertAudioCleanupPreviewRequest(
+  value: unknown
+): asserts value is AudioCleanupPreviewRequest {
+  const request = value as Partial<AudioCleanupPreviewRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    !isUuid(request.jobId) ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    !isNonEmptyBoundedString(request.itemId, 128) ||
+    !["wind", "room", "steady"].includes(request.preset ?? "") ||
+    typeof request.strength !== "number" || !Number.isFinite(request.strength) ||
+    request.strength < 0 || request.strength > 100
+  ) {
+    throw new Error("Invalid audio cleanup preview request.");
+  }
+}
+
+
+export function assertMicTranscriptionRequest(
+  value: unknown
+): asserts value is MicTranscriptionRequest {
+  const request = value as Partial<MicTranscriptionRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    !isUuid(request.requestId) ||
+    !(request.audio instanceof ArrayBuffer) ||
+    request.audio.byteLength === 0 || request.audio.byteLength > 16 * 1024 * 1024
+  ) {
+    throw new Error("Invalid microphone transcription request.");
+  }
+}
+
+
+export function assertImportRecordedClipRequest(
+  value: unknown
+): asserts value is ImportRecordedClipRequest {
+  const request = value as Partial<ImportRecordedClipRequest> | null;
+  if (
+    !request || typeof request !== "object" ||
+    !isNonEmptyBoundedString(request.projectId, 128) ||
+    !isUuid(request.requestId) ||
+    !isNonEmptyBoundedString(request.name, 200) ||
+    !(request.data instanceof ArrayBuffer) ||
+    request.data.byteLength === 0 || request.data.byteLength > 256 * 1024 * 1024
+  ) {
+    throw new Error("Invalid recorded clip import request.");
   }
 }

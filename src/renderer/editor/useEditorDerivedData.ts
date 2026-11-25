@@ -7,8 +7,10 @@ import type { CSSProperties } from "react";
 import type { ProjectView } from "../../shared/types";
 import { previewBackgrounds } from "./backgrounds";
 import { createProjectMedia } from "./media-utils";
+import { screenCropTransform } from "../../shared/editor-domain/screen-crop";
 import { findActiveSubtitleAtTime } from "./subtitle-time";
-import { getScreenFrameForAspectRatio } from "./layout-geometry";
+import { resolvePreviewComposition } from "./composition-layers";
+import { resolveCameraBorder } from "../../shared/editor-domain/timeline-visibility";
 import {
   calculateTimelineDuration,
   createAudioTimelineTracks,
@@ -16,6 +18,7 @@ import {
   getTimelineMediaDuration
 } from "./timeline-utils";
 import { frameRate } from "./types";
+import type { ScreenCrop } from "../../shared/editor-domain/types";
 import { clampNumber } from "./utils";
 import type {
   BackgroundStyle,
@@ -91,6 +94,8 @@ type UseEditorDerivedDataParams = {
   /** Intrinsic aspect ratio (w/h) of the screen recording, once known. */
   screenMediaAspect: number | null;
   screenPosition: ScreenPosition;
+  screenCrop?: ScreenCrop;
+  cameraMaskUrl?: string | null;
   backgroundStyle: BackgroundStyle;
   customBackgroundUrl: string | null;
   cameraSize: number;
@@ -126,6 +131,8 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     screenAspectRatio,
     screenMediaAspect,
     screenPosition,
+    screenCrop,
+    cameraMaskUrl,
     backgroundStyle,
     customBackgroundUrl,
     cameraSize,
@@ -149,7 +156,10 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
   );
   const projectName = project?.name ?? "New Edit";
   const projectScreen = projectMedia.find((item) => item.track === "screen") ?? null;
-  const projectCamera = projectMedia.find((item) => item.track === "camera") ?? null;
+  // A camera with a channel is a timeline clip; a single-camera recording keeps
+  // the floating overlay that has no clip of its own.
+  const overlayCamera =
+    projectMedia.find((item) => item.track === "camera" && item.channel === undefined) ?? null;
   const activeDuration =
     duration > 0 ? duration : selectedItem?.duration ?? (project?.durationMs ?? 0) / 1000;
   const selectedTimelineItemId = selectedItem?.id ?? null;
@@ -161,7 +171,8 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
       allMedia.filter(
         (item) =>
           item.kind === "audio" ||
-          ((item.kind === "video" || item.kind === "image") && item.track !== "camera")
+          ((item.kind === "video" || item.kind === "image") &&
+            (item.track !== "camera" || item.channel !== undefined))
       ),
     [allMedia]
   );
@@ -195,17 +206,43 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     () => createAudioTimelineTracks(audioTimelineClips),
     [audioTimelineClips]
   );
-  const activeVideoClip = useMemo(
+  const composition = useMemo(
     () =>
-      videoTimelineClips.find(
-        (clip) => currentTime >= clip.start && currentTime < clip.start + clip.duration
-      ) ?? null,
-    [currentTime, videoTimelineClips]
+      resolvePreviewComposition({
+        clips: videoTimelineClips,
+        time: currentTime,
+        projectLayout: layoutMode,
+        selectedSegmentId: selectedTimelineSegmentId,
+        screenAspectRatio,
+        screenIntrinsicAspect: screenMediaAspect,
+        cameraFrame,
+        projectCameraStyle: { shape: cameraShape, border: cameraBorderStyle },
+        overlayCamera
+      }),
+    [
+      cameraBorderStyle,
+      cameraFrame,
+      cameraShape,
+      currentTime,
+      layoutMode,
+      overlayCamera,
+      screenAspectRatio,
+      screenMediaAspect,
+      selectedTimelineSegmentId,
+      videoTimelineClips
+    ]
   );
-  const previewItem = activeVideoClip?.item ?? null;
-  const isProjectCompositionSelected = Boolean(
-    previewItem && previewItem.origin === "project" && previewItem.track === "screen"
-  );
+  // Presets compose a base picture (screen or imported video) with a webcam
+  // above it. Geometry comes from the shared composition layout, so the canvas
+  // and the exporter arrange the same layers.
+  const effectiveLayoutMode = composition.layoutMode;
+  // The preset itself decides whether the base picture is visible; a
+  // camera-only layout must not leave the screen playing underneath the webcam.
+  const previewItem = composition.layout.base === null ? null : composition.base?.item ?? null;
+  const previewBaseClip = composition.base;
+  const previewCameraClip = composition.camera;
+  const previewCameraItem = composition.cameraItem;
+  const showNoCameraRecording = composition.showNoCameraRecording;
   const timelineDuration = useMemo(
     () =>
       calculateTimelineDuration(
@@ -237,22 +274,15 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
   const selectedSpeedEffect =
     speedEffects.find((effect) => effect.id === selectedSpeedId) ?? null;
   const audioSources = allMedia.filter((item) => item.kind === "audio");
+  // The aspect-ratio control applies to the presets that keep the picture in a
+  // fitted frame; split and filled-screen presets crop instead.
   const screenAspectEnabled =
-    layoutMode === "screen-only" ||
-    layoutMode === "bubble" ||
-    layoutMode === "bubble-fill" ||
-    layoutMode === "presenter" ||
-    layoutMode === "side-overlap";
-  const screenFrame = screenAspectEnabled
-    ? getScreenFrameForAspectRatio(layoutMode, screenAspectRatio, screenMediaAspect)
-    : null;
-  const sideBySideScreenFrame =
-    layoutMode === "side-by-side" ? { x: 40, y: 0, width: 60, height: 100 } : null;
-  const activeScreenFrame = screenFrame ?? sideBySideScreenFrame;
+    effectiveLayoutMode !== "camera-only" && effectiveLayoutMode !== "side-by-side";
+  const activeScreenFrame = composition.layout.base?.frame ?? null;
   const screenScale =
     (screenPosition.scale / 100) *
     activeZoom.scale *
-    getVideoCornerScale(layoutMode, videoCornerStyle);
+    getVideoCornerScale(effectiveLayoutMode, videoCornerStyle);
   const screenStyle: CSSProperties = {
     ...(activeScreenFrame
       ? {
@@ -265,26 +295,38 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
         }
       : {}),
     ...getVideoCornerStyles(videoCornerStyle),
-    objectFit: layoutMode === "bubble-fill" || layoutMode === "side-by-side" ? "cover" : "contain",
+    // The frame clips the media so a crop never spills outside its box.
+    overflow: "hidden",
     transform: `translate(${screenPosition.x}%, ${screenPosition.y}%) scale(${screenScale.toFixed(
       3
     )})`,
     transformOrigin: `${activeZoom.originX}% ${activeZoom.originY}%`
   };
+  const screenCropCss = screenCropTransform(screenCrop);
+  const screenContentStyle: CSSProperties = {
+    objectFit: composition.layout.base?.fit === "cover" ? "cover" : "contain",
+    ...(screenCropCss === null
+      ? {}
+      : { transform: screenCropCss.transform, transformOrigin: screenCropCss.transformOrigin })
+  };
   const cameraFreeformEnabled =
-    layoutMode === "bubble" ||
-    layoutMode === "bubble-fill" ||
-    layoutMode === "presenter" ||
-    layoutMode === "side-overlap";
+    effectiveLayoutMode === "bubble" ||
+    effectiveLayoutMode === "bubble-fill" ||
+    effectiveLayoutMode === "presenter" ||
+    effectiveLayoutMode === "side-overlap";
+  // The border and shape come from the shared resolver, which merges the
+  // webcam clip's own style over the project style, so the exported file paints
+  // exactly what this preview shows. `border-box` keeps it inside the box.
+  const cameraBorder = resolveCameraBorder({
+    layoutMode: effectiveLayoutMode,
+    borderStyle: composition.cameraStyle.border
+  });
+  const resolvedCameraShape = composition.cameraStyle.shape;
   const baseCameraStyle: CSSProperties = {
     border:
-      cameraBorderStyle === "none"
-        ? 0
-        : cameraBorderStyle === "accent"
-          ? "3px solid rgb(249 169 22)"
-          : "4px solid white",
+      cameraBorder === null ? 0 : `${cameraBorder.cssWidth}px solid #${cameraBorder.colorHex}`,
     borderRadius:
-      cameraShape === "circle" ? "999px" : cameraShape === "rounded" ? 12 : 0,
+      resolvedCameraShape === "circle" ? "999px" : resolvedCameraShape === "rounded" ? 12 : 0,
     boxSizing: "border-box",
     overflow: "hidden"
   };
@@ -299,43 +341,31 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
     }, ${cameraCropScale})`,
     transformOrigin: "center"
   };
-  const cameraStyle: CSSProperties | null =
-    layoutMode === "camera-only"
-      ? {
-          ...baseCameraStyle,
-          left: 0,
-          top: 0,
-          width: "100%",
-          height: "100%"
-        }
-      : layoutMode === "side-by-side"
-        ? {
-            ...baseCameraStyle,
-            left: 0,
-            top: 0,
-            width: "40%",
-            height: "100%",
-            borderRadius: 0,
-            border: 0
-          }
-        : cameraFreeformEnabled
-          ? {
-              ...baseCameraStyle,
-              left: `${cameraFrame.x}%`,
-              top: `${cameraFrame.y}%`,
-              right: "auto",
-              bottom: "auto",
-              width: `${cameraFrame.size}%`,
-              height: "auto",
-              aspectRatio: "1 / 1",
-              transform: "none"
-            }
-          : null;
+  const cameraLayer = composition.layout.camera;
+  const cameraStyle: CSSProperties | null = cameraLayer
+    ? {
+        ...baseCameraStyle,
+        left: `${cameraLayer.frame.x}%`,
+        top: `${cameraLayer.frame.y}%`,
+        right: "auto",
+        bottom: "auto",
+        width: `${cameraLayer.frame.width}%`,
+        height: `${cameraLayer.frame.height}%`,
+        transform: "none",
+        ...(effectiveLayoutMode === "side-by-side" ? { borderRadius: 0, border: 0 } : {})
+      }
+    : null;
+  // A webcam mask belongs to the project's own camera track; it must never be
+  // painted over a different webcam channel.
+  const primaryCameraId = project === null ? null : `${project.id}:camera`;
+  const previewCameraMaskUrl =
+    previewCameraItem !== null && previewCameraItem.id === primaryCameraId
+      ? cameraMaskUrl ?? null
+      : null;
   // Direct manipulation is always available in the viewport. The Layout tool
   // exposes detailed controls, but no longer gates drag/resize interactions.
-  const screenEditEnabled = layoutMode !== "camera-only";
-  const cameraEditEnabled =
-    cameraFreeformEnabled && Boolean(projectCamera);
+  const screenEditEnabled = composition.layout.base !== null && previewItem !== null;
+  const cameraEditEnabled = cameraFreeformEnabled && previewCameraItem !== null;
   const previewFrameStyle = {
     "--camera-size": `${cameraSize}%`,
     backgroundColor: "#050608",
@@ -358,23 +388,26 @@ export function useEditorDerivedData(params: UseEditorDerivedDataParams) {
   return {
     activeDuration,
     activeSubtitle,
-    activeVideoClip,
     allMedia,
     audioSources,
     audioTimelineClips,
     audioTimelineTracks,
     cameraEditEnabled,
+    cameraMaskUrl: previewCameraMaskUrl,
     cameraStyle,
     cameraVideoStyle,
     currentFrame,
-    isProjectCompositionSelected,
     mediaById,
     mediaDurationById,
     playheadPercent,
+    previewBaseClip,
+    previewCameraClip,
+    previewCameraItem,
     previewClassName,
     previewFrameStyle,
     previewItem,
-    projectCamera,
+    showNoCameraRecording,
+    screenContentStyle,
     projectMedia,
     projectName,
     projectScreen,

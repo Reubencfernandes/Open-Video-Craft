@@ -25,7 +25,9 @@ import { useTimelineEditing } from "./useTimelineEditing";
 import type { ApplyTimelineClipSelection } from "./useTimelineMediaDragInteractions";
 import { isTimelineTimedItemInRange } from "./timeline-utils";
 import type {
+  CameraClipStyle,
   EditorMediaItem,
+  LayoutMode,
   EditorTool,
   SpeedEffect,
   SubtitleSegment,
@@ -62,7 +64,9 @@ type UseTimelineControllerParams = {
   playingRef: MutableRefObject<boolean>;
   scheduleTimelinePlaybackSync: (segments: TimelineSegment[]) => void;
   seek: (time: number) => void;
-  seekTimelinePointer: (clientX: number) => void;
+  /** Project layout, used when a clip is told to adopt it. */
+  layoutMode: LayoutMode;
+  seekTimelinePointer: (clientX: number, options?: { snap?: boolean }) => void;
   selectedItemId: string | null;
   selectedSpeedId: string | null;
   selectedSubtitleId: string | null;
@@ -338,9 +342,11 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     copyClip: clipboard.copySelectedTimelineSegment,
     cutClip: clipboard.cutSelectedTimelineSegment,
     pasteClip: clipboard.pasteTimelineSegment,
-    splitAtPlayhead: editing.splitTimelineSegment,
+    splitAtPlayhead: editing.splitSelectionAtPlayhead,
+    selectAll: editing.selectAllTimelineClips,
     togglePlayback: params.togglePlayback,
-    deleteSelected: deleteSelectedTimelineItems
+    deleteSelected: deleteSelectedTimelineItems,
+    toggleHidden: editing.toggleSelectedTimelineHidden
   });
 
   return {
@@ -356,6 +362,15 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     beginZoomClipDrag: drags.beginZoomClipDrag,
     deleteSelectedTimelineSegment: deleteSelectedTimelineItems,
     deleteTimelineSegment: editing.deleteTimelineSegment,
+    toggleVideoLaneVisibility: editing.toggleVideoLaneVisibility,
+    swapVideoChannels: editing.swapVideoChannels,
+    toggleSelectedTimelineHidden: editing.toggleSelectedTimelineHidden,
+    closeTimelineGaps: editing.closeTimelineGaps,
+    selectAllTimelineClips: editing.selectAllTimelineClips,
+    setSelectedClipsLayout: (layout: LayoutMode | null) =>
+      editing.setSelectedClipsLayout(layout, params.layoutMode),
+    setSelectedClipsCameraStyle: (style: CameraClipStyle | null) =>
+      editing.setSelectedClipsCameraStyle(style),
     endTimelineScrub: drags.endTimelineScrub,
     cancelTranscription: subtitleGeneration.cancelTranscription,
     generateSubtitles: subtitleGeneration.generateSubtitles,
@@ -372,6 +387,8 @@ export function useTimelineController(params: UseTimelineControllerParams) {
     removeSpeedEffect: effects.removeSpeedEffect,
     removeZoomEffect: effects.removeZoomEffect,
     splitTimelineSegment: editing.splitTimelineSegment,
+    splitSelectionAtPlayhead: editing.splitSelectionAtPlayhead,
+    splitSelectedTimelineSegments: editing.splitSelectedTimelineSegments,
     undoTimelineEdit: editing.undoTimelineEdit,
     sttDownloadProgress: subtitleGeneration.sttDownloadProgress,
     sttStatus: subtitleGeneration.sttStatus,
