@@ -11,13 +11,7 @@ import { ApiKeyPromptPill } from "./ApiKeyPromptPill";
 import { ChatMessageBubble } from "./assistant/ChatMessageBubble";
 import { useAssistantVoiceInput } from "../useAssistantVoiceInput";
 
-const quickActions = [
-  "Add zooms to the important moments",
-  "Speed up the silent parts",
-  "Remove filler words",
-  "Add subtitles",
-  "Add transitions between clips"
-];
+import { MCP_TOOL_CATALOG } from "../../../shared/mcp-tools";
 
 export type AssistantProvider = "claude-max" | "gemini";
 
@@ -126,20 +120,7 @@ export function AssistantPanel(props: {
           <div className="flex min-h-full min-w-0 flex-col justify-end gap-3 pb-1">
             <div className="max-w-[88%] rounded-2xl rounded-bl-[0.3rem] bg-[#252527] px-3 py-2.5 text-xs leading-[1.5] text-neutral-100">
               <p className="flex items-center gap-1.5 font-bold"><Sparkles size={13} /> What would you like to edit?</p>
-              <p className="mt-1 text-neutral-400">Choose a suggestion or write your own instruction.</p>
-            </div>
-            <div className="flex min-w-0 flex-wrap gap-1.5">
-              {quickActions.map((action) => (
-                <button
-                  className="min-w-0 rounded-full bg-white/[0.06] px-2.5 py-1.5 text-left text-[0.65rem] font-semibold text-neutral-300 transition hover:bg-white/[0.11] hover:text-white disabled:opacity-50"
-                  type="button"
-                  key={action}
-                  disabled={props.sending || (!isClaude && !hasGeminiKey)}
-                  onClick={() => props.onSend(action)}
-                >
-                  {action}
-                </button>
-              ))}
+              <p className="mt-1 text-neutral-400">Pick a tool below or write your own instruction.</p>
             </div>
           </div>
         ) : null}
@@ -196,6 +177,25 @@ export function AssistantPanel(props: {
           {voice.transcribing ? <span>Transcribing with local Whisper…</span> : null}
         </div>
       ) : null}
+      <div
+        className="flex max-h-24 min-w-0 flex-none flex-wrap gap-1 overflow-y-auto border-t border-white/[0.04] bg-[#111113] px-3 pb-2 pt-2"
+        data-assistant-tools
+        aria-label="Assistant tools"
+      >
+        {MCP_TOOL_CATALOG.map((tool) => (
+          <button
+            className="min-w-0 rounded-full bg-white/[0.05] px-2 py-1 text-[0.62rem] font-semibold text-neutral-400 transition hover:bg-white/[0.1] hover:text-white"
+            type="button"
+            key={tool.name}
+            title={`Prefill a message that uses ${tool.name}`}
+            data-assistant-tool={tool.name}
+            onClick={() => setDraft(tool.prompt)}
+          >
+            {tool.title}
+          </button>
+        ))}
+      </div>
+
       <div
         className="flex min-w-0 flex-none items-end gap-2 border-t border-white/[0.06] bg-[#111113] p-3"
         data-assistant-composer

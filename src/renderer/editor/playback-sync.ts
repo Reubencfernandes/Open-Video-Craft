@@ -2,6 +2,8 @@
  * Pure decision helpers for playback sync: when the primary video or a
  * secondary media element should hard-seek, and timeline<->media time maps.
  */
+import type { TimelineMediaClip } from "./types";
+
 export type PlaybackSyncReason = "tick" | "seek" | "play-start" | "clip-change" | "media-ready" | "pause";
 
 export type ClipPlaybackTiming = {
@@ -86,9 +88,9 @@ export function shouldSeekPrimaryVideo(input: {
 
   if (input.reason === "clip-change") {
     // A tick may already have landed the playing decoder on this clip's first
-    // frame; seeking it again would only stall playback at the cut.
+    // frame; seeking it again would only stall playback at the cut. A cut whose
+    // next clip continues from the same frame needs no seek at all.
     return (
-      input.clipChanged ||
       !input.isPlaying ||
       hasMediaDrift({ ...input, driftTolerance: cutContinuityToleranceSeconds })
     );
@@ -147,6 +149,28 @@ export function shouldSeekSecondaryMedia(input: {
   }
 
   return input.lastSeekAtMs === null || input.nowMs - input.lastSeekAtMs >= (input.cooldownMs ?? secondaryDriftSeekCooldownMs);
+}
+
+const audioCutContinuityEpsilonSeconds = 0.0005;
+
+/**
+ * True when two audio clips are consecutive halves of one source cut. Keeping
+ * the same media element playing through that boundary avoids a click; a real
+ * source change must still stop and start the two elements.
+ */
+export function isContiguousAudioCut(
+  previous: TimelineMediaClip,
+  next: TimelineMediaClip
+): boolean {
+  return (
+    previous.item.id === next.item.id &&
+    previous.track === "audio" &&
+    next.track === "audio" &&
+    Math.abs(previous.start + previous.duration - next.start) <=
+      audioCutContinuityEpsilonSeconds &&
+    Math.abs(previous.sourceStart + previous.duration - next.sourceStart) <=
+      audioCutContinuityEpsilonSeconds
+  );
 }
 
 function hasMediaDrift(input: {

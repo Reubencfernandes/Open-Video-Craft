@@ -18,6 +18,8 @@ function ShortcutHarness(props: {
   selectedTimelineSegmentId?: string | null;
   togglePlayback: () => void;
   deleteSelected: () => void;
+  openExport: () => void;
+  toggleHidden: () => void;
   onMute: () => void;
   undo: () => void;
   redo: () => void;
@@ -30,13 +32,15 @@ function ShortcutHarness(props: {
     seek: vi.fn(),
     undo: props.undo,
     redo: props.redo,
-    openExport: vi.fn(),
+    openExport: props.openExport,
     copyClip: vi.fn(),
     cutClip: vi.fn(),
     pasteClip: vi.fn(),
     splitAtPlayhead: vi.fn(),
     togglePlayback: props.togglePlayback,
-    deleteSelected: props.deleteSelected
+    deleteSelected: props.deleteSelected,
+    toggleHidden: props.toggleHidden,
+    selectAll: vi.fn()
   });
 
   return createElement(
@@ -74,6 +78,8 @@ function renderHarness(
   const callbacks = {
     togglePlayback: vi.fn(),
     deleteSelected: vi.fn(),
+    openExport: vi.fn(),
+    toggleHidden: vi.fn(),
     onMute: vi.fn(),
     undo: vi.fn(),
     redo: vi.fn(),
@@ -202,5 +208,37 @@ describe("editor global shortcuts", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(callbacks.deleteSelected).toHaveBeenCalledOnce();
+  });
+
+  it("hides the selection with E as well as H", () => {
+    const { callbacks } = renderHarness();
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true, cancelable: true }));
+
+    expect(callbacks.toggleHidden).toHaveBeenCalledOnce();
+    expect(callbacks.openExport).not.toHaveBeenCalled();
+  });
+
+  it("keeps Cmd/Ctrl+E for export instead of hiding", () => {
+    const { callbacks } = renderHarness();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "e", metaKey: true, bubbles: true, cancelable: true })
+    );
+
+    expect(callbacks.openExport).toHaveBeenCalledOnce();
+    expect(callbacks.toggleHidden).not.toHaveBeenCalled();
+  });
+
+  it("leaves E native while typing in a text field", () => {
+    const { callbacks, host } = renderHarness();
+    const input = host.querySelector<HTMLInputElement>("[data-text-input]");
+    input?.focus();
+
+    const event = new KeyboardEvent("keydown", { key: "e", bubbles: true, cancelable: true });
+    input?.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(callbacks.toggleHidden).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import {
   parseEditorDocument,
   validateEditorStateSnapshot
 } from "../src/shared/editor-domain";
+import { operationSchema } from "../src/shared/editor-domain/operation-schema";
 import {
   applyAgentEdit,
   EditorRevisionConflictError,
@@ -111,6 +112,56 @@ describe("editor document migration", () => {
       fontFamily: "serif",
       opacity: 82
     });
+  });
+});
+
+describe("per-clip camera style", () => {
+  function documentWith(segments: unknown[]) {
+    const state = createDefaultEditorState();
+    return {
+      schemaVersion: 2 as const,
+      revision: 1,
+      savedAt: "2026-01-01T00:00:00.000Z",
+      state: { ...state, timelineSegments: segments },
+      imports: [],
+      lastMutation: { source: "editor" as const, at: "2026-01-01T00:00:00.000Z", editId: null, summary: null }
+    };
+  }
+
+  it("loads a clip camera style while older clips without one stay valid", () => {
+    const loaded = parseEditorDocument(documentWith([
+      {
+        id: "styled-clip", itemId: "project:camera", track: "video", lane: 1,
+        start: 0, end: 2, sourceStart: 0, cameraStyle: { shape: "square", border: "accent" }
+      },
+      {
+        id: "border-clip", itemId: "project:camera-2", track: "video", lane: 2,
+        start: 0, end: 2, sourceStart: 0, cameraStyle: { border: "none" }
+      },
+      { id: "legacy-clip", itemId: "project:screen", track: "video", lane: 0, start: 0, end: 2, sourceStart: 0 }
+    ]));
+
+    expect(loaded?.state.timelineSegments[0]?.cameraStyle).toEqual({ shape: "square", border: "accent" });
+    expect(loaded?.state.timelineSegments[1]?.cameraStyle).toEqual({ border: "none" });
+    expect(loaded?.state.timelineSegments[2]?.cameraStyle).toBeUndefined();
+  });
+
+  it("rejects a clip camera style the editor cannot render", () => {
+    const loaded = parseEditorDocument(documentWith([
+      {
+        id: "bad-clip", itemId: "project:camera", track: "video", lane: 1,
+        start: 0, end: 2, sourceStart: 0, cameraStyle: { shape: "star" }
+      }
+    ]));
+    expect(loaded).toBeNull();
+
+    const badBorder = parseEditorDocument(documentWith([
+      {
+        id: "bad-border", itemId: "project:camera", track: "video", lane: 1,
+        start: 0, end: 2, sourceStart: 0, cameraStyle: { border: "glow" }
+      }
+    ]));
+    expect(badBorder).toBeNull();
   });
 });
 
@@ -246,6 +297,28 @@ describe("agent edit operations", () => {
     ]);
     expect(updated.state.zoomEffects).toMatchObject([{ id: "zoom-hook", start: 1.5, end: 3.5, scale: 2 }]);
     expect(updated.state.speedEffects).toEqual([]);
+  });
+
+  it("accepts an AI scale change to 3x on an auto-generated zoom id", () => {
+    const state = {
+      ...createDefaultEditorState(),
+      timelineSegments: [
+        { id: "video", itemId: "screen", track: "video" as const, lane: 0, start: 0, end: 10, sourceStart: 0 }
+      ],
+      zoomEffects: [
+        { id: "auto-zoom-1", start: 4.65, end: 7.15, speed: "medium" as const, scale: 2, targetX: 62, targetY: 38 }
+      ]
+    };
+    const operation = {
+      type: "set_zoom" as const, id: "auto-zoom-1", start: 4.65, end: 7.15, speed: "medium" as const,
+      scale: 3, targetX: 62, targetY: 38
+    };
+    expect(operationSchema.safeParse(operation).success).toBe(true);
+
+    const result = applyEditorOperations(state, [operation]);
+    expect(result.state.zoomEffects).toMatchObject([
+      { id: "auto-zoom-1", start: 4.65, end: 7.15, speed: "medium", scale: 3, targetX: 62, targetY: 38 }
+    ]);
   });
 
   it("rejects overlapping or out-of-timeline agent effects", () => {

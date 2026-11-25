@@ -6,6 +6,7 @@
 import type { CSSProperties } from "react";
 import type {
   EditorMediaItem,
+  LayoutMode,
   SpeedEffect,
   SubtitleSegment,
   TextOverlay,
@@ -44,11 +45,30 @@ export function getTimelineTrackKind(item: EditorMediaItem): TimelineTrackKind {
   return item.kind === "audio" ? "audio" : "video";
 }
 
+/**
+ * How much longer than its media a clip may be because of speed effects: a 0.5x
+ * region occupies twice the source length.
+ */
+export function speedStretchFor(
+  segment: Pick<TimelineSegment, "start" | "end">,
+  speedEffects: readonly SpeedEffect[]
+): number {
+  let stretch = 1;
+  for (const effect of speedEffects) {
+    if (effect.rate <= 0) continue;
+    if (effect.start < segment.end && effect.end > segment.start) {
+      stretch = Math.max(stretch, 1 / effect.rate);
+    }
+  }
+  return stretch;
+}
+
 export function syncTimelineSegments(
   currentSegments: TimelineSegment[],
   items: EditorMediaItem[],
   mediaDurationById: Map<string, number>,
-  newItemIds: ReadonlySet<string>
+  newItemIds: ReadonlySet<string>,
+  speedEffects: readonly SpeedEffect[] = []
 ): TimelineSegment[] {
   const itemIds = new Set(items.map((item) => item.id));
   const retainedSegments = currentSegments.filter((segment) => itemIds.has(segment.itemId));
@@ -56,7 +76,7 @@ export function syncTimelineSegments(
     .map((segment) => {
       const itemDuration = mediaDurationById.get(segment.itemId);
       const track = segment.track;
-      const lane = track === "audio" ? normalizeTimelineLane(segment.lane) : 0;
+      const lane = normalizeTimelineLane(segment.lane);
       // Unknown metadata must never collapse a saved trim or source offset.
       if (!itemDuration || !Number.isFinite(itemDuration) || itemDuration <= 0) {
         return { ...segment, lane };
@@ -66,7 +86,8 @@ export function syncTimelineSegments(
       // but its end lives in timeline space and may sit well past itemDuration once
       // the clip has been moved, so clamp against start + remaining source, not
       // against the raw media duration.
-      const maxEnd = segment.start + Math.max(0.01, itemDuration - sourceStart);
+      const maxEnd = segment.start +
+        Math.max(0.01, itemDuration - sourceStart) * speedStretchFor(segment, speedEffects);
       const end = segment.pendingDuration
         ? maxEnd
         : clampNumber(segment.end, segment.start + 0.01, maxEnd);
@@ -87,6 +108,7 @@ export function syncTimelineSegments(
     }
 
     const track = getTimelineTrackKind(item);
+    const channel = track === "video" ? item.channel : undefined;
     // Video clips stay sequenced on the video track. Audio clips start at the
     // beginning and are assigned to the first channel that keeps them visible
     // without overlapping another clip on that channel.
@@ -97,10 +119,11 @@ export function syncTimelineSegments(
     const pendingDuration = !knownDuration || !Number.isFinite(knownDuration) || knownDuration <= 0;
     const itemDuration = pendingDuration ? 1 : knownDuration;
     const segmentId = `${item.id}:segment-0`;
-    const start = track === "audio" ? 0 : trackEnd;
+    const start = track === "audio" || channel !== undefined ? 0 : trackEnd;
     const end = start + itemDuration;
-    const lane =
-      track === "audio" ? resolveAudioLane(nextSegments, segmentId, start, end, 0) : 0;
+    const lane = track === "audio"
+      ? resolveAudioLane(nextSegments, segmentId, start, end, 0)
+      : channel === undefined ? 0 : normalizeTimelineLane(channel);
 
     nextSegments.push({
       id: segmentId,
@@ -135,13 +158,16 @@ export function createTimelineMediaClips(
         id: segment.id,
         item,
         track: segment.track,
-        lane: segment.track === "audio" ? normalizeTimelineLane(segment.lane) : 0,
+        lane: normalizeTimelineLane(segment.lane),
         start: segment.start,
         duration: Math.max(0.01, segment.end - segment.start),
-        sourceStart: segment.sourceStart
+        sourceStart: segment.sourceStart,
+        ...(segment.hidden === true ? { hidden: true } : {}),
+        ...(segment.layout === undefined ? {} : { layout: segment.layout }),
+        ...(segment.cameraStyle === undefined ? {} : { cameraStyle: segment.cameraStyle })
       } satisfies TimelineMediaClip;
     })
-    .filter((clip): clip is TimelineMediaClip => Boolean(clip))
+    .filter((clip): clip is NonNullable<typeof clip> => clip !== null)
     .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id));
 }
 
@@ -158,7 +184,15 @@ export function findTimelineSegmentAtTime(
 
 /** Semantic lane occupied by a media segment. */
 export function getTimelineSegmentLaneId(segment: TimelineSegment): TimelineLaneId {
-  return segment.track === "video" ? "video" : `audio:${normalizeTimelineLane(segment.lane)}`;
+  return segment.track === "video"
+    ? getVideoTimelineLaneId(segment.lane)
+    : `audio:${normalizeTimelineLane(segment.lane)}`;
+}
+
+/** Timeline row id for a video channel; channel 0 keeps the legacy "video" id. */
+export function getVideoTimelineLaneId(lane: number): TimelineLaneId {
+  const normalized = normalizeTimelineLane(lane);
+  return normalized === 0 ? "video" : `video:${normalized}`;
 }
 
 /** Ordered, inclusive lane span between the two ends of a marquee gesture. */
@@ -251,8 +285,18 @@ function getTimelineLaneSortOrder(laneId: TimelineLaneId): number {
   return Number.MAX_SAFE_INTEGER;
 }
 
+/**
+ * Shortest piece a blade may leave on either side of a cut. 10ms matches the
+ * linked-audio minimum, so picture and voice agree on what a sliver is and a
+ * split 50ms from a clip edge lands where the owner pointed.
+ */
+export const timelineSplitEpsilonSeconds = 0.01;
+
 export function canSplitTimelineSegment(segment: TimelineSegment, time: number): boolean {
-  return time > segment.start + 0.1 && time < segment.end - 0.1;
+  return (
+    time > segment.start + timelineSplitEpsilonSeconds &&
+    time < segment.end - timelineSplitEpsilonSeconds
+  );
 }
 
 export function canSplitTimelineSegmentAt(
@@ -264,6 +308,29 @@ export function canSplitTimelineSegmentAt(
       ? segments.find((item) => item.id === contextMenu.segmentId)
       : null) ?? findTimelineSegmentAtTime(segments, contextMenu.time);
   return segment ? canSplitTimelineSegment(segment, contextMenu.time) : false;
+}
+
+/**
+ * The clips a context-menu "split" cuts when the menu was opened on one clip of a multi-selection: every selected clip
+ * that can be split at the menu time. Returns null when the menu is not on a multi-selection (a single clip, a clip outside
+ * the selection, empty space), so the caller cuts the clicked clip as before.
+ */
+export function getContextMenuSplitSelectionIds(
+  segments: TimelineSegment[],
+  selectedSegmentIds: readonly string[],
+  contextMenu: Exclude<TimelineContextMenu, null>
+): string[] | null {
+  if (
+    !contextMenu.segmentId ||
+    selectedSegmentIds.length < 2 ||
+    !selectedSegmentIds.includes(contextMenu.segmentId)
+  ) {
+    return null;
+  }
+  const selected = new Set(selectedSegmentIds);
+  return segments
+    .filter((segment) => selected.has(segment.id) && canSplitTimelineSegment(segment, contextMenu.time))
+    .map((segment) => segment.id);
 }
 
 /**
@@ -289,6 +356,26 @@ export function findSplittableTimelineSegment(
         time <= segment.end
     ) ?? findTimelineSegmentAtTime(segments, time);
   return underPlayhead && canSplitTimelineSegment(underPlayhead, time) ? underPlayhead : null;
+}
+
+/**
+ * Whether the playhead split has anything to cut: any selected clip for a
+ * multi-selection, otherwise the single selected clip or the clip under the
+ * playhead — the same targets the split action itself resolves.
+ */
+export function canSplitTimelineSelectionAt(
+  segments: TimelineSegment[],
+  selectedSegmentIds: readonly string[],
+  selectedSegmentId: string | null,
+  time: number
+): boolean {
+  if (selectedSegmentIds.length > 1) {
+    return segments.some(
+      (segment) =>
+        selectedSegmentIds.includes(segment.id) && canSplitTimelineSegment(segment, time)
+    );
+  }
+  return findSplittableTimelineSegment(segments, selectedSegmentId, time) !== null;
 }
 
 export function trimTimelineSegment(
@@ -373,7 +460,8 @@ export function moveTimelineSegment(
   segmentId: string,
   rawStart: number,
   timelineDuration: number,
-  extraSnapTargets: number[] = []
+  extraSnapTargets: number[] = [],
+  targetLane?: number
 ): TimelineSegment[] {
   const segment = segments.find((item) => item.id === segmentId);
   if (!segment) {
@@ -381,6 +469,7 @@ export function moveTimelineSegment(
   }
 
   const length = segment.end - segment.start;
+  const laneHint = targetLane === undefined ? segment.lane : Math.max(0, Math.trunc(targetLane));
   const snapThreshold = getDefaultSnapThreshold(timelineDuration);
   const snapTargets = [0, ...extraSnapTargets];
   for (const other of segments) {
@@ -406,7 +495,13 @@ export function moveTimelineSegment(
   }
 
   if (segment.track === "video") {
-    const clampedStart = clampStartIntoFreeVideoGap(segments, segmentId, start, length);
+    const clampedStart = clampStartIntoFreeVideoGap(
+      segments,
+      segmentId,
+      start,
+      length,
+      laneHint
+    );
     if (clampedStart === null) {
       return segments;
     }
@@ -417,12 +512,12 @@ export function moveTimelineSegment(
   const nextEnd = nextStart + length;
   const nextLane =
     segment.track === "audio"
-      ? resolveAudioLane(segments, segmentId, nextStart, nextEnd, segment.lane)
-      : segment.lane;
+      ? resolveAudioLane(segments, segmentId, nextStart, nextEnd, laneHint)
+      : laneHint;
 
   return segments.map((item) =>
     item.id === segmentId
-      ? { ...item, lane: item.track === "audio" ? nextLane : 0, start: nextStart, end: nextEnd }
+      ? { ...item, lane: nextLane, start: nextStart, end: nextEnd }
       : item
   );
 }
@@ -461,7 +556,8 @@ export function moveTimelineSegmentGroup(
   rawDelta: number,
   timelineDuration: number,
   extraSnapTargets: number[] = [],
-  snapThresholdSeconds?: number
+  snapThresholdSeconds?: number,
+  laneDelta = 0
 ): TimelineSegment[] {
   const selectedIds = new Set(segmentIds);
   const selected = segments.filter((segment) => selectedIds.has(segment.id));
@@ -485,6 +581,11 @@ export function moveTimelineSegmentGroup(
     for (const edge of [segment.start, segment.end]) {
       for (const target of targets) {
         const adjustment = target - (edge + delta);
+        // Snapping may refine a drag, never undo it: a candidate that puts the
+        // group back where it started reads as "nothing moves".
+        if (Math.abs(delta) > 0 && Math.abs(delta + adjustment) < 1e-9) {
+          continue;
+        }
         if (
           Math.abs(adjustment) <= snapThreshold &&
           Math.abs(adjustment) < Math.abs(closestAdjustment)
@@ -498,7 +599,12 @@ export function moveTimelineSegmentGroup(
     delta = Math.max(-minimumStart, delta + closestAdjustment);
   }
 
+  // Dropping on another channel changes the target lane; only clips that end up
+  // on the same channel can conflict, other channels overlap by design.
+  const targetLaneFor = (segment: TimelineSegment): number =>
+    segment.track === "video" ? Math.max(0, segment.lane + laneDelta) : segment.lane;
   const selectedVideo = selected.filter((segment) => segment.track === "video");
+  const laneBySegmentId = new Map(selected.map((segment) => [segment.id, targetLaneFor(segment)]));
   const otherVideo = segments.filter(
     (segment) => segment.track === "video" && !selectedIds.has(segment.id)
   );
@@ -506,6 +612,7 @@ export function moveTimelineSegmentGroup(
     selectedVideo.every((moving) =>
       otherVideo.every(
         (other) =>
+          other.lane !== laneBySegmentId.get(moving.id) ||
           !rangesOverlap(
             moving.start + candidate,
             moving.end + candidate,
@@ -536,10 +643,43 @@ export function moveTimelineSegmentGroup(
 
   const moved = segments.map((segment) =>
     selectedIds.has(segment.id)
-      ? { ...segment, start: segment.start + delta, end: segment.end + delta }
+      ? {
+          ...segment,
+          start: segment.start + delta,
+          end: segment.end + delta,
+          lane: targetLaneFor(segment)
+        }
       : segment
   );
   return normalizeAudioLanes(moved);
+}
+
+/**
+ * Swaps two adjacent video channels. Unlike a move, a swap never changes clip
+ * timing, metadata or selection: every video segment in both lanes exchanges
+ * only its lane number.
+ */
+export function swapTimelineVideoChannels(
+  segments: readonly TimelineSegment[],
+  firstLane: number,
+  secondLane: number
+): TimelineSegment[] {
+  if (
+    !Number.isInteger(firstLane) ||
+    !Number.isInteger(secondLane) ||
+    firstLane < 0 ||
+    secondLane < 0 ||
+    Math.abs(firstLane - secondLane) !== 1
+  ) {
+    return [...segments];
+  }
+  return segments.map((segment) => {
+    if (segment.track !== "video") return segment;
+    const lane = normalizeTimelineLane(segment.lane);
+    if (lane === firstLane) return { ...segment, lane: secondLane };
+    if (lane === secondLane) return { ...segment, lane: firstLane };
+    return segment;
+  });
 }
 
 function getDefaultSnapThreshold(timelineDuration: number): number {
@@ -572,10 +712,11 @@ function clampStartIntoFreeVideoGap(
   segments: TimelineSegment[],
   segmentId: string,
   start: number,
-  length: number
+  length: number,
+  lane = 0
 ): number | null {
   const others = segments
-    .filter((item) => item.id !== segmentId && item.track === "video")
+    .filter((item) => item.id !== segmentId && item.track === "video" && item.lane === lane)
     .sort((first, second) => first.start - second.start);
 
   const gaps: Array<[number, number]> = [];
@@ -629,7 +770,8 @@ export function createAudioTimelineTracks(
 export function normalizeAudioLanes(segments: TimelineSegment[]): TimelineSegment[] {
   const normalized = segments.map((segment) => ({
     ...segment,
-    lane: segment.track === "audio" ? normalizeTimelineLane(segment.lane) : 0
+    // Every track keeps its authored channel so video channels survive a rebuild.
+    lane: normalizeTimelineLane(segment.lane)
   }));
   const processedAudioSegments: TimelineSegment[] = [];
   const laneById = new Map<string, number>();
@@ -701,7 +843,7 @@ function rangesOverlap(firstStart: number, firstEnd: number, secondStart: number
   return firstStart < secondEnd - tolerance && firstEnd > secondStart + tolerance;
 }
 
-function normalizeTimelineLane(value: number): number {
+export function normalizeTimelineLane(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
@@ -764,4 +906,84 @@ export function createClipPlaybackKey(clip: TimelineMediaClip): string {
     clip.duration.toFixed(4),
     clip.sourceStart.toFixed(4)
   ].join("|");
+}
+
+
+/** Layout in force at a moment: a clip may impose its own. */
+export function resolveClipLayout(
+  clipLayout: LayoutMode | undefined,
+  projectLayout: LayoutMode
+): LayoutMode {
+  return clipLayout ?? projectLayout;
+}
+
+/**
+ * Start of the earliest clip being packed. A selection compacts in place while
+ * the whole lane compacts to zero and loses its leading gap.
+ */
+export function getTimelinePackAnchor(
+  segments: readonly TimelineSegment[],
+  ids: readonly string[]
+): number {
+  const targets = new Set(ids);
+  const starts = segments
+    .filter((segment) => targets.has(segment.id))
+    .map((segment) => segment.start);
+  return starts.length > 0 ? Math.min(...starts) : 0;
+}
+
+/**
+ * Packs the given clips back to back from \`anchor\`, removing empty space.
+ * Untouched clips, including every audio channel, keep their position.
+ */
+export function packTimelineSegments(
+  segments: readonly TimelineSegment[],
+  ids: readonly string[],
+  anchor = 0
+): TimelineSegment[] {
+  const targets = new Set(ids);
+  const ordered = segments
+    .filter((segment) => targets.has(segment.id))
+    .sort((first, second) => first.start - second.start || first.id.localeCompare(second.id));
+  if (ordered.length === 0) return [...segments];
+
+  const placed = new Map<string, { start: number; end: number }>();
+  let cursor = Math.max(0, anchor);
+  for (const segment of ordered) {
+    const length = Math.max(0.01, segment.end - segment.start);
+    placed.set(segment.id, { start: cursor, end: cursor + length });
+    cursor += length;
+  }
+  return segments.map((segment) => {
+    const target = placed.get(segment.id);
+    return target ? { ...segment, start: target.start, end: target.end } : segment;
+  });
+}
+
+/** Cut points of the timeline: every clip boundary the cursor can lock onto. */
+export function timelineCutTimes(segments: readonly TimelineSegment[]): number[] {
+  const times = new Set<number>();
+  for (const segment of segments) {
+    times.add(Math.round(segment.start * 1000) / 1000);
+    times.add(Math.round(segment.end * 1000) / 1000);
+  }
+  return [...times].sort((first, second) => first - second);
+}
+
+/** Pulls the playhead onto a nearby cut. */
+export function snapTimeToCuts(
+  time: number,
+  cuts: readonly number[],
+  thresholdSeconds = 0.12
+): { time: number; snappedTo: number | null } {
+  let best: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const cut of cuts) {
+    const distance = Math.abs(cut - time);
+    if (distance <= thresholdSeconds && distance < bestDistance) {
+      best = cut;
+      bestDistance = distance;
+    }
+  }
+  return best === null ? { time, snappedTo: null } : { time: best, snappedTo: best };
 }

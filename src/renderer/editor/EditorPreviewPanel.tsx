@@ -19,13 +19,16 @@ import { PreviewTransportBar } from "./PreviewTransportBar";
 import { TimelineAudioElements } from "./TimelineAudioElements";
 import { TextOverlayLayer } from "./TextOverlayLayer";
 import { useElementFullscreen } from "./useElementFullscreen";
-import { getActiveTimelineTransition } from "./transition-utils";
+import {
+  getActiveClipEdgeTransition,
+  getActiveTimelineTransition
+} from "./transition-utils";
 import type { ViewportSnapOverlay } from "./layout-snapping";
 import type { PreviewQuality } from "./preview-quality";
 import type {
   EditorMediaItem,
   ClipTransition,
-  LayoutMode,
+  ClipEdgeTransition,
   ScreenLayoutDragMode,
   SubtitleSegment,
   SubtitleStyle,
@@ -41,11 +44,14 @@ export function EditorPreviewPanel(props: {
   previewItem: EditorMediaItem | null;
   videoTimelineClips: TimelineMediaClip[];
   transitions: ClipTransition[];
+  edgeTransitions: ClipEdgeTransition[];
   audioTimelineClips: TimelineMediaClip[];
-  isProjectCompositionSelected: boolean;
-  projectCamera: EditorMediaItem | null;
-  layoutMode: LayoutMode;
+  previewCameraItem: EditorMediaItem | null;
+  previewCameraClip: TimelineMediaClip | null;
+  showNoCameraRecording: boolean;
   screenStyle: CSSProperties;
+  screenContentStyle?: CSSProperties;
+  cameraMaskUrl?: string | null;
   cameraStyle: CSSProperties | null;
   cameraVideoStyle: CSSProperties;
   screenEditEnabled: boolean;
@@ -97,12 +103,12 @@ export function EditorPreviewPanel(props: {
     props.transitions,
     props.currentTime
   );
-  const primaryRole = activeTransition
-    ? props.currentTime < activeTransition.cutTime ? "outgoing" : "incoming"
-    : null;
-  const secondaryClip = activeTransition
-    ? primaryRole === "outgoing" ? activeTransition.to : activeTransition.from
-    : null;
+  const activeEdge = getActiveClipEdgeTransition(
+    props.videoTimelineClips,
+    props.edgeTransitions,
+    props.currentTime
+  );
+  const primaryRole = activeTransition ? "incoming" : null;
   // Only "fade through black" wants a solid black backdrop. Crossfade, slide,
   // and wipe must composite over the frame's Style background so it stays
   // visible around a scaled screen instead of being replaced by black.
@@ -129,23 +135,21 @@ export function EditorPreviewPanel(props: {
           {blackBackdrop ? (
             <span className="pointer-events-none absolute inset-0 z-0 bg-black" aria-hidden="true" />
           ) : null}
-          {previewItem ? (
+          {previewItem || props.previewCameraItem || props.showNoCameraRecording ? (
             <div
               className={`absolute inset-0 overflow-hidden ${blackBackdrop ? "bg-black" : ""}`}
               style={activeTransition && primaryRole
-                ? getPreviewTransitionLayerStyle(
-                    activeTransition.transition.type,
-                    activeTransition.progress,
-                    primaryRole
-                  )
+                ? { zIndex: 1, opacity: 0, pointerEvents: "none" }
                 : { zIndex: 1 }}
+              aria-hidden={activeTransition ? true : undefined}
             >
               <PreviewContent
                 item={previewItem}
-                isProjectCompositionSelected={props.isProjectCompositionSelected}
-                projectCamera={props.projectCamera}
-                layoutMode={props.layoutMode}
+                cameraItem={props.previewCameraItem}
+                showNoCameraRecording={props.showNoCameraRecording}
                 screenStyle={props.screenStyle}
+                screenContentStyle={props.screenContentStyle}
+                cameraMaskUrl={props.cameraMaskUrl}
                 cameraStyle={props.cameraStyle}
                 cameraVideoStyle={props.cameraVideoStyle}
                 screenEditEnabled={props.screenEditEnabled && !activeTransition}
@@ -161,7 +165,7 @@ export function EditorPreviewPanel(props: {
                 onMediaReady={props.onMediaReady}
                 onDuration={(nextDuration) => {
                   props.onDuration(nextDuration);
-                  props.onMediaDuration(previewItem.id, nextDuration);
+                  if (previewItem) props.onMediaDuration(previewItem.id, nextDuration);
                 }}
                 onScreenDimensions={props.onScreenDimensions}
                 onSubtitleClick={props.onSubtitleClick}
@@ -174,17 +178,29 @@ export function EditorPreviewPanel(props: {
               </span>
             </div>
           )}
-          {activeTransition && secondaryClip && primaryRole ? (
+          {activeEdge ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-[4] bg-black"
+              style={getPreviewTransitionLayerStyle(
+                activeEdge.transition.type,
+                activeEdge.progress,
+                activeEdge.edge === "start" ? "incoming" : "outgoing"
+              )}
+              aria-hidden="true"
+            />
+          ) : null}
+          {activeTransition ? (
             <PreviewTransitionLayer
-              clip={secondaryClip}
-              role={primaryRole === "outgoing" ? "incoming" : "outgoing"}
+              from={activeTransition.from}
+              to={activeTransition.to}
               type={activeTransition.transition.type}
               progress={activeTransition.progress}
               currentTime={props.currentTime}
               playing={props.playing}
-              projectCamera={props.projectCamera}
-              layoutMode={props.layoutMode}
+              cameraItem={props.previewCameraItem}
               screenStyle={props.screenStyle}
+              screenContentStyle={props.screenContentStyle}
+              cameraMaskUrl={props.cameraMaskUrl}
               cameraStyle={props.cameraStyle}
               cameraVideoStyle={props.cameraVideoStyle}
               previewQuality={props.previewQuality}

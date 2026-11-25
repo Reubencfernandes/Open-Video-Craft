@@ -27,6 +27,16 @@ export type CameraPosition =
   | "bottom-left" | "bottom-center" | "bottom-right";
 export type CameraShape = "circle" | "rounded" | "square";
 export type CameraBorderStyle = "none" | "light" | "accent";
+
+/**
+ * Camera presentation a single clip imposes while it is on screen. Every
+ * property is optional and falls back to the project style, so a clip can
+ * restyle only the border or only the shape.
+ */
+export interface CameraClipStyle {
+  shape?: CameraShape;
+  border?: CameraBorderStyle;
+}
 export type VideoCornerStyle = "flat" | "soft" | "round";
 export type ScreenAspectRatio = "auto" | "16:9" | "16:10" | "4:3";
 export type TimelineTrackKind = "video" | "audio";
@@ -53,6 +63,21 @@ export interface TimelineSegment {
   sourceStart: number;
   /** Only automatically created clips awaiting media metadata may grow. */
   pendingDuration?: boolean;
+  /**
+   * Deactivated clip: it stays on the timeline so its range is not lost, but it
+   * is not shown or heard. Used to pick which recording channel is on screen.
+   */
+  hidden?: boolean;
+  /**
+   * Layout that applies while this clip is on screen, overriding the project
+   * layout for that stretch of the timeline.
+   */
+  layout?: LayoutMode;
+  /**
+   * Webcam shape and border that apply while this clip is on screen,
+   * overriding the project style for that stretch of the timeline.
+   */
+  cameraStyle?: CameraClipStyle;
 }
 
 export interface ZoomEffect {
@@ -79,6 +104,15 @@ export interface ClipTransition {
   id: string;
   fromSegmentId: string;
   toSegmentId: string;
+  type: ClipTransitionType;
+  duration: number;
+}
+
+/** A transition at the isolated start or end edge of one clip. */
+export interface ClipEdgeTransition {
+  id: string;
+  segmentId: string;
+  edge: "start" | "end";
   type: ClipTransitionType;
   duration: number;
 }
@@ -127,6 +161,18 @@ export interface TextOverlay {
 }
 
 export interface ScreenPositionState { x: number; y: number; scale: number }
+
+/**
+ * Non-destructive crop of the recorded screen, in percent of the source frame.
+ * Used to remove OS chrome such as a menu bar or a browser address bar without
+ * touching the recorded file.
+ */
+export interface ScreenCrop {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
 export interface CameraFrame { x: number; y: number; size: number }
 export interface CameraContentTransform { x: number; y: number; scale: number; mirrored: boolean }
 export interface AudioLevel {
@@ -169,6 +215,7 @@ export interface EditorStateSnapshot {
   speedEffects: SpeedEffect[];
   /** Optional so existing schema-v2 projects load without a visible migration. */
   transitions?: ClipTransition[];
+  edgeTransitions?: ClipEdgeTransition[];
   subtitles: SubtitleSegment[];
   /** Optional so schema-v2 projects saved before text overlays still load. */
   textOverlays?: TextOverlay[];
@@ -184,6 +231,8 @@ export interface EditorStateSnapshot {
   cameraContentTransform: CameraContentTransform;
   videoCornerStyle: VideoCornerStyle;
   screenPosition: ScreenPositionState;
+  /** Optional so projects saved before cropping stay valid. */
+  screenCrop?: ScreenCrop;
   screenAspectRatio: ScreenAspectRatio;
   cameraFrame: CameraFrame;
   masterVolume: number;

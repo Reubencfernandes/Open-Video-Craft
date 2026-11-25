@@ -84,6 +84,8 @@ export function Timeline(props: {
   /** User-controlled visible duration; never smaller than contentDuration. */
   renderDuration: number;
   videoClips: TimelineMediaClip[];
+  onToggleVideoLaneVisibility: (lane: number) => void;
+  onSwapVideoChannels: (firstLane: number, secondLane: number) => void;
   audioTracks: Array<{ lane: number; clips: TimelineMediaClip[] }>;
   audioLevels: Record<string, { volume: number; muted: boolean }>;
   onSetAudioLevel: (
@@ -109,6 +111,10 @@ export function Timeline(props: {
   contextMenu: TimelineContextMenu;
   canSplitAtContextMenu: boolean;
   canSplitAtPlayhead: boolean;
+  /** The context menu addresses at least one clip, so Hide/Show applies. */
+  canToggleHidden: boolean;
+  /** Every clip the context menu addresses is already deactivated. */
+  selectedClipsHidden: boolean;
   onTogglePlayback: () => void;
   onSeekFrame: (frame: number) => void;
   onUndo: () => void;
@@ -155,6 +161,9 @@ export function Timeline(props: {
   onBodyDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
   onBodyDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onContextMenuSplit: () => void;
+  onContextMenuToggleHidden: () => void;
+  /** Packs the clips the context menu addresses back to back. */
+  onContextMenuCloseGaps: () => void;
   onContextMenuDelete: () => void;
 }) {
   const transitionBoundaries = useMemo(
@@ -346,6 +355,8 @@ export function Timeline(props: {
         <TimelineTracks
           renderDuration={props.renderDuration}
           videoClips={props.videoClips}
+          onToggleVideoLaneVisibility={props.onToggleVideoLaneVisibility}
+          onSwapVideoChannels={props.onSwapVideoChannels}
           audioTracks={props.audioTracks}
           audioLevels={props.audioLevels}
           onSetAudioLevel={props.onSetAudioLevel}
@@ -407,6 +418,8 @@ export function Timeline(props: {
           y={props.contextMenu.y}
           canSplit={props.canSplitAtContextMenu}
           canDelete={Boolean(props.contextMenu.segmentId)}
+          canToggleHidden={props.canToggleHidden}
+          clipsHidden={props.selectedClipsHidden}
           volume={(() => {
             const clip = [...props.videoClips, ...props.audioTracks.flatMap((track) => track.clips)]
               .find((item) => item.id === props.contextMenu?.segmentId);
@@ -445,6 +458,8 @@ export function Timeline(props: {
               props.onSetAudioLevel(clip.item.id, patch);
           })()}
           onSplit={props.onContextMenuSplit}
+          onToggleHidden={props.onContextMenuToggleHidden}
+          onCloseGaps={props.onContextMenuCloseGaps}
           onDelete={props.onContextMenuDelete}
         />
       ) : null}

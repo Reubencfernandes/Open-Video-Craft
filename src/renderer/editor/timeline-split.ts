@@ -3,7 +3,7 @@
  * offsets easy to verify and prevents UI state from changing the edit math.
  */
 import { splitLinkedRecordingAudioAt } from "./timeline-links";
-import { findSplittableTimelineSegment } from "./timeline-utils";
+import { findSplittableTimelineSegment, timelineSplitEpsilonSeconds } from "./timeline-utils";
 import type { TimelineSegment } from "./types";
 import { clampNumber } from "./utils";
 
@@ -26,7 +26,13 @@ export function splitTimelineSegments(
     return null;
   }
 
-  const splitTime = clampNumber(time, source.start + 0.1, source.end - 0.1);
+  // The requested time is used as-is; the epsilon only keeps a blade from
+  // landing on a clip edge and producing a zero-length clip.
+  const splitTime = clampNumber(
+    time,
+    source.start + timelineSplitEpsilonSeconds,
+    source.end - timelineSplitEpsilonSeconds
+  );
   const elapsedSourceTime = splitTime - source.start;
   const resolvedSource = { ...source, ...(source.pendingDuration ? { pendingDuration: false } : {}) };
   const left: TimelineSegment = { ...resolvedSource, end: splitTime };

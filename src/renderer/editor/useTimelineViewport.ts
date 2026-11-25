@@ -3,6 +3,7 @@
  * mapping pointer X positions to timeline time.
  */
 import { useEffect, useRef, useState } from "react";
+import { snapTimeToCuts } from "./timeline-utils";
 import type {
   Dispatch,
   PointerEvent as ReactPointerEvent,
@@ -14,6 +15,8 @@ import { clampNumber } from "./utils";
 type UseTimelineViewportParams = {
   beginPlaybackInteraction?: () => void;
   contentDuration: number;
+  /** Cut points the playhead locks onto when the pointer is close. */
+  cutTimes?: readonly number[];
   endPlaybackInteraction?: () => void;
   renderDuration: number;
   seek: (time: number) => void;
@@ -65,6 +68,7 @@ function getDefaultTimelinePanelHeight(): number {
 
 export function useTimelineViewport(params: UseTimelineViewportParams) {
   const {
+    cutTimes,
     contentDuration,
     renderDuration,
     seek,
@@ -114,8 +118,19 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
     return progress * renderDuration;
   }
 
-  function seekTimelinePointer(clientX: number) {
-    const nextTime = getTimelineTimeFromClientX(clientX);
+  /**
+   * Park the playhead under the pointer. Clicks seek exactly where the owner
+   * pointed; only pointer movement snaps onto a nearby cut, which is the
+   * deliberate guide used while scrubbing the ruler.
+   */
+  function seekTimelinePointer(clientX: number, options: { snap?: boolean } = {}) {
+    const rawTime = getTimelineTimeFromClientX(clientX);
+    const nextTime =
+      rawTime === null
+        ? null
+        : options.snap === false
+          ? rawTime
+          : snapTimeToCuts(rawTime, cutTimes ?? []).time;
     if (nextTime !== null) {
       seek(nextTime);
     }
@@ -182,7 +197,9 @@ export function useTimelineViewport(params: UseTimelineViewportParams) {
     if (mode === "scrub") {
       params.beginPlaybackInteraction?.();
       params.setScrubbingTimeline?.(true);
-      seekTimelinePointer(event.clientX);
+      // The initial press lands where the pointer is; dragging then locks onto
+      // nearby cuts.
+      seekTimelinePointer(event.clientX, { snap: false });
     }
   }
 

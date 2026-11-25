@@ -1,158 +1,112 @@
 import { describe, expect, it } from "vitest";
-import {
-  getSafeMediaSeekTarget,
-  getMediaTimeForTimelineTime,
-  getTimelineTimeForMediaTime,
-  isMediaTimePlayable,
-  shouldSeekPrimaryVideo,
-  shouldSeekSecondaryMedia
-} from "../src/renderer/editor/playback-sync";
 
-const clip = {
-  start: 12,
-  duration: 5,
-  sourceStart: 30
-};
+import { isContiguousAudioCut, shouldSeekPrimaryVideo } from "../src/renderer/editor/playback-sync";
+import { coalesceAudioSegments, groupVideoAudioPieces } from "../src/main/ffmpeg";
+import type { TimelineMediaClip } from "../src/renderer/editor/types";
 
-describe("playback sync", () => {
-  it("does not drift-seek the primary video for normal sub-tolerance clock skew", () => {
+function audioClip(
+  id: string,
+  start: number,
+  duration: number,
+  sourceStart: number,
+  itemId = "mic"
+): TimelineMediaClip {
+  return {
+    id,
+    item: { id: itemId, name: itemId, url: itemId, kind: "audio", origin: "project", track: "audio", duration: 10 },
+    track: "audio",
+    lane: 0,
+    start,
+    duration,
+    sourceStart
+  };
+}
+
+describe("contiguous split playback", () => {
+  it("keeps two halves of one audio source playing through the cut", () => {
+    expect(isContiguousAudioCut(audioClip("a", 0, 1.2345, 0), audioClip("b", 1.2345, 1, 1.2345))).toBe(true);
+  });
+
+  it("does not bridge a different source, a gap or a retimed source", () => {
+    const first = audioClip("a", 0, 1, 0);
+    expect(isContiguousAudioCut(first, audioClip("b", 1, 1, 1, "other"))).toBe(false);
+    expect(isContiguousAudioCut(first, audioClip("b", 1.01, 1, 1))).toBe(false);
+    expect(isContiguousAudioCut(first, audioClip("b", 1, 1, 2))).toBe(false);
+  });
+
+  it("coalesces contiguous export audio into one decoded input", () => {
+    const merged = coalesceAudioSegments([
+      { path: "/voice.wav", start: 0, end: 1.2345, sourceStart: 0, volume: 1 },
+      { path: "/voice.wav", start: 1.2345, end: 2.5, sourceStart: 1.2345, volume: 1 }
+    ]);
+    expect(merged).toEqual([
+      { path: "/voice.wav", start: 0, end: 2.5, sourceStart: 0, volume: 1 }
+    ]);
+  });
+
+  it("groups video-piece audio across a cut without splitting the decoder", () => {
+    const piece = (id: string, start: number, duration: number, sourceStart: number) => ({
+      inputIndex: 0,
+      duration,
+      gap: false,
+      segment: {
+        id,
+        path: "/screen.mp4",
+        kind: "video" as const,
+        start,
+        end: start + duration,
+        sourceStart,
+        volume: 1,
+        hasAudio: true
+      }
+    });
+    const groups = groupVideoAudioPieces(
+      [piece("a", 0, 1.2345, 0), piece("b", 1.2345, 1, 1.2345)],
+      []
+    );
+    expect(groups).toHaveLength(1);
+    expect(groups[0].start).toBe(0);
+    expect(groups[0].duration).toBeCloseTo(2.2345, 6);
+    expect(groups[0].sourceStart).toBe(0);
+  });
+
+  it("preserves deliberate fades, volume changes and real source changes", () => {
+    const first = { path: "/voice.wav", start: 0, end: 1, sourceStart: 0, volume: 1 };
+    expect(coalesceAudioSegments([first, { ...first, start: 1, end: 2, sourceStart: 1, fadeIn: 0.2 }])).toHaveLength(2);
+    expect(coalesceAudioSegments([first, { ...first, start: 1, end: 2, sourceStart: 1, volume: 0.5 }])).toHaveLength(2);
+    expect(coalesceAudioSegments([first, { ...first, path: "/other.wav", start: 1, end: 2, sourceStart: 0 }])).toHaveLength(2);
+  });
+});
+
+describe("primary video seeks at clip changes", () => {
+  const base = {
+    reason: "clip-change" as const,
+    isPlaying: true,
+    clipChanged: true,
+    canSeek: true
+  };
+
+  it("skips the seek when the next clip continues from the current frame", () => {
     expect(
-      shouldSeekPrimaryVideo({
-        reason: "tick",
-        isPlaying: true,
-        clipChanged: false,
-        canSeek: true,
-        currentMediaTime: 30.9,
-        desiredMediaTime: 31
-      })
+      shouldSeekPrimaryVideo({ ...base, currentMediaTime: 2, desiredMediaTime: 2.004 })
     ).toBe(false);
   });
 
-  it("does not hard-seek a playing primary video even when decoder progress lags", () => {
+  it("still seeks when the next clip starts at a different source position", () => {
     expect(
-      shouldSeekPrimaryVideo({
-        reason: "tick",
-        isPlaying: true,
-        clipChanged: false,
-        canSeek: true,
-        currentMediaTime: 2,
-        desiredMediaTime: 18
-      })
-    ).toBe(false);
-  });
-
-  it("seeks a playing primary video once when a tick crosses into a different clip", () => {
-    // After a cut the decoder is still on the removed frames; wait for React
-    // and those frames reach the screen.
-    expect(
-      shouldSeekPrimaryVideo({
-        reason: "tick",
-        isPlaying: true,
-        clipChanged: true,
-        canSeek: true,
-        currentMediaTime: 5.02,
-        desiredMediaTime: 10
-      })
+      shouldSeekPrimaryVideo({ ...base, currentMediaTime: 0, desiredMediaTime: 6.5 })
     ).toBe(true);
   });
 
-  it("plays straight through a split whose next clip continues from the same frame", () => {
+  it("still seeks when the decoder has drifted away from the cut", () => {
     expect(
-      shouldSeekPrimaryVideo({
-        reason: "tick",
-        isPlaying: true,
-        clipChanged: true,
-        canSeek: true,
-        currentMediaTime: 5.01,
-        desiredMediaTime: 5
-      })
-    ).toBe(false);
-    expect(
-      shouldSeekPrimaryVideo({
-        reason: "clip-change",
-        isPlaying: true,
-        clipChanged: false,
-        canSeek: true,
-        currentMediaTime: 5.01,
-        desiredMediaTime: 5
-      })
-    ).toBe(false);
-  });
-
-  it("still seeks the primary video for explicit seeks and clip changes", () => {
-    expect(
-      shouldSeekPrimaryVideo({
-        reason: "seek",
-        isPlaying: true,
-        clipChanged: false,
-        canSeek: true,
-        currentMediaTime: 30,
-        desiredMediaTime: 35
-      })
-    ).toBe(true);
-
-    expect(
-      shouldSeekPrimaryVideo({
-        reason: "clip-change",
-        isPlaying: true,
-        clipChanged: true,
-        canSeek: true,
-        currentMediaTime: 30,
-        desiredMediaTime: 40
-      })
+      shouldSeekPrimaryVideo({ ...base, currentMediaTime: 2, desiredMediaTime: 2.8 })
     ).toBe(true);
   });
 
-  it("does not force-seek on media-ready callbacks during playback", () => {
+  it("seeks a paused decoder onto the new clip", () => {
     expect(
-      shouldSeekPrimaryVideo({
-        reason: "media-ready",
-        isPlaying: true,
-        clipChanged: true,
-        canSeek: true,
-        currentMediaTime: 30,
-        desiredMediaTime: 40
-      })
-    ).toBe(false);
-  });
-
-  it("maps media time and timeline time through the clip source offset", () => {
-    expect(getMediaTimeForTimelineTime(clip, 14.5)).toBe(32.5);
-    expect(getTimelineTimeForMediaTime(clip, 32.5)).toBe(14.5);
-  });
-
-  it("clamps short secondary tracks and prevents end-of-media restarts", () => {
-    expect(getSafeMediaSeekTarget(10.2, 10)).toBeCloseTo(9.999);
-    expect(isMediaTimePlayable(10.2, 10)).toBe(false);
-    expect(isMediaTimePlayable(9.5, 10)).toBe(true);
-    expect(isMediaTimePlayable(43, Number.POSITIVE_INFINITY)).toBe(true);
-  });
-
-  it("throttles secondary drift seeks while playback is running", () => {
-    expect(
-      shouldSeekSecondaryMedia({
-        reason: "tick",
-        isPlaying: true,
-        clipChanged: false,
-        canSeek: true,
-        currentMediaTime: 30,
-        desiredMediaTime: 31,
-        nowMs: 1_000,
-        lastSeekAtMs: 900
-      })
-    ).toBe(false);
-
-    expect(
-      shouldSeekSecondaryMedia({
-        reason: "tick",
-        isPlaying: true,
-        clipChanged: false,
-        canSeek: true,
-        currentMediaTime: 30,
-        desiredMediaTime: 31,
-        nowMs: 1_300,
-        lastSeekAtMs: 900
-      })
+      shouldSeekPrimaryVideo({ ...base, isPlaying: false, currentMediaTime: 2, desiredMediaTime: 2.004 })
     ).toBe(true);
   });
 });

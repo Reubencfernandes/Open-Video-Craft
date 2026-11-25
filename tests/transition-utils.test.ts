@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getActiveTimelineTransition,
   getNearestTransitionBoundary,
+  getActiveClipEdgeTransition,
   getTimelineTransitionBoundaries
 } from "../src/renderer/editor/transition-utils";
 import { getPreviewTransitionLayerStyle } from "../src/renderer/editor/PreviewTransitionLayer";
@@ -36,6 +37,20 @@ describe("timeline transition interactions", () => {
     expect(boundaries[0]).toMatchObject({ cutTime: 3, from: { id: "a" }, to: { id: "b" } });
   });
 
+  it("finds cuts within each video channel instead of across overlapping lanes", () => {
+    const boundaries = getTimelineTransitionBoundaries([
+      clip("camera", 0, 3),
+      { ...clip("screen", 0, 3), lane: 1 },
+      clip("camera-next", 3, 2)
+    ]);
+    expect(boundaries).toHaveLength(1);
+    expect(boundaries[0]).toMatchObject({
+      cutTime: 3,
+      from: { id: "camera" },
+      to: { id: "camera-next" }
+    });
+  });
+
   it("snaps a drag to the nearest valid cut", () => {
     const boundaries = getTimelineTransitionBoundaries([
       clip("a", 0, 3),
@@ -55,6 +70,38 @@ describe("timeline transition interactions", () => {
     }], 3);
     expect(active?.progress).toBe(0.5);
     expect(getActiveTimelineTransition(clips, [], 3)).toBeNull();
+  });
+
+  it("never renders a hidden clip as the other side of a transition", () => {
+    const hiddenClip = { ...clip("b", 3, 2), hidden: true };
+    const active = getActiveTimelineTransition(
+      [clip("a", 0, 3), hiddenClip],
+      [{
+        id: "transition-a-b",
+        fromSegmentId: "a",
+        toSegmentId: "b",
+        type: "crossfade",
+        duration: 1
+      }],
+      3
+    );
+    expect(active).toBeNull();
+  });
+
+  it("activates an isolated transition at a clip's own start edge", () => {
+    const active = getActiveClipEdgeTransition(
+      clips,
+      [{
+        id: "edge",
+        segmentId: "a",
+        edge: "start",
+        type: "fade-black",
+        duration: 1
+      }],
+      0.5
+    );
+    expect(active?.progress).toBe(0.5);
+    expect(active?.edge).toBe("start");
   });
 
   it("creates distinct visual states for every transition style", () => {

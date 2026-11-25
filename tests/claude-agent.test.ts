@@ -8,6 +8,7 @@ import {
   buildClaudeMcpConfig,
   extractClaudeAssistantText,
   formatClaudeAgentError,
+  resolveClaudeExecutable,
   OVC_MCP_PROJECT_ID_ENV
 } from "../src/main/claude-agent";
 
@@ -126,6 +127,17 @@ describe("Claude Max assistant command construction", () => {
     expect(prompt).toContain("never say it cannot be done");
   });
 
+  it("lets the assistant poll and cancel a b-roll generation job instead of waiting on it", () => {
+    expect(CLAUDE_MCP_TOOL_NAMES).toContain("mcp__open-video-craft__insert_broll_cutaways");
+    expect(CLAUDE_MCP_TOOL_NAMES).toContain("mcp__open-video-craft__get_broll_generation");
+
+    const args = buildClaudeAgentArgs({ projectId: "project-1", message: "Generate B-roll images" });
+    expect(args).toContain("mcp__open-video-craft__get_broll_generation");
+    const systemPrompt = args[args.indexOf("--append-system-prompt") + 1];
+    expect(systemPrompt).toContain("insert_broll_cutaways");
+    expect(systemPrompt).toContain("get_broll_generation");
+  });
+
   it("rejects prompts longer than the public request limit", () => {
     const message = "x".repeat(8_001);
     expect(() => buildClaudeAgentArgs({ projectId: "project-1", message })).toThrow("message is too long");
@@ -150,5 +162,41 @@ describe("Claude Max assistant command construction", () => {
     const message = formatClaudeAgentError({ stderr: "MCP server unavailable: connection refused" });
     expect(message).toContain("MCP server");
     expect(message).not.toContain("claude -p");
+  });
+});
+
+describe("Claude CLI executable resolution", () => {
+  const launchEnv = { HOME: "/Users/owner", PATH: "/usr/bin:/bin:/usr/sbin:/sbin" };
+
+  it("finds the CLI in the user install directory missing from the app PATH", () => {
+    const executable = resolveClaudeExecutable(launchEnv, (candidate) =>
+      candidate === "/Users/owner/.local/bin/claude"
+    );
+    expect(executable).toBe("/Users/owner/.local/bin/claude");
+  });
+
+  it("prefers the CLI already present on PATH", () => {
+    const executable = resolveClaudeExecutable(
+      { HOME: "/Users/owner", PATH: "/opt/homebrew/bin:/usr/bin" },
+      (candidate) => candidate === "/opt/homebrew/bin/claude"
+    );
+    expect(executable).toBe("/opt/homebrew/bin/claude");
+  });
+
+  it("reports a missing CLI instead of an empty generic failure", () => {
+    const executable = resolveClaudeExecutable(launchEnv, () => false);
+    expect(executable).toBe("claude");
+  });
+
+  it("names the missing CLI when the process cannot be spawned", () => {
+    const failure = Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" });
+    const message = formatClaudeAgentError(failure);
+    expect(message).toContain("Claude Code CLI");
+    expect(message).not.toBe("Claude Max could not complete this request.");
+  });
+
+  it("keeps the underlying cause for a non-zero exit without output", () => {
+    const message = formatClaudeAgentError({ stdout: "", stderr: "", code: 2 });
+    expect(message).toContain("exit");
   });
 });

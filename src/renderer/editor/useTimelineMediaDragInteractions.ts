@@ -1,8 +1,9 @@
 /**
  * Media clip press, move and trim interactions for the timeline.
  *
- * A press selects the clip and never moves the playhead. It only becomes a
- * move once the pointer travels a few pixels, so a click cannot nudge a clip.
+ * A press selects the clip and parks the playhead exactly under the pointer,
+ * so a following split lands where the owner pointed. It only becomes a move
+ * once the pointer travels a few pixels, so a click cannot nudge a clip.
  * Moving or trimming a screen recording carries the recording's linked audio
  * along (hold Alt to edit the picture alone), keeping the voice in sync.
  */
@@ -24,6 +25,7 @@ import {
   isolateLinkedRecordingAudio,
   trimTimelineSegmentWithLinkedAudio
 } from "./timeline-links";
+import { getTimelineClipGroupIds } from "./timeline-groups";
 import { resolveTimelineClipPress, timelineDragThresholdPx } from "./timeline-selection";
 import { createId } from "./utils";
 import type {
@@ -80,6 +82,9 @@ type MoveDrag = {
   segmentIds: string[];
   linked: boolean;
   pointerStartClientX: number;
+  pointerStartClientY: number;
+  /** Channel the dragged clip started on, for vertical drops. */
+  startLane: number;
   pointerStartTime: number;
   segmentStart: number;
   moved: boolean;
@@ -232,11 +237,16 @@ export function useTimelineMediaDragInteractions(
     const press = resolveTimelineClipPress(
       params.selectedTimelineSegmentIds,
       segmentId,
-      event.ctrlKey || event.metaKey || event.shiftKey
+      event.ctrlKey || event.metaKey || event.shiftKey,
+      getTimelineClipGroupIds(params.timelineSegments, segmentId)
     );
     params.applyTimelineClipSelection(press.ids, press.primaryId, {
       keepRange: press.keepRange
     });
+    // Pressing a clip parks the playhead exactly under the pointer, so a split
+    // blades where the owner pointed instead of at a nearby cut. Seeking never
+    // turns the press into a move: the drag still needs its own threshold.
+    params.seek(time);
     if (!press.draggable) return;
 
     moveDragRef.current = {
@@ -244,6 +254,8 @@ export function useTimelineMediaDragInteractions(
       segmentIds: press.ids,
       linked: !event.altKey,
       pointerStartClientX: event.clientX,
+      pointerStartClientY: event.clientY,
+      startLane: segment.lane,
       pointerStartTime: time,
       segmentStart: segment.start,
       moved: false,
@@ -258,7 +270,7 @@ export function useTimelineMediaDragInteractions(
     params.timelineBodyRef.current?.setPointerCapture(event.pointerId);
   }
 
-  function updateTimelineClipMove(clientX: number) {
+  function updateTimelineClipMove(clientX: number, clientY?: number) {
     const drag = moveDragRef.current;
     const time = params.getTimelineTimeFromClientX(clientX);
     if (!drag || time === null) return;
@@ -285,13 +297,18 @@ export function useTimelineMediaDragInteractions(
     }
 
     const rawStart = Math.max(0, drag.segmentStart + time - drag.pointerStartTime);
+    // Vertical movement picks a different channel: the row under the pointer
+    // decides where the clip lands, so dragging down moves it to Video 2, etc.
+    const targetLane = clientY === undefined ? null : laneAtClientY(clientY);
+    const laneDelta = targetLane === null ? 0 : targetLane - drag.startLane;
     const next = moveTimelineSegmentGroup(
       drag.baseSegments,
       drag.movingIds,
       rawStart - drag.segmentStart,
       params.timelineRenderDuration,
       [params.currentTimeRef.current],
-      getSnapThresholdSeconds()
+      getSnapThresholdSeconds(),
+      laneDelta
     );
     applySegments(drag, next);
     if (drag.originalRangeSelection) {
@@ -320,13 +337,13 @@ export function useTimelineMediaDragInteractions(
     return Boolean(trimDragRef.current || moveDragRef.current);
   }
 
-  function updateMediaClipDrag(clientX: number) {
+  function updateMediaClipDrag(clientX: number, clientY?: number) {
     if (trimDragRef.current) {
       updateTimelineClipTrim(clientX);
       return true;
     }
     if (moveDragRef.current) {
-      updateTimelineClipMove(clientX);
+      updateTimelineClipMove(clientX, clientY);
       return true;
     }
     return false;
@@ -344,4 +361,20 @@ export function useTimelineMediaDragInteractions(
     isMediaClipDragActive,
     updateMediaClipDrag
   };
+}
+
+/**
+ * Video channel under the pointer. Rows are read from the DOM in visual order,
+ * so dragging down over "Video 2" yields channel 1 and the clip follows.
+ */
+function laneAtClientY(clientY: number): number | null {
+  const rows = [...document.querySelectorAll<HTMLElement>("[data-timeline-lane]")];
+  for (const row of rows) {
+    const laneId = row.dataset.timelineLane ?? "";
+    if (!laneId.startsWith("video")) continue;
+    const bounds = row.getBoundingClientRect();
+    if (clientY < bounds.top || clientY > bounds.bottom) continue;
+    return laneId === "video" ? 0 : Number(laneId.split(":")[1] ?? 0);
+  }
+  return null;
 }

@@ -4,6 +4,7 @@ import {
   findSplittableTimelineSegment,
   createTimelineClipStyle,
   getSnappedInsertStart,
+  getContextMenuSplitSelectionIds,
   syncTimelineSegments,
   resolveAudioLane,
   trimTimelineSegment
@@ -209,5 +210,38 @@ describe("timeline composition duration", () => {
       [],
       68
     )).toBe(68);
+  });
+});
+
+describe("splitting from the timeline context menu", () => {
+  const segments: TimelineSegment[] = [
+    { id: "video-1", itemId: "video-a", track: "video", lane: 0, start: 0, end: 10, sourceStart: 0 },
+    { id: "audio-1", itemId: "audio-a", track: "audio", lane: 0, start: 0, end: 10, sourceStart: 0 },
+    { id: "video-2", itemId: "video-b", track: "video", lane: 0, start: 20, end: 30, sourceStart: 0 },
+    { id: "other", itemId: "video-c", track: "video", lane: 1, start: 0, end: 10, sourceStart: 0 }
+  ];
+  const menu = (segmentId: string | null, time: number) => ({ x: 0, y: 0, time, segmentId });
+
+  it("cuts every selected clip, not only the one that was right-clicked", () => {
+    const ids = getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1", "video-2"], menu("video-1", 4));
+    // video-2 does not span the cut time, so it is left out: it cannot be split there.
+    expect(ids).toEqual(["video-1", "audio-1"]);
+  });
+
+  it("leaves the unselected clips alone, even when they sit under the cut", () => {
+    const ids = getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1"], menu("audio-1", 4));
+    expect(ids).not.toContain("other");
+  });
+
+  it("falls back to the clicked clip when it is not part of the selection", () => {
+    expect(getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1"], menu("video-2", 25))).toBeNull();
+  });
+
+  it("falls back to the clicked clip when only one clip is selected", () => {
+    expect(getContextMenuSplitSelectionIds(segments, ["video-1"], menu("video-1", 4))).toBeNull();
+  });
+
+  it("falls back when the menu was opened on empty space", () => {
+    expect(getContextMenuSplitSelectionIds(segments, ["video-1", "audio-1"], menu(null, 4))).toBeNull();
   });
 });

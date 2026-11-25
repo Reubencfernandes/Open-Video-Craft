@@ -17,13 +17,129 @@ export type RecordingStatus =
 
 export type RecordingTrack = "screen" | "camera" | "mic" | "system";
 
-export type MediaTrackKey =
+/**
+ * Media track ids persisted under `ProjectFile.tracks`.
+ *
+ * The first captured source of every kind keeps the legacy id so existing
+ * single-source projects keep loading, and every additional source gets a
+ * numbered id (`screen-2`, `camera-3`, ...). Audio tracks get a matching
+ * post-processed WAV id (`mic-2-wav`).
+ */
+export type LegacyMediaTrackKey =
   | "screen"
   | "camera"
   | "micWebm"
   | "micWav"
   | "systemWebm"
   | "systemWav";
+
+export type MultiSourceMediaTrackKey =
+  | `screen-${number}`
+  | `camera-${number}`
+  | `mic-${number}`
+  | `system-${number}`
+  | `mic-${number}-wav`
+  | `system-${number}-wav`;
+
+export type MediaTrackKey = LegacyMediaTrackKey | MultiSourceMediaTrackKey;
+
+/** Maximum number of captures accepted per recording kind. */
+export const maxRecordingTracksPerKind = 32;
+
+/** The media track id used by the first captured source of each kind. */
+export const legacyRecordingTrackIds: Record<RecordingTrack, LegacyMediaTrackKey> = {
+  screen: "screen",
+  camera: "camera",
+  mic: "micWebm",
+  system: "systemWebm"
+};
+
+const legacyMediaTrackKeys: readonly LegacyMediaTrackKey[] = [
+  "screen",
+  "camera",
+  "micWebm",
+  "micWav",
+  "systemWebm",
+  "systemWav"
+];
+const multiSourceTrackPattern = /^(screen|camera|mic|system)-([2-9]|[1-9][0-9])$/u;
+const multiSourceWavTrackPattern = /^(mic|system)-([2-9]|[1-9][0-9])-wav$/u;
+
+/**
+ * Stable media track id for the capture at `index` of `kind`. Index 0 keeps the
+ * legacy id, so a single-source recording is byte-for-byte compatible with
+ * projects written by earlier versions.
+ */
+export function createRecordingTrackId(kind: RecordingTrack, index: number): MediaTrackKey {
+  if (index <= 0) {
+    return legacyRecordingTrackIds[kind];
+  }
+
+  const suffix = Math.floor(index) + 1;
+  return `${kind}-${suffix}` as MediaTrackKey;
+}
+
+/** True when the media track id is a post-processed WAV output. */
+export function isWavMediaTrackKey(trackId: MediaTrackKey): boolean {
+  return trackId === "micWav" || trackId === "systemWav" || trackId.endsWith("-wav");
+}
+
+/** Post-processed WAV track id for a recorded audio track, or null for video. */
+export function createWavTrackId(trackId: MediaTrackKey): MediaTrackKey | null {
+  if (trackId === "micWebm") return "micWav";
+  if (trackId === "systemWebm") return "systemWav";
+  if (/^mic-\d+$/u.test(trackId)) return `${trackId}-wav` as MediaTrackKey;
+  if (/^system-\d+$/u.test(trackId)) return `${trackId}-wav` as MediaTrackKey;
+  return null;
+}
+
+/** Recording kind a media track id belongs to, or null when it is unknown. */
+export function getRecordingKindForTrackId(trackId: string): RecordingTrack | null {
+  if (trackId === "screen" || /^screen-\d+$/u.test(trackId)) return "screen";
+  if (trackId === "camera" || /^camera-\d+$/u.test(trackId)) return "camera";
+  if (trackId === "micWebm" || trackId === "micWav" || /^mic-\d+(-wav)?$/u.test(trackId)) {
+    return "mic";
+  }
+  if (
+    trackId === "systemWebm" || trackId === "systemWav" ||
+    /^system-\d+(-wav)?$/u.test(trackId)
+  ) {
+    return "system";
+  }
+  return null;
+}
+
+/** Parse and bound a persisted media track id; null for anything unexpected. */
+export function parseMediaTrackKey(value: unknown): MediaTrackKey | null {
+  if (typeof value !== "string" || value.length === 0 || value.length > 32) {
+    return null;
+  }
+  if (legacyMediaTrackKeys.includes(value as LegacyMediaTrackKey)) {
+    return value as LegacyMediaTrackKey;
+  }
+  if (multiSourceTrackPattern.test(value) || multiSourceWavTrackPattern.test(value)) {
+    return value as MediaTrackKey;
+  }
+  return null;
+}
+
+/** One captured source and the media track it is recorded to. */
+export interface RecordingCapture {
+  trackId: MediaTrackKey;
+  kind: RecordingTrack;
+  /** Desktop capturer source id for screens/windows, media device id otherwise. */
+  sourceId: string | null;
+  label: string;
+  mimeType: string;
+}
+
+/** Persisted description of a captured track (no mime type; see `tracks`). */
+export interface ProjectRecordingTrack {
+  trackId: MediaTrackKey;
+  kind: RecordingTrack;
+  sourceId: string | null;
+  label: string;
+}
 
 export interface SourceSummary {
   id: string;
@@ -134,8 +250,12 @@ export interface ProjectFile {
   updatedAt: string;
   status: RecordingStatus;
   source: ProjectSource | null;
+  /** Every captured screen/window; absent on legacy single-source projects. */
+  sources?: ProjectSource[];
   devices: ProjectDevices;
   tracks: Partial<Record<MediaTrackKey, ProjectTrack>>;
+  /** Capture plan for multi-source recordings; absent on legacy projects. */
+  recordingTracks?: ProjectRecordingTrack[];
   durationMs: number | null;
   startedAt: string | null;
   stoppedAt: string | null;
@@ -179,6 +299,8 @@ export interface RenameProjectRequest {
 export interface StartRecordingRequest {
   projectId: string;
   source: ProjectSource;
+  /** All captured screens/windows; `source` stays the first one. */
+  sources?: ProjectSource[];
   devices: ProjectDevices;
   tracks: {
     screen: { enabled: true; mimeType: string };
@@ -186,6 +308,11 @@ export interface StartRecordingRequest {
     mic: { enabled: boolean; mimeType: string | null };
     system: { enabled: boolean; mimeType: string | null };
   };
+  /**
+   * One entry per captured track. Omitted by older renderers, in which case
+   * main derives the tracks from the legacy `tracks` block.
+   */
+  captures?: RecordingCapture[];
 }
 
 export interface StopRecordingRequest {
@@ -193,9 +320,19 @@ export interface StopRecordingRequest {
   durationMs: number;
 }
 
+export interface BackgroundRemovalStatus {
+  status: "idle" | "downloading-model" | "processing" | "done" | "error" | "cancelled";
+  progress: number;
+  message: string | null;
+}
+
 export interface WriteChunkRequest {
   projectId: string;
-  track: RecordingTrack;
+  /**
+   * Media track id (`screen`, `screen-2`, `micWebm`, ...). The legacy
+   * recording kinds `camera`/`mic`/`system` are still accepted.
+   */
+  track: RecordingTrack | MediaTrackKey;
   chunk: ArrayBuffer;
 }
 
@@ -432,7 +569,7 @@ export interface UndoAgentEditRequest {
 
 export type ExportVideoFormat = "mp4" | "webm" | "mov";
 
-export type ExportResolution = "source" | "720p" | "1080p" | "1440p";
+export type ExportResolution = "source" | "720p" | "1080p" | "1440p" | "vertical";
 export type ExportSubtitleMode = "burn-in" | "sidecar" | "none";
 
 export interface ExportVideoRequest {

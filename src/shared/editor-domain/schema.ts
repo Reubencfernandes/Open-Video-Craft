@@ -3,6 +3,7 @@ import type {
   AudioLevelState,
   CameraContentTransform,
   ClipTransition,
+  ClipEdgeTransition,
   EditorDocument,
   EditorImportRecord,
   EditorMutation,
@@ -20,7 +21,7 @@ import type {
 export function createDefaultEditorState(): EditorStateSnapshot {
   return {
     v: 2,
-    timelineSegments: [], zoomEffects: [], speedEffects: [], transitions: [], subtitles: [], textOverlays: [],
+    timelineSegments: [], zoomEffects: [], speedEffects: [], transitions: [], edgeTransitions: [], subtitles: [], textOverlays: [],
     subtitleLanguage: null, subtitleStyle: "karaoke", layoutMode: "bubble",
     backgroundStyle: "real-world-6", activeBackgroundCategory: "image",
     cameraSize: 24, cameraPosition: "bottom-right", cameraShape: "circle",
@@ -78,12 +79,23 @@ export function parseEditorDocument(value: unknown): EditorDocument | null {
   return null;
 }
 
+/** A crop is kept inside the frame and never removes the whole picture. */
+export function isScreenCrop(value: unknown): value is { top: number; right: number; bottom: number; left: number } {
+  if (!isRecord(value)) return false;
+  const { top, right, bottom, left } = value;
+  if (!finite(top) || !finite(right) || !finite(bottom) || !finite(left)) return false;
+  if (top < 0 || right < 0 || bottom < 0 || left < 0) return false;
+  if (top > 60 || right > 60 || bottom > 60 || left > 60) return false;
+  return top + bottom < 90 && left + right < 90;
+}
+
 /** Runtime guard used at every renderer, main-process, and MCP trust boundary. */
 export function validateEditorStateSnapshot(value: unknown): value is EditorStateSnapshot {
   if (!isRecord(value) || value.v !== 2) return false;
   return isArrayOf(value.timelineSegments, isTimelineSegment) &&
     isArrayOf(value.zoomEffects, isZoomEffect) && isArrayOf(value.speedEffects, isSpeedEffect) &&
     isArrayOf(value.transitions ?? [], isClipTransition) &&
+    isArrayOf(value.edgeTransitions ?? [], isClipEdgeTransition) &&
     isArrayOf(value.subtitles, isSubtitleSegment) &&
     isArrayOf(value.textOverlays ?? [], isTextOverlay) &&
     (value.subtitleLanguage === null || typeof value.subtitleLanguage === "string") &&
@@ -96,6 +108,7 @@ export function validateEditorStateSnapshot(value: unknown): value is EditorStat
     oneOf(value.cameraBorderStyle, ["none", "light", "accent"]) &&
     isCameraContentTransform(value.cameraContentTransform) && oneOf(value.videoCornerStyle, ["flat", "soft", "round"]) &&
     isXYZ(value.screenPosition, ["x", "y", "scale"]) && oneOf(value.screenAspectRatio, ["auto", "16:9", "16:10", "4:3"]) &&
+    (value.screenCrop === undefined || isScreenCrop(value.screenCrop)) &&
     isXYZ(value.cameraFrame, ["x", "y", "size"]) && finite(value.masterVolume) && isAudioLevels(value.audioLevels) &&
     (value.youtubeVolume === undefined || (() => {
       const setting = value.youtubeVolume as { enabled?: unknown; targetLufs?: unknown; truePeakDb?: unknown };
@@ -147,6 +160,13 @@ export function isTextOverlay(value: unknown): value is TextOverlay {
     oneOf(value.animation, ["none", "fade", "pop", "slide-up", "fade-in-out", "pop-in-out", "slide-in-out"]);
 }
 
+function isClipEdgeTransition(value: unknown): value is ClipEdgeTransition {
+  return isRecord(value) && typeof value.id === "string" &&
+    typeof value.segmentId === "string" && oneOf(value.edge, ["start", "end"]) &&
+    oneOf(value.type, ["crossfade", "fade-black", "slide-left", "wipe-left"]) &&
+    finite(value.duration) && value.duration >= 0.1 && value.duration <= 2;
+}
+
 function isClipTransition(value: unknown): value is ClipTransition {
   return isRecord(value) && typeof value.id === "string" &&
     typeof value.fromSegmentId === "string" && typeof value.toSegmentId === "string" &&
@@ -186,7 +206,18 @@ function isEditorMutation(value: unknown): value is EditorMutation {
 function isTimelineSegment(value: unknown): value is TimelineSegment {
   return hasTimedId(value) && typeof value.itemId === "string" && oneOf(value.track, ["video", "audio"]) &&
     finite(value.lane) && Number.isSafeInteger(value.lane) && value.lane >= 0 && finite(value.sourceStart) && value.sourceStart >= 0 &&
-    (value.pendingDuration === undefined || typeof value.pendingDuration === "boolean");
+    (value.pendingDuration === undefined || typeof value.pendingDuration === "boolean") &&
+    (value.hidden === undefined || typeof value.hidden === "boolean") &&
+    (value.layout === undefined ||
+      oneOf(value.layout, ["screen-only", "camera-only", "bubble", "bubble-fill", "presenter", "side-by-side", "side-overlap"])) &&
+    (value.cameraStyle === undefined || isCameraClipStyle(value.cameraStyle));
+}
+
+/** Clip-level webcam shape/border, each property optional. */
+function isCameraClipStyle(value: unknown): boolean {
+  return isRecord(value) &&
+    (value.shape === undefined || oneOf(value.shape, ["circle", "rounded", "square"])) &&
+    (value.border === undefined || oneOf(value.border, ["none", "light", "accent"]));
 }
 
 function isZoomEffect(value: unknown): value is ZoomEffect {

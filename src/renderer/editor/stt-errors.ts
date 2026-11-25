@@ -33,6 +33,11 @@ export function formatSpeechToTextError(
     return `${providerName} transcription was stopped.`;
   }
   if (/failed to fetch|network error|network request failed|econnreset|enotfound/.test(normalized)) {
+    // The local model is downloaded on first use; on a cloud provider the same
+    // failure really is a connection problem.
+    if (provider === "whisper-local") {
+      return "Whisper needs a one-time download of its speech model (about 70 MB) from huggingface.co. Check the connection and try again, or switch the speech-to-text provider to Gemini in AI settings.";
+    }
     return `${providerName} could not be reached. Check your internet connection and try again.`;
   }
   if (/out of memory|allocation failed|memory access out of bounds/.test(normalized)) {

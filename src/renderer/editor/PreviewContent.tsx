@@ -1,15 +1,16 @@
 /**
- * Renders whatever the playhead is over inside the preview frame: image,
- * project composition (screen + camera bubble), or plain video, plus the
- * subtitle overlay and layout-edit handles.
+ * Renders whatever the playhead is over inside the preview frame: the base
+ * picture (recorded screen or imported video) with the webcam layer above it,
+ * plus the subtitle overlay and layout-edit handles.
  */
 import type { CSSProperties, PointerEvent as ReactPointerEvent, RefObject } from "react";
+import { MaskedCameraVideo } from "./MaskedCameraVideo";
+import { noCameraRecordingMessage } from "./composition-layers";
 import { PreviewVideo } from "./PreviewVideo";
 import type { PreviewQuality } from "./preview-quality";
 import { clampNumber } from "./utils";
 import type {
   EditorMediaItem,
-  LayoutMode,
   ScreenLayoutDragMode,
   SubtitleSegment,
   SubtitleStyle,
@@ -43,24 +44,26 @@ const handleClassByMode: Record<ScreenLayoutDragMode, string> = {
 };
 
 /**
- * Renders whatever the playhead is currently over inside the preview frame:
- * - an image asset,
- * - the project composition (screen video + optional camera bubble), or
- * - a plain imported video.
- *
- * Layout positioning is passed in via React styles so the component can stay
- * Tailwind-only while still supporting freeform screen/camera dragging.
+ * Composites the base picture with the webcam layer above it. Either layer can
+ * be missing: `camera-only` layouts and a cut-away screen still show the
+ * webcam, and a screen-only preset keeps the picture while hiding the webcam.
  */
 export function PreviewContent(props: {
-  item: EditorMediaItem;
-  isProjectCompositionSelected: boolean;
-  projectCamera: EditorMediaItem | null;
-  layoutMode: LayoutMode;
+  /** Base layer media: recorded screen, imported video or image. */
+  item: EditorMediaItem | null;
+  /** Webcam layer media: the selected camera clip or the single-camera overlay. */
+  cameraItem: EditorMediaItem | null;
   screenStyle: CSSProperties;
+  /** Style for the media inside the screen frame; carries the crop transform. */
+  screenContentStyle?: CSSProperties;
+  /** Mask video that gives the webcam a transparent background. */
+  cameraMaskUrl?: string | null;
   cameraStyle: CSSProperties | null;
   cameraVideoStyle: CSSProperties;
   screenEditEnabled: boolean;
   cameraEditEnabled: boolean;
+  /** True only for a camera-only preset without any webcam to fill it. */
+  showNoCameraRecording: boolean;
   activeSubtitle: SubtitleSegment | null;
   subtitleStyle: SubtitleStyle;
   currentTime: number;
@@ -81,39 +84,29 @@ export function PreviewContent(props: {
   onScreenDimensions?: (width: number, height: number) => void;
   onSubtitleClick: (subtitleId: string) => void;
 }) {
-  if (props.item.kind === "image") {
-    return (
-      <>
-        <img className={mediaFrameClassName} style={props.screenStyle} src={props.item.url} alt="" />
-        <ScreenEditOverlay
-          enabled={props.screenEditEnabled}
-          style={props.screenStyle}
-          onPointerDown={props.onScreenEditPointerDown}
-        />
-        <SubtitleOverlay
-          subtitle={props.activeSubtitle}
-          currentTime={props.currentTime}
-          style={props.subtitleStyle}
-          onClick={props.onSubtitleClick}
-        />
-      </>
-    );
-  }
+  const base = props.item;
+  const camera = props.cameraItem;
 
-  if (props.isProjectCompositionSelected) {
-    const showScreen = props.layoutMode !== "camera-only";
-    const showCamera = Boolean(props.projectCamera && props.layoutMode !== "screen-only");
-
-    return (
-      <>
-        {showScreen ? (
-          <>
+  return (
+    <>
+      {base?.kind === "image" ? (
+        <>
+          <img className={mediaFrameClassName} style={props.screenStyle} src={base.url} alt="" />
+          <ScreenEditOverlay
+            enabled={props.screenEditEnabled}
+            style={props.screenStyle}
+            onPointerDown={props.onScreenEditPointerDown}
+          />
+        </>
+      ) : base ? (
+        <>
+          <div className={mediaFrameClassName} style={props.screenStyle}>
             <PreviewVideo
               videoRef={props.mainVideoRef}
               quality={props.previewQuality}
-              className={mediaFrameClassName}
-              style={props.screenStyle}
-              src={props.item.url}
+              className="absolute inset-0 h-full w-full"
+              style={props.screenContentStyle}
+              src={base.url}
               // ovc-media:// / ovc-import:// are cross-origin to the page; without
               // this the WebAudio meter graph (audio-meter.ts) is CORS-tainted and
               // outputs silence. The protocol handlers send Access-Control-Allow-Origin: *.
@@ -130,75 +123,52 @@ export function PreviewContent(props: {
                 props.onMediaReady();
               }}
             />
-            <ScreenEditOverlay
-              enabled={props.screenEditEnabled}
-              style={props.screenStyle}
-              onPointerDown={props.onScreenEditPointerDown}
-            />
-          </>
-        ) : null}
-        {showCamera && props.projectCamera ? (
-          <>
-            <div className={mediaFrameClassName} style={props.cameraStyle ?? undefined}>
+          </div>
+          <ScreenEditOverlay
+            enabled={props.screenEditEnabled}
+            style={props.screenStyle}
+            onPointerDown={props.onScreenEditPointerDown}
+          />
+        </>
+      ) : null}
+      {camera ? (
+        <>
+          <div className={mediaFrameClassName} style={props.cameraStyle ?? undefined}>
+            {props.cameraMaskUrl ? (
+              <MaskedCameraVideo
+                videoRef={props.cameraRef}
+                cameraUrl={camera.url}
+                maskUrl={props.cameraMaskUrl}
+                quality={props.previewQuality}
+                videoStyle={props.cameraVideoStyle}
+                onReady={props.onMediaReady}
+              />
+            ) : (
               <PreviewVideo
                 videoRef={props.cameraRef}
                 quality={props.previewQuality}
                 className="absolute inset-0 size-full border-0 bg-transparent"
                 style={props.cameraVideoStyle}
-                src={props.projectCamera.url}
+                src={camera.url}
                 crossOrigin="anonymous"
                 playsInline
                 muted
                 onCanPlay={props.onMediaReady}
               />
-            </div>
-            <CameraEditOverlay
-              enabled={props.cameraEditEnabled}
-              style={props.cameraStyle}
-              onPointerDown={props.onCameraEditPointerDown}
-            />
-          </>
-        ) : null}
-        {props.layoutMode === "camera-only" && !props.projectCamera ? (
-          <div className="grid size-full place-items-center text-sm font-bold text-slate-400">
-            No camera recording for this project.
+            )}
           </div>
-        ) : null}
-        <SubtitleOverlay
-          subtitle={props.activeSubtitle}
-          currentTime={props.currentTime}
-          style={props.subtitleStyle}
-          onClick={props.onSubtitleClick}
-        />
-      </>
-    );
-  }
-
-  return (
-    <>
-      <PreviewVideo
-        videoRef={props.mainVideoRef}
-        quality={props.previewQuality}
-        className={mediaFrameClassName}
-        style={props.screenStyle}
-        src={props.item.url}
-        crossOrigin="anonymous"
-        playsInline
-        onCanPlay={props.onMediaReady}
-        onLoadedMetadata={(event) => {
-          props.onDuration(event.currentTarget.duration);
-          props.onScreenDimensions?.(
-            event.currentTarget.videoWidth,
-            event.currentTarget.videoHeight
-          );
-          props.onMediaReady();
-        }}
-      />
-      <ScreenEditOverlay
-        enabled={props.screenEditEnabled}
-        style={props.screenStyle}
-        onPointerDown={props.onScreenEditPointerDown}
-      />
+          <CameraEditOverlay
+            enabled={props.cameraEditEnabled}
+            style={props.cameraStyle}
+            onPointerDown={props.onCameraEditPointerDown}
+          />
+        </>
+      ) : null}
+      {props.showNoCameraRecording ? (
+        <div className="grid size-full place-items-center text-sm font-bold text-slate-400">
+          {noCameraRecordingMessage}
+        </div>
+      ) : null}
       <SubtitleOverlay
         subtitle={props.activeSubtitle}
         currentTime={props.currentTime}

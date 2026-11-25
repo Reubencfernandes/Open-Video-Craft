@@ -50,3 +50,18 @@ describe("analysis fingerprint input", () => {
     expect(createAnalysisFingerprintInput(project, editor, [])).toBe(createAnalysisFingerprintInput(project, editor, []));
   });
 });
+
+describe("speech-to-text error copy", () => {
+  it("explains the one-time model download instead of blaming the connection", async () => {
+    const { formatSpeechToTextError } = await import("../src/renderer/editor/stt-errors");
+    const message = formatSpeechToTextError(new Error("Failed to fetch"), "whisper-local");
+    expect(message).toContain("one-time download");
+    expect(message).toContain("Gemini");
+  });
+
+  it("keeps a plain connection message for a cloud provider", async () => {
+    const { formatSpeechToTextError } = await import("../src/renderer/editor/stt-errors");
+    const message = formatSpeechToTextError(new Error("Failed to fetch"), "gemini");
+    expect(message).toContain("could not be reached");
+  });
+});

@@ -1,81 +1,36 @@
-/** Record microphone/camera clips into the current project without stopping preview. */
-import { useCallback, useEffect, useRef, useState } from "react";
+/**
+ * Recording from inside a project (S1 follow-up).
+ *
+ * The editor's record buttons open the same recorder the app uses outside a
+ * project — source grid, multiple monitors and cameras, quality, microphone and
+ * system audio — instead of capturing straight from the renderer. Nothing is
+ * added to the current timeline: the recording becomes its own project, and the
+ * owner decides later whether to bring it in.
+ */
+import { useCallback, useState } from "react";
 import type { ImportedMediaFile } from "../../shared/types";
 
 export type ProjectRecordKind = "audio" | "video";
 
-export function useProjectClipRecorder(params: {
+export function useProjectClipRecorder(_params: {
   projectId: string | null;
   onImported: (files: ImportedMediaFile[]) => void;
 }) {
-  const [kind, setKind] = useState<ProjectRecordKind | null>(null);
+  const [kind] = useState<ProjectRecordKind | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
-  const stopStreams = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-  }, []);
-
-  useEffect(() => () => {
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-    stopStreams();
-  }, [stopStreams]);
-
-  const start = useCallback(async (nextKind: ProjectRecordKind) => {
-    const projectId = params.projectId;
-    if (kind || !projectId) return;
+  const start = useCallback(async (_nextKind: ProjectRecordKind) => {
     setError(null);
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setError("Microphone or camera recording is not available in this browser.");
-      return;
-    }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: nextKind === "video"
-      });
-      streamRef.current = stream;
-      const chunks: Blob[] = [];
-      const recorder = new MediaRecorder(stream);
-      recorderRef.current = recorder;
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
-      };
-      recorder.onstop = () => {
-        setKind(null);
-        stopStreams();
-        void (async () => {
-          try {
-            const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-            if (blob.size === 0) throw new Error("No media was recorded.");
-            const requestId = crypto.randomUUID();
-            const files = await window.openVideoCraft.editor.importRecordedClip({
-              projectId,
-              requestId,
-              name: `recorded-${nextKind}-${requestId}.webm`,
-              data: await blob.arrayBuffer()
-            });
-            params.onImported(files);
-          } catch (cause) {
-            setError(cause instanceof Error ? cause.message : String(cause));
-          }
-        })();
-      };
-      recorder.start();
-      setKind(nextKind);
+      const opened = await window.openVideoCraft.windows.openRecorderController();
+      if (!opened) setError("The recorder window could not be opened.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-      setKind(null);
-      stopStreams();
     }
-  }, [kind, params, stopStreams]);
-
-  const stop = useCallback(() => {
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-    setKind(null);
   }, []);
+
+  // The standalone recorder owns its own stop and cancel controls.
+  const stop = useCallback(() => undefined, []);
 
   return { error, kind, start, stop };
 }

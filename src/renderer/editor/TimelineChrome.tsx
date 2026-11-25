@@ -3,6 +3,9 @@
  * right-click context menu.
  */
 import {
+  AlignHorizontalJustifyStart,
+  Eye,
+  EyeOff,
   Maximize2,
   Minus,
   Plus,
@@ -176,18 +179,24 @@ export function TimelinePlayhead(props: {
   );
 }
 
-/** Right-click menu for the timeline: split at the clicked time or delete. */
+/** Right-click menu for the timeline: volume/fades, split, hide and delete. */
 export function TimelineContextMenuView(props: {
   x: number;
   y: number;
   canSplit: boolean;
   canDelete: boolean;
+  canToggleHidden?: boolean;
+  /** Every addressed clip is already deactivated, so the command reads "Show". */
+  clipsHidden?: boolean;
+  /** Packs the addressed clips back to back, removing the empty space around them. */
+  onCloseGaps?: () => void;
   volume?: number;
   onVolumeChange?: (volume: number) => void;
   fadeIn?: number;
   fadeOut?: number;
   onFadeChange?: (patch: { fadeIn?: number; fadeOut?: number }) => void;
   onSplit: () => void;
+  onToggleHidden?: () => void;
   onDelete: () => void;
 }) {
   const itemClassName =
@@ -249,6 +258,27 @@ export function TimelineContextMenuView(props: {
       <button type="button" className={itemClassName} disabled={!props.canSplit} onClick={props.onSplit}>
         <Scissors size={14} />
         Split
+      </button>
+      {props.onCloseGaps ? (
+        <button
+          type="button"
+          className={itemClassName}
+          data-context-menu-close-gaps
+          onClick={() => props.onCloseGaps?.()}
+        >
+          <AlignHorizontalJustifyStart size={14} />
+          Close gaps
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className={itemClassName}
+        data-context-menu-hide
+        disabled={!props.canToggleHidden}
+        onClick={() => props.onToggleHidden?.()}
+      >
+        {props.clipsHidden ? <Eye size={14} /> : <EyeOff size={14} />}
+        {props.clipsHidden ? "Show" : "Hide"}
       </button>
       <button
         type="button"

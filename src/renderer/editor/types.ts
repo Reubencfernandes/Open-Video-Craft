@@ -4,7 +4,9 @@
  */
 import type { ImportedMediaKind } from "../../shared/types";
 import type {
+  CameraClipStyle,
   CameraFrame,
+  LayoutMode,
   TimelineSegment,
   TimelineTrackKind
 } from "../../shared/editor-domain";
@@ -13,15 +15,18 @@ export type {
   BackgroundCategory,
   BackgroundStyle,
   CameraBorderStyle,
+  CameraClipStyle,
   CameraContentTransform,
   CameraFrame,
   CameraPosition,
   CameraShape,
   ClipTransition,
+  ClipEdgeTransition,
   CalloutBoxStyle,
   ClipTransitionType,
   LayoutMode,
   ScreenAspectRatio,
+  ScreenCrop,
   SpeedEffect,
   SpeedRate,
   SubtitleSegment,
@@ -63,6 +68,12 @@ export type EditorMediaItem = {
   duration: number | null;
   importId?: string;
   extension?: string;
+  /**
+   * Video channel of a multi-source recording. Every captured video source
+   * starts together at time 0 on its own channel, so the owner can pick which
+   * one is shown by trimming or hiding clips.
+   */
+  channel?: number;
 };
 
 export type TimelineMediaClip = {
@@ -73,6 +84,12 @@ export type TimelineMediaClip = {
   start: number;
   duration: number;
   sourceStart: number;
+  /** Deactivated clip: kept on the timeline, not shown or heard. */
+  hidden?: boolean;
+  /** Layout this clip imposes while it is on screen. */
+  layout?: LayoutMode;
+  /** Webcam shape/border this clip imposes while it is on screen. */
+  cameraStyle?: CameraClipStyle;
 };
 
 export type TimelineContextMenu = {
@@ -89,6 +106,7 @@ export type TimelineLaneId =
   | "speed"
   | "subtitles"
   | "text"
+  | `video:${number}`
   | `audio:${number}`;
 
 /** Time and lane span painted by a mouse marquee gesture on the timeline. */

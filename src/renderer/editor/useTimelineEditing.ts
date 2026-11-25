@@ -21,11 +21,15 @@ import type {
 } from "react";
 import {
   areTimelineSegmentsEqual,
+  canSplitTimelineSegment,
   getTimelineMediaDuration,
   getSnappedInsertStart,
+  getTimelinePackAnchor,
   getTimelineTrackKind,
   moveTimelineSegment,
+  packTimelineSegments,
   resolveAudioLane,
+  swapTimelineVideoChannels,
   syncTimelineSegments
 } from "./timeline-utils";
 import { removeTimelineSegmentsWithLinkedAudio } from "./timeline-links";
@@ -33,13 +37,18 @@ import { splitTimelineSegments } from "./timeline-split";
 import { createId } from "./utils";
 import { mediaDragType, textDragType } from "./types";
 import type {
+  CameraClipStyle,
   EditorMediaItem,
+  LayoutMode,
+  SpeedEffect,
   TimelineContextMenu,
   TimelineRangeSelection,
   TimelineSegment
 } from "./types";
 
 type UseTimelineEditingParams = {
+  /** Optional so the clamp knows how much a slowed clip stretches. */
+  speedEffects?: SpeedEffect[];
   activeDuration: number;
   audioElsRef: MutableRefObject<Map<string, HTMLAudioElement>>;
   getTimelineTimeFromClientX: (clientX: number) => number | null;
@@ -78,7 +87,38 @@ function createSplitSegmentId(sourceId: string): string {
   return `${sourceId}-split-${createId("clip")}`;
 }
 
+/**
+ * The clips a timeline Hide/Show command addresses. The menu is opened on one
+ * clip: a right-click inside the selection (or on empty space, which keeps the
+ * selection) acts on all of it, while a right-click on another clip has already
+ * re-targeted the selection to that clip, so the command follows it.
+ */
+export function resolveVisibilityToggleClipIds(
+  selectedIds: readonly string[],
+  targetId: string | null
+): string[] {
+  if (targetId) {
+    return selectedIds.includes(targetId) ? [...selectedIds] : [targetId];
+  }
+  return [...selectedIds];
+}
+
+/**
+ * Whether a Hide/Show command should read "Show": true only when every clip it
+ * addresses is already deactivated, so a mixed selection is hidden first.
+ */
+export function areTimelineSegmentsHidden(
+  segments: readonly TimelineSegment[],
+  ids: readonly string[]
+): boolean {
+  const targets = new Set(ids);
+  const addressed = segments.filter((segment) => targets.has(segment.id));
+  return addressed.length > 0 && addressed.every((segment) => segment.hidden === true);
+}
+
 export function useTimelineEditing(params: UseTimelineEditingParams) {
+  const speedEffectsRef = useRef<readonly SpeedEffect[]>([]);
+  speedEffectsRef.current = params.speedEffects ?? [];
   const {
     activeDuration,
     audioElsRef,
@@ -91,6 +131,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     scheduleTimelinePlaybackSync,
     seek,
     selectedItemId,
+  speedEffects,
     selectedTimelineItemId,
     selectedTimelineSegmentId,
     selectedTimelineSegmentIds,
@@ -159,7 +200,8 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
         current,
         timelineEditableItems,
         mediaDurationById,
-        newItemIds
+        newItemIds,
+        speedEffectsRef.current
       )
     );
     setSelectedTimelineSegmentId((current) =>
@@ -312,8 +354,8 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
 
   type DeleteOptions = { linked?: boolean };
 
-  // Deleting a recording's picture also removes the audio that played under
-  // it (unless `linked` is false), so the remaining clips stay in sync.
+  // Deleting a clip removes only that clip. Pass `{ linked: true }` to also
+  // drop the recording's audio in the same range.
   function removeTimelineSegments(ids: readonly string[], options: DeleteOptions = {}) {
     const result = removeTimelineSegmentsWithLinkedAudio(
       timelineSegments,
@@ -358,6 +400,204 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     setTimelineContextMenu(null);
   }
 
+
+  /**
+   * Deactivates or reactivates the selected clips. A deactivated clip keeps its
+   * place on the timeline, so the recording range is never lost, but the canvas
+   * and the export skip it — this is how the owner picks which recorded channel
+   * is on screen. Passing `targetIds` acts on exactly those clips, which is what
+   * the timeline menu does when it addresses the clip it was opened on.
+   */
+  function toggleSelectedTimelineHidden(targetIds?: readonly string[]) {
+    const ids = targetIds && targetIds.length > 0
+      ? [...targetIds]
+      : resolveVisibilityToggleClipIds(
+          selectedTimelineSegmentIds.length > 0
+            ? selectedTimelineSegmentIds
+            : selectedTimelineSegmentId
+              ? [selectedTimelineSegmentId]
+              : [],
+          null
+        );
+    if (ids.length === 0) {
+      return;
+    }
+    const targets = new Set(ids);
+    commitTimelineSegments((segments) => {
+      const shouldHide = segments.some(
+        (segment) => targets.has(segment.id) && segment.hidden !== true
+      );
+      return segments.map((segment) => {
+        if (!targets.has(segment.id)) return segment;
+        const { hidden: _hidden, ...rest } = segment;
+        return shouldHide ? { ...rest, hidden: true } : rest;
+      });
+    });
+    setTimelineContextMenu(null);
+  }
+
+  /** Ids a per-clip command addresses: the multi-selection, else the one clip. */
+  function selectedClipIds(): string[] {
+    return selectedTimelineSegmentIds.length > 0
+      ? selectedTimelineSegmentIds
+      : selectedTimelineSegmentId
+        ? [selectedTimelineSegmentId]
+        : [];
+  }
+
+  /**
+   * Gives the selected video clips the project layout, or removes their own so
+   * the project layout applies again. This is what lets one video switch layouts
+   * from clip to clip.
+   */
+  function setSelectedClipsLayout(layout: LayoutMode | null, currentLayout: LayoutMode) {
+    const ids = selectedClipIds();
+    if (ids.length === 0) return;
+    const targets = new Set(ids);
+    commitTimelineSegments((segments) =>
+      segments.map((segment) => {
+        if (!targets.has(segment.id) || segment.track !== "video") return segment;
+        const { layout: _layout, ...rest } = segment;
+        return layout === null ? rest : { ...rest, layout: layout ?? currentLayout };
+      })
+    );
+    setTimelineContextMenu(null);
+  }
+
+  /**
+   * Gives the selected video clips the current webcam shape/border, or removes
+   * their own so the project style applies again. Together with the layout
+   * override this lets one video change style from clip to clip.
+   */
+  function setSelectedClipsCameraStyle(style: CameraClipStyle | null) {
+    const ids = selectedClipIds();
+    if (ids.length === 0) return;
+    const targets = new Set(ids);
+    const clipStyle: CameraClipStyle | null = style === null
+      ? null
+      : {
+          ...(style.shape === undefined ? {} : { shape: style.shape }),
+          ...(style.border === undefined ? {} : { border: style.border })
+        };
+    commitTimelineSegments((segments) =>
+      segments.map((segment) => {
+        if (!targets.has(segment.id) || segment.track !== "video") return segment;
+        const { cameraStyle: _cameraStyle, ...rest } = segment;
+        return clipStyle === null ? rest : { ...rest, cameraStyle: clipStyle };
+      })
+    );
+    setTimelineContextMenu(null);
+  }
+
+  /** Selects every timeline clip so one action can address all of them. */
+  function selectAllTimelineClips() {
+    setSelectedTimelineSegmentIds(timelineSegments.map((segment) => segment.id));
+    setSelectedTimelineSegmentId(null);
+    setTimelineRangeSelection(null);
+  }
+
+  /** Swaps two adjacent video channels without changing clip timing. */
+  function swapVideoChannels(firstLane: number, secondLane: number) {
+    commitTimelineSegments((segments) =>
+      swapTimelineVideoChannels(segments, firstLane, secondLane)
+    );
+    setTimelineContextMenu(null);
+  }
+
+  /** Shows or hides every clip of one video channel at once. */
+  function toggleVideoLaneVisibility(lane: number) {
+    commitTimelineSegments((segments) => {
+      const laneClips = segments.filter(
+        (segment) => segment.track === "video" && segment.lane === lane
+      );
+      if (laneClips.length === 0) return segments;
+      const hide = laneClips.some((segment) => segment.hidden !== true);
+      return segments.map((segment) => {
+        if (segment.track !== "video" || segment.lane !== lane) return segment;
+        const { hidden: _hidden, ...rest } = segment;
+        return hide ? { ...rest, hidden: true } : rest;
+      });
+    });
+    setTimelineContextMenu(null);
+  }
+
+  /**
+   * Quick cleanup: packs the selected clips back to back, removing empty space
+   * between them and at their start. Without a selection every visible video
+   * clip packs from zero, so the leading and trailing gaps disappear too.
+   */
+  function closeTimelineGaps(targetIds?: readonly string[]) {
+    const explicit = targetIds ? [...targetIds] : [];
+    const selected = explicit.length > 0
+      ? explicit
+      : selectedTimelineSegmentIds.length > 0
+        ? selectedTimelineSegmentIds
+        : selectedTimelineSegmentId
+          ? [selectedTimelineSegmentId]
+          : [];
+    commitTimelineSegments((segments) => {
+      const ids = selected.length > 0
+        ? selected
+        : segments.filter((segment) => segment.track === "video" && segment.hidden !== true)
+            .map((segment) => segment.id);
+      return packTimelineSegments(segments, ids, getTimelinePackAnchor(segments, ids));
+    });
+    setTimelineContextMenu(null);
+  }
+
+  /**
+   * Cuts every selected clip at the same moment, so a multi-selection splits in
+   * one undoable step instead of one clip at a time.
+   */
+  function splitSelectedTimelineSegments(time: number, targetIds?: readonly string[]) {
+    const ids = targetIds
+      ? targetIds
+      : selectedTimelineSegmentIds.length > 0
+      ? selectedTimelineSegmentIds
+      : selectedTimelineSegmentId
+        ? [selectedTimelineSegmentId]
+        : [];
+    if (ids.length === 0) {
+      setTimelineContextMenu(null);
+      return;
+    }
+    const splitApplied = ids.some((id) => {
+      const segment = timelineSegments.find((item) => item.id === id);
+      return segment !== undefined && canSplitTimelineSegment(segment, time);
+    });
+    commitTimelineSegments((segments) => {
+      let next = segments;
+      for (const id of ids) {
+        const current = next.find((segment) => segment.id === id);
+        if (!current || !canSplitTimelineSegment(current, time)) continue;
+        const result = splitTimelineSegments(next, id, time, createSplitSegmentId);
+        if (result) next = result.segments;
+      }
+      // Nothing splittable leaves the segments array untouched, so the commit
+      // is a no-op: no undo entry and no selection change.
+      return next;
+    });
+    if (splitApplied) parkPlayheadAt(time);
+    setTimelineContextMenu(null);
+  }
+
+  /**
+   * Split whatever is selected at one time: every selected clip for a
+   * multi-selection, otherwise the single clip exactly as the toolbar always
+   * did, including its fallback to the clip under the playhead.
+   */
+  function parkPlayheadAt(time: number) {
+    window.queueMicrotask(() => seek(time));
+  }
+
+  function splitSelectionAtPlayhead(time: number) {
+    if (selectedTimelineSegmentIds.length > 1) {
+      splitSelectedTimelineSegments(time, selectedTimelineSegmentIds);
+      return;
+    }
+    splitTimelineSegment(selectedTimelineSegmentId, time);
+  }
+
   function splitTimelineSegment(segmentId: string | null, time: number) {
     const result = splitTimelineSegments(
       timelineSegments,
@@ -376,7 +616,7 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
     setSelectedTimelineSegmentId(result.right.id);
     setSelectedTimelineSegmentIds([result.right.id]);
     setTimelineRangeSelection(null);
-    window.queueMicrotask(() => seek(result.splitTime));
+    parkPlayheadAt(result.splitTime);
     setTimelineContextMenu(null);
   }
 
@@ -459,6 +699,15 @@ export function useTimelineEditing(params: UseTimelineEditingParams) {
 
   return {
     commitTimelineSegments,
+    closeTimelineGaps,
+    selectAllTimelineClips,
+    setSelectedClipsLayout,
+    setSelectedClipsCameraStyle,
+    toggleVideoLaneVisibility,
+    swapVideoChannels,
+    splitSelectedTimelineSegments,
+    splitSelectionAtPlayhead,
+    toggleSelectedTimelineHidden,
     createSplitSegmentId,
     deleteSelectedTimelineSegment,
     deleteTimelineSegment,

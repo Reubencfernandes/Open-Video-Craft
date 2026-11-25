@@ -11,6 +11,7 @@ import type {
   CameraPosition,
   CameraShape,
   ClipTransition,
+  ClipEdgeTransition,
   LayoutMode,
   ScreenAspectRatio,
   SpeedEffect,
@@ -28,6 +29,7 @@ import type {
   AudioCleanupState,
   AudioLevelState,
   EditorStateSnapshot,
+  ScreenCrop,
   PendingMediaImport,
   PendingMusicGeneration,
   PreviewQuality,
@@ -69,9 +71,12 @@ type RestoreEditorStateActions = {
   setPreviewQuality: (value: PreviewQuality) => void;
   setPreviewZoom: (value: number) => void;
   setScreenAspectRatio: (value: ScreenAspectRatio) => void;
+  /** Optional so a caller that does not track crops still restores state. */
+  setScreenCrop?: (value: ScreenCrop) => void;
   setScreenPosition: (value: ScreenPositionState) => void;
   setSpeedEffects: (value: SpeedEffect[]) => void;
   setTransitions: (value: ClipTransition[]) => void;
+  setEdgeTransitions: (value: ClipEdgeTransition[]) => void;
   setSubtitleLanguage: (value: string | null) => void;
   setSubtitleStyle: (value: SubtitleStyle) => void;
   setSubtitles: (value: SubtitleSegment[]) => void;
@@ -112,6 +117,7 @@ export function restoreEditorStateSnapshot(
     actions.setZoomEffects(snapshot.zoomEffects);
     actions.setSpeedEffects(snapshot.speedEffects);
     actions.setTransitions(snapshot.transitions ?? []);
+    actions.setEdgeTransitions(snapshot.edgeTransitions ?? []);
     actions.setSubtitles(snapshot.subtitles);
     actions.setTextOverlays(snapshot.textOverlays ?? []);
     actions.setSubtitleLanguage(snapshot.subtitleLanguage);
@@ -127,6 +133,7 @@ export function restoreEditorStateSnapshot(
     actions.setVideoCornerStyle(snapshot.videoCornerStyle);
     actions.setScreenPosition(snapshot.screenPosition);
     actions.setScreenAspectRatio(snapshot.screenAspectRatio);
+    actions.setScreenCrop?.(snapshot.screenCrop ?? { top: 0, right: 0, bottom: 0, left: 0 });
     actions.setCameraFrame(snapshot.cameraFrame);
     actions.setMasterVolume(snapshot.masterVolume);
     actions.setPendingMediaImport(snapshot.pendingMediaImport ?? null);

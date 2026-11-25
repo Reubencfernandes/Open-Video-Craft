@@ -4,69 +4,149 @@
  * speech-to-text.
  */
 import type WaveSurfer from "wavesurfer.js";
-import type { ImportedMediaFile, ProjectView } from "../../shared/types";
+import {
+  createWavTrackId,
+  type ImportedMediaFile,
+  type MediaTrackKey,
+  type ProjectView,
+  type RecordingTrack
+} from "../../shared/types";
 import type { EditorMediaItem } from "./types";
 import { clampNumber } from "./utils";
+
+/** One media item derived from a recorded source track. */
+export interface ProjectMediaTrackSpec {
+  readonly itemId: string;
+  readonly name: string;
+  readonly url: string;
+  readonly kind: "video" | "audio";
+  readonly track: "screen" | "camera" | "audio";
+  readonly usesWav: boolean;
+  /** Video channel for a multi-source recording; undefined for single source. */
+  readonly channel?: number;
+}
+
+/**
+ * Item ids used by single-source projects. Saved editor state references them,
+ * so the first recorded source of every kind must keep the same id forever.
+ */
+const legacyItemSuffixes: Partial<Record<MediaTrackKey, string>> = {
+  screen: "screen",
+  camera: "camera",
+  micWebm: "audio",
+  systemWebm: "system-audio"
+};
+
+const legacyRecordedOrder: ReadonlyArray<{
+  trackId: MediaTrackKey;
+  kind: RecordingTrack;
+  companion?: MediaTrackKey;
+}> = [
+  { trackId: "screen", kind: "screen" },
+  { trackId: "camera", kind: "camera" },
+  { trackId: "micWebm", kind: "mic", companion: "micWav" },
+  { trackId: "systemWebm", kind: "system", companion: "systemWav" }
+];
+
+type ProjectTracks = Pick<ProjectView, "id" | "tracks" | "recordingTracks" | "mediaUrls">;
+
+function recordedTrackPlan(
+  project: ProjectTracks
+): Array<{ trackId: MediaTrackKey; kind: RecordingTrack }> {
+  if (project.recordingTracks && project.recordingTracks.length > 0) {
+    return project.recordingTracks.map((track) => ({ trackId: track.trackId, kind: track.kind }));
+  }
+
+  const hasBytes = (trackId: MediaTrackKey | undefined): boolean =>
+    trackId !== undefined && (project.tracks[trackId]?.bytesWritten ?? 0) > 0;
+  return legacyRecordedOrder
+    .filter((entry) => hasBytes(entry.trackId) || hasBytes(entry.companion))
+    .map((entry) => ({ trackId: entry.trackId, kind: entry.kind }));
+}
+
+function trackNumber(trackId: string): string | null {
+  return trackId.match(/-(\d+)/u)?.[1] ?? null;
+}
+
+/**
+ * Every recorded source becomes its own media item, so additional monitors,
+ * cameras and microphones stay available instead of being dropped.
+ */
+export function projectMediaTrackSpecs(project: ProjectTracks): ProjectMediaTrackSpec[] {
+  const plan = recordedTrackPlan(project);
+  const screens = plan.filter((entry) => entry.kind === "screen");
+  const cameras = plan.filter((entry) => entry.kind === "camera");
+  // Channels are only needed once a second source of the same kind exists: the
+  // first screen stays the full-frame video and the first camera stays the
+  // floating overlay, so single-source projects keep their exact behavior.
+  const usesChannels = screens.length > 1 || cameras.length > 1;
+  const channels = new Map<string, number>();
+  if (usesChannels) {
+    let next = 0;
+    // Cameras occupy the upper timeline rows. With two screens and one camera
+    // the camera is a channel so the user can reorder and cut it explicitly.
+    for (const camera of cameras.length > 1 ? cameras : screens.length > 1 ? cameras : cameras.slice(1)) {
+      channels.set(camera.trackId, next++);
+    }
+    for (const screen of screens) channels.set(screen.trackId, next++);
+  }
+
+  // Channel numbers put cameras in the upper rows; media list order keeps the
+  // stable legacy screen-first ids and library layout.
+  const ordered = [...screens, ...cameras, ...plan.filter((entry) => entry.kind === "mic" || entry.kind === "system")];
+  const specs: ProjectMediaTrackSpec[] = [];
+
+  for (const { trackId, kind } of ordered) {
+    const isVideo = kind === "screen" || kind === "camera";
+    const wavTrackId = isVideo ? null : createWavTrackId(trackId);
+    const wavUrl = wavTrackId ? project.mediaUrls[wavTrackId] : undefined;
+    const url = wavUrl ?? project.mediaUrls[trackId];
+    if (!url) continue;
+
+    const number = trackNumber(trackId);
+    const suffix = legacyItemSuffixes[trackId] ??
+      `${isVideo ? kind : "audio"}${number === null ? "" : `-${number}`}`;
+    const channel = usedChannelFor(channels, trackId, isVideo);
+    specs.push({
+      itemId: `${project.id}:${suffix}`,
+      name: `${trackId}.${wavUrl ? "wav" : "webm"}`,
+      url,
+      kind: isVideo ? "video" : "audio",
+      track: isVideo ? kind : "audio",
+      usesWav: wavUrl !== undefined,
+      ...(channel === undefined ? {} : { channel })
+    });
+  }
+
+  return specs;
+}
+
+function usedChannelFor(
+  channels: Map<string, number>,
+  trackId: MediaTrackKey,
+  isVideo: boolean
+): number | undefined {
+  if (!isVideo) return undefined;
+  const channel = channels.get(trackId);
+  return channel !== undefined && Number.isFinite(channel) ? channel : undefined;
+}
 
 export function createProjectMedia(project: ProjectView | null): EditorMediaItem[] {
   if (!project) {
     return [];
   }
 
-  const items: EditorMediaItem[] = [];
   const duration = (project.durationMs ?? 0) / 1000 || null;
-
-  if (project.mediaUrls.screen) {
-    items.push({
-      id: `${project.id}:screen`,
-      name: "screen.webm",
-      url: project.mediaUrls.screen,
-      kind: "video",
-      origin: "project",
-      track: "screen",
-      duration
-    });
-  }
-
-  if (project.mediaUrls.camera) {
-    items.push({
-      id: `${project.id}:camera`,
-      name: "camera.webm",
-      url: project.mediaUrls.camera,
-      kind: "video",
-      origin: "project",
-      track: "camera",
-      duration
-    });
-  }
-
-  const audioUrl = project.mediaUrls.micWav ?? project.mediaUrls.micWebm;
-  if (audioUrl) {
-    items.push({
-      id: `${project.id}:audio`,
-      name: project.mediaUrls.micWav ? "mic.wav" : "mic.webm",
-      url: audioUrl,
-      kind: "audio",
-      origin: "project",
-      track: "audio",
-      duration
-    });
-  }
-
-  const systemAudioUrl = project.mediaUrls.systemWav ?? project.mediaUrls.systemWebm;
-  if (systemAudioUrl) {
-    items.push({
-      id: `${project.id}:system-audio`,
-      name: project.mediaUrls.systemWav ? "system.wav" : "system.webm",
-      url: systemAudioUrl,
-      kind: "audio",
-      origin: "project",
-      track: "audio",
-      duration
-    });
-  }
-
-  return items;
+  return projectMediaTrackSpecs(project).map((spec): EditorMediaItem => ({
+    id: spec.itemId,
+    name: spec.name,
+    url: spec.url,
+    kind: spec.kind,
+    origin: "project",
+    track: spec.track,
+    duration,
+    ...(spec.channel === undefined ? {} : { channel: spec.channel })
+  }));
 }
 
 export function toEditorMediaItem(

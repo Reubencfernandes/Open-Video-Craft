@@ -5,6 +5,7 @@ import type {
   EditorEditResult,
   EditorStateSnapshot,
   ClipTransition,
+  ClipEdgeTransition,
   SpeedEffect,
   SubtitleSegment,
   SubtitleWord,
@@ -423,6 +424,7 @@ function sequenceClips(
 function validateFinalState(state: EditorStateSnapshot): void {
   validateTimeline(state.timelineSegments);
   validateClipTransitions(state.timelineSegments, state.transitions ?? []);
+  validateClipEdgeTransitions(state.timelineSegments, state.edgeTransitions ?? []);
   if (!validateEditorStateSnapshot(state)) throw new Error("The edit plan produced an invalid editor state.");
   const duration = getEditorDuration(state);
   if (duration <= 0) return;
@@ -442,7 +444,8 @@ function validateFinalState(state: EditorStateSnapshot): void {
  */
 export function sanitizeClipTransitions(
   segments: TimelineSegment[],
-  transitions: readonly ClipTransition[]
+  transitions: readonly ClipTransition[],
+  edgeTransitions: readonly ClipEdgeTransition[] = []
 ): ClipTransition[] {
   const accepted: ClipTransition[] = [];
   for (const transition of transitions) {
@@ -456,12 +459,56 @@ export function sanitizeClipTransitions(
   return accepted;
 }
 
+/** Drops edge-transition metadata whose clip no longer exists. */
+export function sanitizeClipEdgeTransitions(
+  segments: readonly TimelineSegment[],
+  transitions: readonly ClipEdgeTransition[]
+): ClipEdgeTransition[] {
+  const ids = new Set(segments.filter((item) => item.track === "video").map((item) => item.id));
+  return transitions.filter((transition) => ids.has(transition.segmentId));
+}
+
+/** Validates isolated clip-start/clip-end transitions against their clips. */
+export function validateClipEdgeTransitions(
+  segments: readonly TimelineSegment[],
+  transitions: readonly ClipEdgeTransition[]
+): void {
+  const byId = new Map(segments.filter((item) => item.track === "video").map((item) => [item.id, item]));
+  const used = new Set<string>();
+  for (const transition of transitions) {
+    if (!Number.isFinite(transition.duration) || transition.duration < 0.1 || transition.duration > 2) {
+      throw new Error("Edge transition duration must be between 0.1 and 2 seconds.");
+    }
+    const clip = byId.get(transition.segmentId);
+    if (!clip) throw new Error(`Edge transition references unknown clip "${transition.segmentId}".`);
+    const key = `${transition.segmentId} ${transition.edge}`;
+    if (used.has(key)) throw new Error("A clip edge can contain only one transition.");
+    used.add(key);
+    if (transition.duration > clip.end - clip.start - 0.1) {
+      throw new Error(`Clip "${clip.id}" is too short for its edge transition.`);
+    }
+  }
+}
+
 export function validateClipTransitions(
   segments: TimelineSegment[],
   transitions: readonly ClipTransition[]
 ): void {
-  const videos = segments.filter((item) => item.track === "video").sort((a, b) => a.start - b.start);
-  const indexById = new Map(videos.map((segment, index) => [segment.id, index]));
+  const videos = segments.filter((item) => item.track === "video");
+  const byLane = new Map<number, TimelineSegment[]>();
+  for (const segment of videos) {
+    byLane.set(segment.lane, [...(byLane.get(segment.lane) ?? []), segment]);
+  }
+  const orderedByLane = new Map(
+    [...byLane].map(([lane, laneClips]) => [
+      lane,
+      [...laneClips].sort((a, b) => a.start - b.start)
+    ])
+  );
+  const indexById = new Map<string, { lane: number; index: number }>();
+  for (const [lane, laneClips] of orderedByLane) {
+    laneClips.forEach((segment, index) => indexById.set(segment.id, { lane, index }));
+  }
   const handleUsage = new Map<string, { incoming: number; outgoing: number }>();
   const boundaries = new Set<string>();
 
@@ -469,13 +516,21 @@ export function validateClipTransitions(
     if (!Number.isFinite(transition.duration) || transition.duration < 0.1 || transition.duration > 2) {
       throw new Error("Transition duration must be between 0.1 and 2 seconds.");
     }
-    const fromIndex = indexById.get(transition.fromSegmentId);
-    const toIndex = indexById.get(transition.toSegmentId);
-    if (fromIndex === undefined || toIndex !== fromIndex + 1) {
-      throw new Error("Transitions must connect adjacent video clips in timeline order.");
+    const fromLocation = indexById.get(transition.fromSegmentId);
+    const toLocation = indexById.get(transition.toSegmentId);
+    if (
+      fromLocation === undefined ||
+      toLocation === undefined ||
+      fromLocation.lane !== toLocation.lane ||
+      toLocation.index !== fromLocation.index + 1
+    ) {
+      throw new Error("Transitions must connect adjacent video clips in the same channel.");
     }
-    const from = videos[fromIndex];
-    const to = videos[toIndex];
+    const from = orderedByLane.get(fromLocation.lane)?.[fromLocation.index];
+    const to = orderedByLane.get(toLocation.lane)?.[toLocation.index];
+    if (!from || !to) {
+      throw new Error("Transitions must connect adjacent video clips in the same channel.");
+    }
     if (Math.abs(from.end - to.start) > 0.05) {
       throw new Error("Transitions require clips that meet at the same cut without a gap.");
     }
@@ -643,16 +698,23 @@ function findSegmentIndex(state: EditorStateSnapshot, id: string): number {
   return index;
 }
 
-function validateTimeline(segments: TimelineSegment[]): void {
+export function validateTimeline(segments: TimelineSegment[]): void {
   for (const segment of segments) {
     if (!isTimelineSegment(segment) || segment.start < 0 || segment.end - segment.start < 0.01) {
       throw new Error(`Invalid timeline clip "${segment.id}".`);
     }
   }
-  const videos = segments.filter((item) => item.track === "video").sort((a, b) => a.start - b.start);
-  for (let index = 1; index < videos.length; index += 1) {
-    if (videos[index].start < videos[index - 1].end - 0.01) {
-      throw new Error(`Video clips "${videos[index - 1].id}" and "${videos[index].id}" overlap.`);
+  const videos = segments.filter((item) => item.track === "video");
+  const byLane = new Map<number, TimelineSegment[]>();
+  for (const segment of videos) {
+    byLane.set(segment.lane, [...(byLane.get(segment.lane) ?? []), segment]);
+  }
+  for (const laneClips of byLane.values()) {
+    const ordered = [...laneClips].sort((a, b) => a.start - b.start);
+    for (let index = 1; index < ordered.length; index += 1) {
+      if (ordered[index].start < ordered[index - 1].end - 0.01) {
+        throw new Error(`Video clips "${ordered[index - 1].id}" and "${ordered[index].id}" overlap.`);
+      }
     }
   }
 }
