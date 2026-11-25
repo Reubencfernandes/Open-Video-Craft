@@ -21,7 +21,42 @@ export const PROTOCOL_V1_EVENT_NAMES = [
   "device.lost"
 ] as const;
 
-export type ProtocolV1EventName = (typeof PROTOCOL_V1_EVENT_NAMES)[number];
+export type ProtocolV1EventName =
+  | (typeof PROTOCOL_V1_EVENT_NAMES)[number]
+  | (typeof PROTOCOL_V1_INPUT_EVENT_NAMES)[number];
+
+/**
+ * Optional input-capture events emitted by the `ovc-click-capture` sidecar. They
+ * are protocol v1 lines like every other event, but they are not part of the
+ * mandatory capture-helper set: a recorder that never launches the sidecar
+ * stays valid, and an idle sidecar is never indistinguishable from a working
+ * one because `input.permission` always reports the Input Monitoring verdict.
+ *
+ * Geometry invariants: `display.metrics` and `input.click` share the Quartz
+ * global display coordinate space in **points** (not pixels), so a click can be
+ * normalized as `(x - originX) / width` independent of the display's scale
+ * factor. Screen y grows downward from the main display's top-left corner.
+ */
+export const PROTOCOL_V1_INPUT_EVENT_NAMES = [
+  "display.metrics",
+  "input.click",
+  "input.permission"
+] as const;
+
+const PROTOCOL_V1_ACCEPTED_EVENT_NAMES: readonly ProtocolV1EventName[] = [
+  ...PROTOCOL_V1_EVENT_NAMES,
+  ...PROTOCOL_V1_INPUT_EVENT_NAMES
+];
+
+/** Input Monitoring verdict reported by the click sidecar. */
+export type InputMonitoringStatus = "granted" | "denied" | "not-determined" | "unavailable";
+
+export const INPUT_MONITORING_STATUSES = [
+  "granted",
+  "denied",
+  "not-determined",
+  "unavailable"
+] as const;
 
 export type CaptureRunMode = "dry-run" | "live";
 export type SystemAudioMode = "sck" | "tap";
@@ -114,6 +149,37 @@ export interface DeviceLostEvent extends ProtocolV1Envelope {
   readonly reason: string;
 }
 
+/** Active display bounds in the global point coordinate space of `input.click`. */
+export interface DisplayMetricsEvent extends ProtocolV1Envelope {
+  readonly event: "display.metrics";
+  readonly displayId: string;
+  readonly originXPoints: number;
+  readonly originYPoints: number;
+  readonly widthPoints: number;
+  readonly heightPoints: number;
+  /** Backing scale (2 on Retina); informational, the bounds above stay in points. */
+  readonly scaleFactor: number;
+  readonly primary: boolean;
+}
+
+/** One global left click, timed on the shared host clock. */
+export interface InputClickEvent extends ProtocolV1Envelope {
+  readonly event: "input.click";
+  readonly clickIndex: number;
+  readonly clickHostNs: string;
+  readonly button: "left";
+  readonly displayId: string;
+  readonly xPoints: number;
+  readonly yPoints: number;
+}
+
+/** Explicit Input Monitoring verdict; absent capture is never silent. */
+export interface InputPermissionEvent extends ProtocolV1Envelope {
+  readonly event: "input.permission";
+  readonly capability: "input-monitoring";
+  readonly status: InputMonitoringStatus;
+}
+
 export type ProtocolV1Event =
   | SessionStartEvent
   | DevicesEvent
@@ -122,7 +188,10 @@ export type ProtocolV1Event =
   | PausesEvent
   | TrackFinalizedEvent
   | SessionFinalizedEvent
-  | DeviceLostEvent;
+  | DeviceLostEvent
+  | DisplayMetricsEvent
+  | InputClickEvent
+  | InputPermissionEvent;
 
 export type ProtocolV1ErrorCode = "PROTOCOL_INVALID_JSON" | "PROTOCOL_INVALID_EVENT" | "PROTOCOL_INVALID_FIELD";
 
@@ -190,6 +259,22 @@ function readFiniteNumber(record: JsonRecord, field: string): number {
   return value;
 }
 
+function readPositiveNumber(record: JsonRecord, field: string): number {
+  const value = readFiniteNumber(record, field);
+  if (value <= 0) {
+    throw new ProtocolV1Error("PROTOCOL_INVALID_FIELD", `${field} is not a positive number`);
+  }
+  return value;
+}
+
+function readBoolean(record: JsonRecord, field: string): boolean {
+  const value = record[field];
+  if (typeof value !== "boolean") {
+    throw new ProtocolV1Error("PROTOCOL_INVALID_FIELD", `${field} is not a boolean`);
+  }
+  return value;
+}
+
 function readHostNs(record: JsonRecord, field: string): string {
   const value = readString(record, field);
   try {
@@ -218,7 +303,7 @@ function readStringArray(record: JsonRecord, field: string): readonly string[] {
 
 function readEventName(record: JsonRecord): ProtocolV1EventName {
   const value = readString(record, "event");
-  const match = PROTOCOL_V1_EVENT_NAMES.find((candidate) => candidate === value);
+  const match = PROTOCOL_V1_ACCEPTED_EVENT_NAMES.find((candidate) => candidate === value);
   if (match === undefined) {
     throw new ProtocolV1Error("PROTOCOL_INVALID_EVENT", `unknown event ${JSON.stringify(value)}`);
   }
@@ -352,6 +437,36 @@ export function parseProtocolV1Line(line: string): ProtocolV1Event {
         event,
         trackId: readString(record, "trackId"),
         reason: readString(record, "reason")
+      };
+    case "display.metrics":
+      return {
+        ...envelope,
+        event,
+        displayId: readString(record, "displayId"),
+        originXPoints: readFiniteNumber(record, "originXPoints"),
+        originYPoints: readFiniteNumber(record, "originYPoints"),
+        widthPoints: readPositiveNumber(record, "widthPoints"),
+        heightPoints: readPositiveNumber(record, "heightPoints"),
+        scaleFactor: readPositiveNumber(record, "scaleFactor"),
+        primary: readBoolean(record, "primary")
+      };
+    case "input.click":
+      return {
+        ...envelope,
+        event,
+        clickIndex: readInteger(record, "clickIndex", 0),
+        clickHostNs: readHostNs(record, "clickHostNs"),
+        button: readLiteral(record, "button", ["left"] as const),
+        displayId: readString(record, "displayId"),
+        xPoints: readFiniteNumber(record, "xPoints"),
+        yPoints: readFiniteNumber(record, "yPoints")
+      };
+    case "input.permission":
+      return {
+        ...envelope,
+        event,
+        capability: readLiteral(record, "capability", ["input-monitoring"] as const),
+        status: readLiteral(record, "status", INPUT_MONITORING_STATUSES)
       };
   }
 }

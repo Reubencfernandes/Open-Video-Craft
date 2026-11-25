@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openvideocraft.local/protocol/capture/v1/schema.json",
   "title": "OVC capture helper protocol v1",
-  "description": "One JSON object per line on stdout. HostNs fields are decimal strings, never JSON numbers.",
+  "description": "One JSON object per line on stdout. HostNs fields are decimal strings, never JSON numbers. Display geometry and click points share the Quartz global display coordinate space in points, never pixels.",
   "type": "object",
   "required": ["v", "seq", "tHostNs", "event"],
   "properties": {
@@ -18,7 +18,10 @@
         "pauses",
         "track.finalized",
         "session.finalized",
-        "device.lost"
+        "device.lost",
+        "display.metrics",
+        "input.click",
+        "input.permission"
       ]
     }
   },
@@ -69,6 +72,45 @@
     {
       "if": { "properties": { "event": { "const": "device.lost" } } },
       "then": { "required": ["trackId", "reason"] }
+    },
+    {
+      "if": { "properties": { "event": { "const": "display.metrics" } } },
+      "then": {
+        "required": ["displayId", "originXPoints", "originYPoints", "widthPoints", "heightPoints", "scaleFactor", "primary"],
+        "properties": {
+          "displayId": { "type": "string" },
+          "originXPoints": { "type": "number" },
+          "originYPoints": { "type": "number" },
+          "widthPoints": { "type": "number", "exclusiveMinimum": 0 },
+          "heightPoints": { "type": "number", "exclusiveMinimum": 0 },
+          "scaleFactor": { "type": "number", "exclusiveMinimum": 0 },
+          "primary": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "input.click" } } },
+      "then": {
+        "required": ["clickIndex", "clickHostNs", "button", "displayId", "xPoints", "yPoints"],
+        "properties": {
+          "clickIndex": { "type": "integer", "minimum": 0 },
+          "clickHostNs": { "type": "string", "pattern": "^[0-9]+$" },
+          "button": { "const": "left" },
+          "displayId": { "type": "string" },
+          "xPoints": { "type": "number" },
+          "yPoints": { "type": "number" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "input.permission" } } },
+      "then": {
+        "required": ["capability", "status"],
+        "properties": {
+          "capability": { "const": "input-monitoring" },
+          "status": { "enum": ["granted", "denied", "not-determined", "unavailable"] }
+        }
+      }
     }
   ],
   "unevaluatedProperties": false

@@ -19,6 +19,28 @@ node scripts/bench/g1/run.mjs --dry-run --duration 5 --out /tmp/ovc-g1
 `--pause-at <s>:<s>` is accepted by `record` and appears as a `pauses` event
 and a capture-axis gap in the manifest (pause method B).
 
+## Click sidecar (`ovc-click-capture`)
+
+Global left clicks during a screen recording are captured by a separate helper
+that writes protocol v1 lines to stdout:
+
+```sh
+swift build -c release --package-path native/capture-poc
+native/capture-poc/.build/release/ovc-click-capture --duration 30
+native/capture-poc/.build/release/ovc-click-capture --duration 30 --display 3
+```
+
+It emits one `display.metrics` per active display, one `input.permission`
+verdict, then one `input.click` per click, using the CoreGraphics event
+timestamp (nanoseconds since boot, the shared host clock) as `clickHostNs`.
+`--display <id>` drops clicks outside the recorded display.
+
+Input Monitoring is mandatory: without the grant the helper writes
+`input.permission` with `denied`, prints the exact reason (System Settings >
+Privacy & Security > Input Monitoring) to stderr and exits `2`, so an empty
+click stream is never mistaken for a quiet user. `--request-permission` asks the
+system once instead of waiting for the user to grant it first.
+
 ## Language mode
 
 `Package.swift` selects Swift 5 language mode with the Swift 6 toolchain so the
@@ -39,7 +61,7 @@ Swift unit tests use Swift Testing, which ships with the installed Command
 Line Tools. Because SwiftPM does not add its framework paths to the test bundle
 automatically on CLT-only systems, run `./native/capture-poc/test.sh`: it sets
 `DYLD_FRAMEWORK_PATH`/`DYLD_LIBRARY_PATH` and the required linker rpaths, then
-executes `swift test`. All 14 Swift tests pass on this Mac Studio without
+executes `swift test`. All 21 Swift tests pass on this Mac Studio without
 installing the full Xcode IDE.
 
 ## G-SIGN / G-TCC status
