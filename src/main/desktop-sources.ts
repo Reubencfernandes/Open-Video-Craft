@@ -1,10 +1,46 @@
 /**
- * desktopCapturer source listing with fallbacks, plus an SVG placeholder
- * thumbnail for sources that cannot provide one.
+ * desktopCapturer source listing with fallbacks, real still previews for the
+ * recorder's multi-source grid, and the display-capture source reservation that
+ * serializes getDisplayMedia calls.
  */
 import { app, desktopCapturer } from "electron";
 
 type CapturerSourceType = "screen" | "window";
+
+/** Minimal source handle the capture handler needs. */
+export interface ReservedDisplaySource {
+  id: string;
+  name: string;
+}
+
+// The main process hands exactly one reserved source to the next getDisplayMedia
+// handler call. Selecting another screen while a reservation is still pending
+// fails fast instead of silently recording the wrong display.
+let reservedDisplayCaptureSource: ReservedDisplaySource | null = null;
+
+export function reserveDisplayCaptureSource(source: ReservedDisplaySource): void {
+  if (
+    reservedDisplayCaptureSource &&
+    reservedDisplayCaptureSource.id !== source.id
+  ) {
+    throw new Error(
+      "Another display capture is already being prepared. Wait for it to finish before recording a different screen."
+    );
+  }
+
+  reservedDisplayCaptureSource = { id: source.id, name: source.name };
+}
+
+export function releaseDisplayCaptureSource(): void {
+  reservedDisplayCaptureSource = null;
+}
+
+/** Consume the reserved display source; the handler gets it exactly once. */
+export function takeReservedDisplayCaptureSource(): ReservedDisplaySource | null {
+  const source = reservedDisplayCaptureSource;
+  reservedDisplayCaptureSource = null;
+  return source;
+}
 
 export async function listDesktopCapturerSources(): Promise<Electron.DesktopCapturerSource[]> {
   const attempts: Array<{
@@ -69,6 +105,37 @@ export async function captureSourceThumbnail(
   const thumbnail = source.thumbnail;
   if (thumbnail.isEmpty()) return null;
   return `data:image/png;base64,${thumbnail.toPNG().toString("base64")}`;
+}
+
+/**
+ * Real still previews for many sources in a single capturer pass, so the
+ * recorder's source grid can show what every screen/window actually looks like
+ * without one capturer per card. Sources that cannot provide a thumbnail are
+ * omitted.
+ */
+export async function captureSourceThumbnails(
+  sourceIds: string[],
+  width = 480,
+  height = 270
+): Promise<Record<string, string>> {
+  const requested = new Set(sourceIds);
+  if (requested.size === 0) {
+    return {};
+  }
+
+  const sources = await desktopCapturer.getSources({
+    types: ["screen", "window"],
+    thumbnailSize: { width, height },
+    fetchWindowIcons: false
+  });
+
+  const thumbnails: Record<string, string> = {};
+  for (const source of sources) {
+    if (!requested.has(source.id) || source.thumbnail.isEmpty()) continue;
+    thumbnails[source.id] = `data:image/png;base64,${source.thumbnail.toPNG().toString("base64")}`;
+  }
+
+  return thumbnails;
 }
 
 export function createFallbackThumbnail(label: string): string {

@@ -6,25 +6,19 @@
  * tools are allowed. No Anthropic API key is read or passed anywhere.
  */
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { accessSync, constants as fsConstants } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { ClaudeChatRequest, ClaudeChatResult } from "../shared/types";
+import { MCP_TOOL_NAMES } from "../shared/mcp-tools";
 
 export const CLAUDE_MCP_SERVER_NAME = "open-video-craft";
 export const OVC_MCP_PROJECT_ID_ENV = "OVC_MCP_PROJECT_ID";
 
 /** Exact MCP tools exposed by `src/mcp/server.ts`. */
-export const CLAUDE_MCP_TOOL_NAMES = [
-  "mcp__open-video-craft__list_projects",
-  "mcp__open-video-craft__inspect_project",
-  "mcp__open-video-craft__get_analysis",
-  "mcp__open-video-craft__query_analysis_transcript",
-  "mcp__open-video-craft__query_analysis_silences",
-  "mcp__open-video-craft__start_analysis",
-  "mcp__open-video-craft__apply_edit_plan",
-  "mcp__open-video-craft__set_youtube_volume",
-  "mcp__open-video-craft__undo_agent_edit",
-  "mcp__open-video-craft__export_project"
-] as const;
+export const CLAUDE_MCP_TOOL_NAMES: readonly string[] = MCP_TOOL_NAMES.map(
+  (name) => `mcp__${CLAUDE_MCP_SERVER_NAME}__${name}`
+);
 
 const CLAUDE_SYSTEM_PROMPT = [
   "You are the Open Video Craft editing assistant.",
@@ -36,6 +30,9 @@ const CLAUDE_SYSTEM_PROMPT = [
   "For music requests, use generate_music with engine claude-local; it renders locally without a Gemini API key.",
   "For subtitle or transcription requests, call start_analysis, read query_analysis_transcript, and apply replace_subtitles from the local result; never require a cloud API key.",
   "For YouTube-safe constant loudness across all video clips, call set_youtube_volume; it normalizes the final mix to -14 LUFS and -1 dBTP by default.",
+  "For informational boxes, call insert_transcript_callouts instead of inventing timings by hand; it reads the cached transcript and places animated boxed callouts where the topic is explained.",
+  "For a short vertical reel of the best moments, call create_reel; it derives a new 9:16 project with the subtitles kept and styled, and never modifies the source project.",
+  "For B-roll images, call insert_broll_cutaways: pass imagePaths for pictures the user already has, or pass generate with one description per image. A generated picture takes minutes on this Mac, so the call returns a job id at once; poll get_broll_generation until it reports complete or error instead of waiting, and use cancel only when the user asks to stop it.",
   "For audio fade requests, use set_audio with fadeIn and/or fadeOut in seconds (0–10) on the audio item; this is supported, so never say it cannot be done.",
   "For wind or background noise around speech, use set_audio_cleanup on the relevant audio item with a conservative preset and strength 0–100.",
   "Never add unrelated edits, generic cleanup or extra effects.",
@@ -63,6 +60,47 @@ export function buildClaudeEnvironment(source: NodeJS.ProcessEnv): NodeJS.Proces
     if (value !== undefined) environment[key] = value;
   }
   return environment;
+}
+
+const CLAUDE_EXECUTABLE_NAME = "claude";
+
+/**
+ * Directories where the Claude Code CLI is installed. A Finder-launched app
+ * inherits PATH=/usr/bin:/bin:/usr/sbin:/sbin, which never contains the CLI.
+ */
+export function claudeSearchDirectories(environment: NodeJS.ProcessEnv): string[] {
+  const home = environment.HOME?.trim() || os.homedir();
+  const fromPath = (environment.PATH ?? "")
+    .split(path.delimiter)
+    .filter((entry) => entry.length > 0);
+  const fallbacks = [
+    path.join(home, ".local", "bin"),
+    path.join(home, ".claude", "local"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin"
+  ];
+  return [...new Set([...fromPath, ...fallbacks])];
+}
+
+function isExecutableFile(candidate: string): boolean {
+  try {
+    accessSync(candidate, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Resolves the CLI on the app PATH first, then the user install directories. */
+export function resolveClaudeExecutable(
+  environment: NodeJS.ProcessEnv = process.env,
+  isExecutable: (candidate: string) => boolean = isExecutableFile
+): string {
+  for (const directory of claudeSearchDirectories(environment)) {
+    const candidate = path.join(directory, CLAUDE_EXECUTABLE_NAME);
+    if (isExecutable(candidate)) return candidate;
+  }
+  return CLAUDE_EXECUTABLE_NAME;
 }
 
 export function buildClaudeMcpConfig(request: ClaudeChatRequest, input: ClaudeAgentInput): string {
@@ -139,19 +177,47 @@ export function extractClaudeAssistantText(stdout: string): string {
     .trim();
 }
 
+/** Reads a property that TypeScript does not declare, without casting. */
+function readProperty(source: object, key: string): unknown {
+  return Reflect.get(source, key);
+}
+
 function asErrorRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? Object.fromEntries(Object.entries(value))
     : null;
 }
 
+/**
+ * Collects the readable cause of a failure. `Error.message` and `Error.code`
+ * are not enumerable, so a plain object copy would drop them and leave the
+ * user with an empty, unexplained message.
+ */
+function failureDetails(value: unknown): { details: string; code: string | number | null } {
+  const record: Record<string, unknown> = value instanceof Error
+    ? {
+        message: value.message,
+        code: readProperty(value, "code"),
+        stdout: readProperty(value, "stdout"),
+        stderr: readProperty(value, "stderr")
+      }
+    : asErrorRecord(value) ?? {};
+  const readable = [record["message"], record["stdout"], record["stderr"]]
+    .filter((part): part is string => typeof part === "string" && part.trim().length > 0);
+  const code = record["code"];
+  return {
+    details: readable.join(" "),
+    code: typeof code === "string" || typeof code === "number" ? code : null
+  };
+}
+
 /** Returns concise UI copy without leaking the full spawned command. */
 export function formatClaudeAgentError(error: unknown): string {
-  const record = asErrorRecord(error);
-  const details = record
-    ? `${String(record["stdout"] ?? "")} ${String(record["stderr"] ?? "")}`
-    : String(error);
+  const { details, code } = failureDetails(error);
   const normalized = details.toLowerCase();
+  if (code === "ENOENT" || /enoent/.test(normalized)) {
+    return "Claude Code CLI was not found on this Mac. Install or sign in to Claude Code, then reopen Open Video Craft.";
+  }
   if (/5-hour limit|usage limit|rate limit|weekly limit/.test(normalized)) {
     const reset = details.match(/resets\s+([^\n"}]+)/iu)?.[1]?.trim();
     return reset
@@ -168,9 +234,13 @@ export function formatClaudeAgentError(error: unknown): string {
     .replace(/\s+/gu, " ")
     .trim()
     .slice(0, 300);
-  return detail.length > 0
-    ? `Claude Max could not complete this request: ${detail}`
-    : "Claude Max could not complete this request.";
+  if (detail.length > 0) {
+    return `Claude Max could not complete this request: ${detail}`;
+  }
+  if (typeof code === "number") {
+    return `Claude Max could not complete this request: the Claude CLI exited with code ${code} and no output.`;
+  }
+  return "Claude Max could not complete this request.";
 }
 
 interface ActiveClaudeRun {
@@ -185,10 +255,15 @@ export class ClaudeAgentManager {
 
   async send(request: ClaudeChatRequest): Promise<ClaudeChatResult> {
     const args = buildClaudeAgentArgs(request, this.input);
+    const executable = resolveClaudeExecutable(process.env);
+    const environment = buildClaudeEnvironment(process.env);
+    // Keep the allowlist, but let the CLI find its own helpers from directories
+    // a Finder-launched app never inherits.
+    environment.PATH = claudeSearchDirectories(process.env).join(path.delimiter);
     return new Promise<ClaudeChatResult>((resolve, reject) => {
-      const child = spawn("claude", args, {
+      const child = spawn(executable, args, {
         cwd: this.input.userDataPath,
-        env: buildClaudeEnvironment(process.env)
+        env: environment
       });
       const cancel = (): void => {
         cancelled = true;
@@ -223,7 +298,7 @@ export class ClaudeAgentManager {
         stderr += chunk;
         if (stderr.length > 8 * 1024 * 1024) child.kill("SIGTERM");
       });
-      child.on("error", () => finish(new Error(formatClaudeAgentError({ stderr }))));
+      child.on("error", (error) => finish(new Error(formatClaudeAgentError(error))));
       child.on("close", (code, signal) => {
         const output = `${stdout} ${stderr}`;
         if (cancelled || signal === "SIGTERM") {
@@ -231,7 +306,7 @@ export class ClaudeAgentManager {
           return;
         }
         if (code !== 0) {
-          finish(new Error(formatClaudeAgentError({ stdout, stderr })));
+          finish(new Error(formatClaudeAgentError({ stdout, stderr, code })));
           return;
         }
         if (/5-hour limit|usage limit|rate limit|weekly limit/i.test(output)) {

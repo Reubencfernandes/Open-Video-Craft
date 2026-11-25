@@ -8,14 +8,21 @@ import { promises as fs } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { parseEditorDocument } from "../shared/editor-domain";
-import { importsDirectoryName, mediaTrackRelativePaths } from "./project-paths";
+import {
+  getRecordingKindForTrackId,
+  maxRecordingTracksPerKind,
+  parseMediaTrackKey
+} from "../shared/types";
+import { getMediaTrackRelativePath, importsDirectoryName } from "./project-paths";
 import type {
   EditorProjectImport,
   EditorProjectImportInput,
   EditorProjectStateFile,
-  MediaTrackKey,
   ProjectFile,
-  ProjectTrack
+  ProjectRecordingTrack,
+  ProjectSource,
+  ProjectTrack,
+  RecordingTrack
 } from "../shared/types";
 
 export async function readProjectFile(rootPath: string): Promise<ProjectFile> {
@@ -29,7 +36,10 @@ export async function readProjectFile(rootPath: string): Promise<ProjectFile> {
     !isNonEmptyString(parsed.id) ||
     !isNonEmptyString(parsed.name) ||
     !isNonEmptyString(parsed.updatedAt) ||
-    !isValidProjectTracks(parsed.tracks)
+    !isValidProjectTracks(parsed.tracks) ||
+    (parsed.sources !== undefined && !isValidProjectSources(parsed.sources)) ||
+    (parsed.recordingTracks !== undefined &&
+      !isValidRecordingTracks(parsed.recordingTracks, parsed.tracks))
   ) {
     throw new Error(`"${filePath}" is not a valid Open Video Craft project.`);
   }
@@ -95,7 +105,7 @@ function isValidProjectTracks(value: unknown): value is ProjectFile["tracks"] {
   }
 
   for (const [key, track] of Object.entries(value)) {
-    if (!Object.hasOwn(mediaTrackRelativePaths, key) || !isValidProjectTrack(key as MediaTrackKey, track)) {
+    if (!isValidProjectTrack(key, track)) {
       return false;
     }
   }
@@ -103,20 +113,80 @@ function isValidProjectTracks(value: unknown): value is ProjectFile["tracks"] {
   return true;
 }
 
-function isValidProjectTrack(key: MediaTrackKey, value: unknown): value is ProjectTrack {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+function isValidProjectTrack(key: string, value: unknown): value is ProjectTrack {
+  const trackKey = parseMediaTrackKey(key);
+  if (!trackKey || !value || typeof value !== "object" || Array.isArray(value)) {
     return false;
   }
 
   const track = value as Partial<ProjectTrack>;
   return (
-    normalizeRelativePath(track.path) === mediaTrackRelativePaths[key] &&
+    normalizeRelativePath(track.path) === getMediaTrackRelativePath(trackKey) &&
     isNonEmptyString(track.mimeType) &&
     typeof track.bytesWritten === "number" &&
     Number.isFinite(track.bytesWritten) &&
     track.bytesWritten >= 0 &&
     isNonEmptyString(track.createdAt) &&
     isNonEmptyString(track.updatedAt)
+  );
+}
+
+function isValidProjectSources(value: unknown): value is ProjectSource[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= maxRecordingTracksPerKind &&
+    value.every(isValidProjectSource)
+  );
+}
+
+function isValidProjectSource(value: unknown): value is ProjectSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const source = value as Partial<ProjectSource>;
+  return (
+    isNonEmptyString(source.id) &&
+    typeof source.name === "string" &&
+    (source.kind === "screen" || source.kind === "window") &&
+    typeof source.displayId === "string"
+  );
+}
+
+function isValidRecordingTracks(
+  value: unknown,
+  tracks: ProjectFile["tracks"]
+): value is ProjectRecordingTrack[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= maxRecordingTracksPerKind * 4 &&
+    value.every((entry) => isValidRecordingTrack(entry, tracks))
+  );
+}
+
+function isValidRecordingTrack(
+  value: unknown,
+  tracks: ProjectFile["tracks"]
+): value is ProjectRecordingTrack {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  const recordingTrack = value as Partial<ProjectRecordingTrack>;
+  const trackId = typeof recordingTrack.trackId === "string" ? recordingTrack.trackId : null;
+  const kind = recordingTrack.kind as RecordingTrack | undefined;
+  const validKinds = ["screen", "camera", "mic", "system"];
+
+  return Boolean(
+    trackId &&
+      kind &&
+      validKinds.includes(kind) &&
+      getRecordingKindForTrackId(trackId) === kind &&
+      Object.hasOwn(tracks, trackId) &&
+      (recordingTrack.sourceId === null || typeof recordingTrack.sourceId === "string") &&
+      isNonEmptyString(recordingTrack.label)
   );
 }
 

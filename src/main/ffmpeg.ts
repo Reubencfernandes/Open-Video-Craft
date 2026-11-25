@@ -21,6 +21,7 @@ import {
   calculateExportTimeoutMs,
   parseFfmpegProgressSeconds
 } from "./ffmpeg-progress";
+import type { CameraFrameBorder } from "../shared/editor-domain/timeline-visibility";
 
 export interface ExportProcessControl {
   signal?: AbortSignal;
@@ -43,15 +44,41 @@ export interface ExportVideoJob {
 }
 
 export interface TimelineCompositionVideoSegment {
+  /** Original timeline segment id; export range ids may be rewritten. */
+  sourceId?: string;
+  /** Fade applied when the clip itself enters, not a cut between two clips. */
+  edgeStartSeconds?: number;
+  edgeEndSeconds?: number;
   id?: string;
   path: string;
-  kind: "video" | "image";
+  /** "color" fills the frame with black, for a stretch with no base picture. */
+  kind: "video" | "image" | "color";
   start: number;
   end: number;
   sourceStart: number;
   volume: number;
   hasAudio: boolean;
   cleanupFilter?: string;
+  /** Non-destructive crop of this clip's picture, as an ffmpeg crop filter. */
+  cropFilter?: string;
+  /** Webcam layer composited above this stretch of the picture. */
+  camera?: TimelineCompositionCameraLayer;
+}
+
+/**
+ * Webcam layer of a composed stretch. The frame is in percent of the output
+ * frame, resolved by the shared composition layout so the export matches the
+ * canvas preset.
+ */
+export interface TimelineCompositionCameraLayer {
+  path: string;
+  /** Media time of the webcam when the segment starts. */
+  sourceStart: number;
+  frame: { x: number; y: number; width: number; height: number };
+  fit: "contain" | "cover";
+  shape?: "circle" | "rounded" | "square";
+  /** Border selected in Layout, painted inside the box like the preview. */
+  border?: CameraFrameBorder;
 }
 
 export interface TimelineCompositionTransition {
@@ -117,6 +144,41 @@ export interface TimelineCompositionAudioSegment {
   speedAffected?: boolean;
 }
 
+const audioContinuityEpsilonSeconds = 0.0005;
+
+/**
+ * Adjacent halves of one split audio clip must be decoded as one continuous
+ * stream. Separate inputs delayed by rounded milliseconds overlap and click at
+ * the edit point. User fades and volume changes stay on their own input.
+ */
+export function coalesceAudioSegments(
+  segments: readonly TimelineCompositionAudioSegment[]
+): TimelineCompositionAudioSegment[] {
+  const ordered = [...segments].sort((first, second) => first.start - second.start);
+  const merged: TimelineCompositionAudioSegment[] = [];
+  for (const segment of ordered) {
+    const previous = merged[merged.length - 1];
+    const noFade = (value: number | undefined): boolean => !value || Math.abs(value) < audioContinuityEpsilonSeconds;
+    const canJoin =
+      previous !== undefined &&
+      previous.path === segment.path &&
+      previous.volume === segment.volume &&
+      previous.cleanupFilter === segment.cleanupFilter &&
+      previous.speedAffected === segment.speedAffected &&
+      noFade(previous.fadeIn) && noFade(previous.fadeOut) &&
+      noFade(segment.fadeIn) && noFade(segment.fadeOut) &&
+      Math.abs(previous.end - segment.start) <= audioContinuityEpsilonSeconds &&
+      Math.abs(previous.sourceStart + (previous.end - previous.start) - segment.sourceStart) <=
+        audioContinuityEpsilonSeconds;
+    if (previous !== undefined && canJoin) {
+      previous.end = segment.end;
+    } else {
+      merged.push({ ...segment });
+    }
+  }
+  return merged;
+}
+
 export interface TimelineCompositionJob {
   videoSegments: TimelineCompositionVideoSegment[];
   audioSegments: TimelineCompositionAudioSegment[];
@@ -126,6 +188,8 @@ export interface TimelineCompositionJob {
   trimStart: number;
   trimEnd: number | null;
   subtitlePath?: string | null;
+  /** ASS override so burned-in captions keep the editor's chosen style. */
+  subtitleForceStyle?: string;
   transitions?: TimelineCompositionTransition[];
   zoomEffects?: TimelineCompositionZoomEffect[];
   speedEffects?: TimelineCompositionSpeedEffect[];
@@ -134,11 +198,12 @@ export interface TimelineCompositionJob {
   youtubeVolume?: { targetLufs: number; truePeakDb: number };
 }
 
-type CompositionPiece = {
+export type CompositionPiece = {
   inputIndex: number;
   duration: number;
   gap: boolean;
   segment?: TimelineCompositionVideoSegment;
+  cameraInputIndex?: number;
 };
 
 // ffmpeg-static reports a path inside app.asar, but asar archives are files,
@@ -356,13 +421,34 @@ export async function exportTimelineComposition(
       pieces.push({ inputIndex: inputIndex++, duration, gap: true });
     }
     const duration = segment.end - segment.start;
-    if (segment.kind === "image") {
+    if (segment.kind === "color") {
+      args.push("-f", "lavfi", "-t", formatFfmpegNumber(duration), "-i", `color=c=black:s=${width}x${height}:r=30`);
+    } else if (segment.kind === "image") {
       args.push("-loop", "1", "-t", formatFfmpegNumber(duration), "-i", segment.path);
     } else {
       if (segment.sourceStart > 0) args.push("-ss", formatFfmpegNumber(segment.sourceStart));
       args.push("-t", formatFfmpegNumber(duration), "-i", segment.path);
     }
-    pieces.push({ inputIndex: inputIndex++, duration, gap: false, segment });
+    const baseInputIndex = inputIndex++;
+    let cameraInputIndex: number | undefined;
+    if (segment.camera) {
+      // The webcam is a second input for this stretch, trimmed to the same
+      // media window as the base picture so both stay in sync.
+      if (segment.camera.sourceStart > 0) {
+        args.push("-ss", formatFfmpegNumber(segment.camera.sourceStart));
+      }
+      args.push("-t", formatFfmpegNumber(duration), "-i", segment.camera.path);
+      cameraInputIndex = inputIndex++;
+    }
+    pieces.push({
+      inputIndex: baseInputIndex,
+      duration,
+      // A color piece has no base picture, so it takes the Style background
+      // like an intentional gap while the webcam stays on top of it.
+      gap: segment.kind === "color",
+      segment,
+      ...(cameraInputIndex === undefined ? {} : { cameraInputIndex })
+    });
     cursor = Math.max(cursor, segment.end);
   }
   if (cursor < timelineEnd) {
@@ -382,22 +468,16 @@ export async function exportTimelineComposition(
     cleanupFilter?: string;
     speedAffected: boolean;
   }> = [];
-  for (let pieceIndex = 0; pieceIndex < pieces.length; pieceIndex += 1) {
-    const piece = pieces[pieceIndex];
-    if (!piece.gap && piece.segment?.hasAudio) {
-      audioInputs.push({
-        inputIndex: piece.inputIndex,
-        start: piece.segment.start,
-        duration: piece.duration,
-        volume: piece.segment.volume,
-        cleanupFilter: piece.segment.cleanupFilter,
-        fadeIn: (getTransitionBetween(pieces[pieceIndex - 1], piece, transitions)?.duration ?? 0) / 2,
-        fadeOut: (getTransitionBetween(piece, pieces[pieceIndex + 1], transitions)?.duration ?? 0) / 2,
-        speedAffected: true
-      });
-    }
+  for (const group of groupVideoAudioPieces(pieces, transitions)) {
+    if (group.sourceStart > 0) args.push("-ss", formatFfmpegNumber(group.sourceStart));
+    args.push("-t", formatFfmpegNumber(group.duration), "-i", group.path);
+    audioInputs.push({
+      inputIndex: inputIndex++, start: group.start, duration: group.duration,
+      volume: group.volume, cleanupFilter: group.cleanupFilter,
+      fadeIn: group.fadeIn, fadeOut: group.fadeOut, speedAffected: true
+    });
   }
-  for (const segment of job.audioSegments) {
+  for (const segment of coalesceAudioSegments(job.audioSegments)) {
     const duration = segment.end - segment.start;
     if (segment.sourceStart > 0) args.push("-ss", formatFfmpegNumber(segment.sourceStart));
     args.push("-t", formatFfmpegNumber(duration), "-i", segment.path);
@@ -431,7 +511,12 @@ export async function exportTimelineComposition(
   const sourceDuration = Math.max(0.1, trimEnd - job.trimStart);
   const speedRegions = createSpeedRegions(job.speedEffects ?? [], job.trimStart, trimEnd);
   const zoomEffects = clipZoomEffects(job.zoomEffects ?? [], job.trimStart, trimEnd);
-  const subtitleFilter = job.subtitlePath ? `,subtitles='${escapeFilterPath(job.subtitlePath)}'` : "";
+  const subtitleForce = job.subtitleForceStyle && job.subtitleForceStyle.length > 0
+    ? `:force_style='${job.subtitleForceStyle}'`
+    : "";
+  const subtitleFilter = job.subtitlePath
+    ? `,subtitles='${escapeFilterPath(job.subtitlePath)}'${subtitleForce}`
+    : "";
   filters.push(`[vcat]trim=start=${formatFfmpegNumber(job.trimStart)}:end=${formatFfmpegNumber(trimEnd)},setpts=PTS-STARTPTS[vtrim]`);
   let videoLabel = "vtrim";
   if (zoomEffects.length > 0) {
@@ -793,8 +878,9 @@ function appendTransitionVideoFilters(
     } else {
       const padColor = backgroundSources ? "black@0" : "black";
       const pixelFormat = backgroundSources ? "yuva420p" : "yuv420p";
+      const cropPrefix = piece.segment?.cropFilter ? `${piece.segment.cropFilter},` : "";
       filters.push(
-        `[${piece.inputIndex}:v:0]setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
+        `[${piece.inputIndex}:v:0]setpts=PTS-STARTPTS,${cropPrefix}scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
         `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:${padColor},setsar=1,fps=30,format=${pixelFormat}[${base}]`
       );
       if (backgroundSources) {
@@ -802,6 +888,24 @@ function appendTransitionVideoFilters(
         filters.push(`[${backgroundSources[index]}][${base}]overlay=0:0:format=auto,format=yuv420p[${composited}]`);
         base = composited;
       }
+    }
+    if (piece.cameraInputIndex !== undefined && piece.segment?.camera) {
+      base = appendCameraOverlayFilter(filters, index, piece, base, width, height);
+    }
+    if (piece.segment?.edgeStartSeconds) {
+      const label = `v${index}edgein`;
+      filters.push(
+        `[${base}]fade=t=in:st=0:d=${formatFfmpegNumber(piece.segment.edgeStartSeconds)}[${label}]`
+      );
+      base = label;
+    }
+    if (piece.segment?.edgeEndSeconds) {
+      const label = `v${index}edgeout`;
+      const start = Math.max(0, piece.duration - piece.segment.edgeEndSeconds);
+      filters.push(
+        `[${base}]fade=t=out:st=${formatFfmpegNumber(start)}:d=${formatFfmpegNumber(piece.segment.edgeEndSeconds)}[${label}]`
+      );
+      base = label;
     }
     const sources = branchNames.map((name) => `v${index}${name}src`);
     if (sources.length === 1) filters.push(`[${base}]null[${sources[0]}]`);
@@ -853,19 +957,144 @@ function appendTransitionVideoFilters(
   filters.push(`${outputUnits.join("")}concat=n=${outputUnits.length}:v=1:a=0[vcat]`);
 }
 
-function getTransitionBetween(
+/**
+ * Composites the webcam layer over a prepared piece. The box comes from the
+ * preset in percent of the output frame; the webcam fills it (cover) or fits
+ * inside it (contain), and the circle preset gets a real alpha mask. The border
+ * chosen in Layout is padded inside the box, so the box keeps its size.
+ */
+function appendCameraOverlayFilter(
+  filters: string[],
+  index: number,
+  piece: CompositionPiece,
+  baseLabel: string,
+  width: number,
+  height: number
+): string {
+  const camera = piece.segment?.camera;
+  if (!camera || piece.cameraInputIndex === undefined) return baseLabel;
+
+  const boxWidth = Math.max(2, Math.round((camera.frame.width / 100) * width));
+  const boxHeight = Math.max(2, Math.round((camera.frame.height / 100) * height));
+  const boxX = Math.max(0, Math.round((camera.frame.x / 100) * width));
+  const boxY = Math.max(0, Math.round((camera.frame.y / 100) * height));
+  // The preview paints the border inside the box (`box-sizing: border-box`), so
+  // the webcam picture shrinks by the border and the box keeps its size. The
+  // CSS thickness is scaled like every other preview measurement (1080-based).
+  const border = camera.border;
+  const borderWidth = border === undefined
+    ? 0
+    : Math.max(1, Math.round((border.cssWidth * height) / 1080));
+  const inset = borderWidth * 2 < Math.min(boxWidth, boxHeight) ? borderWidth : 0;
+  const contentWidth = boxWidth - inset * 2;
+  const contentHeight = boxHeight - inset * 2;
+  const fitted = camera.fit === "cover"
+    ? `scale=${contentWidth}:${contentHeight}:force_original_aspect_ratio=increase,crop=${contentWidth}:${contentHeight}`
+    : `scale=${contentWidth}:${contentHeight}:force_original_aspect_ratio=decrease,` +
+      `pad=${contentWidth}:${contentHeight}:(ow-iw)/2:(oh-ih)/2:black@0`;
+  // The circle mask reads the stream size, so it hugs whichever box it is
+  // applied to: the inner picture first, then the bordered box around it.
+  const roundMask = camera.shape === "circle"
+    ? `,format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':` +
+      `a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(min(W,H)/2)*(min(W,H)/2)),255,0)'`
+    : "";
+  const framed = border === undefined || inset === 0
+    ? roundMask
+    : `${roundMask},pad=${boxWidth}:${boxHeight}:${inset}:${inset}:0x${border.colorHex}${roundMask}`;
+  const cameraLabel = `v${index}cam`;
+  filters.push(
+    `[${piece.cameraInputIndex}:v:0]setpts=PTS-STARTPTS,${fitted},setsar=1,fps=30,format=yuva420p` +
+    `${framed}[${cameraLabel}]`
+  );
+  const composited = `v${index}camera`;
+  filters.push(
+    `[${baseLabel}][${cameraLabel}]overlay=${boxX}:${boxY}:format=auto,format=yuv420p[${composited}]`
+  );
+  return composited;
+}
+
+export function getTransitionBetween(
   from: CompositionPiece | undefined,
   to: CompositionPiece | undefined,
-  transitions: TimelineCompositionTransition[]
+  transitions: readonly TimelineCompositionTransition[]
 ): TimelineCompositionTransition | null {
   if (!from?.segment?.id || !to?.segment?.id || from.gap || to.gap) return null;
+  const fromId = from.segment?.sourceId ?? from.segment?.id;
+  const toId = to.segment?.sourceId ?? to.segment?.id;
   return transitions.find((item) =>
-    item.fromSegmentId === from.segment?.id && item.toSegmentId === to.segment?.id
+    item.fromSegmentId === fromId && item.toSegmentId === toId
   ) ?? null;
 }
 
 function toFfmpegTransition(type: TimelineCompositionTransition["type"]): string {
   return ({ crossfade: "fade", "fade-black": "fadeblack", "slide-left": "slideleft", "wipe-left": "wipeleft" })[type];
+}
+
+type VideoAudioGroup = {
+  path: string;
+  start: number;
+  end: number;
+  duration: number;
+  sourceStart: number;
+  volume: number;
+  cleanupFilter?: string;
+  fadeIn: number;
+  fadeOut: number;
+  speedAffected: true;
+  lastPiece: CompositionPiece;
+};
+
+/** Groups contiguous video-piece audio so a split never starts a new decoder. */
+export function groupVideoAudioPieces(
+  pieces: readonly CompositionPiece[],
+  transitions: readonly TimelineCompositionTransition[]
+): Omit<VideoAudioGroup, "lastPiece">[] {
+  const groups: VideoAudioGroup[] = [];
+  for (let index = 0; index < pieces.length; index += 1) {
+    const piece = pieces[index];
+    const segment = piece.segment;
+    if (piece.gap || !segment?.hasAudio) continue;
+    const fadeIn = Math.max(
+      (getTransitionBetween(pieces[index - 1], piece, transitions)?.duration ?? 0) / 2,
+      segment.edgeStartSeconds ?? 0
+    );
+    const fadeOut = Math.max(
+      (getTransitionBetween(piece, pieces[index + 1], transitions)?.duration ?? 0) / 2,
+      segment.edgeEndSeconds ?? 0
+    );
+    const previous = groups[groups.length - 1];
+    const canJoin =
+      previous !== undefined &&
+      previous.path === segment.path &&
+      previous.volume === segment.volume &&
+      previous.cleanupFilter === segment.cleanupFilter &&
+      !segment.edgeStartSeconds && !segment.edgeEndSeconds &&
+      Math.abs(previous.end - segment.start) <= audioContinuityEpsilonSeconds &&
+      Math.abs(previous.sourceStart + previous.duration - segment.sourceStart) <=
+        audioContinuityEpsilonSeconds &&
+      getTransitionBetween(previous.lastPiece, piece, transitions) === null;
+    if (previous !== undefined && canJoin) {
+      previous.duration += piece.duration;
+      previous.end = segment.start + piece.duration;
+      previous.fadeOut = fadeOut;
+      previous.lastPiece = piece;
+    } else {
+      groups.push({
+        path: segment.path,
+        start: segment.start,
+        end: segment.start + piece.duration,
+        duration: piece.duration,
+        sourceStart: segment.sourceStart,
+        volume: segment.volume,
+        cleanupFilter: segment.cleanupFilter,
+        fadeIn,
+        fadeOut,
+        speedAffected: true,
+        lastPiece: piece
+      });
+    }
+  }
+  return groups.map(({ lastPiece: _lastPiece, ...group }) => group);
 }
 
 export async function mediaHasAudio(filePath: string): Promise<boolean> {
@@ -974,6 +1203,9 @@ function getResolutionDimensions(resolution: ExportResolution): [number, number]
       return [1920, 1080];
     case "1440p":
       return [2560, 1440];
+    case "vertical":
+      // 9:16 reel frame for Shorts, Reels and TikTok.
+      return [1080, 1920];
     case "source":
       return null;
   }

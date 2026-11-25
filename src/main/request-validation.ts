@@ -17,11 +17,19 @@ import type {
   ProviderKeyId,
   ProjectDevices,
   ProjectSource,
+  RecordingCapture,
+  RecordingTrack,
   SaveEditorProjectStateRequest,
   StartRecordingRequest,
   SttTranscribeRequest,
   SttTranscribeSource,
   UpdateProviderKeysRequest
+} from "../shared/types";
+import {
+  getRecordingKindForTrackId,
+  isWavMediaTrackKey,
+  maxRecordingTracksPerKind,
+  parseMediaTrackKey
 } from "../shared/types";
 import { isTextOverlay, validateEditorStateSnapshot } from "../shared/editor-domain";
 
@@ -34,6 +42,8 @@ export function assertStartRecordingRequest(
     typeof request !== "object" ||
     !isNonEmptyBoundedString(request.projectId, 128) ||
     !isValidProjectSource(request.source) ||
+    !isValidProjectSources(request.sources) ||
+    !isValidRecordingCaptures(request.captures) ||
     !isValidProjectDevices(request.devices) ||
     !isValidRecordingTracks(request.tracks)
   ) {
@@ -81,7 +91,7 @@ export function assertExportVideoRequest(value: unknown): asserts value is Expor
     !request.source ||
     !sourceIdValid ||
     !["mp4", "webm", "mov"].includes(request.format ?? "") ||
-    !["source", "720p", "1080p", "1440p"].includes(request.resolution ?? "") ||
+    !["source", "720p", "1080p", "1440p", "vertical"].includes(request.resolution ?? "") ||
     typeof request.trimStart !== "number" || !Number.isFinite(request.trimStart) || request.trimStart < 0 ||
     (request.trimEnd !== null && (typeof request.trimEnd !== "number" || !Number.isFinite(request.trimEnd) || request.trimEnd < 0)) ||
     typeof request.volume !== "number" || !Number.isFinite(request.volume) || request.volume < 0 || request.volume > 4 ||
@@ -122,6 +132,58 @@ function isValidProjectSource(value: unknown): value is ProjectSource {
       (source.kind === "screen" || source.kind === "window") &&
       isNullableBoundedString(source.displayId, 128)
   );
+}
+
+const recordingTrackKinds: RecordingTrack[] = ["screen", "camera", "mic", "system"];
+
+function isValidProjectSources(value: unknown): boolean {
+  return (
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.length > 0 &&
+      value.length <= maxRecordingTracksPerKind &&
+      value.every(isValidProjectSource))
+  );
+}
+
+function isValidRecordingCaptures(value: unknown): boolean {
+  if (value === undefined) {
+    return true;
+  }
+  if (!Array.isArray(value) || value.length === 0 || value.length > maxRecordingTracksPerKind * 4) {
+    return false;
+  }
+
+  const seenTrackIds = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return false;
+    }
+
+    const capture = entry as Partial<RecordingCapture>;
+    const trackId = typeof capture.trackId === "string"
+      ? parseMediaTrackKey(capture.trackId)
+      : null;
+    const kind = capture.kind;
+
+    if (
+      !trackId ||
+      isWavMediaTrackKey(trackId) ||
+      !kind ||
+      !recordingTrackKinds.includes(kind) ||
+      getRecordingKindForTrackId(trackId) !== kind ||
+      !isNullableBoundedString(capture.sourceId, 512) ||
+      !isNonEmptyBoundedString(capture.label, 512) ||
+      !isNonEmptyBoundedString(capture.mimeType, 255) ||
+      seenTrackIds.has(trackId)
+    ) {
+      return false;
+    }
+
+    seenTrackIds.add(trackId);
+  }
+
+  return true;
 }
 
 function isValidDeviceSelection(value: unknown): value is DeviceSelection {

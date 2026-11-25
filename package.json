@@ -28,12 +28,13 @@
     "dist:mas": "npm run prepare:ffmpeg:mac && npm run prepare:mas-profile && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas",
     "dist:mas:dev": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac mas-dev",
     "verify:mac-release": "node scripts/verify-mac-release.mjs",
-    "dist:mac:adhoc": "npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=- -c.mac.forceCodeSigning=false -c.mac.notarize=false",
+    "dist:mac:adhoc": "npm run prepare:click-capture && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=- -c.mac.forceCodeSigning=false -c.mac.notarize=false",
     "dist:mac:universal": "node scripts/check-mac-signing.mjs && npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac --universal",
     "typecheck": "tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit",
     "test": "vitest run",
     "test:mcp": "npm run build:main && node scripts/test-mcp-smoke.mjs",
-    "start": "electron dist-electron/main/main.js"
+    "start": "electron dist-electron/main/main.js",
+    "prepare:click-capture": "node scripts/prepare-click-capture.mjs"
   },
   "build": {
     "appId": "dev.micio86dev.openvideocraft",
@@ -88,6 +89,10 @@
       {
         "from": "FFMPEG_MACOS_BUILD_NOTES.md",
         "to": "FFMPEG_MACOS_BUILD_NOTES.md"
+      },
+      {
+        "from": "resources/bin",
+        "to": "bin"
       }
     ],
     "artifactName": "Open-Video-Craft-${version}-${os}-${arch}.${ext}",
