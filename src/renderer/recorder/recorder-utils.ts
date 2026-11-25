@@ -1,8 +1,17 @@
 /**
  * Recorder helpers: mime-type candidates, optional camera/mic streams,
- * MediaRecorder construction per track, and small formatting utilities.
+ * multi-source capture planning, sequential display capture, MediaRecorder
+ * construction per track, and small formatting utilities.
  */
-import type { DeviceSelection, ProjectDevices, RecordingTrack } from "../../shared/types";
+import type {
+  DeviceSelection,
+  MediaTrackKey,
+  ProjectDevices,
+  RecordingCapture,
+  RecordingTrack,
+  SourceSummary
+} from "../../shared/types";
+import { createRecordingTrackId } from "../../shared/types";
 import {
   createMediaRecorderOptions,
   type RecorderKind
@@ -76,53 +85,150 @@ export async function getOptionalMicStream(
   }
 }
 
-export function createRecorders(input: {
-  screenStream: MediaStream;
-  cameraStream: MediaStream | null;
-  micStream: MediaStream | null;
-  systemStream: MediaStream | null;
-  screenMimeType: string;
-  cameraMimeType: string | null;
-  micMimeType: string | null;
-  systemMimeType: string | null;
-  screenBitsPerSecond?: number;
-  onChunk: (track: RecordingTrack, blob: Blob) => void;
-  onError: (error: unknown) => void;
-}): RecorderMap {
-  const recorders: RecorderMap = {
-    screen: createRecorder(
-      input.screenStream,
-      input.screenMimeType,
-      (blob) => input.onChunk("screen", blob),
-      "video",
-      input.screenBitsPerSecond
-    )
+/**
+ * Build the capture plan sent to main: one media track per selected screen,
+ * camera, microphone, and system-audio source. The first source of each kind
+ * keeps the legacy track id, so single-source recordings stay compatible.
+ */
+export function createRecordingCaptures(input: {
+  screens: Array<{ sourceId: string; label: string; mimeType: string }>;
+  cameras: Array<{ deviceId: string; label: string; mimeType: string }>;
+  mic: { deviceId: string; label: string; mimeType: string } | null;
+  system: { mimeType: string } | null;
+}): RecordingCapture[] {
+  const captures: RecordingCapture[] = [];
+
+  input.screens.forEach((screen, index) => {
+    captures.push({
+      trackId: createRecordingTrackId("screen", index),
+      kind: "screen",
+      sourceId: screen.sourceId,
+      label: screen.label,
+      mimeType: screen.mimeType
+    });
+  });
+
+  input.cameras.forEach((camera, index) => {
+    captures.push({
+      trackId: createRecordingTrackId("camera", index),
+      kind: "camera",
+      sourceId: camera.deviceId,
+      label: camera.label,
+      mimeType: camera.mimeType
+    });
+  });
+
+  if (input.mic) {
+    captures.push({
+      trackId: createRecordingTrackId("mic", 0),
+      kind: "mic",
+      sourceId: input.mic.deviceId,
+      label: input.mic.label,
+      mimeType: input.mic.mimeType
+    });
+  }
+
+  if (input.system) {
+    captures.push({
+      trackId: createRecordingTrackId("system", 0),
+      kind: "system",
+      sourceId: null,
+      label: "System audio",
+      mimeType: input.system.mimeType
+    });
+  }
+
+  return captures;
+}
+
+/** A display capture stream only has to expose its tracks to be usable. */
+export interface DisplayCaptureStream {
+  getAudioTracks(): MediaStreamTrack[];
+  getVideoTracks(): MediaStreamTrack[];
+}
+
+/**
+ * Capture every selected display strictly one after another. The main process
+ * hands the reserved display source to the next getDisplayMedia call, so
+ * parallel captures would race over that single selection.
+ *
+ * System/desktop audio is requested once, on the first display capture, and
+ * moved onto its own track list — microphone audio never shares its stream.
+ */
+export async function captureDisplayStreamsSequentially(input: {
+  sourceIds: string[];
+  systemAudio: boolean;
+  createOptions: (withSystemAudio: boolean) => DisplayMediaStreamOptions;
+  selectSource: (sourceId: string) => Promise<unknown>;
+  releaseSource: () => Promise<unknown>;
+  getDisplayMedia: (options: DisplayMediaStreamOptions) => Promise<DisplayCaptureStream>;
+}): Promise<{
+  screens: Array<{ sourceId: string; stream: DisplayCaptureStream }>;
+  systemAudioTracks: MediaStreamTrack[];
+}> {
+  if (input.sourceIds.length === 0) {
+    throw new Error("Select at least one screen or window to record.");
+  }
+
+  const screens: Array<{ sourceId: string; stream: DisplayCaptureStream }> = [];
+  const systemAudioTracks: MediaStreamTrack[] = [];
+
+  const capture = async (sourceId: string, withSystemAudio: boolean) => {
+    await input.selectSource(sourceId);
+    return input.getDisplayMedia(input.createOptions(withSystemAudio));
   };
 
-  if (input.cameraStream && input.cameraMimeType) {
-    recorders.camera = createRecorder(
-      input.cameraStream,
-      input.cameraMimeType,
-      (blob) => input.onChunk("camera", blob),
-      "video"
-    );
+  try {
+    for (const sourceId of input.sourceIds) {
+      const wantsSystemAudio = input.systemAudio && systemAudioTracks.length === 0;
+      let stream: DisplayCaptureStream;
+
+      try {
+        stream = await capture(sourceId, wantsSystemAudio);
+      } catch (error) {
+        if (!wantsSystemAudio) {
+          throw error;
+        }
+        // Some platforms reject a display capture that also asks for audio;
+        // retry video-only so the screen is still recorded.
+        await input.releaseSource().catch(() => undefined);
+        stream = await capture(sourceId, false);
+      }
+
+      const audioTracks = stream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        systemAudioTracks.push(...audioTracks);
+      }
+      screens.push({ sourceId, stream });
+    }
+  } catch (error) {
+    await input.releaseSource().catch(() => undefined);
+    throw error;
   }
 
-  if (input.micStream && input.micMimeType) {
-    recorders.mic = createRecorder(
-      input.micStream,
-      input.micMimeType,
-      (blob) => input.onChunk("mic", blob),
-      "audio"
-    );
-  }
+  return { screens, systemAudioTracks };
+}
 
-  if (input.systemStream && input.systemMimeType) {
-    recorders.system = createRecorder(
-      input.systemStream,
-      input.systemMimeType,
-      (blob) => input.onChunk("system", blob),
-      "audio"
+export function createRecorders(input: {
+  captures: Array<{
+    trackId: MediaTrackKey;
+    stream: MediaStream;
+    mimeType: string;
+    kind: RecorderKind;
+    videoBitsPerSecond?: number;
+  }>;
+  onChunk: (trackId: MediaTrackKey, blob: Blob) => void;
+  onError: (error: unknown) => void;
+}): RecorderMap {
+  const recorders: RecorderMap = {};
+
+  for (const capture of input.captures) {
+    recorders[capture.trackId] = createRecorder(
+      capture.stream,
+      capture.mimeType,
+      (blob) => input.onChunk(capture.trackId, blob),
+      capture.kind,
+      capture.videoBitsPerSecond
     );
   }
 
@@ -217,6 +323,49 @@ export function getDeviceLabel(
   fallback: string
 ): string {
   return options.find((option) => option.deviceId === value)?.label ?? fallback;
+}
+
+/**
+ * Toggle a screen/window in the recording selection. The last remaining source
+ * stays selected so a recording always has something to capture.
+ */
+export function toggleSourceSelection(current: string[], sourceId: string): string[] {
+  if (!current.includes(sourceId)) {
+    return [...current, sourceId];
+  }
+
+  return current.length > 1 ? current.filter((id) => id !== sourceId) : current;
+}
+
+/** Drop sources that disappeared and default to the first screen. */
+export function reconcileSourceSelection(
+  sources: SourceSummary[],
+  current: string[]
+): string[] {
+  const available = current.filter((id) => sources.some((source) => source.id === id));
+  if (available.length > 0) {
+    return available;
+  }
+
+  const first = sources.find((source) => source.kind === "screen") ?? sources[0];
+  return first ? [first.id] : [];
+}
+
+/** Toggle one camera device; any number of cameras may stay selected. */
+export function toggleCameraSelection(current: string[], deviceId: string): string[] {
+  return current.includes(deviceId)
+    ? current.filter((id) => id !== deviceId)
+    : [...current, deviceId];
+}
+
+/** Drop camera devices that are no longer connected. */
+export function reconcileCameraSelection(
+  cameras: DeviceOption[],
+  current: string[]
+): string[] {
+  return current.filter((deviceId) =>
+    cameras.some((camera) => camera.deviceId === deviceId)
+  );
 }
 
 export function formatDuration(ms: number): string {
