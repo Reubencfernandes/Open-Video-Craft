@@ -1,0 +1,706 @@
+
+ RUN  v4.1.9 <repository root>
+
+ ✓ tests/auto-updates-config.test.ts > auto-update configuration > never downloads or installs updates automatically 52ms
+ ✓ tests/bench.test.ts > bench mode > enables only the exact --bench flag in an unpackaged app 1ms
+ ✓ tests/bench.test.ts > bench mode > overwrites an inherited environment flag 0ms
+ ✓ tests/bench.test.ts > bench IPC > returns aggregate app memory and uptime only to the main renderer 2ms
+ ✓ tests/bench.test.ts > bench IPC > rejects every sender while the main window is unavailable 0ms
+ ✓ tests/bench.test.ts > bench IPC > reports zero when Electron supplies no process metrics 0ms
+ ✓ tests/bench.test.ts > bench IPC > does not register the channel outside bench mode 0ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --samples 0 32ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --samples 1.5 32ms
+ ✓ tests/bench.test.ts > startup harness arguments > rejects --settle=-1 33ms
+ ✓ tests/editor-domain.test.ts > editor document migration > migrates schema v1 without changing the saved snapshot 2ms
+ ✓ tests/editor-domain.test.ts > editor document migration > loads schema-v2 snapshots created before transitions were introduced 1ms
+ ✓ tests/editor-domain.test.ts > editor document migration > loads schema-v2 snapshots created before text overlays were introduced 1ms
+ ✓ tests/editor-domain.test.ts > editor document migration > keeps older text overlays valid while accepting saved typography controls 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > ripple-removes time across clips and subtitles 2ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > converts dB gain into the editor's linear volume scale 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > applies composition, audio, text, and editor-view operations 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > queues renderer-owned media import and Lyria generation commands 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > adds, updates, and removes request-scoped zoom and speed effects 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > rejects overlapping or out-of-timeline agent effects 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > adds and removes a transition only at an adjacent clip cut 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > rejects a transition across a timeline gap 1ms
+ ✓ tests/editor-domain.test.ts > agent edit operations > sequences video clips with linked project audio and subtitles 1ms
+ ✓ tests/editor-domain.test.ts > editor transactions > checks revisions, checkpoints one AI plan, and undoes it 16ms
+ ✓ tests/editor-domain.test.ts > editor transactions > recovers a stale lock before saving 3ms
+ ✓ tests/project-library.test.ts > ProjectLibrary > stores, refreshes, marks missing, and removes recent projects 11ms
+ ✓ tests/project-library.test.ts > ProjectLibrary > caps the recent list and refreshes get without scanning unrelated projects 13ms
+ ✓ tests/project-store.test.ts > project folder naming > creates filesystem-safe timestamped project folder names 2ms
+ ✓ tests/project-store.test.ts > ProjectStore > refuses permanent discard of projects loaded from disk 5ms
+ ✓ tests/project-store.test.ts > ProjectStore > reserves separate folders for simultaneous identical project names 9ms
+ ✓ tests/project-store.test.ts > ProjectStore > preserves existing edit and subtitle files when renaming a project 8ms
+ ✓ tests/project-store.test.ts > ProjectStore > creates a transparent project folder with default JSON files 5ms
+ ✓ tests/project-store.test.ts > ProjectStore > tracks recording metadata and bytes written per media track 17ms
+ ✓ tests/project-store.test.ts > ProjectStore > serializes concurrent media writes and keeps project metadata valid 40ms
+ ✓ tests/project-store.test.ts > ProjectStore > stores editor state and imported assets inside the project folder 7ms
+ ✓ tests/editor-document-safety.test.ts > refuses to overwrite an invalid existing editor file: null 6ms
+ ✓ tests/editor-document-safety.test.ts > refuses to overwrite an invalid existing editor file: {"schemaVersion":99} 3ms
+ ✓ tests/editor-document-safety.test.ts > refuses to overwrite an invalid existing editor file: {"schemaVersion":2,"state":{}} 3ms
+ ✓ tests/editor-document-safety.test.ts > refuses to overwrite an invalid existing editor file: {"broken": 3ms
+ ✓ tests/editor-document-safety.test.ts > rejects saved imports outside their canonical project path 3ms
+ ✓ tests/editor-document-safety.test.ts > does not retry an operation that fails with EEXIST 3ms
+ ✓ tests/project-containment.test.ts > allows project files that do not yet exist and rejects traversal 4ms
+ ✓ tests/project-containment.test.ts > rejects reads and writes through an external media junction 4ms
+ ✓ tests/project-containment.test.ts > refuses editor writes through an external metadata junction 3ms
+ ✓ tests/project-containment.test.ts > allows links whose resolved target stays within the selected project 3ms
+ ✓ tests/editor-document-safety.test.ts > does not steal a empty lock 126ms
+ ✓ tests/editor-document-safety.test.ts > does not steal a live but old lock 125ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > uses one sliding indicator for tool navigation 9ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > adds text to the viewport and uses shared responsive editor controls 5ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > only marks the explicitly selected text layer in the layer index 6ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > uses the shared pink bubble action for speed, zoom, and subtitle creation 5ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > uses the glowing API-key pill for cloud subtitle setup 3ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > shows the zoom focus as one large solid red dot 3ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > renders subtitle text as a timed hierarchy and marks the playing segment 3ms
+ ✓ tests/editor-primary-actions.test.ts > editor primary actions > removes Animated from Style while safely opening older projects 1ms
+ ✓ tests/editor-ai-panels.test.ts > editor AI and audio panels > starts the Audio panel at Master volume without the live meter 7ms
+ ✓ tests/editor-ai-panels.test.ts > editor AI and audio panels > offers only Lyria engines and defaults to Lyria Clip 3ms
+ ✓ tests/editor-ai-panels.test.ts > editor AI and audio panels > keeps Gemini actions disabled while provider settings load 2ms
+ ✓ tests/editor-ai-panels.test.ts > editor AI and audio panels > uses the shared glowing status pill for missing Gemini keys 2ms
+ ✓ tests/editor-ai-panels.test.ts > editor AI and audio panels > pins the assistant composer and scrolls only the message thread 15ms
+ ✓ tests/editor-ai-panels.test.ts > editor AI and audio panels > omits project revision text and bounds the AI dialog to the viewport 5ms
+stderr | tests/floating-select.test.ts > FloatingSelect > opens the floating menu and selects an option
+The current testing environment is not configured to support act(...)
+
+stderr | tests/home-update-status.test.ts > HomeUpdateStatus > shows one clean green download progress bar
+The current testing environment is not configured to support act(...)
+
+stderr | tests/floating-select.test.ts > FloatingSelect > opens the floating menu and selects an option
+The current testing environment is not configured to support act(...)
+
+stderr | tests/floating-select.test.ts > FloatingSelect > opens the floating menu and selects an option
+The current testing environment is not configured to support act(...)
+
+stderr | tests/floating-select.test.ts > FloatingSelect > opens the floating menu and selects an option
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/editor-shortcuts.test.ts > editor global shortcuts > leaves Cmd/Ctrl+Z and Y native in text inputs and contenteditable regions 21ms
+ ✓ tests/editor-shortcuts.test.ts > editor global shortcuts > leaves Space on a focused timeline mute button to native activation 4ms
+ ✓ tests/editor-shortcuts.test.ts > editor global shortcuts > toggles playback when a timeline clip button has focus 3ms
+ ✓ tests/editor-shortcuts.test.ts > editor global shortcuts > toggles playback after a Layout preset button receives focus 2ms
+ ✓ tests/editor-shortcuts.test.ts > editor global shortcuts > toggles playback as a general editor shortcut 2ms
+ ✓ tests/editor-shortcuts.test.ts > editor global shortcuts > routes Delete through the unified timeline selection 1ms
+ ✓ tests/editor-shortcuts.test.ts > editor global shortcuts > deletes a selected timeline region even while its button has focus 1ms
+stderr | tests/floating-select.test.ts > FloatingSelect > closes with Escape and returns focus to the trigger
+The current testing environment is not configured to support act(...)
+
+stderr | tests/floating-select.test.ts > FloatingSelect > closes with Escape and returns focus to the trigger
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/provider-keys.test.ts > ProviderKeysManager > round-trips keys with safeStorage encryption 8ms
+ ✓ tests/provider-keys.test.ts > ProviderKeysManager > keeps both providers when settings are updated concurrently 27ms
+ ✓ tests/provider-keys.test.ts > ProviderKeysManager > falls back to obfuscated storage when encryption is unavailable 3ms
+ ✓ tests/provider-keys.test.ts > ProviderKeysManager > never exposes keys in the renderer view 3ms
+ ✓ tests/provider-keys.test.ts > ProviderKeysManager > clears keys with null and persists provider/language choices 13ms
+ ✓ tests/provider-keys.test.ts > ProviderKeysManager > survives a corrupt settings file 1ms
+stderr | tests/floating-select.test.ts > FloatingSelect > closes with Escape and returns focus to the trigger
+The current testing environment is not configured to support act(...)
+
+stderr | tests/floating-select.test.ts > FloatingSelect > closes with Escape and returns focus to the trigger
+The current testing environment is not configured to support act(...)
+
+stderr | tests/home-update-status.test.ts > HomeUpdateStatus > shows one clean green download progress bar
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/floating-select.test.ts > FloatingSelect > opens the floating menu and selects an option 30ms
+ ✓ tests/floating-select.test.ts > FloatingSelect > closes with Escape and returns focus to the trigger 7ms
+stderr | tests/home-update-status.test.ts > HomeUpdateStatus > collapses the progress card before spawning the rainbow Restart action
+The current testing environment is not configured to support act(...)
+
+stderr | tests/home-update-status.test.ts > HomeUpdateStatus > collapses the progress card before spawning the rainbow Restart action
+The current testing environment is not configured to support act(...)
+
+stderr | tests/home-update-status.test.ts > HomeUpdateStatus > collapses the progress card before spawning the rainbow Restart action
+The current testing environment is not configured to support act(...)
+
+stderr | tests/home-update-status.test.ts > HomeUpdateStatus > collapses the progress card before spawning the rainbow Restart action
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/home-update-status.test.ts > HomeUpdateStatus > collapses the progress card before spawning the rainbow Restart action
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/home-update-status.test.ts > HomeUpdateStatus > shows one clean green download progress bar 27ms
+ ✓ tests/home-update-status.test.ts > HomeUpdateStatus > collapses the progress card before spawning the rainbow Restart action 13ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > returns a friendly message when Gemini is temporarily overloaded 12ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > passes expanded editor operations through the shared Gemini contract 3ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > replays thought signatures and echoes function call ids 1ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > does not resend an earlier video attachment when consent is off 1ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > bounds long history only at complete top-level user turns 1ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > rolls back a failed user turn before retrying 1ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > preserves an applied tool outcome when cancellation interrupts the reply 2ms
+ ✓ tests/gemini-agent.test.ts > GeminiAgentManager function calling > preserves an undo outcome when cancellation interrupts the reply 1ms
+stderr | tests/chat-message-bubble.test.ts > ChatMessageBubble > copies a sent user query and confirms the action
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/subtitle-export.test.ts > subtitle export file safety > refuses to overwrite an existing sidecar and preserves its contents 5ms
+ ✓ tests/subtitle-export.test.ts > subtitle export file safety > uses exclusive creation when two sidecar writes race 3ms
+ ✓ tests/subtitle-export.test.ts > subtitle export file safety > isolates burn-in subtitles and removes only their temporary directory 6ms
+stderr | tests/api-key-card.test.ts > ApiKeyCard > reveals a saved key only on request and keeps it editable
+The current testing environment is not configured to support act(...)
+
+stderr | tests/chat-message-bubble.test.ts > ChatMessageBubble > copies a sent user query and confirms the action
+The current testing environment is not configured to support act(...)
+
+stderr | tests/chat-message-bubble.test.ts > ChatMessageBubble > copies a sent user query and confirms the action
+The current testing environment is not configured to support act(...)
+
+stderr | tests/chat-message-bubble.test.ts > ChatMessageBubble > does not show the query copy action on assistant messages
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > reveals a saved key only on request and keeps it editable
+The current testing environment is not configured to support act(...)
+
+stderr | tests/chat-message-bubble.test.ts > ChatMessageBubble > does not show the query copy action on assistant messages
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > reveals a saved key only on request and keeps it editable
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > reveals a saved key only on request and keeps it editable
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > reveals a saved key only on request and keeps it editable
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > reveals a saved key only on request and keeps it editable
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > keeps a revealed key available when an update fails
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/chat-message-bubble.test.ts > ChatMessageBubble > copies a sent user query and confirms the action 34ms
+ ✓ tests/chat-message-bubble.test.ts > ChatMessageBubble > does not show the query copy action on assistant messages 18ms
+ ✓ tests/subtitles-panel.test.ts > SubtitlesPanel > opens the first subtitle by default, switches items, and lets the open item close 69ms
+ ✓ tests/subtitles-panel.test.ts > SubtitlesPanel > shows timing as read-only because timing is edited on the timeline 18ms
+stderr | tests/api-key-card.test.ts > ApiKeyCard > keeps a revealed key available when an update fails
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > keeps a revealed key available when an update fails
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/composition-export.test.ts > timeline composition export > retimes subtitle cues through trimmed speed regions 2ms
+ ✓ tests/composition-export.test.ts > timeline composition export > retimes styled text overlays without losing their presentation 1ms
+ ✓ tests/editor-export.test.ts > exports silent video with background audio 528ms
+stderr | tests/api-key-card.test.ts > ApiKeyCard > keeps a revealed key available when an update fails
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > keeps a revealed key available when an update fails
+The current testing environment is not configured to support act(...)
+
+stderr | tests/api-key-card.test.ts > ApiKeyCard > keeps a revealed key available when an update fails
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/api-key-card.test.ts > ApiKeyCard > reveals a saved key only on request and keeps it editable 46ms
+ ✓ tests/api-key-card.test.ts > ApiKeyCard > keeps a revealed key available when an update fails 10ms
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when the editor unmounts
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when the editor unmounts
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when the editor unmounts
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when the editor unmounts
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/subtitles-panel.test.ts > SubtitlesPanel > sorts cues by their current timestamps 14ms
+ ✓ tests/subtitles-panel.test.ts > SubtitlesPanel > marks only the next cue active at an adjacent boundary 10ms
+ ✓ tests/subtitles-panel.test.ts > SubtitlesPanel > grows the current connector and keeps completed connectors filled 29ms
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > includes the project video automatically with every chat request
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > includes the project video automatically with every chat request
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > includes the project video automatically with every chat request
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > includes the project video automatically with every chat request
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > includes the project video automatically with every chat request
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > includes the project video automatically with every chat request
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/editor-export-subtitles.test.ts > raw/import editor subtitle export > reserves a sidecar before encoding 10ms
+ ✓ tests/editor-export-subtitles.test.ts > raw/import editor subtitle export > does not start encoding when the requested sidecar already exists 7ms
+ ✓ tests/editor-export-subtitles.test.ts > raw/import editor subtitle export > removes its reserved sidecar and partial video when encoding fails 13ms
+ ✓ tests/editor-export-subtitles.test.ts > raw/import editor subtitle export > passes a scoped temporary SRT for burn-in and cleans it afterward 4ms
+ ✓ tests/editor-export-subtitles.test.ts > raw/import editor subtitle export > cleans the scoped burn-in SRT when encoding fails 3ms
+ ✓ tests/editor-export-subtitles.test.ts > raw/import editor subtitle export > does not create or pass subtitles in none mode 1ms
+stderr | tests/editor-export-hook.test.ts > exports the saved timeline even when an imported clip is selected
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > formatGeminiChatError > turns a raw Electron-wrapped Gemini 503 response into a useful message
+The current testing environment is not configured to support act(...)
+
+stderr | tests/gemini-chat-hook.test.ts > formatGeminiChatError > explains when a previous request is still active
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > exports the saved timeline even when an imported clip is selected
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > exports the saved timeline even when an imported clip is selected
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when switching projects 17ms
+ ✓ tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > cancels active work when the editor unmounts 4ms
+ ✓ tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > does not cancel a completed session when switching projects 3ms
+ ✓ tests/gemini-chat-hook.test.ts > useGeminiChat project lifecycle > includes the project video automatically with every chat request 2ms
+ ✓ tests/gemini-chat-hook.test.ts > formatGeminiChatError > turns a raw Electron-wrapped Gemini 503 response into a useful message 1ms
+ ✓ tests/gemini-chat-hook.test.ts > formatGeminiChatError > explains when a previous request is still active 1ms
+stderr | tests/editor-export-hook.test.ts > exports the saved timeline even when an imported clip is selected
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > uses the project created by the first save
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > uses the project created by the first save
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > uses the project created by the first save
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > uses the project created by the first save
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > uses the project created by the first save
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > does not export an older snapshot after saving fails
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > does not export an older snapshot after saving fails
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > does not export an older snapshot after saving fails
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > does not export an older snapshot after saving fails
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > does not export an older snapshot after saving fails
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > honors cancellation during save and prevents duplicate exports
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > honors cancellation during save and prevents duplicate exports
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > honors cancellation during save and prevents duplicate exports
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > honors cancellation during save and prevents duplicate exports
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > honors cancellation during save and prevents duplicate exports
+The current testing environment is not configured to support act(...)
+The current testing environment is not configured to support act(...)
+
+stderr | tests/editor-export-hook.test.ts > honors cancellation during save and prevents duplicate exports
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/editor-export-hook.test.ts > exports the saved timeline even when an imported clip is selected 10ms
+ ✓ tests/editor-export-hook.test.ts > uses the project created by the first save 6ms
+ ✓ tests/editor-export-hook.test.ts > does not export an older snapshot after saving fails 4ms
+ ✓ tests/editor-export-hook.test.ts > honors cancellation during save and prevents duplicate exports 3ms
+ ✓ tests/prepare-mas-profile.test.ts > Mac App Store provisioning profile preparation > reads the application identifier and expiration date 11ms
+ ✓ tests/prepare-mas-profile.test.ts > Mac App Store provisioning profile preparation > returns null for malformed profile values 0ms
+ ✓ tests/chat-markdown.test.ts > ChatMarkdown > renders GitHub-flavored Markdown and drops unsafe content 16ms
+ ✓ tests/timeline-selection.test.ts > pressing a timeline clip > selects only the pressed clip 2ms
+ ✓ tests/timeline-selection.test.ts > pressing a timeline clip > keeps a group for dragging and collapses to the clip if it was just a click 0ms
+ ✓ tests/timeline-selection.test.ts > pressing a timeline clip > toggles membership with a modifier and never drags a clip it just deselected 1ms
+ ✓ tests/timeline-selection.test.ts > timeline shortcuts while a clip has focus > splits with Ctrl/Cmd+B right after the clip was clicked 17ms
+ ✓ tests/timeline-selection.test.ts > timeline shortcuts while a clip has focus > still seeks with the arrow keys 3ms
+ ✓ tests/timeline-selection.test.ts > timeline shortcuts while a clip has focus > keeps a recording's audio on Alt+Delete 3ms
+ ✓ tests/stt-cloud.test.ts > provider errors > does not expose a raw Gemini overload payload 10ms
+ ✓ tests/stt-cloud.test.ts > parseClockTimestamp > parses MM:SS and MM:SS.mmm 0ms
+ ✓ tests/stt-cloud.test.ts > parseClockTimestamp > accepts bare seconds and rejects junk 0ms
+ ✓ tests/stt-cloud.test.ts > pickChunkBoundaries > keeps short audio as one chunk 0ms
+ ✓ tests/stt-cloud.test.ts > pickChunkBoundaries > cuts at the silence nearest the 60s target 0ms
+ ✓ tests/stt-cloud.test.ts > pickChunkBoundaries > caps chunks at 120s when there is no usable silence 0ms
+ ✓ tests/stt-cloud.test.ts > mapGeminiSegments > offsets timestamps by the chunk start and clamps to the chunk 0ms
+ ✓ tests/stt-cloud.test.ts > mapGeminiSegments > drops unparsable or empty segments 1ms
+ ✓ tests/stt-cloud.test.ts > mapGeminiSegments > splits over-long text into caption-sized pieces 1ms
+ ✓ tests/composition-export.test.ts > timeline composition export > renders reordered clips, an intentional gap, and delayed audio 633ms
+ ✓ tests/recorder-controller-view.test.ts > recorder controller view > shows source selection and the simplified red record control 9ms
+ ✓ tests/recorder-controller-view.test.ts > recorder controller view > shows an animated recording state with elapsed time and clear controls 7ms
+ ✓ tests/recorder-controller-view.test.ts > recorder controller view > renders the camera preview as the full central-panel background 2ms
+ ✓ tests/timeline-links.test.ts > recording audio links > groups only a recording's own screen, mic, and system tracks 1ms
+ ✓ tests/timeline-links.test.ts > recording audio links > unlinks audio that was moved out of sync on its own 0ms
+ ✓ tests/timeline-links.test.ts > recording audio links > splits the voice together with the picture 1ms
+ ✓ tests/timeline-links.test.ts > recording audio links > does not split imported music when blading the picture 0ms
+ ✓ tests/timeline-links.test.ts > recording audio links > splitting a selected audio clip leaves the picture whole 0ms
+ ✓ tests/timeline-links.test.ts > recording audio links > deletes the audio under a deleted clip, even when the audio was never split 0ms
+ ✓ tests/timeline-links.test.ts > recording audio links > keeps the audio when asked to delete only the picture 0ms
+ ✓ tests/timeline-links.test.ts > recording audio links > removes an explicitly selected audio clip whole instead of slicing it 0ms
+ ✓ tests/timeline-links.test.ts > recording audio links > isolates linked audio so a moved clip keeps its voice in sync 5ms
+ ✓ tests/timeline-links.test.ts > recording audio links > trims linked audio to the clip's new edges 1ms
+ ✓ tests/timeline-links.test.ts > recording audio links > reports linked audio for a selection without repeating selected clips 0ms
+ ✓ tests/timeline-links.test.ts > video trim bounds > stops an end trim at the next clip instead of overlapping it 0ms
+ ✓ tests/timeline-links.test.ts > video trim bounds > stops a start trim at the previous clip instead of overlapping it 0ms
+ ✓ tests/timeline-links.test.ts > video trim bounds > never shrinks a clip that is already shorter than the minimum 1ms
+ ✓ tests/project-deletion.test.ts > project deletion safety > accepts only a project folder with the expected id 8ms
+ ✓ tests/project-deletion.test.ts > project deletion safety > rejects an arbitrary folder 1ms
+stderr | tests/range-control.test.ts > RangeControl > shows smooth inset progress without dots and keeps a native slider
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/operation-schema.test.ts > operationSchema > accepts every operation type the reducer supports 9ms
+ ✓ tests/operation-schema.test.ts > operationSchema > rejects out-of-range and malformed operations 1ms
+ ✓ tests/subtitle-generation-hook.test.ts > useSubtitleGeneration > clears existing subtitles before local transcription begins 12ms
+stderr | tests/range-control.test.ts > RangeControl > shows smooth inset progress without dots and keeps a native slider
+The current testing environment is not configured to support act(...)
+
+ ✓ tests/range-control.test.ts > RangeControl > shows smooth inset progress without dots and keeps a native slider 23ms
+ ✓ tests/export-dialog.test.ts > ExportDialog > uses a wide compact layout without the export explanation card 6ms
+ ✓ tests/editor-export.test.ts > burns captions into a selected import without leaving a sidecar 244ms
+ ✓ tests/request-validation-ai.test.ts > assertUpdateProviderKeysRequest > accepts partial updates and null key clears 1ms
+ ✓ tests/request-validation-ai.test.ts > assertUpdateProviderKeysRequest > rejects bad providers, oversized keys, bad languages 0ms
+ ✓ tests/request-validation-ai.test.ts > assertProviderKeyId > accepts supported cloud credentials and rejects everything else 0ms
+ ✓ tests/request-validation-ai.test.ts > assertSttTranscribeRequest > accepts a valid request 0ms
+ ✓ tests/request-validation-ai.test.ts > assertSttTranscribeRequest > rejects raw file paths and http URLs 0ms
+ ✓ tests/request-validation-ai.test.ts > assertSttTranscribeRequest > rejects whisper-local, empty sources, and bad ids 0ms
+ ✓ tests/request-validation-ai.test.ts > assertMusicGenerateRequest > accepts Lyria engines without local ACE-Step fields 0ms
+ ✓ tests/request-validation-ai.test.ts > assertMusicGenerateRequest > rejects the removed ACE-Step engine 0ms
+ ✓ tests/request-validation-ai.test.ts > assertGeminiChatSendRequest > accepts a valid chat message 0ms
+ ✓ tests/request-validation-ai.test.ts > assertGeminiChatSendRequest > rejects empty and oversized messages 0ms
+ ✓ tests/permission-onboarding.test.ts > PermissionOnboarding > uses a neutral continuation label before macOS media permission prompts 10ms
+ ✓ tests/editor-topbar.test.ts > editor top bar > renders the export action with the animated green chevron track 9ms
+ ✓ tests/font-metrics.test.ts > font metrics > reads the bundled font's em size and glyph coverage 3ms
+ ✓ tests/font-metrics.test.ts > font metrics > reports a line height near one and a quarter em 0ms
+ ✓ tests/font-metrics.test.ts > font metrics > scales width with font size and text length 0ms
+ ✓ tests/font-metrics.test.ts > font metrics > gives a wider advance to a wider glyph 0ms
+ ✓ tests/font-metrics.test.ts > font metrics > keeps every wrapped line inside the limit 0ms
+ ✓ tests/font-metrics.test.ts > font metrics > preserves newlines the author typed 0ms
+ ✓ tests/font-metrics.test.ts > font metrics > lets a word wider than the limit overflow rather than splitting it 0ms
+ ✓ tests/font-metrics.test.ts > font metrics > returns null for data that is not a font 0ms
+ ✓ tests/font-metrics.test.ts > font metrics > returns null for a missing file instead of throwing 0ms
+ ✓ tests/subtitle-activity.test.ts > subtitle activity placeholders > places cloud placeholders only between detected silence ranges 1ms
+ ✓ tests/subtitle-activity.test.ts > subtitle activity placeholders > detects separated local audio activity without filling silent gaps 1ms
+ ✓ tests/subtitle-activity.test.ts > subtitle activity placeholders > does not create placeholders for effectively silent audio 1ms
+ ✓ tests/timeline-playhead.test.ts > timeline playhead > routes a direct drag gesture to the scrub handlers 14ms
+ ✓ tests/timeline-playhead.test.ts > timeline ruler > positions the final timestamp at the true end of the ruler 12ms
+ ✓ tests/timeline-playhead.test.ts > timeline trim handles > route captured move and release events directly to the interaction controller 8ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > shows zoom, speed, subtitle, and text timing while another tool is active 27ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > enables toolbar deletion for a singular zoom selection 13ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > exposes mouse resizing and wheel/pinch timeline zoom 16ms
+ ✓ tests/workflow-security.test.ts > workflow security > pins every external action to a full commit SHA 2ms
+ ✓ tests/workflow-security.test.ts > workflow security > drops Windows from CI and release workflows 1ms
+ ✓ tests/workflow-security.test.ts > workflow security > uses least-privilege workflow permissions 0ms
+ ✓ tests/workflow-security.test.ts > workflow security > runs the runtime audit and keeps action pins updated 0ms
+ ✓ tests/workflow-security.test.ts > workflow security > records the CI and coverage decisions in ADR-14 0ms
+ ✓ tests/workflow-security.test.ts > workflow security > retires Windows build scripts and packaging 0ms
+ ✓ tests/fork-identity.test.ts > fork identity > uses the fork appId and keeps the product name 1ms
+ ✓ tests/fork-identity.test.ts > fork identity > publishes to the fork and never to upstream 1ms
+ ✓ tests/fork-identity.test.ts > fork identity > does not hard-code upstream's Apple Team ID in release verification 0ms
+ ✓ tests/fork-identity.test.ts > fork identity > targets the fork's own bundle id in the Mac App Store profile helper 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > resolves the bundled FFmpeg path 1ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > rewrites app.asar paths to app.asar.unpacked paths 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > parses remuxed media duration metadata 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > adds escaped burn-in subtitles to the raw video filter 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > disables stream copy when subtitles must be burned in 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > disables stream copy when text overlays must be drawn 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > draws text overlays under burned-in subtitles 3ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > sizes overlay text against the exported frame, not the source 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > wraps overlay text within the room the preview leaves it 1ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > centres wrapped lines, as the preview does 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > keeps newlines literal so drawtext breaks the line 0ms
+ ✓ tests/ffmpeg.test.ts > FFmpeg binaries > leaves the filter untouched when there are no overlays 0ms
+ ✓ tests/new-project-button.test.ts > NewProjectButton > renders a responsive pink halftone action with an accessible name 7ms
+ ✓ tests/new-project-button.test.ts > NewProjectButton > preserves the disabled state 1ms
+ ✓ tests/changelog-dialog.test.ts > ChangelogDialog > presents the release as a branded update card 7ms
+ ✓ tests/changelog-dialog.test.ts > ChangelogDialog > keeps release metadata current without advertising inline time inputs 0ms
+ ✓ tests/changelog-dialog.test.ts > ChangelogDialog > renders nothing while closed 0ms
+ ✓ tests/pinned-electron.test.ts > pinned Electron > pins an exact Electron version of at least 43.8.1 1ms
+ ✓ tests/pinned-electron.test.ts > pinned Electron > records the same version in the lockfile 2ms
+ ✓ tests/editor-export-timeline.test.ts > project timeline export > renders through the compositor when the project has no screen recording 2ms
+ ✓ tests/editor-export-timeline.test.ts > project timeline export > passes every video segment to the compositor 2ms
+ ✓ tests/editor-export-timeline.test.ts > project timeline export > names the save dialog after the project, not a screen recording 2ms
+ ✓ tests/editor-export-timeline.test.ts > project timeline export > falls back to the single-source path when the timeline has no video 2ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > FFmpeg release validation > accepts the required free encoders and filters 1ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > FFmpeg release validation > rejects nonfree builds even when all capabilities exist 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > FFmpeg release validation > reports missing release capabilities 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > FFmpeg release validation > requires exact configuration-flag tokens 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > FFmpeg release validation > validates non-native Mach-O capability markers without execution 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > FFmpeg release validation > runs full runtime validation only when the binary contains the native slice 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > pinned macOS FFmpeg inputs > keeps the release archives and checksums pinned 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > electron-builder FFmpeg routing > maps the installed numeric Arch values 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > electron-builder FFmpeg routing > routes a thin build to app.asar.unpacked 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > electron-builder FFmpeg routing > does not overwrite the final universal binary with a thin slice 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > electron-builder FFmpeg routing > prefers the merged universal app.asar.unpacked layout 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > electron-builder FFmpeg routing > accepts the split universal layout only when both slices exist 1ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > macOS release archive routing > derives thin and universal FFmpeg architectures from artifact names 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > macOS release archive routing > locates FFmpeg in merged and split packaged layouts 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > macOS release archive routing > does not trust plausible output from a failed signing command 0ms
+ ✓ tests/ffmpeg-release-scripts.test.ts > macOS release archive routing > requires complete architecture metadata with no stale ZIP entries 0ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > expands and compresses the time ruler with a horizontal drag 12ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > keeps all effect lanes visible before effects or subtitles are added 8ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > shows timeline feedback while subtitles are processing 8ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > hides the drag rectangle after release and highlights the selected items 15ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > shows one pink rectangle without item outlines while the pointer is dragging 10ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > persists mute on the audio lane rather than every reused source 17ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > exposes inherited per-source mute as a mixed lane state 14ms
+ ✓ tests/timeline-playhead.test.ts > persistent effect lanes > offers to unmute a lane muted by its own persisted control 11ms
+ ✓ tests/timeline-move.test.ts > moveTimelineSegment > stops a video clip against its neighbor instead of overlapping 1ms
+ ✓ tests/timeline-move.test.ts > moveTimelineSegment > jumps to the gap on the far side once the pointer is closer to it 0ms
+ ✓ tests/timeline-move.test.ts > moveTimelineSegment > holds a boxed-in clip until the pointer favors the far gap, then jumps past it 0ms
+ ✓ tests/timeline-move.test.ts > moveTimelineSegment > snaps the clip edge to an extra target such as the playhead 0ms
+ ✓ tests/timeline-move.test.ts > timeline range selection > selects only clips touched by both the marked time and chosen lane 0ms
+ ✓ tests/timeline-move.test.ts > timeline range selection > does not select unrelated media when the marquee covers only effect lanes 0ms
+ ✓ tests/timeline-move.test.ts > timeline range selection > selects timed effects only inside their painted lane and time bounds 0ms
+ ✓ tests/timeline-move.test.ts > timeline range selection > rebuilds a moved group range from the clips' actual lanes and bounds 0ms
+ ✓ tests/timeline-move.test.ts > timeline range selection > builds an inclusive ordered lane range in either drag direction 1ms
+ ✓ tests/timeline-move.test.ts > timeline range selection > moves a selected group with its spacing intact 0ms
+ ✓ tests/timeline-move.test.ts > timeline range selection > stops a selected group at an unselected video clip 0ms
+ ✓ tests/editor-export.test.ts > exports an imported-only saved timeline without requiring a screen recording 292ms
+ ✓ tests/playback-clock.test.ts > playback clock > uses decoder media time as the authoritative video timeline clock 1ms
+ ✓ tests/playback-clock.test.ts > playback clock > holds the timeline while the decoder is seeking or buffering 0ms
+ ✓ tests/playback-clock.test.ts > playback clock > uses elapsed time for images and intentional timeline gaps 0ms
+ ✓ tests/playback-clock.test.ts > playback clock > never jumps backwards for a stale decoder frame 0ms
+ ✓ tests/playback-clock.test.ts > playback clock > advances to the clip boundary when a slightly shorter primary track ends 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > preserves deliberate short trims when media metadata resynchronizes 1ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > preserves source offsets and lengths while metadata is unknown 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > only expands explicitly marked placeholders once metadata arrives 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > does not extend a start trim before the source begins 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > assigns sparse audio lanes without allocating by the largest lane ID 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > trims a clip start and advances its source offset by the same amount 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > clamps an end trim to the remaining source media 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > splits the clip under the playhead instead of a stale selected clip 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > prefers the video clip over overlapping audio at the playhead 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > does not split at a clip boundary 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > keeps source time continuous across both sides of a split 0ms
+ ✓ tests/timeline-utils.test.ts > timeline trim and split geometry > does not expand a short left split as an unresolved duration placeholder 0ms
+ ✓ tests/timeline-utils.test.ts > timeline composition duration > does not leave an empty video tail for audio extending past the last frame 0ms
+ ✓ tests/timeline-utils.test.ts > timeline composition duration > uses the audio end when the project has no video clips 0ms
+ ✓ tests/subtitle-transcription.test.ts > subtitle transcription > auto-detects any spoken language without translating it to English 1ms
+ ✓ tests/subtitle-transcription.test.ts > subtitle transcription > groups Whisper word timestamps into subtitle segments with word timing 1ms
+ ✓ tests/subtitle-transcription.test.ts > subtitle transcription > falls back to timed subtitle chunks when word timestamps are unavailable 0ms
+ ✓ tests/subtitle-transcription.test.ts > subtitle transcription > formats the detected language for the UI 0ms
+ ✓ tests/subtitle-transcription.test.ts > subtitle transcription > keeps language on flattened word chunks from the Transformers.js tokenizer 0ms
+ ✓ tests/subtitle-transcription.test.ts > subtitle transcription > recognizes the missing-attention timestamp export failure 0ms
+ ✓ tests/home-dashboard.test.ts > home dashboard > renders a compact searchable project header 6ms
+ ✓ tests/home-dashboard.test.ts > home dashboard > renders quick-start workflows as dashboard cards 1ms
+ ✓ tests/home-dashboard.test.ts > home dashboard > uses real project data in a larger project grid 1ms
+ ✓ tests/home-dashboard.test.ts > home dashboard > offers a non-destructive Recents removal for incompatible projects 1ms
+ ✓ tests/home-dashboard.test.ts > home dashboard > keeps project artwork empty until the actual thumbnail loads 0ms
+ ✓ tests/subtitle-timecode.test.ts > subtitle timecodes > switches adjacent cues at a half-open boundary 1ms
+ ✓ tests/subtitle-timecode.test.ts > subtitle timecodes > grows progress toward the next sorted cue 1ms
+ ✓ tests/subtitle-timecode.test.ts > subtitle timecodes > removes floating-point noise while preserving milliseconds 0ms
+ ✓ tests/subtitle-timecode.test.ts > subtitle timecodes > accepts seconds and clock-formatted edits 0ms
+ ✓ tests/subtitle-timecode.test.ts > subtitle timecodes > rejects malformed clock values 0ms
+ ✓ tests/subtitle-timecode.test.ts > subtitle timecodes > bounds generated subtitle and word timestamps to the media duration 0ms
+ ✓ tests/subtitle-segmentation.test.ts > createSubtitleSegmentsFromPlainText > returns nothing for empty text or an empty window 1ms
+ ✓ tests/subtitle-segmentation.test.ts > createSubtitleSegmentsFromPlainText > spans exactly the provided window 1ms
+ ✓ tests/subtitle-segmentation.test.ts > createSubtitleSegmentsFromPlainText > respects the word and character caps 0ms
+ ✓ tests/subtitle-segmentation.test.ts > createSubtitleSegmentsFromPlainText > breaks at sentence boundaries 0ms
+ ✓ tests/subtitle-segmentation.test.ts > createSubtitleSegmentsFromPlainText > allocates more time to longer pieces 0ms
+ ✓ tests/subtitle-segmentation.test.ts > clampSegments > drops empty text, keeps order monotonic, enforces min duration 1ms
+ ✓ tests/zoom-timing.test.ts > zoom timing > places a new zoom in the first available gap at or after the playhead 1ms
+ ✓ tests/zoom-timing.test.ts > zoom timing > prevents a moved zoom from crossing neighboring zooms 0ms
+ ✓ tests/zoom-timing.test.ts > zoom timing > clamps start trim at the previous zoom boundary 0ms
+ ✓ tests/zoom-timing.test.ts > zoom timing > clamps end trim at the next zoom boundary 0ms
+ ✓ tests/zoom-timing.test.ts > zoom timing > allows touching zooms but treats real overlaps as overlap 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > does not drift-seek the primary video for normal sub-tolerance clock skew 1ms
+ ✓ tests/playback-sync.test.ts > playback sync > does not hard-seek a playing primary video even when decoder progress lags 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > seeks a playing primary video once when a tick crosses into a different clip 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > plays straight through a split whose next clip continues from the same frame 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > still seeks the primary video for explicit seeks and clip changes 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > does not force-seek on media-ready callbacks during playback 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > maps media time and timeline time through the clip source offset 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > clamps short secondary tracks and prevents end-of-media restarts 0ms
+ ✓ tests/playback-sync.test.ts > playback sync > throttles secondary drift seeks while playback is running 0ms
+ ✓ tests/media-range.test.ts > local media byte ranges > parses bounded and open-ended byte ranges 1ms
+ ✓ tests/media-range.test.ts > local media byte ranges > parses suffix ranges and clamps their start 0ms
+ ✓ tests/media-range.test.ts > local media byte ranges > rejects invalid or out-of-bounds ranges 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during ready 1ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during preparing 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during countdown 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during recording 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during paused 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during stopping 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during processing 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during complete 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > never covers the selected display with a separate overlay during failed 0ms
+ ✓ tests/source-overlay-state.test.ts > shouldShowSourceSelectionOverlay > does not show for window sources or disabled overlays 0ms
+ ✓ tests/timeline-clipboard.test.ts > timeline clipboard > cuts only the primary clip that was copied 13ms
+ ✓ tests/bezier-waveform.test.ts > Bezier timeline waveform > creates deterministic cubic curves for the same audio clip 1ms
+ ✓ tests/bezier-waveform.test.ts > Bezier timeline waveform > varies the curve by clip seed and exposes a smooth center line 1ms
+ ✓ tests/bezier-waveform.test.ts > Bezier timeline waveform > scales the Bézier control points with the audio gain 0ms
+ ✓ tests/composition-export.test.ts > timeline composition export > renders a fixed-duration crossfade between adjacent clips 415ms
+ ✓ tests/layout-snapping.test.ts > viewport layout snapping > snaps rectangle edges to the 12 by 8 composition grid 1ms
+ ✓ tests/layout-snapping.test.ts > viewport layout snapping > snaps an element center as well as its outer edges 0ms
+ ✓ tests/layout-snapping.test.ts > viewport layout snapping > leaves freely positioned elements unchanged outside the snap tolerance 0ms
+ ✓ tests/overlay-fonts.test.ts > text overlay fonts > ships every weight the editor offers 1ms
+ ✓ tests/overlay-fonts.test.ts > text overlay fonts > gives each weight its own file, since drawtext cannot synthesize bold 0ms
+ ✓ tests/overlay-fonts.test.ts > text overlay fonts > pins the sans family to a bundled file 0ms
+ ✓ tests/overlay-fonts.test.ts > text overlay fonts > defaults to sans when the overlay predates typography controls 0ms
+ ✓ tests/overlay-fonts.test.ts > text overlay fonts > falls back to a fontconfig name for families that are not bundled 0ms
+ ✓ tests/editor-persistence-flush.test.ts > editor persistence flush state > preserves media additions, deletions, and metadata edits made during a save 1ms
+ ✓ tests/editor-persistence-flush.test.ts > editor persistence flush state > stays dirty when a newer snapshot was queued during a save 1ms
+ ✓ tests/editor-persistence-flush.test.ts > editor persistence flush state > becomes clean only when the saved snapshot is still current 0ms
+ ✓ tests/editor-persistence-flush.test.ts > editor persistence in-flight guard > releases a save that never awaited 0ms
+ ✓ tests/editor-persistence-flush.test.ts > editor persistence in-flight guard > releases a save that awaited before settling 0ms
+ ✓ tests/editor-persistence-flush.test.ts > editor persistence in-flight guard > releases a save that failed 0ms
+ ✓ tests/editor-persistence-flush.test.ts > editor persistence in-flight guard > keeps the newest save when an older one settles late 0ms
+ ✓ tests/zoom-utils.test.ts > zoom easing > keeps linear zoom progress linear 1ms
+ ✓ tests/zoom-utils.test.ts > zoom easing > supports distinct nonlinear presets 0ms
+ ✓ tests/zoom-utils.test.ts > zoom easing > uses the saved custom cubic bezier curve 0ms
+ ✓ tests/zoom-utils.test.ts > zoom easing > gives older saved zooms a smooth default curve 0ms
+ ✓ tests/zoom-utils.test.ts > zoom easing > maps realtime preview progress across the selected entry ramp 0ms
+ ✓ tests/preview-quality.test.ts > preview quality preference > defaults unknown values to high quality 1ms
+ ✓ tests/preview-quality.test.ts > preview quality preference > reads and writes the low quality preference 1ms
+ ✓ tests/display-overlay.test.ts > display overlay geometry > uses desktopCapturer's matching display id when it is available 1ms
+ ✓ tests/display-overlay.test.ts > display overlay geometry > uses the sequential screen source number as an index, never as a display id 0ms
+ ✓ tests/display-overlay.test.ts > display overlay geometry > does not draw an overlay on the wrong display when a source can no longer be matched 0ms
+ ✓ tests/display-overlay.test.ts > display overlay geometry > uses the exact display bounds and a DPI-aware Windows border 0ms
+ ✓ tests/display-overlay.test.ts > display overlay geometry > preserves the existing six-DIP border on macOS 0ms
+ ✓ tests/music-lyria.test.ts > parseLyriaResponse > extracts audio and joins lyric text blocks 1ms
+ ✓ tests/music-lyria.test.ts > parseLyriaResponse > throws a safety-aware error when no audio is present 0ms
+ ✓ tests/music-lyria.test.ts > buildLyriaPrompt > appends lyrics only when provided 0ms
+ ✓ tests/transition-utils.test.ts > timeline transition interactions > offers drop targets only where adjacent clips meet 2ms
+ ✓ tests/transition-utils.test.ts > timeline transition interactions > snaps a drag to the nearest valid cut 0ms
+ ✓ tests/transition-utils.test.ts > timeline transition interactions > computes preview progress across the centered transition window 0ms
+ ✓ tests/transition-utils.test.ts > timeline transition interactions > creates distinct visual states for every transition style 0ms
+ ✓ tests/application-menu.test.ts > macOS application menu > provides a Window menu action that reopens the main window 1ms
+ ✓ tests/layout-geometry.test.ts > preview layout geometry > fills the whole composition for the bubble-fill preset 1ms
+ ✓ tests/layout-geometry.test.ts > preview layout geometry > keeps the normal bubble preset inset and aspect-fitted 0ms
+ ✓ tests/ffmpeg-progress.test.ts > FFmpeg progress > parses machine progress timestamps 1ms
+ ✓ tests/ffmpeg-progress.test.ts > FFmpeg progress > caps active progress below completion 0ms
+ ✓ tests/ffmpeg-progress.test.ts > FFmpeg progress > bounds the wall-clock timeout 0ms
+ ✓ tests/export-jobs.test.ts > ExportJobRegistry > publishes bounded progress and cancels an active job 1ms
+ ✓ tests/stt-errors.test.ts > formatSpeechToTextError > formats an Electron-wrapped Gemini 503 response 1ms
+ ✓ tests/stt-errors.test.ts > formatSpeechToTextError > keeps provider-specific recovery advice 0ms
+ ✓ tests/media-import.test.ts > media import validation > accepts only supported persistence-safe extensions 1ms
+ ✓ tests/media-import.test.ts > media import validation > classifies supported media kinds 0ms
+ ✓ tests/video-corners.test.ts > video corner styles > maps Flat, Slight, and Rounded to progressively rounder corners 1ms
+ ✓ tests/video-corners.test.ts > video corner styles > keeps the filled-screen frame full-size for every corner style 0ms
+ ✓ tests/mac-build-config.test.ts > macOS build targets > builds x64 and arm64 and sets a minimum system version 1ms
+ ✓ tests/audio-utils.test.ts > audio dB conversion and metering > combines source gain with a persisted lane mute without muting other lanes 1ms
+ ✓ tests/audio-utils.test.ts > audio dB conversion and metering > excludes only the muted lane when preparing reused audio for subtitles 1ms
+ ✓ tests/audio-utils.test.ts > audio dB conversion and metering > round-trips unity and positive gain 0ms
+ ✓ tests/audio-utils.test.ts > audio dB conversion and metering > maps peak amplitude logarithmically onto the meter 0ms
+ ✓ tests/audio-utils.test.ts > audio dB conversion and metering > preserves over-range clipping in the dB readout 0ms
+ ✓ tests/speed-utils.test.ts > speed utils > returns 1x outside speed effects and the effect rate inside a range 1ms
+ ✓ tests/speed-utils.test.ts > speed utils > validates supported speed rates 0ms
+ ✓ tests/dev-tools.test.ts > developer tools policy > enables developer tools in installed Windows builds 1ms
+ ✓ tests/dev-tools.test.ts > developer tools policy > keeps installed macOS builds opt-in 0ms
+ ✓ tests/dev-tools.test.ts > developer tools policy > enables developer tools in development on every platform 0ms
+ ✓ tests/text-overlay.test.ts > text overlay preview animation > derives placement and entrance animation from timeline time 1ms
+ ✓ tests/recording-runtime.test.ts > display capture options > requests a native-resolution video stream without system audio by default 1ms
+ ✓ tests/recording-runtime.test.ts > display capture options > uses the same standards-based capture path for optional desktop audio and downscaling 0ms
+ ✓ tests/renderer-url.test.ts > resolveRendererBaseUrl > uses the dev server URL when the app is not packaged 1ms
+ ✓ tests/renderer-url.test.ts > resolveRendererBaseUrl > ignores the dev server URL when the app is packaged 0ms
+ ✓ tests/renderer-url.test.ts > resolveRendererBaseUrl > falls back to the bundled file when no dev server is configured 0ms
+ ✓ tests/text-color-picker.test.ts > text color picker conversions > round-trips representative brand and neutral colors 1ms
+ ✓ tests/text-color-picker.test.ts > text color picker conversions > clamps HSB channels before producing a hex color 0ms
+ ✓ tests/composition-export.test.ts > timeline composition export > renders focus zoom and keeps video, mixed audio, and duration synced through speed 393ms
+
+ Test Files  84 passed (84)
+      Tests  401 passed (401)
+   Start at  10:56:39
+   Duration  1.75s (transform 4.65s, setup 0ms, import 8.35s, tests 4.27s, environment 6.40s)
+

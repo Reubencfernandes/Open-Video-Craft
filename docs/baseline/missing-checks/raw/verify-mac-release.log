@@ -1,0 +1,1 @@
+macOS release verification failed: OVC_MAC_TEAM_ID is not set. Release verification needs the Apple Team ID the archives were signed with; ad-hoc builds cannot be verified as notarized releases.

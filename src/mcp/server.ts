@@ -15,6 +15,13 @@ import {
   startProjectAnalysis
 } from "../main/editor-analysis";
 import { getEditorDuration } from "../shared/editor-domain";
+import { generateTranscriptCallouts } from "../shared/editor-domain/transcript-callouts";
+import { reelDuration, selectReelHighlights } from "../shared/editor-domain/reel-highlights";
+import { createReelProject, reelExportResolution } from "../main/reel-project";
+import { insertBrollCutaways, startBrollGeneration, getBrollGenerationJob, cancelBrollGenerationJob } from "../main/broll-import";
+import { imageGenerationModel } from "../shared/image-model";
+import { ProjectStore } from "../main/project-store";
+import { getProductVersion } from "../main/app-version";
 import type { EditorEditOperation } from "../shared/editor-domain";
 import { operationSchema as sharedOperationSchema } from "../shared/editor-domain/operation-schema";
 import { listCatalogProjects, resolveCatalogProject } from "./project-catalog";
@@ -78,6 +85,17 @@ server.registerResource("analysis-contact-sheet", new ResourceTemplate("ovc://pr
   const data = await readContactSheet(project.rootPath, page);
   return { contents: [{ uri: uri.href, mimeType: "image/jpeg", blob: data.toString("base64") }] };
 });
+
+
+/**
+ * Store used to create derived projects (reels). It only needs to create a
+ * folder and read it back, so one instance is enough for the whole session.
+ */
+let reelProjectStore: ProjectStore | null = null;
+function getMcpProjectStore(): ProjectStore {
+  reelProjectStore ??= new ProjectStore({ appVersion: getProductVersion() });
+  return reelProjectStore;
+}
 
 server.registerTool("list_projects", {
   title: "List Open Video Craft projects",
@@ -178,6 +196,202 @@ async function loadAnalysisResult(projectId: string | undefined, jobId: string |
   const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
   return await readCachedAnalysis(project.rootPath) ?? { status: "not-started" };
 }
+
+server.registerTool("create_reel", {
+  title: "Create vertical highlight reel",
+  description: "Build a new vertical 9:16 reel project from the best spoken moments of a recording, with the subtitles kept and styled for TikTok. The original project is never modified.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    title: z.string().min(1).max(120).optional().describe("Name of the new reel project."),
+    maxDurationSeconds: z.number().min(10).max(180).optional().describe("Reel length budget; defaults to 90 seconds."),
+    maxClips: z.number().int().min(1).max(12).optional().describe("How many moments to use at most; defaults to 8."),
+    subtitleStyle: z.enum(["clean", "karaoke", "boxed", "pop"]).optional()
+      .describe("Subtitle look for the reel; defaults to karaoke.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
+}, async ({ projectId, title, maxDurationSeconds, maxClips, subtitleStyle }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const analysis = await readCachedAnalysis(project.rootPath);
+    if (!analysis) throw new Error("No cached analysis yet. Run start_analysis first.");
+    const ranges = selectReelHighlights(analysis.transcript.segments, {
+      maxDurationSeconds,
+      maxClips
+    });
+    if (ranges.length === 0) throw new Error("The transcript has no moment worth a reel yet.");
+    const document = await readEditorDocument(project.rootPath);
+    const reel = await createReelProject({
+      store: getMcpProjectStore(),
+      sourceProject: {
+        id: project.project.id,
+        name: project.project.name,
+        rootPath: project.rootPath,
+        durationMs: project.project.durationMs
+      },
+      ranges,
+      subtitles: document?.state.subtitles ?? [],
+      subtitleStyle,
+      title
+    });
+    return success({
+      sourceProjectId: project.project.id,
+      reelProjectId: reel.id,
+      reelName: reel.name,
+      rootPath: reel.rootPath,
+      resolution: reelExportResolution,
+      durationSeconds: reelDuration(ranges),
+      highlights: ranges
+    });
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("insert_transcript_callouts", {
+  title: "Insert transcript callouts",
+  description: "Generate animated informational boxes from the cached transcript at the moments they are talked about, and apply them to the text track. Use this instead of inventing callout timings by hand.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    baseRevision: z.number().int().nonnegative(),
+    userRequest: z.string().min(1).max(1_000)
+      .describe("The user's actual request, for example: add informational boxes where I explain the export settings."),
+    maxCallouts: z.number().int().min(1).max(12).optional()
+      .describe("How many boxes to create at most; defaults to 6."),
+    animation: z.enum(["fade", "pop", "slide-up"]).optional()
+      .describe("Entrance animation; defaults to pop.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
+}, async ({ projectId, baseRevision, userRequest, maxCallouts, animation }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const analysis = await readCachedAnalysis(project.rootPath);
+    if (!analysis) throw new Error("No cached analysis yet. Run start_analysis first.");
+    const cues = analysis.transcript.segments.map((segment) => ({
+      start: segment.start,
+      end: segment.end,
+      text: segment.text
+    }));
+    if (cues.length === 0) throw new Error("The analysis has no transcript, so there is nothing to explain.");
+    const overlays = generateTranscriptCallouts(cues, {
+      maxCallouts,
+      animation,
+      durationSeconds: analysis.timelineDurationSeconds
+    });
+    if (overlays.length === 0) throw new Error("The transcript has no informative moment worth a callout.");
+    const operations = overlays.map((overlay) => ({ type: "set_text_overlay" as const, overlay }));
+    const editingBasis = { mode: "analysis-guided" as const, analysisFingerprint: analysis.fingerprint };
+    await validateEditScope({
+      rootPath: project.rootPath,
+      userRequest,
+      requestedActions: ["text"],
+      editingBasis,
+      operations
+    });
+    const result = await applyAgentEdit({
+      rootPath: project.rootPath,
+      baseRevision,
+      summary: `Added ${overlays.length} transcript callout${overlays.length === 1 ? "" : "s"}.`,
+      operations
+    });
+    return success({
+      projectId: project.project.id,
+      revision: result.document.revision,
+      editId: result.editId,
+      calloutCount: overlays.length,
+      callouts: overlays.map((overlay) => ({ id: overlay.id, start: overlay.start, end: overlay.end, title: overlay.title })),
+      editingBasis
+    });
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("insert_broll_cutaways", {
+  title: "Insert B-roll cutaways",
+  description: "Insert image files as cutaways where the owner talks about them: the recording is split around each moment and the image takes its place. Images are copied into the project and the source file is never modified. Pass imagePaths for pictures that already exist. To generate the pictures locally instead, pass generate: the call returns a job id immediately, so poll it with get_broll_generation until it completes.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    baseRevision: z.number().int().nonnegative(),
+    imagePaths: z.array(z.string().min(3).max(1024)).min(1).max(12).optional()
+      .describe("Absolute paths of the image files to use."),
+    generate: z.object({
+      prompts: z.array(z.string().min(3).max(300)).min(1).max(6)
+        .describe("One English description per image, for example: a clean desk with a laptop."),
+      model: z.string().min(3).max(300).optional()
+        .describe("Local model directory or repository id; defaults to the app's SD-Turbo asset.")
+    }).optional()
+      .describe("Generate the images locally on this Mac; returns a job id instead of waiting."),
+    maxCutaways: z.number().int().min(1).max(12).optional()
+      .describe("How many cutaways to create at most; defaults to 6."),
+    summary: z.string().min(1).max(500).optional()
+  },
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false }
+}, async ({ projectId, baseRevision, imagePaths, generate, maxCutaways, summary }) => {
+  try {
+    const project = await resolveCatalogProject(userDataPath, assertScopedProject(projectId));
+    const analysis = await readCachedAnalysis(project.rootPath);
+    const moments = analysis
+      ? analysis.transcript.segments.map((segment) => ({
+          start: segment.start,
+          end: segment.end,
+          text: segment.text
+        }))
+      : undefined;
+    const providedPaths = imagePaths ?? [];
+    if (generate === undefined && providedPaths.length === 0) {
+      throw new Error("Pass imagePaths with existing pictures, or generate with image descriptions.");
+    }
+    if (generate === undefined) {
+      const result = await insertBrollCutaways({
+        rootPath: project.rootPath,
+        baseRevision,
+        imagePaths: providedPaths,
+        moments,
+        maxCutaways,
+        summary
+      });
+      return success({
+        projectId: project.project.id,
+        revision: result.revision,
+        importedCount: result.importedCount,
+        cutaways: result.cutaways
+      });
+    }
+    // Local diffusion takes minutes: return a job so the chat keeps answering.
+    const job = await startBrollGeneration({
+      rootPath: project.rootPath,
+      baseRevision,
+      projectId: project.project.id,
+      imagePaths: providedPaths,
+      moments,
+      maxCutaways,
+      summary,
+      generate: {
+        prompts: generate.prompts,
+        model: generate.model ?? imageGenerationModel.pipelineId,
+        outputDirectory: resolveContainedProjectPath(project.rootPath, ".ovc/broll")
+      }
+    });
+    return success(toRecord(job));
+  } catch (error) { return failure(error); }
+});
+
+server.registerTool("get_broll_generation", {
+  title: "Check B-roll generation",
+  description: "Poll a job started by insert_broll_cutaways with generate. It returns progress, then the new revision and the placed cutaways; pass cancel: true to stop it. Poll instead of waiting, and never restart a generation just because it is still running.",
+  inputSchema: {
+    projectId: projectIdSchema,
+    jobId: z.string().min(1).max(128).describe("Job id returned by insert_broll_cutaways."),
+    cancel: z.boolean().optional().describe("Stop the job and keep the project unchanged.")
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }
+}, async ({ projectId, jobId, cancel }) => {
+  try {
+    const job = cancel === true ? cancelBrollGenerationJob(jobId) : getBrollGenerationJob(jobId);
+    if (!job) throw new Error(`Unknown b-roll job "${jobId}".`);
+    const scopedId = assertScopedProject(projectId);
+    if (scopedId !== undefined && job.projectId !== scopedId) {
+      throw new Error("This b-roll job belongs to a different project.");
+    }
+    return success(toRecord(job));
+  } catch (error) { return failure(error); }
+});
 
 server.registerTool("set_youtube_volume", {
   title: "Normalize volume for YouTube",
@@ -296,7 +510,7 @@ server.registerTool("export_project", {
     projectId: projectIdSchema,
     expectedRevision: z.number().int().nonnegative(),
     format: z.enum(["mp4", "webm", "mov"]).default("mp4"),
-    resolution: z.enum(["source", "720p", "1080p", "1440p"]).default("1080p"),
+    resolution: z.enum(["source", "720p", "1080p", "1440p", "vertical"]).default("1080p"),
     subtitleMode: z.enum(["burn-in", "sidecar", "none"]).default("burn-in")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false }

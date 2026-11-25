@@ -1,0 +1,45 @@
+
+> open-video-craft@1.0.6 build
+> npm run build:main && npm run build:renderer
+
+
+> open-video-craft@1.0.6 build:main
+> tsc -p tsconfig.electron.json
+
+
+> open-video-craft@1.0.6 build:renderer
+> vite build
+
+vite v8.1.2 building client environment for production...
+[2Ktransforming...✓ 491 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-renderer/index.html                                                 0.85 kB │ gzip:     0.44 kB
+dist-renderer/ort-wasm-simd-threaded.jsep.mjs                           46.85 kB
+dist-renderer/assets/style-marble-BYtPWWQA.jpg                         165.47 kB
+dist-renderer/assets/style-chrome-C5G3ud_p.jpg                         231.84 kB
+dist-renderer/assets/gradient-silver-D-XkJH5i.jpg                      236.79 kB
+dist-renderer/assets/gradient-dawn-Dy78wWEb.jpg                        257.46 kB
+dist-renderer/assets/release-1.0.0-hero-D2JtxGDJ.jpg                   280.28 kB
+dist-renderer/assets/gradient-ultraviolet-CUFI9fx2.jpg                 283.11 kB
+dist-renderer/assets/style-florals-CeieTKtL.jpg                        365.06 kB
+dist-renderer/assets/scene-skyline-DkP0PyUX.jpg                        400.06 kB
+dist-renderer/assets/Inter-Regular-BOoJxjxf.ttf                        411.64 kB
+dist-renderer/assets/Inter-SemiBold-ipl4pJhC.ttf                       419.74 kB
+dist-renderer/assets/Inter-Bold-SlGuY_v7.ttf                           420.42 kB
+dist-renderer/assets/Inter-ExtraBold-QrqRPPK_.ttf                      421.79 kB
+dist-renderer/assets/scene-coast-Cn8sjJub.jpg                          508.71 kB
+dist-renderer/assets/subtitle-transcription.worker-CBbGGUVB.js         546.79 kB
+dist-renderer/assets/scene-cityscape-BxEKnAui.jpg                      754.24 kB
+dist-renderer/assets/app-Cez-ML-U.png                                1,368.75 kB
+dist-renderer/assets/ort-wasm-simd-threaded.asyncify-CxOG5pUO.wasm  26,861.77 kB │ gzip: 6,762.79 kB
+dist-renderer/ort-wasm-simd-threaded.jsep.wasm                      28,352.88 kB │ gzip: 6,816.80 kB
+dist-renderer/assets/index-DHCcFcn5.css                                135.64 kB │ gzip:    22.30 kB
+dist-renderer/assets/index-bOoKQzc-.js                                 734.87 kB │ gzip:   214.83 kB
+
+✓ built in 674ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

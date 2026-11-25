@@ -1,0 +1,4 @@
+screen exit=0
+camera exit=0
+mic exit=0
+system-audio exit=0

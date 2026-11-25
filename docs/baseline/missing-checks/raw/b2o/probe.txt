@@ -1,0 +1,8 @@
+  Duration: 00:00:05.00, start: 0.000000, bitrate: 4391 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 1920x1080, 4389 kb/s, 5.20 fps, 5 tbr, 1000k tbn (default)
+  Duration: 00:00:04.97, start: 0.000000, bitrate: 508 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 3440x1440, 502 kb/s, 30.20 fps, 30 tbr, 1000k tbn (default)
+  Duration: 00:00:04.88, bitrate: 768 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, mono, s16, 768 kb/s
+  Duration: 00:00:04.83, bitrate: 1536 kb/s
+  Stream #0:0: Audio: pcm_s16le ([1][0][0][0] / 0x0001), 48000 Hz, stereo, s16, 1536 kb/s

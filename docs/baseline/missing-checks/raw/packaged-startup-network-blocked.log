@@ -1,0 +1,9 @@
+[auto-update] Checking for updates (startup).
+[auto-update] Checking for update
+[auto-update] Checking for an available update.
+[auto-update] Generated new staging user ID: a46f7583-450f-5701-989e-a13f4d918fbb
+[auto-update] Error: Error: net::ERR_PROXY_CONNECTION_FAILED
+    at SimpleURLLoaderWrapper.<anonymous> (node:electron/js2c/browser_init:2:139478)
+    at SimpleURLLoaderWrapper.emit (node:events:514:28)
+[auto-update] net::ERR_PROXY_CONNECTION_FAILED
+[auto-update] net::ERR_PROXY_CONNECTION_FAILED

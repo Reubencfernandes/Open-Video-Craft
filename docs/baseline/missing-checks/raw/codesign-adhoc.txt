@@ -1,0 +1,12 @@
+Executable=<repository root>/release/1.0.6/mac-arm64/Open Video Craft.app/Contents/MacOS/Open Video Craft
+Identifier=dev.micio86dev.openvideocraft
+Format=app bundle with Mach-O thin (arm64)
+CodeDirectory v=20500 size=446 flags=0x10002(adhoc,runtime) hashes=3+7 location=embedded
+Signature=adhoc
+Info.plist entries=34
+TeamIdentifier=not set
+Runtime Version=26.5.0
+Sealed Resources version=2 rules=13 files=58
+Internal requirements count=0 size=12
+Total signatures=1
+Chosen signature=1

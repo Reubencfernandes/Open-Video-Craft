@@ -1,0 +1,105 @@
+
+> open-video-craft@1.0.6 dist:mac:adhoc
+> npm run prepare:ffmpeg:mac && npm run verify:ffmpeg && npm run build:icons && npm run build && electron-builder --mac -c.mac.identity=- -c.mac.forceCodeSigning=false -c.mac.notarize=false
+
+
+> open-video-craft@1.0.6 prepare:ffmpeg:mac
+> node scripts/prepare-ffmpeg.mjs --all-mac
+
+Downloading pinned FFmpeg 8.1.2 for macOS arm64...
+Prepared release FFmpeg: <repository root>/.ffmpeg-bin/darwin-arm64/ffmpeg
+Downloading pinned FFmpeg 8.1.2 for macOS x64...
+Prepared release FFmpeg: <repository root>/.ffmpeg-bin/darwin-x64/ffmpeg
+Updated local ffmpeg-static binary: <repository root>/node_modules/ffmpeg-static/ffmpeg
+
+> open-video-craft@1.0.6 verify:ffmpeg
+> node scripts/verify-ffmpeg.mjs
+
+Verified release-safe FFmpeg: <repository root>/node_modules/ffmpeg-static/ffmpeg
+
+> open-video-craft@1.0.6 build:icons
+> node scripts/create-app-icons.mjs
+
+
+> open-video-craft@1.0.6 build
+> npm run build:main && npm run build:renderer
+
+
+> open-video-craft@1.0.6 build:main
+> tsc -p tsconfig.electron.json
+
+
+> open-video-craft@1.0.6 build:renderer
+> vite build
+
+vite v8.1.2 building client environment for production...
+[2K
+transforming...✓ 491 modules transformed.
+rendering chunks...
+computing gzip size...
+dist-renderer/index.html                                                 0.85 kB │ gzip:     0.44 kB
+dist-renderer/ort-wasm-simd-threaded.jsep.mjs                           46.85 kB
+dist-renderer/assets/style-marble-BYtPWWQA.jpg                         165.47 kB
+dist-renderer/assets/style-chrome-C5G3ud_p.jpg                         231.84 kB
+dist-renderer/assets/gradient-silver-D-XkJH5i.jpg                      236.79 kB
+dist-renderer/assets/gradient-dawn-Dy78wWEb.jpg                        257.46 kB
+dist-renderer/assets/release-1.0.0-hero-D2JtxGDJ.jpg                   280.28 kB
+dist-renderer/assets/gradient-ultraviolet-CUFI9fx2.jpg                 283.11 kB
+dist-renderer/assets/style-florals-CeieTKtL.jpg                        365.06 kB
+dist-renderer/assets/scene-skyline-DkP0PyUX.jpg                        400.06 kB
+dist-renderer/assets/Inter-Regular-BOoJxjxf.ttf                        411.64 kB
+dist-renderer/assets/Inter-SemiBold-ipl4pJhC.ttf                       419.74 kB
+dist-renderer/assets/Inter-Bold-SlGuY_v7.ttf                           420.42 kB
+dist-renderer/assets/Inter-ExtraBold-QrqRPPK_.ttf                      421.79 kB
+dist-renderer/assets/scene-coast-Cn8sjJub.jpg                          508.71 kB
+dist-renderer/assets/subtitle-transcription.worker-CBbGGUVB.js         546.79 kB
+dist-renderer/assets/scene-cityscape-BxEKnAui.jpg                      754.24 kB
+dist-renderer/assets/app-Cez-ML-U.png                                1,368.75 kB
+dist-renderer/assets/ort-wasm-simd-threaded.asyncify-CxOG5pUO.wasm  26,861.77 kB │ gzip: 6,762.79 kB
+dist-renderer/ort-wasm-simd-threaded.jsep.wasm                      28,352.88 kB │ gzip: 6,816.80 kB
+dist-renderer/assets/index-DHCcFcn5.css                                135.64 kB │ gzip:    22.30 kB
+dist-renderer/assets/index-bOoKQzc-.js                                 734.87 kB │ gzip:   214.83 kB
+
+✓ built in 574ms
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+  • electron-builder  version=26.15.3 os=27.2.0
+  • loaded configuration  file=package.json ("build" field)
+  • executing @electron/rebuild  electronVersion=43.8.10 arch=x64 buildFromSource=false workspaceRoot=<repository root> projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=x64 electron=43.8.10 appOutDir=release/1.0.6/mac
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=<repository root>/release/1.0.6/mac
+  • searching for node modules  pm=npm searchDir=<repository root>
+  • duplicate dependency references  dependencies=["@emnapi/runtime@1.11.3","react-dom@19.2.7","react-dom@19.2.7","@babel/parser@7.29.7","@babel/types@7.29.7","@jridgewell/trace-mapping@0.3.31","@babel/types@7.29.7","@babel/code-frame@7.29.7","@babel/parser@7.29.7","@babel/types@7.29.7","@babel/types@7.29.7","debug@4.4.3","@emotion/serialize@1.3.3","@babel/code-frame@7.29.7","hasown@2.0.4","@emotion/cache@11.14.0","@emotion/serialize@1.3.3","@emotion/babel-plugin@11.13.5","@emotion/cache@11.14.0","@emotion/serialize@1.3.3","react-dom@19.2.7","ajv@8.20.0","express@5.2.1","debug@4.4.3","http-errors@2.0.1","iconv-lite@0.7.3","on-finished@2.4.1","qs@6.17.1","raw-body@3.0.2","type-is@2.1.0","debug@4.4.3","on-finished@2.4.1","get-intrinsic@1.3.0","call-bind-apply-helpers@1.0.2","call-bind-apply-helpers@1.0.2","es-object-atoms@1.1.2","call-bound@1.0.4","get-intrinsic@1.3.0","side-channel-map@1.0.1","debug@4.4.3","debug@4.4.3","http-errors@2.0.1","on-finished@2.4.1","send@1.2.1","http-errors@2.0.1","debug@4.4.3","debug@4.4.3","debug@4.4.3","@types/hast@3.0.5","devlop@1.1.0","@types/hast@3.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/estree-jsx@1.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","decode-named-character-reference@1.3.0","vfile-message@4.0.3","@types/estree-jsx@1.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","unist-util-stringify-position@4.0.0","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","unist-util-position@5.0.0","unist-util-visit@5.1.0","vfile@6.0.3","@types/mdast@4.0.4","@types/mdast@4.0.4","devlop@1.1.0","@types/mdast@4.0.4","decode-named-character-reference@1.3.0","micromark-util-character@2.1.1","micromark-util-decode-numeric-character-reference@2.0.2","debug@4.4.3","decode-named-character-reference@1.3.0","devlop@1.1.0","micromark-core-commonmark@2.0.3","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","micromark-util-combine-extensions@2.0.1","micromark-util-decode-numeric-character-reference@2.0.2","micromark-util-normalize-identifier@2.0.1","micromark-util-resolve-all@2.0.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","micromark-util-chunked@2.0.1","unist-util-stringify-position@4.0.0","unified@11.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","mdast-util-to-hast@13.2.1","unified@11.0.5","vfile@6.0.3","devlop@1.1.0","vfile@6.0.3","unist-util-is@6.0.1","vfile-message@4.0.3","@types/mdast@4.0.4","mdast-util-from-markdown@2.0.3","@types/mdast@4.0.4","devlop@1.1.0","@types/mdast@4.0.4","unist-util-is@6.0.1","unist-util-visit-parents@6.0.2","micromark-util-character@2.1.1","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","micromark-util-normalize-identifier@2.0.1","@types/mdast@4.0.4","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","@types/mdast@4.0.4","unist-util-is@6.0.1","mdast-util-to-string@4.0.0","micromark-util-character@2.1.1","micromark-util-decode-string@2.0.1","unist-util-visit@5.1.0","micromark-util-character@2.1.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","decode-named-character-reference@1.3.0","devlop@1.1.0","micromark-util-character@2.1.1","devlop@1.1.0","micromark-util-character@2.1.1","micromark-factory-space@2.0.1","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","micromark-util-classify-character@2.0.1","micromark-util-normalize-identifier@2.0.1","micromark-util-resolve-all@2.0.1","micromark-util-subtokenize@2.1.0","micromark-util-character@2.1.1","micromark-util-character@2.1.1","micromark-util-normalize-identifier@2.0.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","micromark-util-classify-character@2.0.1","devlop@1.1.0","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","devlop@1.1.0","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","remark-parse@11.0.0","@types/mdast@4.0.4","mdast-util-to-markdown@2.1.2","unified@11.0.5","unified@11.0.5"]
+[afterPack] Installed validated macOS x64 FFmpeg: <repository root>/release/1.0.6/mac/Open Video Craft.app/Contents/Resources/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg
+  • executing @electron/fuses  electronPath=release/1.0.6/mac/Open Video Craft.app
+  • ad-hoc signing with hardenedRuntime enabled requires the com.apple.security.cs.disable-library-validation entitlement to prevent app launch failures due to library validation. See https://electron.build/code-signing for details.
+  • signing         file=release/1.0.6/mac/Open Video Craft.app platform=darwin type=distribution identityName=- identityHash=none provisioningProfile=none
+  • skipped macOS notarization  reason=`notarize` options were set explicitly `false`
+  • building        target=macOS zip arch=x64 file=release/1.0.6/Open-Video-Craft-1.0.6-mac-x64.zip
+  • building        target=DMG arch=x64 file=release/1.0.6/Open-Video-Craft-1.0.6-mac-x64.dmg
+  • executing @electron/rebuild  electronVersion=43.8.10 arch=arm64 buildFromSource=false workspaceRoot=<repository root> projectDir=./ appDir=./
+  • installing native dependencies  arch=arm64
+  • completed installing native dependencies
+  • packaging       platform=darwin arch=arm64 electron=43.8.10 appOutDir=release/1.0.6/mac-arm64
+  • downloaded      label=electron progress=100%
+  • downloaded      label=dmgbuild-bundle-arm64-75c8a6c.tar.gz progress=100%
+  • downloaded electron zip extracted successfully  output=<repository root>/release/1.0.6/mac-arm64
+  • searching for node modules  pm=npm searchDir=<repository root>
+  • duplicate dependency references  dependencies=["@emnapi/runtime@1.11.3","react-dom@19.2.7","react-dom@19.2.7","@babel/parser@7.29.7","@babel/types@7.29.7","@jridgewell/trace-mapping@0.3.31","@babel/types@7.29.7","@babel/code-frame@7.29.7","@babel/parser@7.29.7","@babel/types@7.29.7","@babel/types@7.29.7","debug@4.4.3","@emotion/serialize@1.3.3","@babel/code-frame@7.29.7","hasown@2.0.4","@emotion/cache@11.14.0","@emotion/serialize@1.3.3","@emotion/babel-plugin@11.13.5","@emotion/cache@11.14.0","@emotion/serialize@1.3.3","react-dom@19.2.7","ajv@8.20.0","express@5.2.1","debug@4.4.3","http-errors@2.0.1","iconv-lite@0.7.3","on-finished@2.4.1","qs@6.17.1","raw-body@3.0.2","type-is@2.1.0","debug@4.4.3","on-finished@2.4.1","get-intrinsic@1.3.0","call-bind-apply-helpers@1.0.2","call-bind-apply-helpers@1.0.2","es-object-atoms@1.1.2","call-bound@1.0.4","get-intrinsic@1.3.0","side-channel-map@1.0.1","debug@4.4.3","debug@4.4.3","http-errors@2.0.1","on-finished@2.4.1","send@1.2.1","http-errors@2.0.1","debug@4.4.3","debug@4.4.3","debug@4.4.3","@types/hast@3.0.5","devlop@1.1.0","@types/hast@3.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/estree-jsx@1.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","decode-named-character-reference@1.3.0","vfile-message@4.0.3","@types/estree-jsx@1.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","unist-util-stringify-position@4.0.0","@types/hast@3.0.5","@types/mdast@4.0.4","devlop@1.1.0","unist-util-position@5.0.0","unist-util-visit@5.1.0","vfile@6.0.3","@types/mdast@4.0.4","@types/mdast@4.0.4","devlop@1.1.0","@types/mdast@4.0.4","decode-named-character-reference@1.3.0","micromark-util-character@2.1.1","micromark-util-decode-numeric-character-reference@2.0.2","debug@4.4.3","decode-named-character-reference@1.3.0","devlop@1.1.0","micromark-core-commonmark@2.0.3","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","micromark-util-combine-extensions@2.0.1","micromark-util-decode-numeric-character-reference@2.0.2","micromark-util-normalize-identifier@2.0.1","micromark-util-resolve-all@2.0.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","micromark-util-chunked@2.0.1","unist-util-stringify-position@4.0.0","unified@11.0.5","@types/hast@3.0.5","@types/mdast@4.0.4","mdast-util-to-hast@13.2.1","unified@11.0.5","vfile@6.0.3","devlop@1.1.0","vfile@6.0.3","unist-util-is@6.0.1","vfile-message@4.0.3","@types/mdast@4.0.4","mdast-util-from-markdown@2.0.3","@types/mdast@4.0.4","devlop@1.1.0","@types/mdast@4.0.4","unist-util-is@6.0.1","unist-util-visit-parents@6.0.2","micromark-util-character@2.1.1","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","micromark-util-normalize-identifier@2.0.1","@types/mdast@4.0.4","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","devlop@1.1.0","mdast-util-from-markdown@2.0.3","mdast-util-to-markdown@2.1.2","@types/mdast@4.0.4","@types/mdast@4.0.4","unist-util-is@6.0.1","mdast-util-to-string@4.0.0","micromark-util-character@2.1.1","micromark-util-decode-string@2.0.1","unist-util-visit@5.1.0","micromark-util-character@2.1.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","decode-named-character-reference@1.3.0","devlop@1.1.0","micromark-util-character@2.1.1","devlop@1.1.0","micromark-util-character@2.1.1","micromark-factory-space@2.0.1","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","micromark-util-classify-character@2.0.1","micromark-util-normalize-identifier@2.0.1","micromark-util-resolve-all@2.0.1","micromark-util-subtokenize@2.1.0","micromark-util-character@2.1.1","micromark-util-character@2.1.1","micromark-util-normalize-identifier@2.0.1","micromark-util-sanitize-uri@2.0.1","devlop@1.1.0","micromark-util-classify-character@2.0.1","devlop@1.1.0","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","devlop@1.1.0","micromark-factory-space@2.0.1","micromark-util-character@2.1.1","micromark-util-chunked@2.0.1","remark-parse@11.0.0","@types/mdast@4.0.4","mdast-util-to-markdown@2.1.2","unified@11.0.5","unified@11.0.5"]
+[afterPack] Installed validated macOS arm64 FFmpeg: <repository root>/release/1.0.6/mac-arm64/Open Video Craft.app/Contents/Resources/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg
+  • executing @electron/fuses  electronPath=release/1.0.6/mac-arm64/Open Video Craft.app
+  • ad-hoc signing with hardenedRuntime enabled requires the com.apple.security.cs.disable-library-validation entitlement to prevent app launch failures due to library validation. See https://electron.build/code-signing for details.
+  • signing         file=release/1.0.6/mac-arm64/Open Video Craft.app platform=darwin type=distribution identityName=- identityHash=none provisioningProfile=none
+  • skipped macOS notarization  reason=`notarize` options were set explicitly `false`
+  • building        target=macOS zip arch=arm64 file=release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.zip
+  • building        target=DMG arch=arm64 file=release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg
+  • building block map  blockMapFile=release/1.0.6/Open-Video-Craft-1.0.6-mac-x64.zip.blockmap
+  • building block map  blockMapFile=release/1.0.6/Open-Video-Craft-1.0.6-mac-x64.dmg.blockmap
+  • building block map  blockMapFile=release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.dmg.blockmap
+  • building block map  blockMapFile=release/1.0.6/Open-Video-Craft-1.0.6-mac-arm64.zip.blockmap

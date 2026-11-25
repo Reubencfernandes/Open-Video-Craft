@@ -1,0 +1,48 @@
+[AVFoundation indev @ 0x12de08170] Configuration of video device failed, falling back to default.
+[in#0 @ 0x12de07f10] Selected pixel format (yuv420p) is not supported by the input device.
+[in#0 @ 0x12de07f10] Supported pixel formats:
+[in#0 @ 0x12de07f10]   uyvy422
+[in#0 @ 0x12de07f10]   yuyv422
+[in#0 @ 0x12de07f10]   nv12
+[in#0 @ 0x12de07f10]   0rgb
+[in#0 @ 0x12de07f10]   bgr0
+[in#0 @ 0x12de07f10] Overriding selected pixel format to use uyvy422 instead.
+[in#0/avfoundation @ 0x12de07f10] Stream #0: not enough frames to estimate rate; consider increasing probesize
+Input #0, avfoundation, from 'Angetube Live Camera':
+  Duration: N/A, start: 69641.176933, bitrate: N/A
+  Stream #0:0: Video: rawvideo (UYVY / 0x59565955), uyvy422, 1920x1080, 1000k tbr, 1000k tbn, start 69641.176933
+Stream mapping:
+  Stream #0:0 -> #0:0 (rawvideo (native) -> h264 (libx264))
+Press [q] to stop, [?] for help
+[libx264 @ 0x12ec32b30] MB rate (8160000000) > level limit (16711680)
+[libx264 @ 0x12ec32b30] using cpu capabilities: ARMv8 NEON DotProd I8MM
+[libx264 @ 0x12ec32b30] profile High, level 6.2, 4:2:0, 8-bit
+[libx264 @ 0x12ec32b30] 264 - core 165 - H.264/MPEG-4 AVC codec - Copyleft 2003-2025 - http://www.videolan.org/x264.html - options: cabac=1 ref=3 deblock=1:0:0 analyse=0x3:0x113 me=hex subme=7 psy=1 psy_rd=1.00:0.00 mixed_ref=1 me_range=16 chroma_me=1 trellis=1 8x8dct=1 cqm=0 deadzone=21,11 fast_pskip=1 chroma_qp_offset=-2 threads=27 lookahead_threads=4 sliced_threads=0 nr=0 decimate=1 interlaced=0 bluray_compat=0 constrained_intra=0 bframes=3 b_pyramid=2 b_adapt=1 b_bias=0 direct=1 weightb=1 open_gop=0 weightp=2 keyint=250 keyint_min=25 scenecut=40 intra_refresh=0 rc_lookahead=40 rc=crf mbtree=1 crf=23.0 qcomp=0.60 qpmin=0 qpmax=69 qpstep=4 ip_ratio=1.40 aq=1:1.00
+Output #0, mp4, to 'docs/baseline/missing-checks/raw/b2o/camera.mp4':
+  Metadata:
+    encoder         : Lavf62.12.102
+  Stream #0:0: Video: h264 (avc1 / 0x31637661), yuv420p(tv, progressive), 1920x1080, q=2-31, 1000k fps, 1000k tbn
+    Metadata:
+      encoder         : Lavc62.28.102 libx264
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:00.50    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:01.00    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:01.50    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:02.00    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:02.51    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:03.01    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:03.51    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:04.02    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:04.52    frame=    0 fps=0.0 q=0.0 size=       0KiB time=N/A bitrate=N/A speed=N/A elapsed=0:00:05.02    [out#0/mp4 @ 0x600002cdc180] video:2679KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.044507%
+frame=   26 fps=4.8 q=-1.0 Lsize=    2680KiB time=00:00:04.59 bitrate=4773.3kbits/s speed=0.855x elapsed=0:00:05.37    
+[libx264 @ 0x12ec32b30] frame I:1     Avg QP:16.99  size: 71974
+[libx264 @ 0x12ec32b30] frame P:7     Avg QP:18.83  size:141390
+[libx264 @ 0x12ec32b30] frame B:18    Avg QP:19.79  size: 93390
+[libx264 @ 0x12ec32b30] consecutive B-frames:  3.8%  7.7% 11.5% 76.9%
+[libx264 @ 0x12ec32b30] mb I  I16..4: 13.0% 70.8% 16.2%
+[libx264 @ 0x12ec32b30] mb P  I16..4:  4.8% 31.6%  8.2%  P16..4: 29.1% 17.4%  7.9%  0.0%  0.0%    skip: 1.0%
+[libx264 @ 0x12ec32b30] mb B  I16..4:  1.2%  5.5%  0.7%  B16..8: 37.3% 15.7%  3.9%  direct:27.5%  skip: 8.3%  L0:40.1% L1:43.6% BI:16.2%
+[libx264 @ 0x12ec32b30] 8x8 transform intra:71.6% inter:54.1%
+[libx264 @ 0x12ec32b30] coded y,uvDC,uvAC intra: 64.2% 88.9% 83.5% inter: 54.0% 81.1% 46.2%
+[libx264 @ 0x12ec32b30] i16 v,h,dc,p: 23% 10% 14% 53%
+[libx264 @ 0x12ec32b30] i8 v,h,dc,ddl,ddr,vr,hd,vl,hu: 27% 10% 28%  6%  7%  6%  6%  5%  6%
+[libx264 @ 0x12ec32b30] i4 v,h,dc,ddl,ddr,vr,hd,vl,hu: 33% 14% 18%  6%  7%  7%  5%  6%  4%
+[libx264 @ 0x12ec32b30] i8c dc,h,v,p: 62% 14% 16%  8%
+[libx264 @ 0x12ec32b30] Weighted P-Frames: Y:28.6% UV:28.6%
+[libx264 @ 0x12ec32b30] ref P L0: 52.3% 13.8% 25.1%  8.8%
+[libx264 @ 0x12ec32b30] ref B L0: 73.6% 21.8%  4.6%
+[libx264 @ 0x12ec32b30] ref B L1: 88.7% 11.3%
+[libx264 @ 0x12ec32b30] kb/s:4219.59

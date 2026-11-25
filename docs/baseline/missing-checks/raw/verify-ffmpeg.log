@@ -1,0 +1,5 @@
+
+> open-video-craft@1.0.6 verify:ffmpeg
+> node scripts/verify-ffmpeg.mjs
+
+Verified release-safe FFmpeg: <repository root>/node_modules/ffmpeg-static/ffmpeg

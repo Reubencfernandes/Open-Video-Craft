@@ -1,0 +1,4 @@
+[90785:1120/110116.883214:ERROR:chrome/browser/process_singleton_posix.cc:1230] Failed to bind() /var/folders/ny/3lywqt597xb0htllc8_kvrbh0000gn/T/scoped_dirikcEQp/SingletonSocket: Operation not permitted (1)
+sandbox initialization failed: Operation not permitted
+sandbox initialization failed: Operation not permitted
+Failed to initialize sandbox.Failed to initialize sandbox.

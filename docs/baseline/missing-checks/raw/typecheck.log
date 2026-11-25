@@ -1,0 +1,4 @@
+
+> open-video-craft@1.0.6 typecheck
+> tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.renderer.json --noEmit
+
